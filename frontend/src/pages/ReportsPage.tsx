@@ -6,12 +6,20 @@ import { Skeleton } from "../components/ui/Skeleton";
 import { Pagination } from "../components/Pagination";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+import { Select } from "../components/ui/Select";
+
 export function ReportsPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [range, setRange] = useState("30d");
   const pageSize = 8;
   const filters = useMemo(() => ({ range }), [range]);
+
+  const rangeOptions = [
+    { value: "7d", label: "Last 7 days" },
+    { value: "30d", label: "Last 30 days" },
+    { value: "90d", label: "Last 90 days" },
+  ];
 
   const stock = useQuery({ queryKey: ["report-stock-on-hand", filters], queryFn: async () => (await api.get("/reports/stock-on-hand")).data.data as any[] });
   const low = useQuery({ queryKey: ["report-low-stock", filters], queryFn: async () => (await api.get("/reports/low-stock")).data.data as any[] });
@@ -45,13 +53,15 @@ export function ReportsPage() {
     <section className="reports">
       <header className="reports-head">
         <h1>Reports</h1>
-        <div className="reports-filters">
+        <div className="reports-filters" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <input placeholder="Search stock table..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-          <select value={range} onChange={(e) => setRange(e.target.value)}>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="90d">Last 90 days</option>
-          </select>
+          <div style={{ width: '180px' }}>
+            <Select
+              value={range}
+              onChange={setRange}
+              options={rangeOptions}
+            />
+          </div>
         </div>
       </header>
 

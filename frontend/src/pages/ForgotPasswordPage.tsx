@@ -25,15 +25,22 @@ export function ForgotPasswordPage() {
 
   return (
     <div className="auth-page">
-    <div className="login">
-      <h1>Forgot password</h1>
-      <form onSubmit={onSubmit}>
-        <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        {errors.email ? <p>{errors.email}</p> : null}
-        <Button type="submit">Send reset link</Button>
-      </form>
-      {message ? <p>{message}</p> : null}
-    </div>
+      <div className="auth-card">
+        <h1>Forgot Password</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Enter your email to receive a password reset link.</p>
+        <form onSubmit={onSubmit}>
+          <div className="form-field">
+            <label>Email Address</label>
+            <input placeholder="name@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+            {errors.email ? <p>{errors.email}</p> : null}
+          </div>
+          <Button type="submit" style={{ marginTop: '8px' }}>Send reset link</Button>
+        </form>
+        {message ? <p style={{ color: 'var(--success)', textAlign: 'center', fontSize: '13px' }}>{message}</p> : null}
+        <div style={{ textAlign: 'center', marginTop: '8px' }}>
+          <Link to="/login" style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Back to Login</Link>
+        </div>
+      </div>
     </div>
   );
 }

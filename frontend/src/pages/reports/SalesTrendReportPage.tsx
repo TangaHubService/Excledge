@@ -7,6 +7,8 @@ import { Pagination } from "../../components/Pagination";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { useReportQuery } from "../../hooks/useReportQuery";
 
+import { Select } from "../../components/ui/Select";
+
 export function SalesTrendReportPage() {
   const [page, setPage] = useState(1);
   const [groupBy, setGroupBy] = useState<"daily" | "weekly">("daily");
@@ -15,15 +17,23 @@ export function SalesTrendReportPage() {
   const params = useMemo(() => ({ ...filters, page, limit: 10, groupBy }), [filters, page, groupBy]);
   const q = useReportQuery<any>(["report-sales-trend", params], "/reports/sales-trend", params);
 
+  const groupByOptions = [
+    { value: "daily", label: "Daily" },
+    { value: "weekly", label: "Weekly" },
+  ];
+
   return (
     <section className="page-stack">
       <h1>Sales Trend</h1>
-      <div className="report-filterbar-with-extra">
+      <div className="report-filterbar-with-extra" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
         <FilterBar filters={filters} branches={branches.data ?? []} onChange={(v) => { setFilters(v); setPage(1); }} onReset={() => { setFilters({}); setPage(1); }} />
-        <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as "daily" | "weekly")}>
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-        </select>
+        <div style={{ width: '150px' }}>
+          <Select
+            value={groupBy}
+            onChange={(val) => setGroupBy(val as "daily" | "weekly")}
+            options={groupByOptions}
+          />
+        </div>
       </div>
       {q.isLoading ? <Skeleton height={180} /> : (
         <>

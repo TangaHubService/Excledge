@@ -30,15 +30,19 @@ export function ResetPasswordPage() {
 
   return (
     <div className="auth-page">
-    <div className="login">
-      <h1>Reset password</h1>
-      <form onSubmit={onSubmit}>
-        <input type="password" placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-        {errors.newPassword ? <p>{errors.newPassword}</p> : null}
-        <Button type="submit">Reset password</Button>
-      </form>
-      {message ? <p>{message}</p> : null}
-    </div>
+      <div className="auth-card">
+        <h1>Reset Password</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Enter your new password below.</p>
+        <form onSubmit={onSubmit}>
+          <div className="form-field">
+            <label>New Password</label>
+            <input type="password" placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+            {errors.newPassword ? <p>{errors.newPassword}</p> : null}
+          </div>
+          <Button type="submit" style={{ marginTop: '8px' }}>Reset Password</Button>
+        </form>
+        {message ? <p style={{ color: 'var(--success)', textAlign: 'center', fontSize: '13px' }}>{message}</p> : null}
+      </div>
     </div>
   );
 }

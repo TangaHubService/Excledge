@@ -33,22 +33,32 @@ export function SignupPage() {
 
   return (
     <div className="auth-page">
-    <div className="login">
-      <h1>Create account</h1>
-      <form onSubmit={onSubmit}>
-        <input placeholder="Full name" value={form.fullName} onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))} />
-        {fieldErrors.fullName ? <p>{fieldErrors.fullName}</p> : null}
-        <input placeholder="Email" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} />
-        {fieldErrors.email ? <p>{fieldErrors.email}</p> : null}
-        <input type="password" placeholder="Password" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} />
-        {fieldErrors.password ? <p>{fieldErrors.password}</p> : null}
-        <Button type="submit">Sign up</Button>
-      </form>
-      {error ? <p>{error}</p> : null}
-      <p>
-        Have an account? <Link to="/login">Sign in</Link>
-      </p>
-    </div>
+      <div className="auth-card">
+        <h1>Create Account</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Get started with your inventory management.</p>
+        <form onSubmit={onSubmit}>
+          <div className="form-field">
+            <label>Full Name</label>
+            <input placeholder="John Doe" value={form.fullName} onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))} />
+            {fieldErrors.fullName ? <p>{fieldErrors.fullName}</p> : null}
+          </div>
+          <div className="form-field">
+            <label>Email Address</label>
+            <input placeholder="name@company.com" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} />
+            {fieldErrors.email ? <p>{fieldErrors.email}</p> : null}
+          </div>
+          <div className="form-field">
+            <label>Password</label>
+            <input type="password" placeholder="••••••••" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} />
+            {fieldErrors.password ? <p>{fieldErrors.password}</p> : null}
+          </div>
+          <Button type="submit" style={{ marginTop: '8px', height: '44px' }}>Create account</Button>
+        </form>
+        {error ? <p style={{ color: 'var(--danger)', textAlign: 'center', fontSize: '13px' }}>{error}</p> : null}
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center' }}>
+          Already have an account? <Link to="/login" style={{ color: 'var(--primary)', fontWeight: 600 }}>Sign in</Link>
+        </p>
+      </div>
     </div>
   );
 }

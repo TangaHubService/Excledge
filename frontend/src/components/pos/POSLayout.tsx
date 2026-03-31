@@ -1,21 +1,20 @@
 import type { ReactNode } from "react";
 
 export function POSLayout({
-  top,
   left,
   right,
 }: {
-  top: ReactNode;
   left: ReactNode;
   right: ReactNode;
 }) {
   return (
-    <section className="pos">
-      <header className="pos-top">{top}</header>
-      <div className="pos-grid">
-        <div className="panel">{left}</div>
-        {right}
+    <div className="pos-layout">
+      <div style={{ display: 'flex', flexDirection: 'column', padding: '20px', gap: '20px', overflow: 'auto' }}>
+        {left}
       </div>
-    </section>
+      <aside className="cart-panel-standard">
+        {right}
+      </aside>
+    </div>
   );
 }

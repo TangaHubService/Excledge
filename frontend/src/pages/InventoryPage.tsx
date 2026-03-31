@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, History, Package, ArrowRightLeft } from "lucide-react";
 import * as yup from "yup";
 import { api } from "../api/client";
 import { DataTable } from "../components/DataTable";
@@ -13,10 +13,12 @@ export function InventoryPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isAddOpen, setIsAddOpen] = useState(false);
   const qc = useQueryClient();
+  
   const branches = useQuery({ queryKey: ["branches"], queryFn: async () => (await api.get("/branches", { params: { page: 1, pageSize: 100, search: "" } })).data.data as any[] });
   const products = useQuery({ queryKey: ["products"], queryFn: async () => (await api.get("/products", { params: { page: 1, pageSize: 100, search: "" } })).data.data as any[] });
   const balances = useQuery({ queryKey: ["balances"], queryFn: async () => (await api.get("/inventory/balances")).data.data });
   const movements = useQuery({ queryKey: ["movements"], queryFn: async () => (await api.get("/inventory/movements")).data.data });
+  
   const createAdj = useMutation({
     mutationFn: async () => api.post("/inventory/adjustments", { ...adjustment, quantityDelta: Number(adjustment.quantityDelta) }),
     onSuccess: () => {
@@ -26,50 +28,100 @@ export function InventoryPage() {
       setIsAddOpen(false);
     },
   });
+
   const schema = yup.object({
-    branchId: yup.string().required("branchId is required"),
-    productId: yup.string().required("productId is required"),
-    quantityDelta: yup.number().required("quantityDelta is required"),
-    reason: yup.string().required("reason is required"),
+    branchId: yup.string().required("Branch is required"),
+    productId: yup.string().required("Product is required"),
+    quantityDelta: yup.number().typeError("Must be a number").required("Quantity is required"),
+    reason: yup.string().required("Reason is required"),
   });
+
   const branchName = (id: string) => (branches.data ?? []).find((b) => b.id === id)?.name ?? id;
   const productName = (id: string) => (products.data ?? []).find((p) => p.id === id)?.name ?? id;
+
   return (
-    <section className="page-stack">
-      <div className="section-header">
-        <h1>Inventory</h1>
-        <Button variant="ghost" onClick={() => setIsAddOpen(true)}>
-          <Plus size={16} />
-          Add Adjustment
+    <div className="page-stack">
+      <div className="section-header" style={{ marginBottom: '24px' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Inventory Tracking</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: '4px 0 0' }}>Manage stock levels and view movements across branches</p>
+        </div>
+        <Button onClick={() => setIsAddOpen(true)}>
+          <Plus size={18} />
+          Create Adjustment
         </Button>
       </div>
-      <h3>Balances</h3>
-      <div className="panel">
-        <DataTable
-          rows={balances.data ?? []}
-          columns={[
-            { key: "branchId", title: "Branch", render: (row) => branchName(String(row.branchId)) },
-            { key: "productId", title: "Product", render: (row) => productName(String(row.productId)) },
-            { key: "quantity", title: "Qty" },
-          ]}
-        />
+
+      <div style={{ display: 'grid', gap: '24px' }}>
+        <section>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <Package size={20} color="var(--primary)" />
+            <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>Current Balances</h2>
+          </div>
+          <div className="panel">
+            <DataTable
+              rows={balances.data ?? []}
+              columns={[
+                { key: "branchId", title: "Branch", render: (row: any) => <span style={{ fontWeight: 500 }}>{branchName(String(row.branchId))}</span> },
+                { key: "productId", title: "Product", render: (row: any) => productName(String(row.productId)) },
+                { key: "quantity", title: "Available Qty", render: (row: any) => (
+                  <span style={{ 
+                    padding: '4px 8px', 
+                    borderRadius: '4px', 
+                    background: Number(row.quantity) < 10 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                    color: Number(row.quantity) < 10 ? 'var(--danger)' : 'var(--success)',
+                    fontWeight: 600
+                  }}>
+                    {row.quantity as React.ReactNode}
+                  </span>
+                )},
+              ]}
+            />
+          </div>
+        </section>
+
+        <section>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <History size={20} color="var(--primary)" />
+            <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>Stock Movements</h2>
+          </div>
+          <div className="panel">
+            <DataTable
+              rows={movements.data ?? []}
+              columns={[
+                { key: "type", title: "Type", render: (row: any) => (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <ArrowRightLeft size={14} color="var(--text-muted)" />
+                    <span style={{ textTransform: 'capitalize' }}>{String(row.type).toLowerCase()}</span>
+                  </div>
+                )},
+                { key: "productId", title: "Product", render: (row: any) => productName(String(row.productId)) },
+                { key: "quantityDelta", title: "Adjustment", render: (row: any) => (
+                  <span style={{ color: Number(row.quantityDelta) > 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+                    {Number(row.quantityDelta) > 0 ? '+' : ''}{row.quantityDelta as React.ReactNode}
+                  </span>
+                )},
+                { key: "referenceType", title: "Source", render: (row: any) => <span style={{ color: 'var(--text-muted)' }}>{String(row.referenceType)}</span> },
+              ]}
+            />
+          </div>
+        </section>
       </div>
-      <h3>Recent Movements</h3>
-      <div className="panel">
-        <DataTable
-          rows={movements.data ?? []}
-          columns={[
-            { key: "type", title: "Type" },
-            { key: "productId", title: "Product", render: (row) => productName(String(row.productId)) },
-            { key: "quantityDelta", title: "Delta" },
-            { key: "referenceType", title: "Ref Type" },
-          ]}
-        />
-      </div>
-      <Modal open={isAddOpen} title="Add stock adjustment" onClose={() => setIsAddOpen(false)}>
-        <form className="form-grid modal-form" onSubmit={(e) => { e.preventDefault(); validateWithYup(schema, adjustment).then((errs) => { setErrors(errs); if (!Object.keys(errs).length) createAdj.mutate(); }); }}>
+
+      <Modal open={isAddOpen} title="Manual Stock Adjustment" onClose={() => setIsAddOpen(false)}>
+        <form 
+          className="form-grid" 
+          style={{ gridTemplateColumns: '1fr 1fr' }}
+          onSubmit={(e) => { 
+            e.preventDefault(); 
+            validateWithYup(schema, adjustment).then((errs) => { 
+              setErrors(errs); 
+              if (!Object.keys(errs).length) createAdj.mutate(); 
+            }); 
+          }}
+        >
           <div className="form-field">
-            <label>Branch</label>
+            <label>Target Branch</label>
             <select value={adjustment.branchId} onChange={(e) => setAdjustment((s) => ({ ...s, branchId: e.target.value }))}>
               <option value="">Select branch</option>
               {(branches.data ?? []).map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
@@ -85,21 +137,21 @@ export function InventoryPage() {
             {errors.productId ? <p>{errors.productId}</p> : null}
           </div>
           <div className="form-field">
-            <label>Quantity Delta</label>
-            <input placeholder="Quantity delta" value={adjustment.quantityDelta} onChange={(e) => setAdjustment((s) => ({ ...s, quantityDelta: e.target.value }))} />
+            <label>Quantity Change (+/-)</label>
+            <input type="number" placeholder="e.g. 10 or -5" value={adjustment.quantityDelta} onChange={(e) => setAdjustment((s) => ({ ...s, quantityDelta: e.target.value }))} />
             {errors.quantityDelta ? <p>{errors.quantityDelta}</p> : null}
           </div>
           <div className="form-field">
-            <label>Reason</label>
-            <input placeholder="Reason" value={adjustment.reason} onChange={(e) => setAdjustment((s) => ({ ...s, reason: e.target.value }))} />
+            <label>Reason / Note</label>
+            <input placeholder="e.g. Restock or Damage" value={adjustment.reason} onChange={(e) => setAdjustment((s) => ({ ...s, reason: e.target.value }))} />
             {errors.reason ? <p>{errors.reason}</p> : null}
           </div>
-          <div className="modal-actions">
+          <div className="modal-actions" style={{ gridColumn: 'span 2' }}>
             <Button type="button" variant="ghost" onClick={() => setIsAddOpen(false)}>Cancel</Button>
-            <Button type="submit" loading={createAdj.isPending}>Apply adjustment</Button>
+            <Button type="submit" loading={createAdj.isPending}>Confirm Adjustment</Button>
           </div>
         </form>
       </Modal>
-    </section>
+    </div>
   );
 }

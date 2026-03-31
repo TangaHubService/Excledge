@@ -17,6 +17,8 @@ type SelectFieldConfig = {
   placeholder?: string;
 };
 
+import { Select } from "../components/ui/Select";
+
 export function CrudPage({
   title,
   endpoint,
@@ -91,29 +93,33 @@ export function CrudPage({
             });
           }}
         >
-          {fields.map((f) => (
-            <div key={f} className="form-field">
-              <label>{f}</label>
-              {selectFields[f] ? (
-                <select value={form[f] ?? ""} onChange={(e) => setForm((s) => ({ ...s, [f]: e.target.value }))}>
-                  <option value="">{selectFields[f].placeholder ?? `Select ${f}`}</option>
-                  {(selectQueries[selectEntries.findIndex(([key]) => key === f)]?.data ?? []).map((row) => {
-                    const valueKey = selectFields[f].valueKey ?? "id";
-                    const value = String(row[valueKey] ?? "");
-                    const label = String(row[selectFields[f].labelKey] ?? value);
-                    return (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    );
-                  })}
-                </select>
-              ) : (
-                <input placeholder={f} value={form[f] ?? ""} onChange={(e) => setForm((s) => ({ ...s, [f]: e.target.value }))} />
-              )}
-              {formErrors[f] ? <p>{formErrors[f]}</p> : null}
-            </div>
-          ))}
+          {fields.map((f) => {
+            const config = selectFields[f];
+            const qIdx = selectEntries.findIndex(([key]) => key === f);
+            const queryData = selectQueries[qIdx]?.data ?? [];
+
+            return (
+              <div key={f} className="form-field">
+                <label>{f}</label>
+                {config ? (
+                  <Select
+                    value={form[f] ?? ""}
+                    onChange={(val) => setForm((s) => ({ ...s, [f]: val }))}
+                    placeholder={config.placeholder ?? `Select ${f}`}
+                    options={queryData.map((row) => {
+                      const valueKey = config.valueKey ?? "id";
+                      const value = String(row[valueKey] ?? "");
+                      const label = String(row[config.labelKey] ?? value);
+                      return { value, label };
+                    })}
+                  />
+                ) : (
+                  <input placeholder={f} value={form[f] ?? ""} onChange={(e) => setForm((s) => ({ ...s, [f]: e.target.value }))} />
+                )}
+                {formErrors[f] ? <p className="error-text">{formErrors[f]}</p> : null}
+              </div>
+            );
+          })}
           <div className="modal-actions">
             <Button type="button" variant="ghost" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
             <Button type="submit" loading={mutation.isPending}>Create</Button>
