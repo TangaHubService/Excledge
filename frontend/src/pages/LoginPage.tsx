@@ -34,23 +34,23 @@ export function LoginPage() {
 
   return (
     <div className="auth-page">
-    <div className="login">
-      <h1>Inventory Login</h1>
-      <form onSubmit={onSubmit}>
-        <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        {fieldErrors.email ? <p>{fieldErrors.email}</p> : null}
-        <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        {fieldErrors.password ? <p>{fieldErrors.password}</p> : null}
-        <Button type="submit">Sign in</Button>
-      </form>
-      {error ? <p>{error}</p> : null}
-      <p>
-        No account? <Link to="/signup">Sign up</Link>
-      </p>
-      <p>
-        Forgot password? <Link to="/forgot-password">Reset it</Link>
-      </p>
-    </div>
+      <div className="login">
+        <h1>Inventory Login</h1>
+        <form onSubmit={onSubmit}>
+          <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          {fieldErrors.email ? <p>{fieldErrors.email}</p> : null}
+          <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          {fieldErrors.password ? <p>{fieldErrors.password}</p> : null}
+          <Button type="submit">Sign in</Button>
+        </form>
+        {error ? <p>{error}</p> : null}
+        <p>
+          No account? <Link to="/signup">Sign up</Link>
+        </p>
+        <p>
+          Forgot password? <Link to="/forgot-password">Reset it</Link>
+        </p>
+      </div>
     </div>
   );
 }

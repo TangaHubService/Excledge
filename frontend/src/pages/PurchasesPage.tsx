@@ -12,6 +12,8 @@ import { validateWithYup } from "../utils/validation";
 import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
 
+import { Select } from "../components/ui/Select";
+
 function TransactionPage() {
   const qc = useQueryClient();
   const [form, setForm] = useState({ branchId: "", supplierId: "", referenceNo: "", productId: "", quantity: "", unitCost: "" });
@@ -70,27 +72,33 @@ function TransactionPage() {
         <form className="form-grid modal-form" onSubmit={(e) => { e.preventDefault(); validateWithYup(schema, form).then((errs) => { setErrors(errs); if (!Object.keys(errs).length) create.mutate(); }); }}>
           <div className="form-field">
             <label>Branch</label>
-            <select value={form.branchId} onChange={(e) => setForm((s) => ({ ...s, branchId: e.target.value }))}>
-              <option value="">Select branch</option>
-              {(branches.data ?? []).map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-            </select>
-            {errors.branchId ? <p>{errors.branchId}</p> : null}
+            <Select
+              value={form.branchId}
+              onChange={(val) => setForm((s) => ({ ...s, branchId: val }))}
+              placeholder="Select branch"
+              options={(branches.data ?? []).map((b) => ({ value: String(b.id), label: b.name }))}
+            />
+            {errors.branchId ? <p className="error-text">{errors.branchId}</p> : null}
           </div>
           <div className="form-field">
             <label>Supplier</label>
-            <select value={form.supplierId} onChange={(e) => setForm((s) => ({ ...s, supplierId: e.target.value }))}>
-              <option value="">Select supplier</option>
-              {(suppliers.data ?? []).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
-            </select>
-            {errors.supplierId ? <p>{errors.supplierId}</p> : null}
+            <Select
+              value={form.supplierId}
+              onChange={(val) => setForm((s) => ({ ...s, supplierId: val }))}
+              placeholder="Select supplier"
+              options={(suppliers.data ?? []).map((s) => ({ value: String(s.id), label: s.name }))}
+            />
+            {errors.supplierId ? <p className="error-text">{errors.supplierId}</p> : null}
           </div>
           <div className="form-field">
             <label>Product</label>
-            <select value={form.productId} onChange={(e) => setForm((s) => ({ ...s, productId: e.target.value }))}>
-              <option value="">Select product</option>
-              {(products.data ?? []).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
-            </select>
-            {errors.productId ? <p>{errors.productId}</p> : null}
+            <Select
+              value={form.productId}
+              onChange={(val) => setForm((s) => ({ ...s, productId: val }))}
+              placeholder="Select product"
+              options={(products.data ?? []).map((p) => ({ value: String(p.id), label: p.name }))}
+            />
+            {errors.productId ? <p className="error-text">{errors.productId}</p> : null}
           </div>
           <div className="form-field">
             <label>Reference No</label>

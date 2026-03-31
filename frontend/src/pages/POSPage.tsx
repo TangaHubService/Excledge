@@ -1,16 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useRef, useMemo, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { Modal } from "../components/ui/Modal";
-import { Skeleton } from "../components/ui/Skeleton";
 import { useToast } from "../toast";
 import { queryKeys } from "../api/queryKeys";
+import { useBranch } from "../context/BranchContext";
 import { POSLayout } from "../components/pos/POSLayout";
 import { SearchBar } from "../components/pos/SearchBar";
-import { CategoryFilter } from "../components/pos/CategoryFilter";
 import { ProductCard } from "../components/pos/ProductCard";
 import { CartPanel } from "../components/pos/CartPanel";
 import { PaymentModal } from "../components/pos/PaymentModal";
+import { Modal } from "../components/ui/Modal";
 import { Button } from "../components/ui/Button";
 
 type CatalogItem = {
@@ -26,21 +25,18 @@ type CartLine = { productId: string; name: string; qty: number; unitPrice: numbe
 export function POSPage() {
   const { push } = useToast();
   const qc = useQueryClient();
-  const [branchId, setBranchId] = useState("");
+  const { branchId } = useBranch();
   const [search, setSearch] = useState("");
-  const [categoryId, setCategoryId] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "MOBILE_MONEY">("CASH");
   const [clearOpen, setClearOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const branches = useQuery({ queryKey: ["branches"], queryFn: async () => (await api.get("/branches")).data.data });
-  const categories = useQuery({ queryKey: ["categories"], queryFn: async () => (await api.get("/categories")).data.data });
   const catalog = useQuery({
-    queryKey: queryKeys.posCatalog({ branchId, search, categoryId }),
+    queryKey: queryKeys.posCatalog({ search, branchId }),
     enabled: !!branchId,
-    queryFn: async () => (await api.get("/pos/catalog", { params: { branchId, search, categoryId: categoryId || undefined } })).data.data as CatalogItem[],
+    queryFn: async () => (await api.get("/pos/catalog", { params: { search, branchId } })).data.data as CatalogItem[],
   });
 
   const total = useMemo(() => cart.reduce((sum, x) => sum + x.qty * x.unitPrice, 0), [cart]);
@@ -52,7 +48,6 @@ export function POSPage() {
   const checkout = useMutation({
     mutationFn: async () =>
       api.post("/pos/checkout", {
-        branchId,
         paymentMethod,
         items: cart.map((c) => ({ productId: c.productId, quantity: c.qty })),
       }),
@@ -74,7 +69,7 @@ export function POSPage() {
       }
       if (event.key === "F9") {
         event.preventDefault();
-        if (cart.length && branchId && !checkout.isPending) setPaymentOpen(true);
+        if (cart.length && !checkout.isPending) setPaymentOpen(true);
       }
       if (event.key === "Escape" && cart.length) {
         setClearOpen(true);
@@ -82,7 +77,7 @@ export function POSPage() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [branchId, cart.length, checkout]);
+  }, [cart.length, checkout]);
 
   const addToCart = (item: CatalogItem) => {
     setCart((prev) => {
@@ -93,63 +88,47 @@ export function POSPage() {
   };
 
   const saveHold = () => localStorage.setItem("held-sale", JSON.stringify(cart));
-  const resumeHold = () => {
-    const raw = localStorage.getItem("held-sale");
-    if (raw) setCart(JSON.parse(raw));
-  };
 
   return (
     <>
       <POSLayout
-        top={
-          <>
-            <h1>POS</h1>
-            <div className="pos-top-controls">
-              <select value={branchId} onChange={(e) => setBranchId(e.target.value)}>
-                <option value="">Select branch</option>
-                {(branches.data ?? []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-              <span>Cashier: Current User</span>
-            </div>
-          </>
-        }
         left={
-          <>
-            <div className="toolbar">
-              <SearchBar
-                inputRef={searchRef}
-                value={search}
-                onChange={setSearch}
-                onEnter={() => {
-                  if ((catalog.data?.length ?? 0) > 0) addToCart(catalog.data![0]);
-                }}
-              />
-              <CategoryFilter value={categoryId} onChange={setCategoryId} options={categories.data ?? []} />
-            </div>
-            <div className="product-grid">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%' }}>
+            <SearchBar
+              inputRef={searchRef}
+              value={search}
+              onChange={setSearch}
+              onEnter={() => {
+                if ((catalog.data?.length ?? 0) > 0) addToCart(catalog.data![0]);
+              }}
+            />
+            
+            <div className="product-grid" style={{ flex: 1 }}>
               {catalog.isLoading ? (
-                Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} height={90} />)
+                Array.from({ length: 9 }).map((_, i) => <div key={i} className="skeleton" style={{ height: '220px' }} />)
               ) : (catalog.data ?? []).length === 0 ? (
-                <p>No products found</p>
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No products found</div>
               ) : (
                 (catalog.data ?? []).map((p) => (
                   <ProductCard key={p.id} name={p.name} price={p.unitPrice} stock={p.stock} onAdd={() => addToCart(p)} />
                 ))
               )}
             </div>
-          </>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid #d1d5db' }}>
+              <button className="btn btn-clear-pos" onClick={() => setClearOpen(true)} style={{ padding: '8px 24px' }}>Clear Cart</button>
+              <button className="btn btn-hold" onClick={saveHold} style={{ padding: '8px 24px' }}>Hold Sale</button>
+            </div>
+          </div>
         }
         right={
           <CartPanel
             cart={cart}
             total={total}
-            onDec={(id) => setCart((s) => s.map((x) => x.productId === id ? { ...x, qty: Math.max(1, x.qty - 1) } : x))}
             onInc={(id) => setCart((s) => s.map((x) => x.productId === id ? { ...x, qty: Math.min(x.stock, x.qty + 1) } : x))}
+            onDec={(id) => setCart((s) => s.map((x) => x.productId === id ? { ...x, qty: Math.max(0, x.qty - 1) } : x).filter(x => x.qty > 0))}
             onPay={() => setPaymentOpen(true)}
             onClear={() => setClearOpen(true)}
-            onHold={saveHold}
-            onResume={resumeHold}
-            payDisabled={!cart.length || !branchId}
           />
         }
       />
