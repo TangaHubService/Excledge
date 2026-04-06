@@ -20,9 +20,27 @@ interface SaleItem {
     totalPrice: string;
 }
 
+/** EBM/VSDC rows returned with sale detail (from API). */
+export interface SaleEbmTransaction {
+    id?: string | number;
+    operation?: string | null;
+    submissionStatus?: string;
+    ebmInvoiceNumber?: string | null;
+    errorMessage?: string | null;
+    responseData?: {
+        normalized?: {
+            ebmInvoiceNumber?: string;
+            receiptQrPayload?: string;
+            verificationCode?: string;
+            sdcDateTime?: string;
+        };
+    } | null;
+}
+
 interface Sale {
     id: string;
     saleNumber: string;
+    invoiceNumber?: string | null;
     customer: {
         name: string;
         email?: string;
@@ -39,6 +57,7 @@ interface Sale {
     createdAt: string;
     status: string;
     saleItems: SaleItem[];
+    ebmTransactions?: SaleEbmTransaction[];
 }
 
 // ⭐ Improved Styling for Sales Invoice
@@ -168,18 +187,59 @@ const styles = StyleSheet.create({
         fontSize: 9,
         color: "#777",
     },
+    fiscalBox: {
+        marginTop: 16,
+        padding: 10,
+        border: "1 solid #1e40af",
+        borderRadius: 4,
+        backgroundColor: "#eff6ff",
+    },
+    fiscalTitle: {
+        fontSize: 11,
+        fontWeight: "bold",
+        color: "#1e3a8a",
+        marginBottom: 6,
+    },
+    fiscalMuted: {
+        fontSize: 9,
+        color: "#64748b",
+        marginTop: 4,
+    },
 });
 
 interface SalesInvoicePDFProps {
     sale: Sale;
     organizationName?: string;
     organizationLogo?: string;
+    /** Seller TIN for RRA reference on the receipt */
+    organizationTin?: string | null;
+}
+
+function fiscalBlockFromSale(sale: Sale) {
+    const txs = sale.ebmTransactions ?? [];
+    const saleTxs = txs.filter((t) => !t.operation || t.operation === "SALE");
+    const success = saleTxs.find((t) => t.submissionStatus === "SUCCESS");
+    const pending = saleTxs.find((t) =>
+        ["PENDING", "SUBMITTED", "RETRYING"].includes(t.submissionStatus ?? "")
+    );
+    const failed = saleTxs.find((t) => t.submissionStatus === "FAILED");
+    const norm = success?.responseData?.normalized;
+    return {
+        success,
+        pending,
+        failed,
+        ebmInvoiceNumber: success?.ebmInvoiceNumber ?? norm?.ebmInvoiceNumber,
+        verificationCode: norm?.verificationCode,
+        sdcDateTime: norm?.sdcDateTime,
+        receiptQrPayload: norm?.receiptQrPayload,
+    };
 }
 
 const SalesInvoicePDF: React.FC<SalesInvoicePDFProps> = ({
     sale,
     organizationName = "Your Organization",
-    organizationLogo
+    organizationLogo,
+    organizationTin,
 }) => {
     const formatCurrency = (amount: string) => {
         return new Intl.NumberFormat('en-RW', {
@@ -213,6 +273,13 @@ const SalesInvoicePDF: React.FC<SalesInvoicePDFProps> = ({
                                 {sale.saleNumber}
                             </Text>
                         </View>
+
+                        {sale.invoiceNumber ? (
+                            <View style={styles.row}>
+                                <Text style={styles.label}>Internal invoice #:</Text>
+                                <Text style={styles.value}>{sale.invoiceNumber}</Text>
+                            </View>
+                        ) : null}
 
                         <View style={styles.row}>
                             <Text style={styles.label}>Invoice Date:</Text>
@@ -428,6 +495,59 @@ const SalesInvoicePDF: React.FC<SalesInvoicePDFProps> = ({
                         </Text>
                     </View>
                 </View>
+
+                {/* RRA EBM / VSDC fiscal data (when present) */}
+                {(() => {
+                    const f = fiscalBlockFromSale(sale);
+                    if (!f.success && !f.pending && !f.failed && !sale.ebmTransactions?.length) {
+                        return null;
+                    }
+                    return (
+                        <View style={styles.fiscalBox}>
+                            <Text style={styles.fiscalTitle}>RRA EBM / VSDC</Text>
+                            {organizationTin ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Seller TIN:</Text>
+                                    <Text style={styles.value}>{organizationTin}</Text>
+                                </View>
+                            ) : null}
+                            {f.ebmInvoiceNumber ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>EBM invoice #:</Text>
+                                    <Text style={styles.value}>{f.ebmInvoiceNumber}</Text>
+                                </View>
+                            ) : null}
+                            {f.verificationCode ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Verification:</Text>
+                                    <Text style={styles.value}>{f.verificationCode}</Text>
+                                </View>
+                            ) : null}
+                            {f.sdcDateTime ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>SDC time:</Text>
+                                    <Text style={styles.value}>{f.sdcDateTime}</Text>
+                                </View>
+                            ) : null}
+                            {f.receiptQrPayload ? (
+                                <Text style={styles.fiscalMuted}>
+                                    QR / payload: {f.receiptQrPayload.length > 200 ? `${f.receiptQrPayload.slice(0, 200)}…` : f.receiptQrPayload}
+                                </Text>
+                            ) : null}
+                            {f.pending && !f.success ? (
+                                <Text style={styles.fiscalMuted}>Fiscal submission pending or retrying.</Text>
+                            ) : null}
+                            {f.failed && !f.success ? (
+                                <Text style={styles.fiscalMuted}>
+                                    Last fiscal error: {f.failed.errorMessage ?? "Unknown"}
+                                </Text>
+                            ) : null}
+                            {!f.success && !f.pending && !f.failed && sale.ebmTransactions?.length ? (
+                                <Text style={styles.fiscalMuted}>No fiscal data recorded for this sale.</Text>
+                            ) : null}
+                        </View>
+                    );
+                })()}
 
                 {/* FOOTER */}
                 <View style={styles.footer}>

@@ -46,6 +46,7 @@ model Organization {
   branches          Branch[]                 // NEW: Branch management
   taxConfigurations TaxConfiguration[]
   stockTransfers    StockTransfer[]
+  invoiceCounter    OrganizationInvoiceCounter?
 
   @@map("organizations")
 }
@@ -693,12 +694,23 @@ model StockTransferItem {
   @@map("stock_transfer_items")
 }
 
+/// Per-organization atomic sequence for internal invoice numbers (EBM/VSDC readiness).
+model OrganizationInvoiceCounter {
+  organizationId Int          @id
+  nextSequence   Int          @default(0)
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_invoice_counters")
+}
+
 model EbmTransaction {
   id               Int                 @id @default(autoincrement())
   organizationId   Int
   saleId           Int?
   invoiceNumber    String?
   ebmInvoiceNumber String?
+  operation        String?             @default("SALE")
   submissionStatus EbmSubmissionStatus @default(PENDING)
   submittedAt      DateTime?
   responseData     Json?

@@ -11,7 +11,7 @@ import { apiClient } from '../../../lib/api-client';
 import { toast } from 'react-toastify';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
-import SalesInvoicePDF from '../../../components/invoice/SalesInvoicePDF';
+import SalesInvoicePDF, { type SaleEbmTransaction } from '../../../components/invoice/SalesInvoicePDF';
 import { useOrganization } from '../../../context/OrganizationContext';
 import { Badge } from '../../../components/ui/badge';
 
@@ -46,6 +46,7 @@ type Sale = {
         costPrice?: string;
         profit?: string;
     }>;
+    ebmTransactions?: SaleEbmTransaction[];
 };
 
 /** GET sale returns success(sale) → { success, data }. */
@@ -148,6 +149,7 @@ export default function SaleDetailsPage() {
                 sale={sale}
                 organizationName={organization?.name}
                 organizationLogo={organization?.avatar}
+                organizationTin={organization?.TIN ?? organization?.tin}
             />).toBlob();
 
             saveAs(blob, `invoice-${sale.saleNumber}.pdf`);
@@ -169,6 +171,7 @@ export default function SaleDetailsPage() {
                 sale={sale}
                 organizationName={organization?.name}
                 organizationLogo={organization?.avatar}
+                organizationTin={organization?.TIN ?? organization?.tin}
             />).toBlob();
 
             const url = URL.createObjectURL(blob);
@@ -365,6 +368,36 @@ export default function SaleDetailsPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            {sale.ebmTransactions && sale.ebmTransactions.length > 0 && (
+                <Card className={theme === 'dark' ? 'bg-gray-800 border-blue-900/40 border' : 'border-blue-200 bg-blue-50/40'}>
+                    <CardHeader>
+                        <CardTitle className={theme === 'dark' ? 'text-white' : 'text-blue-950'}>
+                            RRA EBM / VSDC
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        {sale.ebmTransactions.map((tx) => (
+                            <div
+                                key={String(tx.id ?? `${tx.operation}-${tx.submissionStatus}`)}
+                                className={`text-sm rounded-lg p-3 ${theme === 'dark' ? 'bg-gray-900/80' : 'bg-white'}`}
+                            >
+                                <p className={`font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
+                                    {tx.operation ?? 'SALE'} — {tx.submissionStatus}
+                                </p>
+                                {tx.ebmInvoiceNumber && (
+                                    <p className={theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}>
+                                        EBM invoice #: {tx.ebmInvoiceNumber}
+                                    </p>
+                                )}
+                                {tx.errorMessage && (
+                                    <p className="text-red-600 dark:text-red-400 mt-1">{tx.errorMessage}</p>
+                                )}
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Customer Information */}
             <Card className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>

@@ -760,6 +760,7 @@ async function seedDemoDataset() {
       organizationId: org.id,
       saleId: cashSale.id,
       invoiceNumber: cashSale.invoiceNumber,
+      operation: "SALE",
       submissionStatus: EbmSubmissionStatus.SUCCESS,
       submittedAt: new Date(),
       ebmInvoiceNumber: "EBM-SEED-001",

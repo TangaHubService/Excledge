@@ -44,6 +44,7 @@ import {
   productExpiryAlertJob,
   dailyReportJob,
 } from "./jobs/product-expiry.job";
+import { ebmQueueJob } from "./jobs/ebm-queue.job";
 import pesapalRoutes from "./routes/pesapal.route";
 import uploadRoutes from "./routes/upload.route";
 
@@ -149,6 +150,7 @@ if (process.env.RUN_JOBS !== "false") {
   expireSubscriptionsJob.start();
   productExpiryAlertJob.start();
   dailyReportJob.start();
+  ebmQueueJob.start();
 }
 
 

@@ -31,9 +31,15 @@ export const config = {
   },
   ebm: {
     enabled: process.env.ENABLE_EBM === "true" || false,
-    apiUrl: process.env.EBM_API_URL || "",
+    apiUrl: (process.env.EBM_API_URL || "").replace(/\/$/, ""),
     apiKey: process.env.EBM_API_KEY || "",
     apiSecret: process.env.EBM_API_SECRET || "",
-    environment: process.env.EBM_ENVIRONMENT || "sandbox", // sandbox | production
+    environment: process.env.EBM_ENVIRONMENT || "sandbox",
+    salePath: process.env.EBM_SALE_PATH || "/sales",
+    refundPath: process.env.EBM_REFUND_PATH || "/refunds",
+    voidPath: process.env.EBM_VOID_PATH || "/voids",
+    requestTimeoutMs: Number.parseInt(process.env.EBM_REQUEST_TIMEOUT_MS || "30000", 10),
+    useMock: process.env.EBM_USE_MOCK === "true",
+    maxQueueRetries: Number.parseInt(process.env.EBM_MAX_QUEUE_RETRIES || "10", 10),
   },
 }

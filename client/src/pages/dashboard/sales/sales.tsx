@@ -15,7 +15,7 @@ import { Label } from '../../../components/ui/label';
 import { toast } from 'react-toastify';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
-import SalesInvoicePDF from '../../../components/invoice/SalesInvoicePDF';
+import SalesInvoicePDF, { type SaleEbmTransaction } from '../../../components/invoice/SalesInvoicePDF';
 import { useOrganization } from '../../../context/OrganizationContext';
 import { useTheme } from '../../../context/ThemeContext';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
@@ -90,6 +90,7 @@ type Sale = {
         costPrice?: string;
         profit?: string;
     }>;
+    ebmTransactions?: SaleEbmTransaction[];
 };
 
 export default function SalesPage() {
@@ -234,6 +235,7 @@ export default function SalesPage() {
                 sale={sale}
                 organizationName={organization?.name}
                 organizationLogo={organization?.avatar}
+                organizationTin={organization?.TIN ?? organization?.tin}
             />).toBlob();
 
             // Download the file

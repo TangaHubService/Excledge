@@ -38,6 +38,8 @@ type OrganizationData = {
     phone?: string;
     email?: string;
     TIN?: string;
+    ebmDeviceId?: string | null;
+    ebmSerialNo?: string | null;
     currency?: string;
     isActive: boolean;
     createdAt: string;
@@ -320,6 +322,34 @@ export function OrganizationConfig() {
                                             value={organization?.TIN || ''}
                                             onChange={(e) => setOrganization(prev => prev ? { ...prev, TIN: e.target.value } : null)}
                                             disabled={!isAuthorized || isSavingOrg}
+                                            className="rounded-xl"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2 md:col-span-2">
+                                        <Label className="flex items-center gap-2">
+                                            <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                            RRA EBM / VSDC — device ID
+                                        </Label>
+                                        <Input
+                                            value={organization?.ebmDeviceId ?? ''}
+                                            onChange={(e) => setOrganization(prev => prev ? { ...prev, ebmDeviceId: e.target.value } : null)}
+                                            disabled={!isAuthorized || isSavingOrg}
+                                            placeholder="From RRA registration (VSDC)"
+                                            className="rounded-xl"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2 md:col-span-2">
+                                        <Label className="flex items-center gap-2">
+                                            <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                            RRA EBM / VSDC — serial number
+                                        </Label>
+                                        <Input
+                                            value={organization?.ebmSerialNo ?? ''}
+                                            onChange={(e) => setOrganization(prev => prev ? { ...prev, ebmSerialNo: e.target.value } : null)}
+                                            disabled={!isAuthorized || isSavingOrg}
+                                            placeholder="Device / controller serial from RRA"
                                             className="rounded-xl"
                                         />
                                     </div>

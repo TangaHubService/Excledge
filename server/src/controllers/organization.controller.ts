@@ -219,7 +219,17 @@ export const createOrganization = async (req: Request, res: Response) => {
 export const updateOrganization = async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
-    const { name, businessType, address, phone, email, TIN, currency } = req.body;
+    const {
+      name,
+      businessType,
+      address,
+      phone,
+      email,
+      TIN,
+      currency,
+      ebmDeviceId,
+      ebmSerialNo,
+    } = req.body;
     //@ts-ignore
     const userId = parseInt(req.user?.userId as string);
 
@@ -237,6 +247,13 @@ export const updateOrganization = async (req: Request, res: Response) => {
         .json({ error: "Only admins can update organization details" });
     }
 
+    if (ebmDeviceId !== undefined && ebmDeviceId !== null && typeof ebmDeviceId !== "string") {
+      return res.status(400).json({ error: "ebmDeviceId must be a string" });
+    }
+    if (ebmSerialNo !== undefined && ebmSerialNo !== null && typeof ebmSerialNo !== "string") {
+      return res.status(400).json({ error: "ebmSerialNo must be a string" });
+    }
+
     const organization = await prisma.organization.update({
       where: { id },
       data: {
@@ -247,6 +264,12 @@ export const updateOrganization = async (req: Request, res: Response) => {
         email,
         TIN,
         currency,
+        ...(ebmDeviceId !== undefined
+          ? { ebmDeviceId: ebmDeviceId === "" ? null : ebmDeviceId }
+          : {}),
+        ...(ebmSerialNo !== undefined
+          ? { ebmSerialNo: ebmSerialNo === "" ? null : ebmSerialNo }
+          : {}),
       },
     });
 

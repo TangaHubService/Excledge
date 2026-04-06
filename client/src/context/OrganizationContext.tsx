@@ -10,7 +10,11 @@ interface Organization {
     country?: string;
     phone?: string;
     email?: string;
+    /** Prisma / API may return uppercase TIN */
+    TIN?: string;
     tin?: string;
+    ebmDeviceId?: string | null;
+    ebmSerialNo?: string | null;
     avatar?: string;
     businessType?: string;
     hasActiveSubscription?: boolean;

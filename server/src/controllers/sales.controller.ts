@@ -5,7 +5,13 @@ import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 import { Decimal } from "@prisma/client/runtime/library"
 import { auditLogger } from "../utils/auditLogger"
 import { removeStock, addStock } from "../services/inventory-ledger.service"
-import { generateInvoiceNumber, submitInvoiceToEbm, isEbmEnabled } from "../services/rra-ebm.service"
+import {
+  generateInvoiceNumber,
+  submitInvoiceToEbm,
+  submitRefundToEbm,
+  submitVoidToEbm,
+  isEbmEnabled,
+} from "../services/rra-ebm.service"
 import { selectBatchesForSale, updateBatchQuantity } from "../services/batch.service"
 import { calculateProfit } from "../services/profit.service"
 import { getAverageCost } from "../services/cost-price.service"
@@ -254,24 +260,13 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       timeout: 60000,   // 60 seconds
     });
 
-    // 5. Submit to EBM if enabled (outside transaction, async)
+    // 5. Submit to EBM/VSDC if enabled (outside transaction, async)
     if (isEbmEnabled()) {
-      // Submit asynchronously - don't block sale creation
       submitInvoiceToEbm({
         saleId: sale.id,
-        invoiceNumber: sale.invoiceNumber || saleNumber,
         organizationId: organizationId!,
-        customerTIN: (sale as any).customer?.customerType === 'CORPORATE' ? undefined : undefined, // TODO: Add TIN to customer
-        items: ((sale as any).saleItems || []).map((item: any) => ({
-          productName: item.product.name,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice.toNumber(),
-          totalPrice: item.totalPrice.toNumber(),
-        })),
-        totalAmount: sale.totalAmount.toNumber(),
-        date: sale.createdAt,
-      }).catch(error => {
-        console.error('[EBM] Failed to submit invoice (non-blocking):', error);
+      }).catch((error) => {
+        console.error("[EBM] Failed to submit invoice (non-blocking):", error);
       });
     }
 
@@ -373,6 +368,10 @@ export const getSales = async (req: BranchAuthRequest, res: Response) => {
         saleItems: {
           include: { product: true },
         },
+        ebmTransactions: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
       },
       orderBy: {
         createdAt: 'asc',
@@ -419,6 +418,9 @@ export const getSaleById = async (req: BranchAuthRequest, res: Response) => {
         },
         saleItems: {
           include: { product: true },
+        },
+        ebmTransactions: {
+          orderBy: { createdAt: "desc" },
         },
       },
     })
@@ -670,6 +672,15 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
       });
     });
 
+    if (isEbmEnabled() && result.refundSale?.id && result.success) {
+      submitRefundToEbm({
+        organizationId: parseInt(req.params.organizationId),
+        originalSaleId: parseInt(req.params.id),
+        refundSaleId: result.refundSale.id,
+        reason: req.body?.reason,
+      }).catch((err) => console.error("[EBM] Refund submit failed (non-blocking):", err));
+    }
+
     res.status(200).json(success(result));
   } catch (error: any) {
     console.error("[Refund Error]:", error);
@@ -768,6 +779,14 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
         metadata: { cancellationReason: reason }
       });
     });
+
+    if (isEbmEnabled()) {
+      submitVoidToEbm({
+        organizationId,
+        saleId,
+        reason,
+      }).catch((err) => console.error("[EBM] Void submit failed (non-blocking):", err));
+    }
 
     res.status(200).json(success({ message: "Sale cancelled successfully" }));
   } catch (error) {
