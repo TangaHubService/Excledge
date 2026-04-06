@@ -1,0 +1,30 @@
+
+> inventory-system-fn@0.0.0 build
+> tsc -b && vite build
+
+src/pages/dashboard/reports/sells.tsx(12,1): error TS6133: 'apiClient' is declared but its value is never read.
+src/pages/dashboard/reports/sells.tsx(43,12): error TS2451: Cannot redeclare block-scoped variable 'transactions'.
+src/pages/dashboard/reports/sells.tsx(43,26): error TS6133: 'setTransactions' is declared but its value is never read.
+src/pages/dashboard/reports/sells.tsx(44,12): error TS2451: Cannot redeclare block-scoped variable 'summary'.
+src/pages/dashboard/reports/sells.tsx(44,21): error TS6133: 'setSummary' is declared but its value is never read.
+src/pages/dashboard/reports/sells.tsx(50,12): error TS2451: Cannot redeclare block-scoped variable 'loading'.
+src/pages/dashboard/reports/sells.tsx(50,21): error TS6133: 'setLoading' is declared but its value is never read.
+src/pages/dashboard/reports/sells.tsx(51,12): error TS2451: Cannot redeclare block-scoped variable 'error'.
+src/pages/dashboard/reports/sells.tsx(51,19): error TS6133: 'setError' is declared but its value is never read.
+src/pages/dashboard/reports/sells.tsx(70,12): error TS2451: Cannot redeclare block-scoped variable 'totalItems'.
+src/pages/dashboard/reports/sells.tsx(70,24): error TS6133: 'setTotalItems' is declared but its value is never read.
+src/pages/dashboard/reports/sells.tsx(83,30): error TS2451: Cannot redeclare block-scoped variable 'loading'.
+src/pages/dashboard/reports/sells.tsx(89,11): error TS2451: Cannot redeclare block-scoped variable 'transactions'.
+src/pages/dashboard/reports/sells.tsx(90,11): error TS2451: Cannot redeclare block-scoped variable 'totalItems'.
+src/pages/dashboard/reports/sells.tsx(99,11): error TS2451: Cannot redeclare block-scoped variable 'summary'.
+src/pages/dashboard/reports/sells.tsx(118,11): error TS2451: Cannot redeclare block-scoped variable 'error'.
+src/pages/dashboard/reports/sells.tsx(122,13): error TS2304: Cannot find name 'setIsGeneratingPdf'.
+src/pages/dashboard/reports/sells.tsx(210,13): error TS2304: Cannot find name 'setIsGeneratingPdf'.
+src/pages/dashboard/reports/sells.tsx(527,72): error TS2304: Cannot find name 'isGeneratingPdf'.
+src/pages/dashboard/reports/sells.tsx(530,34): error TS2304: Cannot find name 'isGeneratingPdf'.
+src/pages/dashboard/reports/sells.tsx(535,34): error TS2304: Cannot find name 'isGeneratingPdf'.
+src/pages/dashboard/sales/pos.tsx(411,20): error TS6133: 'setIsOnline' is declared but its value is never read.
+src/pages/dashboard/sales/pos.tsx(412,10): error TS6133: 'isSyncing' is declared but its value is never read.
+src/pages/dashboard/sales/pos.tsx(412,21): error TS6133: 'setIsSyncing' is declared but its value is never read.
+src/pages/dashboard/suppliers/suppliers.tsx(86,11): error TS6133: 'handleDelete' is declared but its value is never read.
+src/pages/dashboard/suppliers/suppliers.tsx(170,14): error TS2741: Property 'onDelete' is missing in type '{ loading: boolean; suppliers: Supplier[]; searchTerm: string; onSearchChange: Dispatch<SetStateAction<string>>; onEdit: (supplier: Supplier) => void; }' but required in type 'SuppliersCardProps'.

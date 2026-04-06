@@ -1,0 +1,971 @@
+{
+  "info": {
+    "name": "Business Management System API",
+    "description": "Complete API collection for Multi-Domain Business Inventory & Sales Management System (Pharmacy, Hardware Store, Retail, etc.)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "organizationId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('token', jsonData.token);",
+                  "    if (jsonData.user.organizations && jsonData.user.organizations.length > 0) {",
+                  "        pm.collectionVariables.set('organizationId', jsonData.user.organizations[0].organizationId);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"password\": \"password123\",\n  \"name\": \"New User\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/signup"
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"oldPass\",\n  \"newPassword\": \"newPass\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/change-password"
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/auth/me"
+          }
+        },
+        {
+          "name": "Switch Organization",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/switch-organization"
+          }
+        },
+        {
+          "name": "Verify Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"token\": \"verification_token\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/verify-account"
+          }
+        },
+        {
+          "name": "Resend Verification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"email\": \"user@example.com\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/resend-verification"
+          }
+        },
+        {
+          "name": "Request Password Reset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"email\": \"user@example.com\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/request-password-reset"
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"token\": \"reset_token\",\n \"newPassword\": \"new_password\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/reset-password"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Organizations",
+      "item": [
+        {
+          "name": "Get User Organizations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/organizations"
+          }
+        },
+        {
+          "name": "Get Organization By ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/organizations/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Create Organization",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Business\",\n  \"businessType\": \"RETAIL_SHOP\",\n  \"phone\": \"123456789\",\n  \"email\": \"business@example.com\"\n}"
+            },
+            "url": "{{baseUrl}}/organizations"
+          }
+        },
+        {
+          "name": "Update Organization",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\"\n}"
+            },
+            "url": "{{baseUrl}}/organizations/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Update Organization Avatar",
+          "request": {
+            "method": "PUT",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/organizations/avatar/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Invite User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee@example.com\",\n  \"role\": \"SELLER\"\n}"
+            },
+            "url": "{{baseUrl}}/organizations/{{organizationId}}/invite"
+          }
+        },
+        {
+          "name": "Bulk Invite Users",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "description": "Excel file"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/organizations/{{organizationId}}/bulk-invite"
+          }
+        },
+        {
+          "name": "Get Organization Users",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/organizations/{{organizationId}}/users"
+          }
+        },
+        {
+          "name": "Remove User from Organization",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/organizations/{{organizationId}}/users/:userId"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Stats",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/dashboard/stats/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Get Sales Trend",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/dashboard/sales-trend/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/dashboard/notifications/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Get Top Selling Products",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/dashboard/{{organizationId}}/top-selling-products"
+          }
+        },
+        {
+          "name": "Get Detailed Inventory",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/dashboard/{{organizationId}}/detailed-inventory"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sales",
+      "item": [
+        {
+          "name": "Get Sales",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/sales/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Get Sale By ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/sales/:id"
+          }
+        },
+        {
+          "name": "Create Sale",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"cust_123\",\n  \"items\": [{ \"productId\": \"prod_1\", \"quantity\": 2 }],\n  \"paymentType\": \"CASH\",\n  \"totalAmount\": 1000\n}"
+            },
+            "url": "{{baseUrl}}/sales/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Pay Debt",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"amount\": 500\n}"
+            },
+            "url": "{{baseUrl}}/sales/:id/pay-debt/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Refund Sale",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"reason\": \"Defective item\"\n}"
+            },
+            "url": "{{baseUrl}}/sales/:id/refund/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Cancel Sale",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"reason\": \"Mistake\"\n}"
+            },
+            "url": "{{baseUrl}}/sales/:id/cancel/{{organizationId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "item": [
+        {
+          "name": "Get Products",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/inventory/products/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Get Product By ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/inventory/:id"
+          }
+        },
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Product A\",\n  \"quantity\": 100,\n  \"unitPrice\": 500\n}"
+            },
+            "url": "{{baseUrl}}/inventory/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"quantity\": 150\n}"
+            },
+            "url": "{{baseUrl}}/inventory/{{organizationId}}/product/:id"
+          }
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/inventory/{{organizationId}}/product/:id"
+          }
+        },
+        {
+          "name": "Get Expiring Products",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/inventory/products/{{organizationId}}/expiring"
+          }
+        },
+        {
+          "name": "Get Expired Products",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/inventory/products/{{organizationId}}/expired"
+          }
+        },
+        {
+          "name": "Get Low Stock Products",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/inventory/products/{{organizationId}}/low-stock"
+          }
+        },
+        {
+          "name": "Bulk Create Products",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n {\"name\": \"P1\", \"quantity\": 10, \"unitPrice\": 100},\n {\"name\": \"P2\", \"quantity\": 20, \"unitPrice\": 200}\n]"
+            },
+            "url": "{{baseUrl}}/inventory/{{organizationId}}/products"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "Get Customers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/customers/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Get Customer By ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/customers/:id"
+          }
+        },
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"name\": \"Jane Doe\",\n \"phone\": \"0780000000\"\n}"
+            },
+            "url": "{{baseUrl}}/customers/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Update Customer",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"phone\": \"0781111111\"\n}"
+            },
+            "url": "{{baseUrl}}/customers/:id"
+          }
+        },
+        {
+          "name": "Delete Customer",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/customers/:id"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Sales Report",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reports/sales/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Inventory Report",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reports/inventory/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Debtors Report",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reports/debtors/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Debt Payments Report",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reports/debt-payments/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Cash Flow Report",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reports/cash-flow/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Export Report",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reports/export/:reportType/{{organizationId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Subscriptions",
+      "item": [
+        {
+          "name": "Get Plans",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/subscriptions/plans"
+          }
+        },
+        {
+          "name": "Get User Subscriptions",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/subscriptions/organizations/{{organizationId}}/subscriptions"
+          }
+        },
+        {
+          "name": "Get Subscription Stats",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/subscriptions/organizations/{{organizationId}}/stats"
+          }
+        },
+        {
+          "name": "Get Payment History",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/subscriptions/organizations/{{organizationId}}/payments"
+          }
+        },
+        {
+          "name": "Initiate Paypack Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"phoneNumber\": \"0780000000\"\n}"
+            },
+            "url": "{{baseUrl}}/subscriptions/organizations/paypack/initiate"
+          }
+        },
+        {
+          "name": "Initiate Paypack (Plan specific)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"phoneNumber\": \"0780000000\"\n}"
+            },
+            "url": "{{baseUrl}}/subscriptions/organizations/{{organizationId}}/plans/:planId/paypack/initiate"
+          }
+        },
+        {
+          "name": "Cancel Subscription",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/subscriptions/organizations/{{organizationId}}/subscriptions/:id/cancel"
+          }
+        },
+        {
+          "name": "Reactivate Subscription",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/subscriptions/organizations/{{organizationId}}/subscriptions/:id/reactivate"
+          }
+        },
+        {
+          "name": "Toggle Auto-Renew",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"autoRenew\": true\n}"
+            },
+            "url": "{{baseUrl}}/subscriptions/organizations/{{organizationId}}/subscriptions/:id/auto-renew"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Suppliers",
+      "item": [
+        {
+          "name": "Get Suppliers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/suppliers/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Create Supplier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"name\": \"Supplier Inc\",\n \"email\": \"supply@example.com\"\n}"
+            },
+            "url": "{{baseUrl}}/suppliers/{{organizationId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Purchase Orders",
+      "item": [
+        {
+          "name": "Get Purchase Orders",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/purchase-orders/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Create Purchase Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"supplierId\": \"sup_1\",\n \"items\": []\n}"
+            },
+            "url": "{{baseUrl}}/purchase-orders/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Update Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"status\": \"COMPLETED\"\n}"
+            },
+            "url": "{{baseUrl}}/purchase-orders/:id/status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Debt Payments",
+      "item": [
+        {
+          "name": "Record Debt Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"amount\": 100\n}"
+            },
+            "url": "{{baseUrl}}/debt-payments/:saleId/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Get Outstanding",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/debt-payments/outstanding/{{organizationId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "System Owner",
+      "item": [
+        {
+          "name": "Get Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/system-owner/dashboard/stats"
+          }
+        },
+        {
+          "name": "Get All Organizations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/system-owner/organizations"
+          }
+        },
+        {
+          "name": "Update Org Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"action\": \"activate\"\n}"
+            },
+            "url": "{{baseUrl}}/system-owner/organizations/:id/status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/notifications/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Mark As Read",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/notifications/{{organizationId}}/:id/read"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Activity Logs",
+      "item": [
+        {
+          "name": "Get Logs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/activity-logs/{{organizationId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks & Integrations",
+      "item": [
+        {
+          "name": "Paypack Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"event_id\": \"...\", \"kind\": \"transaction:processed\", \"data\": { ... } }"
+            },
+            "url": "{{baseUrl}}/webhooks/paypack"
+          }
+        },
+        {
+          "name": "Pesapal IPN",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/pesapal/ipn"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Upload",
+      "item": [
+        {
+          "name": "Upload Image",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/upload/image"
+          }
+        }
+      ]
+    }
+  ]
+}

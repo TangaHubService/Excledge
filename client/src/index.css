@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply font-sans antialiased;
+  }
+}
+
+/* Dashboard shell: shared rhythm (sidebar + header vs main) */
+@layer components {
+  /* Deep navy–slate: lower saturation & luminance than bright blue-600 for less eye fatigue */
+  .dashboard-chrome {
+    @apply border-white/10 bg-gradient-to-b from-[#0f2744] via-[#0c2035] to-[#0a1628] text-slate-100 dark:from-[#0a1628] dark:via-[#070f18] dark:to-[#050a12] dark:border-slate-800/80;
+  }
+  .dashboard-main {
+    @apply flex-1 bg-slate-100 text-slate-900 dark:bg-zinc-900 dark:text-zinc-100;
+  }
+  .dashboard-main-padding {
+    @apply px-4 py-6 sm:px-6 lg:px-8;
+  }
+  .dashboard-nav-section-label {
+    @apply text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500;
+  }
+  .dashboard-nav-item {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150;
+  }
+}
+
+/* Your custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100 dark:bg-gray-800;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400 dark:bg-gray-500;
+}
+@layer utilities {
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+}

@@ -1,0 +1,19 @@
+
+> inventory-system-fn@0.0.0 build
+> tsc -b && vite build
+
+src/pages/dashboard/reports/sells.tsx(12,1): error TS6133: 'apiClient' is declared but its value is never read.
+src/pages/dashboard/reports/sells.tsx(33,11): error TS6196: 'SalesSummary' is declared but never used.
+src/pages/dashboard/reports/sells.tsx(74,19): error TS6133: 'isLoading' is declared but its value is never read.
+src/pages/dashboard/reports/sells.tsx(237,43): error TS7006: Parameter 'transaction' implicitly has an 'any' type.
+src/pages/dashboard/reports/sells.tsx(259,46): error TS7006: Parameter 'transaction' implicitly has an 'any' type.
+src/pages/dashboard/reports/sells.tsx(288,56): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/pages/dashboard/reports/sells.tsx(288,61): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/pages/dashboard/reports/sells.tsx(289,53): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/pages/dashboard/reports/sells.tsx(289,58): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/pages/dashboard/reports/sells.tsx(316,9): error TS2552: Cannot find name 'loading'. Did you mean 'isLoading'?
+src/pages/dashboard/reports/sells.tsx(557,52): error TS7006: Parameter 'transaction' implicitly has an 'any' type.
+src/pages/dashboard/reports/sells.tsx(591,63): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/pages/dashboard/reports/sells.tsx(591,68): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/pages/dashboard/reports/sells.tsx(595,78): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/pages/dashboard/reports/sells.tsx(595,83): error TS7006: Parameter 't' implicitly has an 'any' type.

@@ -1,0 +1,508 @@
+import type { Request, Response } from "express"
+import bcrypt from "bcryptjs"
+import jwt from "jsonwebtoken"
+import crypto from "crypto"
+import { prisma } from "../lib/prisma"
+import type { AuthRequest } from "../middleware/auth.middleware"
+import { auditLogger } from "../utils/auditLogger"
+import { emailService } from "../services/email.service"
+import { generateVerificationToken } from "../utils/token.utils"
+import { generateTokenPair, generateAccessToken, getRefreshTokenExpiry, verifyToken } from "../services/token.service"
+
+export const signup = async (req: Request, res: Response) => {
+  try {
+    const { email, password, name, phone } = req.body
+
+    if (!email || !password || !name) {
+      return res.status(400).json({ error: "Email, password, and name are required" })
+    }
+
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    })
+
+    if (existingUser) {
+      return res.status(400).json({ error: "User already exists" })
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    const { token: verificationToken, expires: verificationExpiry } = generateVerificationToken()
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name,
+        phone,
+        requirePasswordChange: false,
+        isActive: false,
+        isEmailVerified: false,
+        verificationToken,
+        verificationExpiry,
+      },
+    })
+
+    await emailService.sendVerificationEmail(user.email, user.name, verificationToken)
+
+    await auditLogger.users(req, {
+      type: 'USER_CREATED',
+      description: `New user signup: ${user.email}`,
+      entityType: 'User',
+      entityId: user.id,
+      metadata: {
+        email: user.email,
+        name: user.name,
+      }
+    });
+
+    const authToken = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        isVerified: false,
+      },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "24h" }
+    )
+
+    res.status(201).json({
+      token: authToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        isEmailVerified: false,
+        requirePasswordChange: false,
+      },
+      message: "Verification email sent. Please check your email to verify your account."
+    })
+  } catch (error) {
+    console.error("[Signup Error]:", error)
+    res.status(500).json({ error: "Signup failed" })
+  }
+}
+
+export const login = async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        userOrganizations: {
+          include: {
+            organization: true,
+          },
+        },
+      },
+    })
+    if (!user) {
+      await auditLogger.users(req, {
+        type: 'USER_LOGIN_FAILED',
+        description: `Failed login attempt for email: ${email}`,
+        status: 'FAILED',
+        metadata: { email }
+      });
+      return res.status(401).json({ error: "Invalid credentials" })
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.password)
+    if (!isValidPassword) {
+      await auditLogger.users(req, {
+        type: 'USER_LOGIN_FAILED',
+        description: `Failed login attempt (wrong password) for: ${user.email}`,
+        status: 'FAILED',
+        entityType: 'User',
+        entityId: user.id,
+        metadata: { email: user.email }
+      });
+      return res.status(401).json({ error: "Invalid credentials" })
+    }
+    if (!user.isEmailVerified) {
+      return res.status(403).json({
+        error: "Email not verified. Please check your email for the verification link.",
+        code: "EMAIL_NOT_VERIFIED",
+        userId: user.id
+      })
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({ error: "Account is inactive" })
+    }
+
+    const organizations = await Promise.all(user.userOrganizations.map(async (uo) => {
+      const activeSubscription = await prisma.subscription.findFirst({
+        where: {
+          organizationId: uo.organization.id,
+          status: { in: ['ACTIVE', 'TRIALING'] },
+          endDate: { gte: new Date() }
+        },
+        orderBy: { endDate: 'desc' }
+      });
+
+      return {
+        id: uo.organization.id,
+        name: uo.organization.name,
+        address: uo.organization.address,
+        phone: uo.organization.phone,
+        email: uo.organization.email,
+        businessType: uo.organization.businessType,
+        role: uo.role,
+        isOwner: uo.isOwner,
+        hasActiveSubscription: !!activeSubscription,
+        subscriptionStatus: activeSubscription?.status || (uo.organization.isActive ? 'INACTIVE' : 'EXPIRED'),
+        subscriptionEndDate: activeSubscription?.endDate,
+      };
+    }))
+
+    const tokenPayload = {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      organizationId: user.userOrganizations.map((user) => user.organizationId),
+    };
+
+    const { accessToken, refreshToken } = generateTokenPair(tokenPayload);
+    
+    // Hash the refresh token before storing
+    const hashedRefreshToken = crypto
+      .createHash('sha256')
+      .update(refreshToken)
+      .digest('hex');
+
+    // Store hashed refresh token and expiry in database
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        refreshToken: hashedRefreshToken,
+        refreshTokenExpiry: getRefreshTokenExpiry(),
+      },
+    });
+
+    const organizationId = user.userOrganizations[0]?.organizationId;
+
+    if (organizationId) {
+      await auditLogger.users(req, {
+        type: 'USER_LOGIN',
+        description: `User logged in to ${user.userOrganizations[0]?.organization.name}`,
+        entityType: 'User',
+        entityId: user.id,
+        metadata: {
+          email: user.email,
+          organizationId,
+        }
+      });
+    }
+
+    res.json({
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        requirePasswordChange: user.requirePasswordChange,
+      },
+      organizations,
+      hasOrganization: organizations.length > 0,
+    })
+  } catch (error) {
+    console.error("[Login Error]:", error)
+    res.status(500).json({ error: "Login failed" })
+  }
+}
+
+export const refresh = async (req: Request, res: Response) => {
+  try {
+    const { refreshToken: clientRefreshToken } = req.body;
+
+    if (!clientRefreshToken) {
+      return res.status(401).json({ error: "Refresh token required" });
+    }
+
+    // Verify the refresh token is valid
+    let decoded;
+    try {
+      decoded = verifyToken(clientRefreshToken);
+    } catch (error) {
+      return res.status(401).json({ error: "Invalid or expired refresh token" });
+    }
+
+    // Hash the client refresh token to compare with stored hash
+    const hashedRefreshToken = crypto
+      .createHash('sha256')
+      .update(clientRefreshToken)
+      .digest('hex');
+
+    // Find user and verify the refresh token matches
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      include: {
+        userOrganizations: {
+          include: {
+            organization: true,
+          },
+        },
+      },
+    });
+
+    if (!user || !user.refreshToken || user.refreshToken !== hashedRefreshToken) {
+      return res.status(401).json({ error: "Invalid refresh token" });
+    }
+
+    // Check if refresh token has expired
+    if (user.refreshTokenExpiry && user.refreshTokenExpiry < new Date()) {
+      return res.status(401).json({ error: "Refresh token has expired" });
+    }
+
+    // Generate new token pair
+    const tokenPayload = {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      organizationId: user.userOrganizations.map((uo) => uo.organizationId),
+    };
+
+    const { accessToken, refreshToken: newRefreshToken } = generateTokenPair(tokenPayload);
+
+    // Hash and store new refresh token
+    const hashedNewRefreshToken = crypto
+      .createHash('sha256')
+      .update(newRefreshToken)
+      .digest('hex');
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        refreshToken: hashedNewRefreshToken,
+        refreshTokenExpiry: getRefreshTokenExpiry(),
+      },
+    });
+
+    res.json({
+      accessToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (error) {
+    console.error("[Refresh Token Error]:", error);
+    res.status(500).json({ error: "Token refresh failed" });
+  }
+}
+
+export const logout = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // Revoke refresh token by clearing it from database
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        refreshToken: null,
+        refreshTokenExpiry: null,
+      },
+    });
+
+    await auditLogger.users(req, {
+      type: 'USER_LOGOUT',
+      description: `User logged out`,
+      entityType: 'User',
+      entityId: userId,
+      status: 'SUCCESS',
+    });
+
+    res.json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.error("[Logout Error]:", error);
+    res.status(500).json({ error: "Logout failed" });
+  }
+}
+
+export const switchOrganization = async (req: Request, res: Response) => {
+  try {
+    //@ts-ignore
+    const userId = req.user.userId;
+    const { organizationId } = req.body;
+
+    const organization = await prisma.organization.findUnique({
+      where: { id: parseInt(organizationId as string) },
+      include: { userOrganizations: true },
+    })
+
+    if (!organization) {
+      return res.status(403).json({ error: "Access denied to this organization" })
+    }
+
+    const userOrg = organization.userOrganizations.find((u) => u.userId === parseInt(userId as string));
+
+    if (!userOrg) {
+      return res.status(403).json({ error: "Access denied to this organization" })
+    }
+
+    const fullUser = await prisma.user.findUnique({
+      where: { id: parseInt(userId as string) },
+    });
+
+    if (!fullUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const token = jwt.sign(
+      {
+        userId: userId,
+        email: fullUser.email,
+        role: userOrg.role,
+        organizationId: organization.id,
+      },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "24h" },
+    );
+
+    res.json({
+      organization,
+      token,
+      user: {
+        id: fullUser.id,
+        email: fullUser.email,
+        name: fullUser.name,
+        role: userOrg.role,
+      }
+    })
+  } catch (error: any) {
+    console.error("[Switch Organization Error]:", error)
+    res.status(500).json({ error: "Failed to switch organization" })
+  }
+}
+
+export const changePassword = async (req: Request, res: Response) => {
+  try {
+    const { currentPassword, newPassword } = req.body
+    //@ts-ignore
+    const userId = req.user.userId
+
+    if (!userId || !currentPassword || !newPassword) {
+      return res.status(400).json({ error: "All fields are required" })
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: parseInt(userId as string) },
+    })
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" })
+    }
+
+    // Verify current password
+    const isValidPassword = await bcrypt.compare(currentPassword, user.password)
+    if (!isValidPassword) {
+      return res.status(401).json({ error: "Current password is incorrect" })
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10)
+
+    // Update password and remove requirement flag
+    await prisma.user.update({
+      where: { id: parseInt(userId as string) },
+      data: {
+        password: hashedPassword,
+        requirePasswordChange: false,
+        defaultPassword: null,
+      },
+    })
+
+    res.json({ message: "Password changed successfully" })
+  } catch (error) {
+    console.error("[Change Password Error]:", error)
+    res.status(500).json({ error: "Failed to change password" })
+  }
+}
+
+export const checkPasswordRequirement = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params
+
+    const user = await prisma.user.findUnique({
+      where: { id: parseInt(userId as string) },
+      select: {
+        requirePasswordChange: true,
+      },
+    })
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" })
+    }
+
+    res.json({ requirePasswordChange: user.requirePasswordChange })
+  } catch (error) {
+    console.error("[Check Password Requirement Error]:", error)
+    res.status(500).json({ error: "Failed to check password requirement" })
+  }
+}
+
+export const getCurrentUser = async (req: AuthRequest, res: Response) => {
+  try {
+    const authUser = req.user
+    //@ts-ignore
+    const userId = authUser?.userId
+    const user = await prisma.user.findUnique({
+      where: { id: parseInt(userId as string) },
+      include: {
+        userOrganizations: {
+          include: {
+            organization: true,
+          },
+        },
+      },
+    })
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" })
+    }
+
+    const organizations = await Promise.all(user.userOrganizations.map(async (uo) => {
+      const activeSubscription = await prisma.subscription.findFirst({
+        where: {
+          organizationId: uo.organization.id,
+          status: { in: ['ACTIVE', 'TRIALING'] },
+          endDate: { gte: new Date() }
+        },
+        orderBy: { endDate: 'desc' }
+      });
+
+      return {
+        id: uo.organization.id,
+        name: uo.organization.name,
+        address: uo.organization.address,
+        phone: uo.organization.phone,
+        email: uo.organization.email,
+        businessType: uo.organization.businessType,
+        role: uo.role,
+        isOwner: uo.isOwner,
+        hasActiveSubscription: !!activeSubscription,
+        subscriptionStatus: activeSubscription?.status || (uo.organization.isActive ? 'INACTIVE' : 'EXPIRED'),
+        subscriptionEndDate: activeSubscription?.endDate,
+      };
+    }))
+
+    res.json({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      phone: user.phone,
+      isActive: user.isActive,
+      organizations,
+      profileImage: user.profileImage,
+      requirePasswordChange: user.requirePasswordChange,
+    })
+  } catch (error) {
+    console.error("[Get Current User Error]:", error)
+    res.status(500).json({ error: "Failed to get user" })
+  }
+}

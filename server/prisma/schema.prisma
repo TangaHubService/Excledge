@@ -1,0 +1,1077 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  name              String
+  businessType      BusinessType             @default(PHARMACY)
+  TIN               String?
+  currency          String?
+  ebmDeviceId       String?
+  ebmSerialNo       String?
+  avatar            String?
+  address           String?
+  phone             String?
+  email             String?
+  isActive          Boolean                  @default(true)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  stripeCustomerId  String?
+  id                Int                      @id @default(autoincrement())
+  activityLogs      ActivityLog[]
+  batches           Batch[]
+  cashBalances      CashBalance[]
+  customers         Customer[]
+  debtPayments      DebtPayment[]
+  ebmQueue          EbmQueue[]
+  ebmTransactions   EbmTransaction[]
+  expenses          Expense[]
+  inventoryLedgers  InventoryLedger[]
+  notifications     Notification[]
+  invitations       OrganizationInvitation[]
+  products          Product[]
+  purchaseOrders    PurchaseOrder[]
+  sales             Sale[]
+  stockMovements    StockMovement[]
+  subscriptions     Subscription[]           @relation("OrganizationSubscriptions")
+  supplierPayments  SupplierPayment[]
+  suppliers         Supplier[]
+  userOrganizations UserOrganization[]
+  warehouses        Warehouse[]
+  branches          Branch[]                 // NEW: Branch management
+  taxConfigurations TaxConfiguration[]
+  stockTransfers    StockTransfer[]
+
+  @@map("organizations")
+}
+
+// NEW: Branch Model - Core entity for inventory management
+model Branch {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  name           String
+  code           String       // e.g., "NYC-001", "MAIN", "KIGALI-01"
+  location       String?
+  address        String?
+  phone          String?
+  status         BranchStatus @default(ACTIVE)
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  // Relations
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userBranches      UserBranch[]
+  sales             Sale[]
+  stockMovements    StockMovement[]
+  expenses          Expense[]
+  cashBalances      CashBalance[]
+  activityLogs      ActivityLog[]
+  batches           Batch[]
+  inventoryLedgers  InventoryLedger[]
+  transfersFrom     StockTransfer[]     @relation("TransferFrom")
+  transfersTo       StockTransfer[]     @relation("TransferTo")
+  
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([status])
+  @@index([organizationId, status])
+  @@map("branches")
+}
+
+// NEW: Junction table linking users to branches (many-to-many)
+model UserBranch {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  branchId  Int
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, branchId])
+  @@index([userId])
+  @@index([branchId])
+  @@map("user_branches")
+}
+
+model Supplier {
+  name           String
+  email          String
+  phone          String?
+  address        String?
+  contactPerson  String?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  id             Int             @id @default(autoincrement())
+  organizationId Int
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  orderNumber      String              @unique
+  status           PurchaseOrderStatus @default(PENDING)
+  totalAmount      Decimal             @db.Decimal(10, 2)
+  notes            String?
+  orderedAt        DateTime            @default(now())
+  expectedDate     DateTime?
+  receivedAt       DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  id               Int                 @id @default(autoincrement())
+  supplierId       Int
+  organizationId   Int
+  userId           Int
+  isActive         Boolean             @default(true)
+  items            PurchaseOrderItem[]
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier         Supplier            @relation(fields: [supplierId], references: [id])
+  user             User                @relation(fields: [userId], references: [id])
+  supplierPayments SupplierPayment[]
+  User             User[]              @relation("CreatedOrders")
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  productName     String
+  quantity        Int
+  unitPrice       Decimal       @db.Decimal(10, 2)
+  totalPrice      Decimal       @db.Decimal(10, 2)
+  id              Int           @id @default(autoincrement())
+  purchaseOrderId Int
+  productId       Int?
+  product         Product?      @relation(fields: [productId], references: [id])
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_order_items")
+}
+
+model User {
+  email                    String                   @unique
+  password                 String
+  name                     String
+  phone                    String?
+  profileImage             String?
+  role                     UserRole                 @default(ADMIN)
+  isActive                 Boolean                  @default(false)
+  isEmailVerified          Boolean                  @default(false)
+  verificationToken        String?
+  verificationExpiry       DateTime?
+  passwordResetToken       String?
+  passwordResetExpiry      DateTime?
+  refreshToken             String?
+  refreshTokenExpiry       DateTime?
+  requirePasswordChange    Boolean                  @default(false)
+  defaultPassword          String?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  deletedAt                DateTime?
+  id                       Int                      @id @default(autoincrement())
+  activityLogs             ActivityLog[]
+  recordedCashBalances     CashBalance[]            @relation("RecordedCashBalances")
+  recordedCostHistory      CostPriceHistory[]       @relation("RecordedCostHistory")
+  recordedDebtPayments     DebtPayment[]            @relation("RecordedDebtPayments")
+  recordedExpenses         Expense[]
+  inventoryLedgers         InventoryLedger[]
+  sentInvitations          OrganizationInvitation[] @relation("InvitedBy")
+  receivedInvitations      OrganizationInvitation[] @relation("InvitedUser")
+  PurchaseOrder            PurchaseOrder[]
+  sales                    Sale[]
+  stockMovements           StockMovement[]
+  recordedSupplierPayments SupplierPayment[]        @relation("RecordedSupplierPayments")
+  userOrganizations        UserOrganization[]
+  createdOrders            PurchaseOrder[]          @relation("CreatedOrders")
+  userBranches             UserBranch[]             // NEW: Branch assignments
+
+  @@map("users")
+  @@index([deletedAt])
+  @@index([passwordResetToken])
+  @@index([refreshToken])
+}
+
+model UserOrganization {
+  role           UserRole
+  isOwner        Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  id             Int          @id @default(autoincrement())
+  userId         Int
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@map("user_organizations")
+}
+
+model OrganizationInvitation {
+  email           String
+  role            UserRole
+  token           String           @unique
+  defaultPassword String
+  status          InvitationStatus @default(PENDING)
+  expiresAt       DateTime
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  id              Int              @id @default(autoincrement())
+  organizationId  Int
+  invitedBy       Int
+  invitedUserId   Int?
+  inviter         User             @relation("InvitedBy", fields: [invitedBy], references: [id])
+  invitedUser     User?            @relation("InvitedUser", fields: [invitedUserId], references: [id])
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_invitations")
+}
+
+model SubscriptionPlan {
+  name          String         @unique
+  description   String?
+  price         Float
+  currency      String         @default("USD")
+  billingCycle  String         @default("MONTHLY")
+  isActive      Boolean        @default(true)
+  maxUsers      Int            @default(1)
+  stripePriceId String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  id            Int            @id @default(autoincrement())
+  features      PlanFeature[]
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Feature {
+  name        String        @unique
+  description String?
+  key         String        @unique
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  id          Int           @id @default(autoincrement())
+  plans       PlanFeature[]
+
+  @@map("features")
+}
+
+model PlanFeature {
+  isEnabled  Boolean          @default(true)
+  limitValue Int?
+  planId     Int
+  featureId  Int
+  feature    Feature          @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  plan       SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@id([planId, featureId])
+  @@map("plan_features")
+}
+
+model Subscription {
+  status         SubscriptionStatus @default(PENDING)
+  startDate      DateTime?
+  endDate        DateTime?
+  autoRenew      Boolean            @default(true)
+  paymentMethod  PaymentMethodType  @default(STRIPE)
+  paymentId      String?            @unique
+  paymentDetails Json?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  cancelledAt    DateTime?
+  id             Int                @id @default(autoincrement())
+  organizationId Int
+  planId         Int
+  payments       Payment[]
+  organization   Organization       @relation("OrganizationSubscriptions", fields: [organizationId], references: [id])
+  plan           SubscriptionPlan   @relation(fields: [planId], references: [id])
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([endDate])
+  @@map("subscriptions")
+}
+
+model Payment {
+  amount         Float
+  currency       String            @default("USD")
+  paymentMethod  PaymentMethodType
+  paymentId      String?
+  status         PaymentStatus     @default(PENDING)
+  receiptUrl     String?
+  metadata       Json?
+  processedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  id             Int               @id @default(autoincrement())
+  subscriptionId Int
+  subscription   Subscription      @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([paymentId])
+  @@index([status])
+  @@map("payments")
+}
+
+model Product {
+  name               String
+  sku                String?
+  batchNumber        String?
+  quantity           Int
+  unitPrice          Decimal             @db.Decimal(10, 2)
+  expiryDate         DateTime?
+  category           String?
+  description        String?
+  minStock           Int                 @default(10)
+  taxCategory        TaxCategory         @default(STANDARD)
+  barcode            String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  deletedAt          DateTime?
+  imageUrl           String?
+  id                 Int                 @id @default(autoincrement())
+  organizationId     Int
+  supplierId         Int?
+  isActive           Boolean             @default(true)
+  batches            Batch[]
+  inventoryLedgers   InventoryLedger[]
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier           Supplier?           @relation(fields: [supplierId], references: [id])
+  purchaseOrderItems PurchaseOrderItem[]
+  saleItems          SaleItem[]
+  stockTransferItems StockTransferItem[]
+  stockMovements     StockMovement[]
+
+  @@map("products")
+  @@index([name])
+  @@index([category])
+  @@index([organizationId, isActive])
+  @@index([deletedAt])
+}
+
+model Customer {
+  name           String
+  email          String?
+  phone          String
+  address        String?
+  customerType   CustomerType  @default(INDIVIDUAL)
+  balance        Decimal       @default(0) @db.Decimal(10, 2)
+  isActive       Boolean       @default(true)
+  TIN            String?       // RRA Tax ID
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+  id             Int           @id @default(autoincrement())
+  organizationId Int
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  debtPayments   DebtPayment[]
+  sales          Sale[]
+
+  @@map("customers")
+  @@index([phone])
+  @@index([organizationId, customerType])
+  @@index([deletedAt])
+}
+
+model DebtPayment {
+  amount         Decimal      @db.Decimal(10, 2)
+  paymentDate    DateTime     @default(now())
+  paymentMethod  String       @default("CASH")
+  reference      String?
+  notes          String?
+  id             Int          @id @default(autoincrement())
+  saleId         Int
+  customerId     Int
+  organizationId Int
+  recordedById   Int
+  customer       Customer     @relation(fields: [customerId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  recordedBy     User         @relation("RecordedDebtPayments", fields: [recordedById], references: [id])
+  sale           Sale         @relation(fields: [saleId], references: [id])
+
+  @@index([saleId])
+  @@index([customerId])
+  @@index([organizationId])
+  @@index([paymentDate])
+  @@map("debt_payments")
+}
+
+model Sale {
+  saleNumber         String           @unique
+  paymentType        SalePaymentType
+  cashAmount         Decimal          @default(0) @db.Decimal(10, 2)
+  insuranceAmount    Decimal          @default(0) @db.Decimal(10, 2)
+  debtAmount         Decimal          @default(0) @db.Decimal(10, 2)
+  totalAmount        Decimal          @db.Decimal(10, 2)
+  status             SaleStatus       @default(COMPLETED)
+  refundedAt         DateTime?        @map("refunded_at")
+  refundReason       String?          @map("refund_reason")
+  cancelledAt        DateTime?        @map("cancelled_at")
+  cancellationReason String?          @map("cancellation_reason")
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  id                 Int              @id @default(autoincrement())
+  customerId         Int
+  userId             Int
+  organizationId     Int
+  branchId           Int              // NEW: Branch association
+  refundedById       Int?             @map("refunded_by")
+  cancelledById      Int?             @map("cancelled_by")
+  originalSaleId     Int?             @map("original_sale_id")
+  isProforma         Boolean          @default(false)
+  reprintCount       Int              @default(0)
+  invoiceNumber      String?          @unique @map("invoice_number")
+  vatAmount          Decimal          @default(0)   @db.Decimal(10, 2)
+  taxableAmount      Decimal          @default(0)   @db.Decimal(10, 2)
+  debtPayments       DebtPayment[]
+  ebmQueueItems      EbmQueue[]       @relation("SaleEbmQueue")
+  ebmTransactions    EbmTransaction[] @relation("SaleEbmTransactions")
+  saleItems          SaleItem[]
+  customer           Customer         @relation(fields: [customerId], references: [id])
+  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch             Branch           @relation(fields: [branchId], references: [id]) // NEW
+  originalSale       Sale?            @relation("RefundRelation", fields: [originalSaleId], references: [id])
+  refunds            Sale[]           @relation("RefundRelation")
+  user               User             @relation(fields: [userId], references: [id])
+
+  @@index([organizationId, status, createdAt])
+  @@index([invoiceNumber])
+  @@index([branchId])              // NEW
+  @@index([branchId, createdAt])   // NEW
+  @@index([branchId, status])      // NEW
+  @@map("sales")
+}
+
+model ActivityLog {
+  type           ActivityType
+  entityType     String?
+  entityId       String?
+  description    String
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  id             Int           @id @default(autoincrement())
+  organizationId Int?
+  userId         Int?
+  branchId       Int?          // NEW: Branch association (optional)
+  module         LogModule     @default(SYSTEM)
+  status         LogStatus     @default(SUCCESS)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  branch         Branch?       @relation(fields: [branchId], references: [id]) // NEW
+
+  @@index([organizationId, module, createdAt])
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+  @@index([branchId])              // NEW
+  @@map("activity_logs")
+}
+
+model SaleItem {
+  quantity   Int
+  unitPrice  Decimal @db.Decimal(10, 2)
+  totalPrice Decimal @db.Decimal(10, 2)
+  id         Int     @id @default(autoincrement())
+  saleId     Int
+  productId  Int
+  batchId    Int?
+  costPrice  Decimal @default(0) @db.Decimal(10, 2)
+  profit     Decimal @default(0) @db.Decimal(10, 2)
+  taxRate    Decimal @default(0)   @db.Decimal(5, 2)
+  taxAmount  Decimal @default(0)   @db.Decimal(10, 2)
+  taxCode    String?               // e.g. "A" = 18%, "B" = 0%, "E" = Exempt
+  batch      Batch?  @relation(fields: [batchId], references: [id])
+  product    Product @relation(fields: [productId], references: [id])
+  sale       Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@map("sale_items")
+}
+
+model Notification {
+  title          String
+  message        String
+  type           NotificationType @default(GENERIC)
+  data           Json?
+  isRead         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  id             Int              @id @default(autoincrement())
+  organizationId Int
+  recipientId    Int?
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([isRead])
+  @@index([recipientId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model StockMovement {
+  type           StockMovementType
+  quantity       Int
+  previousStock  Int
+  newStock       Int
+  note           String?
+  reference      String?
+  createdAt      DateTime          @default(now())
+  id             Int               @id @default(autoincrement())
+  organizationId Int
+  productId      Int
+  userId         Int
+  branchId       Int               // NEW: Branch association
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user           User              @relation(fields: [userId], references: [id])
+  branch         Branch            @relation(fields: [branchId], references: [id]) // NEW
+
+  @@index([organizationId])
+  @@index([productId])
+  @@index([createdAt])
+  @@index([branchId])              // NEW
+  @@index([branchId, productId])   // NEW
+  @@index([branchId, createdAt])   // NEW
+  @@map("stock_movements")
+}
+
+model Warehouse {
+  id               Int               @id @default(autoincrement())
+  name             String
+  code             String?
+  address          String?
+  organizationId   Int
+  isActive         Boolean           @default(true)
+  isDefault        Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  batches          Batch[]
+  inventoryLedgers InventoryLedger[]
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([isActive])
+  @@map("warehouses")
+}
+
+model Batch {
+  id               Int                @id @default(autoincrement())
+  productId        Int
+  organizationId   Int
+  branchId         Int                // NEW: Branch-based inventory
+  warehouseId      Int?               // DEPRECATED: kept for migration
+  batchNumber      String
+  quantity         Int
+  unitCost         Decimal            @db.Decimal(10, 2)
+  expiryDate       DateTime?
+  receivedAt       DateTime           @default(now())
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product          Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branch           Branch             @relation(fields: [branchId], references: [id]) // NEW
+  warehouse        Warehouse?         @relation(fields: [warehouseId], references: [id]) // DEPRECATED
+  costHistory      CostPriceHistory[]
+  inventoryLedgers InventoryLedger[]
+  saleItems        SaleItem[]
+
+  @@unique([productId, batchNumber, branchId])  // CHANGED from warehouseId
+  @@index([productId, isActive])
+  @@index([organizationId])
+  @@index([expiryDate])
+  @@index([receivedAt])
+  @@index([branchId])              // NEW
+  @@index([branchId, productId])   // NEW
+  @@map("batches")
+}
+
+model CostPriceHistory {
+  id           Int      @id @default(autoincrement())
+  batchId      Int
+  unitCost     Decimal  @db.Decimal(10, 2)
+  quantity     Int
+  reason       String?
+  reference    String?
+  recordedAt   DateTime @default(now())
+  recordedById Int
+  batch        Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  recordedBy   User     @relation("RecordedCostHistory", fields: [recordedById], references: [id])
+
+  @@index([batchId, recordedAt])
+  @@index([recordedAt])
+  @@map("cost_price_history")
+}
+
+model InventoryLedger {
+  id             Int                   @id @default(autoincrement())
+  organizationId Int
+  productId      Int
+  branchId       Int                   // NEW: Branch-based inventory
+  warehouseId    Int?                  // DEPRECATED: kept for migration
+  userId         Int
+  movementType   InventoryMovementType
+  direction      InventoryDirection
+  quantity       Int
+  runningBalance Int
+  unitCost       Decimal?              @db.Decimal(10, 2)
+  totalCost      Decimal?              @db.Decimal(10, 2)
+  reference      String?
+  referenceType  String?
+  batchNumber    String?
+  expiryDate     DateTime?
+  note           String?
+  metadata       Json?
+  createdAt      DateTime              @default(now())
+  batchId        Int?
+  batch          Batch?                @relation(fields: [batchId], references: [id])
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user           User                  @relation(fields: [userId], references: [id])
+  branch         Branch                @relation(fields: [branchId], references: [id]) // NEW
+  warehouse      Warehouse?            @relation(fields: [warehouseId], references: [id]) // DEPRECATED
+
+  @@index([organizationId, productId, createdAt])
+  @@index([organizationId, productId, branchId, createdAt])  // CHANGED
+  @@index([organizationId, movementType, createdAt])
+  @@index([productId, createdAt])
+  @@index([reference, referenceType])
+  @@index([createdAt])
+  @@index([branchId])              // NEW
+  @@index([branchId, productId])   // NEW
+  @@map("inventory_ledger")
+}
+
+model TaxConfiguration {
+  id             Int           @id @default(autoincrement())
+  organizationId Int
+  vatRate        Decimal       @db.Decimal(5, 2)  // e.g. 18.00
+  effectiveDate  DateTime
+  createdAt      DateTime      @default(now())
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@index([organizationId, effectiveDate])
+  @@map("tax_configurations")
+}
+
+model StockTransfer {
+  id             Int                  @id @default(autoincrement())
+  organizationId Int
+  fromBranchId   Int
+  toBranchId     Int
+  status         StockTransferStatus  @default(PENDING)
+  notes          String?
+  requestedById  Int
+  approvedById   Int?
+  createdAt      DateTime             @default(now())
+  completedAt    DateTime?
+  items          StockTransferItem[]
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  fromBranch     Branch               @relation("TransferFrom", fields: [fromBranchId], references: [id])
+  toBranch       Branch               @relation("TransferTo", fields: [toBranchId], references: [id])
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id               Int           @id @default(autoincrement())
+  transferId       Int
+  productId        Int
+  quantity         Int
+  transfer         StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product          Product       @relation(fields: [productId], references: [id])
+  @@map("stock_transfer_items")
+}
+
+model EbmTransaction {
+  id               Int                 @id @default(autoincrement())
+  organizationId   Int
+  saleId           Int?
+  invoiceNumber    String?
+  ebmInvoiceNumber String?
+  submissionStatus EbmSubmissionStatus @default(PENDING)
+  submittedAt      DateTime?
+  responseData     Json?
+  errorMessage     String?
+  retryCount       Int                 @default(0)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sale             Sale?               @relation("SaleEbmTransactions", fields: [saleId], references: [id])
+
+  @@index([organizationId])
+  @@index([saleId])
+  @@index([createdAt])
+  @@map("ebm_transactions")
+}
+
+model EbmQueue {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  saleId         Int?
+  invoiceNumber  String?
+  payload        Json
+  priority       Int          @default(0)
+  retryCount     Int          @default(0)
+  nextRetryAt    DateTime?
+  lastError      String?
+  submissionStatus EbmSubmissionStatus @default(PENDING)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sale           Sale?        @relation("SaleEbmQueue", fields: [saleId], references: [id])
+
+  @@index([organizationId])
+  @@index([submissionStatus])
+  @@index([nextRetryAt])
+  @@index([priority])
+  @@map("ebm_queue")
+}
+
+model Expense {
+  id             Int             @id @default(autoincrement())
+  organizationId Int
+  userId         Int
+  branchId       Int             // NEW: Branch association
+  category       ExpenseCategory
+  amount         Decimal         @db.Decimal(10, 2)
+  paymentMethod  String
+  description    String
+  reference      String?
+  expenseDate    DateTime
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id])
+  branch         Branch          @relation(fields: [branchId], references: [id]) // NEW
+
+  @@index([organizationId, expenseDate])
+  @@index([category])
+  @@index([paymentMethod])
+  @@index([branchId])              // NEW
+  @@index([branchId, expenseDate]) // NEW
+  @@map("expenses")
+}
+
+model SupplierPayment {
+  id              Int           @id @default(autoincrement())
+  purchaseOrderId Int
+  organizationId  Int
+  amount          Decimal       @db.Decimal(10, 2)
+  paymentMethod   String
+  paymentDate     DateTime
+  reference       String?
+  notes           String?
+  recordedById    Int
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  recordedBy      User          @relation("RecordedSupplierPayments", fields: [recordedById], references: [id])
+
+  @@index([purchaseOrderId])
+  @@index([organizationId, paymentDate])
+  @@index([paymentMethod])
+  @@map("supplier_payments")
+}
+
+model CashBalance {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  branchId       Int          // NEW: Branch association
+  balance        Decimal      @db.Decimal(10, 2)
+  balanceDate    DateTime
+  notes          String?
+  recordedById   Int
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch       @relation(fields: [branchId], references: [id]) // NEW
+  recordedBy     User         @relation("RecordedCashBalances", fields: [recordedById], references: [id])
+
+  @@index([organizationId, balanceDate])
+  @@index([branchId])              // NEW
+  @@index([branchId, balanceDate]) // NEW
+  @@map("cash_balances")
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING
+  PROCESSING
+  APPROVED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REJECTED
+}
+
+enum OrderItemStatus {
+  PENDING
+  PARTIALLY_FULFILLED
+  FULFILLED
+  CANCELLED
+}
+
+enum BusinessType {
+  PHARMACY
+  HARDWARE_STORE
+  RETAIL_SHOP
+  GROCERY_STORE
+  ELECTRONICS_STORE
+  CLOTHING_STORE
+  RESTAURANT
+  BAKERY
+  OTHER
+}
+
+enum PurchaseOrderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  CANCELLED
+  APPROVED
+  REJECTED
+}
+
+enum UserRole {
+  SYSTEM_OWNER
+  ADMIN
+  BRANCH_MANAGER  // NEW: For branch-level management
+  ACCOUNTANT
+  SELLER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+  DECLINED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PENDING
+  CANCELED
+  EXPIRED
+  PAST_DUE
+  TRIALING
+  UNPAID
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELED
+  UNPAID
+  CANCELLED
+}
+
+enum PaymentMethodType {
+  STRIPE
+  PAYPACK
+  PESAPA
+  CARD
+  CASH
+  BANK_TRANSFER
+  MOBILE_MONEY
+  TRIAL
+}
+
+enum CustomerType {
+  INDIVIDUAL
+  INSURANCE
+  CORPORATE
+}
+
+enum SaleStatus {
+  COMPLETED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELLED
+  DRAFT
+  PENDING
+}
+
+enum LogModule {
+  SALES
+  INVENTORY
+  CUSTOMERS
+  USERS
+  PURCHASE_ORDERS
+  SYSTEM
+}
+
+enum LogStatus {
+  SUCCESS
+  FAILED
+  REVERTED
+}
+
+enum ActivityType {
+  USER_LOGIN
+  USER_LOGOUT
+  USER_INVITE
+  USER_ACCEPT_INVITE
+  USER_ROLE_UPDATE
+  PRODUCT_CREATE
+  PRODUCT_UPDATE
+  PRODUCT_DELETE
+  SALE_CREATE
+  SALE_UPDATE
+  SALE_DELETE
+  PURCHASE_ORDER_CREATE
+  PURCHASE_ORDER_UPDATE
+  PURCHASE_ORDER_DELETE
+  STOCK_ADJUSTMENT
+  CUSTOMER_CREATE
+  CUSTOMER_UPDATE
+  CUSTOMER_DELETE
+  SUPPLIER_CREATE
+  SUPPLIER_UPDATE
+  SUPPLIER_DELETE
+  SETTINGS_UPDATE
+  OTHER
+  USER_LOGIN_FAILED
+  USER_CREATED
+  USER_PASSWORD_RESET
+  USER_ACCOUNT_DISABLED
+  USER_ACCOUNT_ENABLED
+  PRODUCT_ARCHIVED
+  STOCK_ADJUSTMENT_APPROVED
+  STOCK_ADJUSTMENT_REJECTED
+  LOW_STOCK_ALERT
+  STOCK_INCREASED
+  STOCK_DECREASED
+  SALE_COMPLETED
+  SALE_REFUNDED
+  SALE_CANCELLED
+  DISCOUNT_APPLIED
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  CUSTOMER_ARCHIVED
+  CUSTOMER_REACTIVATED
+  PURCHASE_ORDER_APPROVED
+  PURCHASE_ORDER_REJECTED
+  PURCHASE_ORDER_COMPLETED
+  PURCHASE_ORDER_CANCELLED
+  TAX_CONFIG_CHANGED
+  BRANCH_CREATE
+  BRANCH_UPDATE
+  BACKUP_RESTORE
+  WAREHOUSE_CREATE
+  WAREHOUSE_UPDATE
+  WAREHOUSE_DELETE
+  EXPENSE_CREATE
+  EXPENSE_UPDATE
+  EXPENSE_DELETE
+}
+
+enum SalePaymentType {
+  CASH
+  INSURANCE
+  DEBT
+  MIXED
+  CREDIT_CARD
+  MOBILE_MONEY
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ERROR
+  SYSTEM
+  ALERT
+  GENERIC
+  SALE
+  PURCHASE_ORDER
+}
+
+enum StockMovementType {
+  SALE
+  PURCHASE
+  RETURN
+  DAMAGE
+  EXPIRED
+  ADJUSTMENT
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+enum InventoryMovementType {
+  PURCHASE
+  RETURN_CUSTOMER
+  TRANSFER_IN
+  INITIAL_STOCK
+  ADJUSTMENT_IN
+  SALE
+  DAMAGE
+  EXPIRED
+  TRANSFER_OUT
+  ADJUSTMENT_OUT
+  ADJUSTMENT
+  CORRECTION
+}
+
+enum InventoryDirection {
+  IN
+  OUT
+}
+
+enum EbmSubmissionStatus {
+  PENDING
+  SUBMITTED
+  SUCCESS
+  FAILED
+  RETRYING
+}
+
+enum ExpenseCategory {
+  SALARIES_WAGES
+  RENT
+  UTILITIES
+  TRANSPORT_FUEL
+  MAINTENANCE_REPAIRS
+  TAXES
+  INSURANCE
+  MARKETING
+  OFFICE_SUPPLIES
+  PROFESSIONAL_FEES
+  OTHER
+}
+
+// NEW: Branch status enum
+enum BranchStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum TaxCategory {
+  STANDARD
+  ZERO_RATED
+  EXEMPT
+}
+
+enum StockTransferStatus {
+  PENDING
+  APPROVED
+  COMPLETED
+  REJECTED
+}
