@@ -77,7 +77,7 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
 export const getCustomerById = async (req: AuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
-    const organizationId = parseInt(req.params.organizationId || req.user?.organizationId as string)
+    const organizationId = parseInt(req.params.organizationId)
 
     if (!organizationId) {
       return res.status(400).json({ error: "Organization ID is required" })
@@ -176,7 +176,7 @@ export const updateCustomer = async (req: AuthRequest, res: Response) => {
     }
 
     const customer = await prisma.customer.update({
-      where: { id },
+      where: { id: existingCustomer.id },
       data: updateData,
     })
 
@@ -212,7 +212,7 @@ export const deleteCustomer = async (req: AuthRequest, res: Response) => {
     }
 
     await prisma.customer.update({
-      where: { id },
+      where: { id: existingCustomer.id },
       data: { isActive: false, deletedAt: new Date() },
     })
 

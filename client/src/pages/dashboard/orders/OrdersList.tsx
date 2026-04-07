@@ -28,6 +28,7 @@ import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import { apiClient } from '../../../lib/api-client';
 import { format } from 'date-fns';
 import { useTheme } from '../../../context/ThemeContext';
+import { useBranch } from '../../../context/BranchContext';
 import { Badge } from '../../../components/ui/badge';
 import { Card, CardContent } from '../../../components/ui/card';
 import {
@@ -50,6 +51,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const { theme } = useTheme();
+    const { selectedBranchId, primaryBranch } = useBranch();
 
     const [orders, setOrders] = useState<Order[]>([]);
     const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
@@ -105,7 +107,15 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
     const handleStatusUpdate = async (orderId: string | number, newStatus: string) => {
         try {
             setUpdatingStatus(prev => ({ ...prev, [orderId]: true }));
-            const response = await apiClient.updatePurchaseOrderStatus(orderId, newStatus);
+            const branchIdForReceive = selectedBranchId ?? primaryBranch?.id ?? null;
+            const response = await apiClient.updatePurchaseOrderStatus(
+                orderId,
+                newStatus,
+                organizationId,
+                {
+                    branchId: newStatus === 'COMPLETED' ? branchIdForReceive : undefined
+                }
+            );
 
             if (response) {
                 setOrders(prevOrders =>

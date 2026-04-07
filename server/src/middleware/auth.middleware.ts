@@ -51,9 +51,12 @@ export const authorize = (...roles: string[]) => {
     if (!req.user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-    const userRoles = Array.isArray(req.user.role)
-      ? req.user.role
-      : [req.user.role];
+    // Per-organization role from requireOrganizationAccess (authoritative for :organizationId routes)
+    const orgRole = (req as { organizationRole?: string }).organizationRole;
+    const effectiveRole = orgRole ?? req.user.role;
+    const userRoles = Array.isArray(effectiveRole)
+      ? effectiveRole
+      : [effectiveRole];
     const hasRole = userRoles.some((role) => roles.includes(role));
 
     if (!hasRole) {

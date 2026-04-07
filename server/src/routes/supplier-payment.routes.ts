@@ -6,11 +6,13 @@ import {
     deleteSupplierPayment
 } from "../controllers/supplier-payment.controller";
 import { authenticate } from "../middleware/auth.middleware";
+import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+router.use(requireOrganizationAccess());
 
 /**
  * @route POST /api/supplier-payments/:organizationId

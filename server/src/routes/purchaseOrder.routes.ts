@@ -1,31 +1,34 @@
 import { Router } from "express"
 import { authenticate, authorize } from "../middleware/auth.middleware"
+import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware"
 import {
     getPurchaseOrders,
     getPurchaseOrder,
     createPurchaseOrder,
     updatePurchaseOrderStatus,
     deletePurchaseOrder,
-} from "../controllers/pruchaseOrder.controller"
+} from "../controllers/purchaseOrder.controller"
 
 const router = Router()
 
 // All routes require authentication
 router.use(authenticate)
 
+const orgAccess = requireOrganizationAccess()
+
 // Get all purchase orders
-router.get("/:organizationId", getPurchaseOrders)
+router.get("/:organizationId", orgAccess, getPurchaseOrders)
 
 // Get single purchase order
-router.get("/:organizationId/:id", getPurchaseOrder)
+router.get("/:organizationId/:id", orgAccess, getPurchaseOrder)
 
 // Create purchase order (Admin/Manager only)
-router.post("/:organizationId", authorize("ADMIN", "SELLER", "ACCOUNTANT"), createPurchaseOrder)
+router.post("/:organizationId", orgAccess, authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), createPurchaseOrder)
 
 // Update purchase order status (Admin/Manager only)
-router.patch("/:id/status", authorize("ADMIN", "SELLER", "ACCOUNTANT"), updatePurchaseOrderStatus)
+router.patch("/:organizationId/:id/status", orgAccess, authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), updatePurchaseOrderStatus)
 
 // Delete purchase order (Admin only)
-router.delete("/:id", authorize("ADMIN", "SELLER", "ACCOUNTANT"), deletePurchaseOrder)
+router.delete("/:organizationId/:id", orgAccess, authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), deletePurchaseOrder)
 
 export default router

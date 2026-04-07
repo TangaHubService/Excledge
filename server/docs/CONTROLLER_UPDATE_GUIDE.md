@@ -15,7 +15,7 @@ The branch management system requires updating controllers to:
 
 ```typescript
 import type { BranchAuthRequest } from '../middleware/branchAuth.middleware';
-import { buildBranchFilter, getBranchIdForOperation } from '../utils/branchFilterHelpers';
+import { buildBranchFilter, getBranchIdForOperation } from '../middleware/branchAuth.middleware';
 ```
 
 ### 2. Update Request Type

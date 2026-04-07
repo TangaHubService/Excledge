@@ -82,14 +82,18 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
 
     // Calculate actual stock from ledger for each product (source of truth)
     // If no ledger entries exist, fall back to database quantity
+    const branchForLedger =
+      req.selectedBranchId !== null && req.selectedBranchId !== undefined
+        ? req.selectedBranchId
+        : undefined
+
     const productsWithStock = await Promise.all(
       products.map(async (product) => {
-        // Check if product has any ledger entries
         const ledgerEntryCount = await prisma.inventoryLedger.count({
           where: {
             productId: product.id,
             organizationId: organizationId,
-            ...buildBranchFilter(req)
+            ...(branchForLedger != null ? { branchId: branchForLedger } : {}),
           },
         });
 
@@ -97,8 +101,7 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
         if (ledgerEntryCount === 0) {
           actualStock = product.quantity;
         } else {
-          // getCurrentStock also needs to be branch-aware
-          actualStock = await getCurrentStock(organizationId, product.id, req.branchIds?.[0]);
+          actualStock = await getCurrentStock(organizationId, product.id, branchForLedger);
         }
 
         return {

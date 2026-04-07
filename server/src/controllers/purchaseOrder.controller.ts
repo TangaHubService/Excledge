@@ -135,7 +135,8 @@ export const createPurchaseOrder = async (req: AuthRequest, res: Response) => {
 // Update purchase order status
 export const updatePurchaseOrderStatus = async (req: AuthRequest, res: Response) => {
     const id = parseInt(req.params.id)
-    const { status } = req.body
+    const organizationId = parseInt(req.params.organizationId)
+    const { status, branchId, receivedItems } = req.body
 
     // Define valid status values
     const validStatuses = [
@@ -158,7 +159,7 @@ export const updatePurchaseOrderStatus = async (req: AuthRequest, res: Response)
     try {
         // Check if purchase order exists
         const order = await prisma.purchaseOrder.findFirst({
-            where: { id },
+            where: { id, organizationId },
             include: {
                 supplier: true,
                 user: true,
@@ -170,38 +171,93 @@ export const updatePurchaseOrderStatus = async (req: AuthRequest, res: Response)
             return res.status(404).json({ message: "Purchase order not found" })
         }
 
-        const updatedOrder = await prisma.purchaseOrder.update({
-            where: { id },
-            data: {
-                status,
-                receivedAt: status === "COMPLETED" ? new Date() : order.receivedAt, // Fixed from DELIVERED to COMPLETED
-            },
-            include: {
-                supplier: true,
-                items: true,
-            },
-        })
+        const userId = (req as any).user.userId;
+        const effectiveBranchId = branchId ? parseInt(String(branchId)) : null;
 
-        // Add items to stock if completed - record in ledger (Stock IN)
-        if (status === 'COMPLETED') {
-            const userId = (req as any).user.userId;
-            for (const item of updatedOrder.items) {
-                if (item.productId) {
+        if (status === 'COMPLETED' && !effectiveBranchId) {
+            return res.status(400).json({ message: "branchId is required to complete a purchase order" })
+        }
+
+        const updatedOrder = await prisma.$transaction(async (tx) => {
+            const po = await tx.purchaseOrder.update({
+                where: { id: order.id },
+                data: {
+                    status,
+                    receivedAt: status === "COMPLETED" ? new Date() : order.receivedAt,
+                },
+                include: {
+                    supplier: true,
+                    items: true,
+                },
+            })
+
+            // Add items to stock if completed - now branch + batch aware
+            if (status === 'COMPLETED' && effectiveBranchId) {
+                const branch = await tx.branch.findFirst({
+                    where: { id: effectiveBranchId, organizationId: order.organizationId, status: "ACTIVE" }
+                })
+                if (!branch) {
+                    throw new Error("Invalid or inactive branch for receiving")
+                }
+
+                for (const item of po.items) {
+                    if (!item.productId) continue
+
+                    const receivedMeta = Array.isArray(receivedItems)
+                        ? receivedItems.find((ri: any) => parseInt(String(ri.productId)) === item.productId)
+                        : null
+
+                    const recvQty = receivedMeta?.quantity ? parseInt(String(receivedMeta.quantity)) : item.quantity
+                    const recvUnitCost = receivedMeta?.unitCost ? Number(receivedMeta.unitCost) : Number(item.unitPrice)
+                    const recvBatchNumber = receivedMeta?.batchNumber || `PO-${po.id}-P${item.productId}-${Date.now()}`
+                    const recvExpiryDate = receivedMeta?.expiryDate ? new Date(receivedMeta.expiryDate) : null
+
+                    await tx.batch.upsert({
+                        where: {
+                            productId_batchNumber_branchId: {
+                                productId: item.productId,
+                                batchNumber: recvBatchNumber,
+                                branchId: effectiveBranchId,
+                            }
+                        },
+                        update: {
+                            quantity: { increment: recvQty },
+                            unitCost: recvUnitCost,
+                            expiryDate: recvExpiryDate,
+                            isActive: true,
+                        },
+                        create: {
+                            productId: item.productId,
+                            organizationId: order.organizationId,
+                            branchId: effectiveBranchId,
+                            batchNumber: recvBatchNumber,
+                            quantity: recvQty,
+                            unitCost: recvUnitCost,
+                            expiryDate: recvExpiryDate,
+                            isActive: true,
+                        }
+                    })
+
                     await addStock({
                         organizationId: order.organizationId,
                         productId: item.productId,
-                        userId: userId,
-                        quantity: item.quantity,
+                        userId,
+                        quantity: recvQty,
                         movementType: 'PURCHASE',
-                        branchId: null,
-                        unitCost: Number(item.unitPrice),
+                        branchId: effectiveBranchId,
+                        unitCost: recvUnitCost,
+                        batchNumber: recvBatchNumber,
+                        expiryDate: recvExpiryDate || undefined,
                         reference: order.orderNumber,
                         referenceType: 'PURCHASE_ORDER',
-                        note: `Purchase Order #${order.orderNumber} received`,
+                        note: `Purchase Order #${order.orderNumber} received at branch ${effectiveBranchId}`,
+                        tx,
                     });
                 }
             }
-        }
+
+            return po
+        })
 
         try {
             await emailService.sendPurchaseOrderStatusUpdate(
@@ -253,9 +309,10 @@ export const updatePurchaseOrderStatus = async (req: AuthRequest, res: Response)
 export const deletePurchaseOrder = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params
+        const organizationId = parseInt(req.params.organizationId)
 
         const order = await prisma.purchaseOrder.findFirst({
-            where: { id: parseInt(id) },
+            where: { id: parseInt(id), organizationId },
         })
 
         if (!order) {
@@ -263,7 +320,7 @@ export const deletePurchaseOrder = async (req: AuthRequest, res: Response) => {
         }
 
         await prisma.purchaseOrder.update({
-            where: { id: parseInt(id) },
+            where: { id: order.id },
             data: { isActive: false }
         })
 

@@ -230,6 +230,7 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify(data),
     });
+    this.persistAuthFromResponse(response as { accessToken?: string; token?: string; refreshToken?: string });
     return response;
   }
 
@@ -498,8 +499,9 @@ class ApiClient {
     return this.request(`/customers/${this.getOrganizationId()}?${query}`);
   }
 
-  async getCustomerById(id: string, organizationId: string) {
-    return this.request(`/customers/${id}?organizationId=${organizationId}`);
+  async getCustomerById(id: string, organizationId?: string | number) {
+    const org = organizationId ?? this.getOrganizationId();
+    return this.request(`/customers/${org}/${id}`);
   }
 
   async createCustomer(data: any) {
@@ -777,21 +779,24 @@ class ApiClient {
     })
   }
 
-  async updateSupplier(id: string | number, data: any) {
-    return this.request(`/suppliers/${id}`, {
+  async updateSupplier(id: string | number, data: any, organizationId?: string | number) {
+    const org = organizationId ?? this.getOrganizationId();
+    return this.request(`/suppliers/${org}/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
     })
   }
 
-  async deleteSupplier(id: string | number) {
-    return this.request(`/suppliers/${id}`, {
+  async deleteSupplier(id: string | number, organizationId?: string | number) {
+    const org = organizationId ?? this.getOrganizationId();
+    return this.request(`/suppliers/${org}/${id}`, {
       method: "DELETE",
     })
   }
 
-  async deleteCustomer(id: string) {
-    return this.request(`/customers/${id}`, {
+  async deleteCustomer(id: string, organizationId?: string | number) {
+    const org = organizationId ?? this.getOrganizationId();
+    return this.request(`/customers/${id}/${org}`, {
       method: "DELETE",
     })
   }
@@ -809,10 +814,29 @@ class ApiClient {
     })
   }
 
-  async updatePurchaseOrderStatus(id: string | number, status: string) {
-    return this.request(`/purchase-orders/${id}/status`, {
+  async updatePurchaseOrderStatus(
+    id: string | number,
+    status: string,
+    organizationId?: string | number,
+    options?: {
+      branchId?: number | null;
+      receivedItems?: Array<{
+        productId: number;
+        quantity?: number;
+        unitCost?: number;
+        batchNumber?: string;
+        expiryDate?: string;
+      }>;
+    }
+  ) {
+    const org = organizationId ?? this.getOrganizationId();
+    return this.request(`/purchase-orders/${org}/${id}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({
+        status,
+        branchId: options?.branchId,
+        receivedItems: options?.receivedItems,
+      }),
     })
   }
 
@@ -820,11 +844,76 @@ class ApiClient {
     return this.request(`/purchase-orders/${id}`)
   }
 
-  async deletePurchaseOrder(id: string | number) {
-    return this.request(`/purchase-orders/${id}`, {
+  async deletePurchaseOrder(id: string | number, organizationId?: string | number) {
+    const org = organizationId ?? this.getOrganizationId();
+    return this.request(`/purchase-orders/${org}/${id}`, {
       method: "DELETE",
     })
   }
+
+  private stockTransferBranchQs(branchId?: number | null) {
+    if (branchId === undefined || branchId === null) return "";
+    return `?branchId=${branchId}`;
+  }
+
+  async getStockTransfers(organizationId?: string | number, branchId?: number | null) {
+    const org = organizationId ?? this.getOrganizationId();
+    return this.request(`/stock-transfers/${org}${this.stockTransferBranchQs(branchId)}`);
+  }
+
+  async createStockTransfer(
+    organizationId: string | number,
+    data: {
+      fromBranchId: number;
+      toBranchId: number;
+      notes?: string;
+      items: Array<{ productId: number; quantity: number }>;
+    },
+    branchId?: number | null
+  ) {
+    const org = organizationId ?? this.getOrganizationId();
+    return this.request(`/stock-transfers/${org}${this.stockTransferBranchQs(branchId)}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async approveStockTransfer(
+    organizationId: string | number,
+    id: number,
+    branchId?: number | null
+  ) {
+    const org = organizationId ?? this.getOrganizationId();
+    return this.request(
+      `/stock-transfers/${org}/${id}/approve${this.stockTransferBranchQs(branchId)}`,
+      { method: "POST" }
+    );
+  }
+
+  async rejectStockTransfer(
+    organizationId: string | number,
+    id: number,
+    branchId?: number | null
+  ) {
+    const org = organizationId ?? this.getOrganizationId();
+    return this.request(
+      `/stock-transfers/${org}/${id}/reject${this.stockTransferBranchQs(branchId)}`,
+      { method: "POST" }
+    );
+  }
+
+  async completeStockTransfer(
+    organizationId: string | number,
+    id: number,
+    branchId?: number | null
+  ) {
+    const org = organizationId ?? this.getOrganizationId();
+    return this.request(
+      `/stock-transfers/${org}/${id}/complete${this.stockTransferBranchQs(branchId)}`,
+      { method: "POST" }
+    );
+  }
+
   // In your api-client.ts or similar file
 
   // Record a debt payment

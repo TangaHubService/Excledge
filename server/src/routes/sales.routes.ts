@@ -8,16 +8,20 @@ import {
   cancelSale
 } from "../controllers/sales.controller";
 import { authenticate, authorize } from "../middleware/auth.middleware";
+import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
 import { validate } from "../middleware/validate.middleware";
 import { createSaleSchema, cancelSaleSchema } from "../validations/sales.validation";
 
 const router = Router();
 
+const orgAccess = requireOrganizationAccess();
+
 // Create a new sale
 router.post(
   "/:organizationId",
   authenticate,
-  authorize("ADMIN", "SELLER", "ACCOUNTANT"),
+  orgAccess,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   validate(createSaleSchema),
   createSale
 );
@@ -26,7 +30,8 @@ router.post(
 router.get(
   "/:organizationId",
   authenticate,
-  authorize("ADMIN", "ACCOUNTANT", "SELLER"),
+  orgAccess,
+  authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   getSales
 );
 
@@ -34,7 +39,8 @@ router.get(
 router.get(
   "/:organizationId/:id",
   authenticate,
-  authorize("ADMIN", "ACCOUNTANT", "SELLER"),
+  orgAccess,
+  authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   getSaleById
 );
 
@@ -42,7 +48,8 @@ router.get(
 router.put(
   "/:id/pay-debt/:organizationId",
   authenticate,
-  authorize("ADMIN", "SELLER", "ACCOUNTANT"),
+  orgAccess,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   payDebt
 );
 
@@ -50,7 +57,8 @@ router.put(
 router.post(
   "/:id/refund/:organizationId",
   authenticate,
-  authorize("ADMIN", "SELLER", "ACCOUNTANT"),
+  orgAccess,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   refundSale
 );
 
@@ -58,7 +66,8 @@ router.post(
 router.post(
   "/:organizationId/:saleId/cancel",
   authenticate,
-  authorize("ADMIN", "SELLER", "ACCOUNTANT"),
+  orgAccess,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   validate(cancelSaleSchema),
   cancelSale
 );

@@ -4,15 +4,19 @@ import { prisma } from '../lib/prisma';
 
 /**
  * Inventory Ledger Service
- * 
+ *
  * This service implements an append-only ledger pattern for inventory tracking.
  * Current stock is calculated from the ledger, not stored as a mutable value.
- * 
+ *
  * Key principles:
  * - Append-only: No updates or deletes
  * - Immutable history: Every movement is permanently recorded
- * - Source of truth: Ledger is the authoritative record
+ * - Source of truth: Ledger is the authoritative record (per branch)
  * - Concurrent safe: Uses database transactions
+ *
+ * Note: `Product.quantity` is updated as a legacy cache when ledger rows change.
+ * For multi-branch organizations it does not represent branch-specific stock;
+ * use ledger aggregates (or APIs that call `getCurrentStock` with `branchId`).
  */
 
 // Constants for movement types

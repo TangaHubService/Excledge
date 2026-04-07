@@ -118,6 +118,18 @@ const baseNavigation: NavigationItem[] = [
     icon: BarChart3,
     id: "inventory-summary",
   },
+  {
+    name: "nav.stockTransfers",
+    href: "stock-transfers",
+    icon: GitBranch,
+    id: "stock-transfers",
+  },
+  {
+    name: "nav.warehouses",
+    href: "warehouses",
+    icon: Building2,
+    id: "warehouses",
+  },
 
 
   // Orders Section
