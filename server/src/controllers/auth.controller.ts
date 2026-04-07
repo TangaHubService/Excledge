@@ -156,11 +156,19 @@ export const login = async (req: Request, res: Response) => {
       };
     }))
 
+    const sortedUo = [...user.userOrganizations].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+    const primaryUo = sortedUo[0];
+    const organizationIds = user.userOrganizations.map((uo) => uo.organizationId);
+
     const tokenPayload = {
       userId: user.id,
       email: user.email,
-      role: user.role,
-      organizationId: user.userOrganizations.map((user) => user.organizationId),
+      role: primaryUo ? primaryUo.role : user.role,
+      activeOrganizationId: primaryUo?.organizationId,
+      organizationIds,
+      organizationId: primaryUo?.organizationId ?? organizationIds,
     };
 
     const { accessToken, refreshToken } = generateTokenPair(tokenPayload);
@@ -202,7 +210,7 @@ export const login = async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        role: primaryUo ? primaryUo.role : user.role,
         requirePasswordChange: user.requirePasswordChange,
       },
       organizations,
@@ -223,9 +231,9 @@ export const refresh = async (req: Request, res: Response) => {
     }
 
     // Verify the refresh token is valid
-    let decoded;
+    let decoded: import("../services/token.service").TokenPayload;
     try {
-      decoded = verifyToken(clientRefreshToken);
+      decoded = verifyToken(clientRefreshToken) as import("../services/token.service").TokenPayload;
     } catch (error) {
       return res.status(401).json({ error: "Invalid or expired refresh token" });
     }
@@ -257,12 +265,38 @@ export const refresh = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Refresh token has expired" });
     }
 
-    // Generate new token pair
+    const orgIdList = user.userOrganizations.map((uo) => uo.organizationId);
+
+    let activeOrganizationId =
+      decoded.activeOrganizationId ??
+      (typeof decoded.organizationId === "number"
+        ? decoded.organizationId
+        : Array.isArray(decoded.organizationId)
+          ? decoded.organizationId[0]
+          : undefined);
+
+    let roleForToken = decoded.role ?? user.role;
+
+    if (activeOrganizationId != null) {
+      const uo = user.userOrganizations.find((x) => x.organizationId === activeOrganizationId);
+      if (uo) {
+        roleForToken = uo.role;
+      } else {
+        activeOrganizationId = user.userOrganizations[0]?.organizationId;
+        roleForToken = user.userOrganizations[0]?.role ?? user.role;
+      }
+    } else {
+      activeOrganizationId = user.userOrganizations[0]?.organizationId;
+      roleForToken = user.userOrganizations[0]?.role ?? user.role;
+    }
+
     const tokenPayload = {
       userId: user.id,
       email: user.email,
-      role: user.role,
-      organizationId: user.userOrganizations.map((uo) => uo.organizationId),
+      role: roleForToken,
+      activeOrganizationId,
+      organizationIds: orgIdList,
+      organizationId: activeOrganizationId ?? orgIdList,
     };
 
     const { accessToken, refreshToken: newRefreshToken } = generateTokenPair(tokenPayload);
@@ -346,32 +380,48 @@ export const switchOrganization = async (req: Request, res: Response) => {
 
     const fullUser = await prisma.user.findUnique({
       where: { id: parseInt(userId as string) },
+      include: { userOrganizations: true },
     });
 
     if (!fullUser) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const token = jwt.sign(
-      {
-        userId: userId,
-        email: fullUser.email,
-        role: userOrg.role,
-        organizationId: organization.id,
+    const organizationIds = fullUser.userOrganizations.map((uo) => uo.organizationId);
+
+    const { accessToken, refreshToken } = generateTokenPair({
+      userId: parseInt(userId as string),
+      email: fullUser.email,
+      role: userOrg.role,
+      activeOrganizationId: organization.id,
+      organizationIds,
+      organizationId: organization.id,
+    });
+
+    const hashedRefreshToken = crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
+
+    await prisma.user.update({
+      where: { id: parseInt(userId as string) },
+      data: {
+        refreshToken: hashedRefreshToken,
+        refreshTokenExpiry: getRefreshTokenExpiry(),
       },
-      process.env.JWT_SECRET as string,
-      { expiresIn: "24h" },
-    );
+    });
 
     res.json({
       organization,
-      token,
+      accessToken,
+      refreshToken,
+      token: accessToken,
       user: {
         id: fullUser.id,
         email: fullUser.email,
         name: fullUser.name,
         role: userOrg.role,
-      }
+      },
     })
   } catch (error: any) {
     console.error("[Switch Organization Error]:", error)

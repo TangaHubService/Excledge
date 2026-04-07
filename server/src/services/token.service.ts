@@ -8,6 +8,11 @@ export interface TokenPayload {
   userId: number;
   email: string;
   role?: string;
+  /** Active tenant for RBAC; use with UserOrganization.role semantics */
+  activeOrganizationId?: number;
+  /** All organizations the user belongs to */
+  organizationIds?: number[];
+  /** @deprecated Prefer activeOrganizationId; kept for older clients */
   organizationId?: number | number[];
 }
 

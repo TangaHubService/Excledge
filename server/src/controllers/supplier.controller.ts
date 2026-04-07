@@ -98,7 +98,7 @@ export const updateSupplier = async (req: AuthRequest, res: Response) => {
         }
 
         const supplier = await prisma.supplier.update({
-            where: { id },
+            where: { id: existingSupplier.id },
             data: { name, email, phone, address, contactPerson, isActive },
         })
 
@@ -134,7 +134,7 @@ export const deleteSupplier = async (req: AuthRequest, res: Response) => {
         }
 
         await prisma.supplier.update({
-            where: { id },
+            where: { id: existingSupplier.id },
             data: { isActive: false }
         })
 

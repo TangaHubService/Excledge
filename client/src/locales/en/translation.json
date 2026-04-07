@@ -155,6 +155,7 @@
         "ledgerHistory": "Stock Movement History",
         "stockMovementHistory": "Stock Movement History",
         "inventorySummary": "Inventory Summary",
+        "stockTransfers": "Stock transfers",
         "warehouses": "Warehouses",
         "branches": "Branches",
         "getStarted": "Get Started"

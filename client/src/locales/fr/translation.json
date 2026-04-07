@@ -151,6 +151,7 @@
         "ledgerHistory": "Historique des mouvements de stock",
         "stockMovementHistory": "Historique des mouvements de stock",
         "inventorySummary": "Résumé de l'inventaire",
+        "stockTransfers": "Transferts de stock",
         "warehouses": "Entrepôts",
         "branches": "Succursales"
     },

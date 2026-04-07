@@ -12,18 +12,21 @@ import {
 } from "../controllers/report.controller"
 import { authenticate, authorize } from "../middleware/auth.middleware"
 import { branchAuth } from "../middleware/branchAuth.middleware"
+import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware"
 
 const router = Router()
 
-router.get("/sales/:organizationId", authenticate, branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER"), getSalesReport)
-router.get("/inventory/:organizationId", authenticate, branchAuth, authorize("ADMIN", "PHARMACIST"), getInventoryReport)
-router.get("/debtors/:organizationId", authenticate, branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER"), getDebtorsReport)
-router.get("/debt-payments/:organizationId", authenticate, branchAuth, authorize("ADMIN", "ACCOUNTANT"), getDebtPaymentsReport)
-router.get("/cash-flow/:organizationId", authenticate, branchAuth, authorize("ADMIN", "ACCOUNTANT"), getCashFlowReport)
-router.get("/stock/:organizationId", authenticate, branchAuth, authorize("ADMIN", "ACCOUNTANT", "PHARMACIST"), getStockReport)
-router.get("/stock-history/:organizationId", authenticate, branchAuth, authorize("ADMIN", "ACCOUNTANT", "PHARMACIST"), getStockHistory)
-router.get("/profit/:organizationId", authenticate, branchAuth, authorize("ADMIN", "ACCOUNTANT"), getProfitReportController)
-router.get("/export/:reportType/:organizationId", authenticate, branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER"), exportReport)
+const orgAccess = requireOrganizationAccess()
+
+router.get("/sales/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getSalesReport)
+router.get("/inventory/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getInventoryReport)
+router.get("/debtors/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getDebtorsReport)
+router.get("/debt-payments/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getDebtPaymentsReport)
+router.get("/cash-flow/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getCashFlowReport)
+router.get("/stock/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getStockReport)
+router.get("/stock-history/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getStockHistory)
+router.get("/profit/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getProfitReportController)
+router.get("/export/:reportType/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), exportReport)
 
 
 export default router

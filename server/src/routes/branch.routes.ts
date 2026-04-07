@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
+import { requireOrganizationAccess } from '../middleware/organizationAccess.middleware';
 import {
   getBranchesController,
   getBranch,
@@ -15,37 +16,37 @@ import {
 
 const router = Router();
 
+const orgAccess = requireOrganizationAccess();
+
 // All routes require authentication
 router.use(authenticate);
 
-// Get all branches
-router.get('/:organizationId', getBranchesController);
-
-// Get user's branches
+// Static paths must be registered before /:organizationId
 router.get('/user/all', getUserBranchesController);
-
-// Get user's primary branch
 router.get('/user/primary', getUserPrimaryBranchController);
 
+// Get all branches
+router.get('/:organizationId', orgAccess, getBranchesController);
+
 // Get single branch
-router.get('/:organizationId/:id', getBranch);
+router.get('/:organizationId/:id', orgAccess, getBranch);
 
 // Create branch (Admin/Manager only)
-router.post('/:organizationId', authorize('ADMIN', 'ACCOUNTANT'), createBranchController);
+router.post('/:organizationId', orgAccess, authorize('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'), createBranchController);
 
 // Update branch (Admin/Manager only)
-router.put('/:organizationId/:id', authorize('ADMIN', 'ACCOUNTANT'), updateBranchController);
+router.put('/:organizationId/:id', orgAccess, authorize('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'), updateBranchController);
 
 // Delete branch (Admin only)
-router.delete('/:organizationId/:id', authorize('ADMIN'), deleteBranchController);
+router.delete('/:organizationId/:id', orgAccess, authorize('ADMIN'), deleteBranchController);
 
 // Assign user to branch
-router.post('/:organizationId/:id/users', authorize('ADMIN'), assignUserToBranchController);
+router.post('/:organizationId/:id/users', orgAccess, authorize('ADMIN', 'BRANCH_MANAGER'), assignUserToBranchController);
 
 // Remove user from branch
-router.delete('/:organizationId/:id/users/:userId', authorize('ADMIN'), removeUserFromBranchController);
+router.delete('/:organizationId/:id/users/:userId', orgAccess, authorize('ADMIN', 'BRANCH_MANAGER'), removeUserFromBranchController);
 
 // Get branch users
-router.get('/:organizationId/:id/users', authorize('ADMIN'), getBranchUsersController);
+router.get('/:organizationId/:id/users', orgAccess, authorize('ADMIN', 'BRANCH_MANAGER'), getBranchUsersController);
 
 export default router;

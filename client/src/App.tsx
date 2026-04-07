@@ -26,6 +26,8 @@ import { CustomerManagement } from "./pages/dashboard/CustomerManagement";
 import { UserManagement } from "./pages/dashboard/users/UserManagement";
 import LedgerHistoryPage from "./pages/dashboard/inventory/LedgerHistoryPage";
 import InventorySummaryDashboard from "./pages/dashboard/inventory/InventorySummaryDashboard";
+import StockTransfersPage from "./pages/dashboard/inventory/StockTransfersPage";
+import WarehouseManagement from "./pages/dashboard/inventory/WarehouseManagement";
 
 import SaleDetailsPage from "./pages/dashboard/sales/SaleDetailsPage";
 import { AcceptInvitationPage } from "./pages/auth/AcceptInvitation";
@@ -123,6 +125,8 @@ function App() {
                       <Route path="purchases-report" element={<Navigate to="/dashboard/orders" replace />} />
                       <Route path="ledger-history" element={<LedgerHistoryPage />} />
                       <Route path="inventory-summary" element={<InventorySummaryDashboard />} />
+                      <Route path="stock-transfers" element={<StockTransfersPage />} />
+                      <Route path="warehouses" element={<WarehouseManagement />} />
                       <Route path="sales" element={<SalesPage />} />
                       <Route path="sales/:id" element={<SaleDetailsPage />} />
                       <Route path="organization-config" element={<OrganizationConfig />} />

@@ -1,8 +1,50 @@
 import type { Response } from "express"
 import type { AuthRequest } from "../middleware/auth.middleware"
+import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
+import { buildBranchFilter } from "../middleware/branchAuth.middleware"
 import { prisma } from "../lib/prisma"
 
-export const getDashboardStats = async (req: AuthRequest, res: Response) => {
+/** Ledger net quantity per product for org, optionally scoped to one branch */
+async function ledgerBalanceByProduct(
+  organizationId: number,
+  branchId: number | null
+): Promise<Map<number, number>> {
+  const map = new Map<number, number>()
+  const rows =
+    branchId != null
+      ? await prisma.$queryRaw<Array<{ productId: number; bal: bigint }>>`
+          SELECT "productId",
+            COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END), 0) -
+            COALESCE(SUM(CASE WHEN direction = 'OUT' THEN quantity ELSE 0 END), 0) AS bal
+          FROM inventory_ledger
+          WHERE "organizationId" = ${organizationId}
+            AND "branchId" = ${branchId}
+          GROUP BY "productId"
+        `
+      : await prisma.$queryRaw<Array<{ productId: number; bal: bigint }>>`
+          SELECT "productId",
+            COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END), 0) -
+            COALESCE(SUM(CASE WHEN direction = 'OUT' THEN quantity ELSE 0 END), 0) AS bal
+          FROM inventory_ledger
+          WHERE "organizationId" = ${organizationId}
+          GROUP BY "productId"
+        `
+  for (const r of rows) {
+    map.set(r.productId, Number(r.bal))
+  }
+  return map
+}
+
+function effectiveQuantity(
+  productId: number,
+  cachedQuantity: number,
+  ledgerMap: Map<number, number>
+): number {
+  if (!ledgerMap.has(productId)) return cachedQuantity
+  return ledgerMap.get(productId) ?? 0
+}
+
+export const getDashboardStats = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
     const { days: qDays } = req.query;
@@ -18,36 +60,54 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       startDate.setHours(0, 0, 0, 0);
     }
 
-    const products = await prisma.product.findMany({
-      where: {
-        organizationId,
-        quantity: {
-          lte: prisma.product.fields.minStock,
-        },
-      },
+    const branchFilter = buildBranchFilter(req)
+    const branchId =
+      typeof branchFilter.branchId === "number" ? branchFilter.branchId : null
+
+    const ledgerMap = await ledgerBalanceByProduct(organizationId, branchId)
+
+    const allProducts = await prisma.product.findMany({
+      where: { organizationId, deletedAt: null, isActive: true },
       select: {
         id: true,
         name: true,
         quantity: true,
         minStock: true,
+        unitPrice: true,
+        category: true,
       },
-      take: 3,
     })
 
-    const lowStock = products
-      .map((prod) => ({
-        ...prod,
-        remaining: prod.quantity - prod.minStock,
-      }))
+    const lowStock = allProducts
+      .map((prod) => {
+        const q = effectiveQuantity(prod.id, prod.quantity, ledgerMap)
+        return {
+          id: prod.id,
+          name: prod.name,
+          quantity: q,
+          minStock: prod.minStock,
+          remaining: q - prod.minStock,
+        }
+      })
+      .filter((p) => p.minStock > 0 && p.quantity <= p.minStock)
       .sort((a, b) => a.remaining - b.remaining)
+      .slice(0, 3)
 
     const expiringProducts = await prisma.product.findMany({
       where: {
         organizationId,
+        deletedAt: null,
         expiryDate: {
           not: null,
           gt: new Date(),
         },
+        ...(branchId != null
+          ? {
+              batches: {
+                some: { branchId, isActive: true },
+              },
+            }
+          : {}),
       },
       select: {
         id: true,
@@ -71,39 +131,24 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       }
     })
 
-    const totalProducts = await prisma.product.count({
-      where: { organizationId },
-    })
+    const totalProducts = allProducts.length
 
-    const totalStock = await prisma.product.aggregate({
-      where: { organizationId },
-      _sum: { quantity: true },
-    })
-    const allproducts = await prisma.product.findMany({
-      where: { organizationId },
-      select: { unitPrice: true, quantity: true },
-    });
+    let totalStock = 0
+    let totalInventoryValue = 0
+    const categoryTotals = new Map<string, number>()
 
-    const totalInventoryValue = allproducts.reduce(
-      (acc, product: any) => acc + (product.unitPrice * product.quantity),
-      0
-    );
-
-
-
-    const totalByCategory = await prisma.product.groupBy({
-      by: ["category"],
-      where: { organizationId },
-      _sum: { quantity: true },
-      _count: { id: true },
-      orderBy: {
-        _sum: { quantity: "desc" },
-      },
-    })
+    for (const p of allProducts) {
+      const q = effectiveQuantity(p.id, p.quantity, ledgerMap)
+      totalStock += q
+      totalInventoryValue += q * p.unitPrice.toNumber()
+      const cat = p.category || "Uncategorized"
+      categoryTotals.set(cat, (categoryTotals.get(cat) ?? 0) + q)
+    }
 
     const salesStats = await prisma.sale.aggregate({
       where: {
         organizationId,
+        ...buildBranchFilter(req),
         ...(startDate && {
           createdAt: {
             gte: startDate,
@@ -119,9 +164,9 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
 
     const result = {
       totalProducts,
-      totalStock: totalStock._sum.quantity || 0,
-      totalCategory: totalByCategory.length,
-      totalInventoryValue: totalInventoryValue,
+      totalStock,
+      totalCategory: categoryTotals.size,
+      totalInventoryValue,
       totalRevenue: Number(salesStats._sum.totalAmount || 0)
     }
 
@@ -136,7 +181,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
   }
 }
 
-export const getSalesTrend = async (req: AuthRequest, res: Response) => {
+export const getSalesTrend = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
     const { startDate: qStartDate, endDate: qEndDate, days: qDays } = req.query;
@@ -161,6 +206,7 @@ export const getSalesTrend = async (req: AuthRequest, res: Response) => {
     const salesData = await prisma.sale.findMany({
       where: {
         organizationId,
+        ...buildBranchFilter(req),
         ...(startDate && {
           createdAt: {
             gte: startDate,
@@ -214,9 +260,14 @@ export const getSalesTrend = async (req: AuthRequest, res: Response) => {
   }
 }
 
-export const getNotifications = async (req: AuthRequest, res: Response) => {
+export const getNotifications = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = Number(req.params.organizationId)
+    const branchFilter = buildBranchFilter(req)
+    const branchId =
+      typeof branchFilter.branchId === "number" ? branchFilter.branchId : null
+    const ledgerMap = await ledgerBalanceByProduct(organizationId, branchId)
+
     const notifications: {
       type: string
       title: string
@@ -227,10 +278,14 @@ export const getNotifications = async (req: AuthRequest, res: Response) => {
     const expired = await prisma.product.findMany({
       where: {
         organizationId: Number(organizationId),
+        deletedAt: null,
         expiryDate: {
           not: null,
           lt: new Date(),
         },
+        ...(branchId != null
+          ? { batches: { some: { branchId, isActive: true } } }
+          : {}),
       },
       take: 5,
     })
@@ -247,11 +302,15 @@ export const getNotifications = async (req: AuthRequest, res: Response) => {
     const expiringSoon = await prisma.product.findMany({
       where: {
         organizationId: Number(organizationId),
+        deletedAt: null,
         expiryDate: {
           not: null,
           gte: new Date(),
           lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
+        ...(branchId != null
+          ? { batches: { some: { branchId, isActive: true } } }
+          : {}),
       },
       take: 5,
     })
@@ -265,19 +324,24 @@ export const getNotifications = async (req: AuthRequest, res: Response) => {
       })
     })
 
-    const lowStock = await prisma.product.findMany({
-      where: {
-        organizationId: Number(organizationId),
-        quantity: { lte: prisma.product.fields.minStock },
-      },
-      take: 5,
+    const products = await prisma.product.findMany({
+      where: { organizationId: Number(organizationId), deletedAt: null, isActive: true },
+      select: { id: true, name: true, quantity: true, minStock: true },
     })
+
+    const lowStock = products
+      .map((p) => ({
+        ...p,
+        q: effectiveQuantity(p.id, p.quantity, ledgerMap),
+      }))
+      .filter((p) => p.minStock > 0 && p.q <= p.minStock)
+      .slice(0, 5)
 
     lowStock.forEach((prod) => {
       notifications.push({
         type: "warning",
         title: "Low Stock Alert",
-        message: `${prod.name} is running low (${prod.quantity} units remaining)`,
+        message: `${prod.name} is running low (${prod.q} units remaining)`,
         time: new Date(),
       })
     })
@@ -289,7 +353,7 @@ export const getNotifications = async (req: AuthRequest, res: Response) => {
   }
 }
 
-export const topSellingProducts = async (req: AuthRequest, res: Response) => {
+export const topSellingProducts = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
     const salesData = await prisma.saleItem.groupBy({
@@ -305,6 +369,7 @@ export const topSellingProducts = async (req: AuthRequest, res: Response) => {
       where: {
         sale: {
           organizationId,
+          ...buildBranchFilter(req),
         },
       },
     });
@@ -339,12 +404,17 @@ export const topSellingProducts = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export const getDetailedInventory = async (req: AuthRequest, res: Response) => {
+export const getDetailedInventory = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = Number(req.params.organizationId);
     const { search, category, status } = req.query;
 
-    const where: any = { organizationId };
+    const branchFilter = buildBranchFilter(req)
+    const branchId =
+      typeof branchFilter.branchId === "number" ? branchFilter.branchId : null
+    const ledgerMap = await ledgerBalanceByProduct(organizationId, branchId)
+
+    const where: any = { organizationId, deletedAt: null };
 
     if (search) {
       where.OR = [
@@ -361,6 +431,8 @@ export const getDetailedInventory = async (req: AuthRequest, res: Response) => {
         saleItems: {
           where: {
             sale: {
+              organizationId,
+              ...buildBranchFilter(req),
               createdAt: {
                 gte: new Date(new Date().setDate(new Date().getDate() - 30)) // Last 30 days
               }
@@ -377,12 +449,12 @@ export const getDetailedInventory = async (req: AuthRequest, res: Response) => {
 
     const inventoryData = products.map(product => {
       const soldLastMonth = product.saleItems.reduce((sum, sale) => sum + sale.quantity, 0);
-      const averageStock = (product.minStock + product.quantity) / 2;
+      const currentStock = effectiveQuantity(product.id, product.quantity, ledgerMap);
+      const averageStock = (product.minStock + currentStock) / 2;
       const turnoverRate = averageStock > 0 ? soldLastMonth / averageStock : 0;
-      const currentStock = product.quantity;
-      const status = currentStock <= product.minStock ? 'critical' :
+      const rowStatus = currentStock <= product.minStock ? 'critical' :
         currentStock <= product.minStock * 1.5 ? 'low' :
-          currentStock >= product.quantity * 0.9 ? 'high' : 'normal';
+          currentStock > product.minStock * 3 ? 'high' : 'normal';
 
       return {
         id: product.id,
@@ -390,11 +462,11 @@ export const getDetailedInventory = async (req: AuthRequest, res: Response) => {
         category: product.category || 'Uncategorized',
         currentStock: currentStock,
         minStock: product.minStock,
-        maxStock: product.quantity,
+        maxStock: currentStock,
         unitPrice: product.unitPrice.toNumber(),
         soldLastMonth: soldLastMonth,
         turnoverRate: turnoverRate,
-        status: status
+        status: rowStatus
       };
     });
 

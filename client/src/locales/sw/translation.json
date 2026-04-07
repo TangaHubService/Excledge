@@ -154,6 +154,7 @@
         "ledgerHistory": "Historia ya mabadiliko ya hesabu",
         "stockMovementHistory": "Historia ya mabadiliko ya hesabu",
         "inventorySummary": "Muhtasari wa hesabu",
+        "stockTransfers": "Uhamisho wa stocki",
         "warehouses": "Maghala",
         "branches": "Matawi"
     },
