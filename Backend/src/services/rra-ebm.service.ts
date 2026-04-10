@@ -49,6 +49,11 @@ export type EbmQueuePayloadV2 = {
   organizationId: number;
 };
 
+type InvoiceSequenceMode = 'unknown' | 'per_org' | 'legacy_sequence';
+
+let invoiceSequenceMode: InvoiceSequenceMode = 'unknown';
+let loggedLegacyInvoiceFallback = false;
+
 function gatewayErrorMessage(http: { json: unknown | null; status: number }, fallback: string): string {
   if (http.json && typeof http.json === 'object') {
     const rec = http.json as Record<string, unknown>;
@@ -116,6 +121,92 @@ export function parseGatewayResponse(raw: unknown): NormalizedEbmResponse {
     verificationCode: pick('verificationCode', 'verification_code', 'internalData', 'rcptSign'),
     sdcDateTime: pick('sdcDateTime', 'sdc_date_time', 'issuedAt', 'timestamp'),
   };
+}
+
+function isMissingDatabaseObjectError(error: unknown, objectName: string): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const prismaError = error as {
+    code?: string;
+    meta?: { code?: string; message?: string };
+  };
+
+  if (prismaError.code !== 'P2010') {
+    return false;
+  }
+
+  const postgresCode = prismaError.meta?.code;
+  const message = prismaError.meta?.message ?? '';
+
+  return (
+    (postgresCode === '42P01' || postgresCode === '42704') &&
+    message.includes(`"${objectName}"`)
+  );
+}
+
+async function nextInvoiceSequenceFromCounterTable(organizationId: number): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ nextSequence: number }>>`
+    INSERT INTO "organization_invoice_counters" ("organizationId", "nextSequence", "updatedAt")
+    VALUES (${organizationId}, 1, NOW())
+    ON CONFLICT ("organizationId") DO UPDATE
+    SET "nextSequence" = "organization_invoice_counters"."nextSequence" + 1,
+        "updatedAt" = NOW()
+    RETURNING "nextSequence"
+  `;
+
+  return Number(rows[0]?.nextSequence ?? 0);
+}
+
+async function nextInvoiceSequenceFromLegacySequence(): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ nextSequence: bigint | number }>>`
+    SELECT nextval('invoice_seq')::bigint AS "nextSequence"
+  `;
+
+  return Number(rows[0]?.nextSequence ?? 0);
+}
+
+async function allocateNextInvoiceSequence(organizationId: number): Promise<number> {
+  if (invoiceSequenceMode === 'per_org') {
+    return nextInvoiceSequenceFromCounterTable(organizationId);
+  }
+
+  if (invoiceSequenceMode === 'legacy_sequence') {
+    return nextInvoiceSequenceFromLegacySequence();
+  }
+
+  try {
+    const sequence = await nextInvoiceSequenceFromCounterTable(organizationId);
+    invoiceSequenceMode = 'per_org';
+    return sequence;
+  } catch (error) {
+    if (!isMissingDatabaseObjectError(error, 'organization_invoice_counters')) {
+      throw error;
+    }
+  }
+
+  try {
+    const sequence = await nextInvoiceSequenceFromLegacySequence();
+    invoiceSequenceMode = 'legacy_sequence';
+
+    if (!loggedLegacyInvoiceFallback) {
+      loggedLegacyInvoiceFallback = true;
+      console.warn(
+        '[EBM] Falling back to legacy invoice_seq because organization_invoice_counters is missing. Apply the latest Prisma migrations to enable per-organization invoice counters.'
+      );
+    }
+
+    return sequence;
+  } catch (error) {
+    if (isMissingDatabaseObjectError(error, 'invoice_seq')) {
+      throw new Error(
+        'Invoice numbering database objects are missing. Run `npm run prisma:deploy` in `Backend/` to apply the latest Prisma migrations.'
+      );
+    }
+
+    throw error;
+  }
 }
 
 async function postToGateway(
@@ -240,15 +331,9 @@ async function enqueueSaleRetry(params: {
  * Atomically allocate next invoice sequence for an organization (PostgreSQL upsert).
  */
 export async function generateInvoiceNumber(organizationId: number): Promise<string> {
-  const rows = await prisma.$queryRaw<[{ nextSequence: number }]>`
-    INSERT INTO "organization_invoice_counters" ("organizationId", "nextSequence", "updatedAt")
-    VALUES (${organizationId}, 1, NOW())
-    ON CONFLICT ("organizationId") DO UPDATE
-    SET "nextSequence" = "organization_invoice_counters"."nextSequence" + 1,
-        "updatedAt" = NOW()
-    RETURNING "nextSequence"
-  `;
-  const sequence = Number(rows[0]?.nextSequence ?? 0).toString().padStart(6, '0');
+  const sequence = (await allocateNextInvoiceSequence(organizationId))
+    .toString()
+    .padStart(6, '0');
 
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
