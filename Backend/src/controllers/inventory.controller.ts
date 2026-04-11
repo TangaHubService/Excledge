@@ -11,6 +11,15 @@ import {
 } from "../services/inventory-ledger.service"
 import { success, error as apiError } from "../utils/apiResponse"
 
+const normalizeOptionalText = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
 export const getProducts = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId)
@@ -185,7 +194,24 @@ export const getProductById = async (req: BranchAuthRequest, res: Response) => {
 export const createProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId)
-    const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock } = req.body
+    const {
+      name,
+      sku,
+      itemCode,
+      itemClassCode,
+      packageUnitCode,
+      quantityUnitCode,
+      batchNumber,
+      quantity,
+      unitPrice,
+      imageUrl,
+      expiryDate,
+      category,
+      description,
+      minStock,
+      taxCategory,
+      barcode,
+    } = req.body
     const userId = parseInt((req as any).user?.userId as string)
     const branchId = getBranchIdForOperation(req)
 
@@ -198,6 +224,11 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       const product = await tx.product.create({
         data: {
           name,
+          sku: normalizeOptionalText(sku),
+          itemCode: normalizeOptionalText(itemCode),
+          itemClassCode: normalizeOptionalText(itemClassCode),
+          packageUnitCode: normalizeOptionalText(packageUnitCode),
+          quantityUnitCode: normalizeOptionalText(quantityUnitCode),
           batchNumber,
           quantity,
           unitPrice,
@@ -206,6 +237,8 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
           description,
           imageUrl,
           minStock: minStock || 10,
+          taxCategory,
+          barcode: normalizeOptionalText(barcode),
           organizationId: organizationId!,
         },
       })
@@ -288,6 +321,11 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
       await tx.product.createMany({
         data: products.map((product: any) => ({
           name: product.name,
+          sku: normalizeOptionalText(product.sku),
+          itemCode: normalizeOptionalText(product.itemCode),
+          itemClassCode: normalizeOptionalText(product.itemClassCode),
+          packageUnitCode: normalizeOptionalText(product.packageUnitCode),
+          quantityUnitCode: normalizeOptionalText(product.quantityUnitCode),
           batchNumber: product.batchNumber,
           quantity: product.quantity,
           unitPrice: product.unitPrice,
@@ -295,6 +333,8 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
           description: product.description,
           imageUrl: product.imageUrl,
           minStock: product.minStock,
+          taxCategory: product.taxCategory,
+          barcode: normalizeOptionalText(product.barcode),
           organizationId: organizationId!,
           expiryDate: product.expiryDate ? new Date(product.expiryDate) : null,
         })),
@@ -373,7 +413,15 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
       where: { id },
       data: {
         ...updateData,
-        expiryDate: updateData.expiryDate ? new Date(updateData.expiryDate) : null,
+        ...(updateData.sku !== undefined ? { sku: normalizeOptionalText(updateData.sku) } : {}),
+        ...(updateData.itemCode !== undefined ? { itemCode: normalizeOptionalText(updateData.itemCode) } : {}),
+        ...(updateData.itemClassCode !== undefined ? { itemClassCode: normalizeOptionalText(updateData.itemClassCode) } : {}),
+        ...(updateData.packageUnitCode !== undefined ? { packageUnitCode: normalizeOptionalText(updateData.packageUnitCode) } : {}),
+        ...(updateData.quantityUnitCode !== undefined ? { quantityUnitCode: normalizeOptionalText(updateData.quantityUnitCode) } : {}),
+        ...(updateData.barcode !== undefined ? { barcode: normalizeOptionalText(updateData.barcode) } : {}),
+        ...(updateData.expiryDate !== undefined
+          ? { expiryDate: updateData.expiryDate ? new Date(updateData.expiryDate) : null }
+          : {}),
       },
     })
 

@@ -155,7 +155,7 @@ export const getDashboardStats = async (req: BranchAuthRequest, res: Response) =
             lte: endDate,
           },
         }),
-        status: { not: 'CANCELLED' }
+        status: { notIn: ['CANCELLED', 'PENDING'] }
       },
       _sum: {
         totalAmount: true
@@ -213,6 +213,7 @@ export const getSalesTrend = async (req: BranchAuthRequest, res: Response) => {
             lte: endDate,
           }
         }),
+        status: { notIn: ['CANCELLED', 'PENDING'] },
       },
       select: {
         createdAt: true,
@@ -484,4 +485,3 @@ export const getDetailedInventory = async (req: BranchAuthRequest, res: Response
     });
   }
 };
-

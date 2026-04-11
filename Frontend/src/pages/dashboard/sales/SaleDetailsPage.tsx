@@ -11,43 +11,9 @@ import { apiClient } from '../../../lib/api-client';
 import { toast } from 'react-toastify';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
-import SalesInvoicePDF, { type SaleEbmTransaction } from '../../../components/invoice/SalesInvoicePDF';
+import SalesInvoicePDF, { type PrintableSale as Sale } from '../../../components/invoice/SalesInvoicePDF';
 import { useOrganization } from '../../../context/OrganizationContext';
 import { Badge } from '../../../components/ui/badge';
-
-type Sale = {
-    id: string;
-    saleNumber: string;
-    invoiceNumber?: string;
-    customer: {
-        name: string;
-        email?: string;
-        phone?: string;
-    };
-    user: {
-        name: string;
-    };
-    paymentType: string;
-    cashAmount: string;
-    insuranceAmount: string;
-    debtAmount: string;
-    totalAmount: string;
-    createdAt: string;
-    status: string;
-    saleItems: Array<{
-        id: string;
-        product: {
-            name: string;
-            batchNumber?: string;
-        };
-        quantity: number;
-        unitPrice: string;
-        totalPrice: string;
-        costPrice?: string;
-        profit?: string;
-    }>;
-    ebmTransactions?: SaleEbmTransaction[];
-};
 
 /** GET sale returns success(sale) → { success, data }. */
 function saleFromApiResponse(res: unknown): Sale | null {
@@ -140,20 +106,51 @@ export default function SaleDetailsPage() {
         return methods;
     };
 
+    const buildReceiptBlob = async (saleForPdf: Sale) => {
+        return pdf(<SalesInvoicePDF
+            sale={saleForPdf}
+            organizationName={organization?.name}
+            organizationLogo={organization?.avatar}
+            organizationTin={organization?.TIN ?? organization?.tin}
+            organizationAddress={[organization?.address, organization?.city, organization?.country].filter(Boolean).join(', ')}
+            organizationPhone={organization?.phone}
+            organizationEmail={organization?.email}
+            organizationDeviceId={organization?.ebmDeviceId}
+            organizationSerialNo={organization?.ebmSerialNo}
+        />).toBlob();
+    };
+
+    const recordReprint = async (currentSale: Sale, optimisticSale: Sale) => {
+        try {
+            const response = await apiClient.recordSaleReprint(currentSale.id);
+            const updatedSale = saleFromApiResponse(response);
+            if (updatedSale) {
+                setSale(updatedSale);
+                return updatedSale;
+            }
+        } catch (error) {
+            console.error('Failed to record sale reprint:', error);
+            toast.warn('Receipt copy generated, but reprint tracking could not be updated.');
+        }
+
+        setSale(optimisticSale);
+        return optimisticSale;
+    };
+
     const handleDownloadInvoice = async () => {
         if (!sale) return;
 
         setIsDownloadingInvoice(true);
         try {
-            const blob = await pdf(<SalesInvoicePDF
-                sale={sale}
-                organizationName={organization?.name}
-                organizationLogo={organization?.avatar}
-                organizationTin={organization?.TIN ?? organization?.tin}
-            />).toBlob();
+            const saleForPdf = {
+                ...sale,
+                reprintCount: (sale.reprintCount ?? 0) + 1,
+            };
+            const blob = await buildReceiptBlob(saleForPdf);
+            await recordReprint(sale, saleForPdf);
 
-            saveAs(blob, `invoice-${sale.saleNumber}.pdf`);
-            toast.success(t('sales.invoiceDownloadSuccess') || 'Invoice downloaded successfully');
+            saveAs(blob, `receipt-${sale.saleNumber}.pdf`);
+            toast.success(t('sales.invoiceDownloadSuccess') || 'Receipt downloaded successfully');
         } catch (error) {
             console.error('Failed to generate invoice:', error);
             toast.error(t('sales.invoiceGenerationError') || 'Failed to generate invoice');
@@ -167,12 +164,12 @@ export default function SaleDetailsPage() {
 
         setIsPrintingInvoice(true);
         try {
-            const blob = await pdf(<SalesInvoicePDF
-                sale={sale}
-                organizationName={organization?.name}
-                organizationLogo={organization?.avatar}
-                organizationTin={organization?.TIN ?? organization?.tin}
-            />).toBlob();
+            const saleForPdf = {
+                ...sale,
+                reprintCount: (sale.reprintCount ?? 0) + 1,
+            };
+            const blob = await buildReceiptBlob(saleForPdf);
+            await recordReprint(sale, saleForPdf);
 
             const url = URL.createObjectURL(blob);
             const printWindow = window.open(url, '_blank');
@@ -184,7 +181,7 @@ export default function SaleDetailsPage() {
             } else {
                 toast.error(t('sales.printWindowError') || 'Failed to open print window');
             }
-            toast.success(t('sales.invoicePrintSuccess') || 'Invoice sent to printer');
+            toast.success(t('sales.invoicePrintSuccess') || 'Receipt sent to printer');
         } catch (error) {
             console.error('Failed to generate invoice for printing:', error);
             toast.error(t('sales.invoiceGenerationError') || 'Failed to generate invoice');

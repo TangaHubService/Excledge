@@ -6,6 +6,8 @@ import { Decimal } from "@prisma/client/runtime/library"
 import { auditLogger } from "../utils/auditLogger"
 import { removeStock, addStock } from "../services/inventory-ledger.service"
 import {
+  assertVsdcBranchMasterData,
+  assertVsdcProductMasterData,
   generateInvoiceNumber,
   submitInvoiceToEbm,
   submitRefundToEbm,
@@ -19,9 +21,66 @@ import { buildBranchFilter, getBranchIdForOperation } from "../middleware/branch
 import { success, error as apiError } from "../utils/apiResponse"
 import { TaxService } from "../services/tax.service"
 
+const loadSaleWithContext = async (
+  req: BranchAuthRequest,
+  id: number,
+  organizationId: number
+) => {
+  return prisma.sale.findFirst({
+    where: {
+      id,
+      organizationId,
+      ...buildBranchFilter(req)
+    },
+    include: {
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          TIN: true,
+          customerType: true,
+          email: true,
+          address: true
+        }
+      },
+      branch: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          bhfId: true,
+          address: true,
+        }
+      },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          role: true
+        }
+      },
+      saleItems: {
+        include: { product: true },
+      },
+      ebmTransactions: {
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  })
+}
+
 export const createSale = async (req: BranchAuthRequest, res: Response) => {
   try {
-    const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount } = req.body
+    const {
+      customerId,
+      items,
+      paymentType,
+      cashAmount,
+      debtAmount,
+      insuranceAmount,
+      purchaseOrderCode,
+    } = req.body
     // @ts-ignore
     const userId = parseInt(req.user?.userId as string)
     const organizationId = parseInt(req.params.organizationId)
@@ -79,9 +138,30 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
     // Generate sale number and invoice number
     const saleNumber = `SALE-${Date.now()}`
     const invoiceNumber = await generateInvoiceNumber(organizationId!)
+    const ebmEnabled = isEbmEnabled()
+    const initialSaleStatus = ebmEnabled ? 'PENDING' : 'COMPLETED'
 
     // Wrap everything in a transaction for atomicity
     const sale = await prisma.$transaction(async (tx) => {
+      if (ebmEnabled) {
+        const branch = branchId
+          ? await tx.branch.findFirst({
+            where: {
+              id: branchId,
+              organizationId: organizationId!,
+            },
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              bhfId: true,
+            },
+          })
+          : null;
+
+        assertVsdcBranchMasterData(branch);
+      }
+
       // 1. Validate stock availability before creating sale (using ledger as source of truth)
       for (const item of items) {
         const product = await tx.product.findFirst({
@@ -93,6 +173,17 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
 
         if (!product) {
           throw new Error(`Product with ID ${item.productId} not found`);
+        }
+
+        if (ebmEnabled) {
+          assertVsdcProductMasterData({
+            id: product.id,
+            name: product.name,
+            itemCode: product.itemCode,
+            itemClassCode: product.itemClassCode,
+            packageUnitCode: product.packageUnitCode,
+            quantityUnitCode: product.quantityUnitCode,
+          });
         }
 
         // Calculate current stock from ledger (source of truth)
@@ -207,13 +298,17 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
           organizationId: organizationId!,
           branchId: branchId as any,
           paymentType: finalPaymentType,
+          purchaseOrderCode:
+            typeof purchaseOrderCode === "string" && purchaseOrderCode.trim().length > 0
+              ? purchaseOrderCode.trim()
+              : null,
           cashAmount: cashAmount || 0,
           insuranceAmount: insuranceAmount || 0,
           debtAmount: debtAmount || 0,
           totalAmount,
           vatAmount: taxSummary.vatAmount,
           taxableAmount: taxSummary.taxableAmount,
-          status: 'COMPLETED', // Default to completed (can be changed to PENDING if needed)
+          status: initialSaleStatus,
           saleItems: {
             create: saleItemsData,
           },
@@ -260,17 +355,59 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       timeout: 60000,   // 60 seconds
     });
 
-    // 5. Submit to EBM/VSDC if enabled (outside transaction, async)
-    if (isEbmEnabled()) {
-      submitInvoiceToEbm({
+    if (ebmEnabled) {
+      try {
+        await auditLogger.sales(req, {
+          type: 'SALE_CREATE',
+          description: `Sale created and awaiting fiscalization (Invoice #${sale.invoiceNumber || saleNumber})`,
+          entityType: 'Sale',
+          entityId: sale.id,
+          metadata: {
+            invoiceNumber: sale.invoiceNumber,
+            totalAmount: sale.totalAmount,
+            paymentType: sale.paymentType,
+            status: 'PENDING'
+          }
+        });
+      } catch (auditError) {
+        console.error("[Sale Create Audit Error]:", auditError)
+      }
+
+      const ebmResult = await submitInvoiceToEbm({
         saleId: sale.id,
         organizationId: organizationId!,
-      }).catch((error) => {
-        console.error("[EBM] Failed to submit invoice (non-blocking):", error);
       });
+
+      const responseSale = await loadSaleWithContext(req, sale.id, organizationId) ?? sale
+
+      if (!ebmResult.success) {
+        return res.status(201).json(success(
+          responseSale,
+          ebmResult.error
+            ? `Sale created, but fiscal submission failed. Sale remains pending: ${ebmResult.error}`
+            : "Sale created, but fiscal submission is still pending."
+        ))
+      }
+
+      await auditLogger.sales(req, {
+        type: 'SALE_COMPLETED',
+        description: `Sale completed and fiscalized (Invoice #${sale.invoiceNumber || saleNumber})`,
+        entityType: 'Sale',
+        entityId: sale.id,
+        metadata: {
+          invoiceNumber: sale.invoiceNumber,
+          totalAmount: sale.totalAmount,
+          paymentType: sale.paymentType,
+          ebmInvoiceNumber: ebmResult.ebmInvoiceNumber ?? null
+        }
+      });
+
+      return res.status(201).json(success(
+        responseSale,
+        "Sale completed and fiscalized successfully"
+      ))
     }
 
-    // 6. Log activity (outside transaction for performance, but after successful sale)
     await auditLogger.sales(req, {
       type: 'SALE_COMPLETED',
       description: `Sale completed (Invoice #${sale.invoiceNumber || saleNumber})`,
@@ -283,13 +420,18 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       }
     });
 
-    res.status(201).json(success(sale))
+    const responseSale = await loadSaleWithContext(req, sale.id, organizationId) ?? sale
+    res.status(201).json(success(responseSale, "Sale completed successfully"))
   } catch (error: any) {
     console.error("[Create Sale Error]:", error)
 
     // Return appropriate status code based on error type
     if (error.message && error.message.includes('Insufficient stock')) {
       return res.status(400).json(apiError(error.message || "Insufficient stock"))
+    }
+
+    if (error.message && error.message.includes('VSDC master data:')) {
+      return res.status(400).json(apiError(error.message || "Missing VSDC master data"))
     }
 
     if (error.message && error.message.includes('not found')) {
@@ -355,7 +497,18 @@ export const getSales = async (req: BranchAuthRequest, res: Response) => {
             name: true,
             phone: true,
             TIN: true,
-            customerType: true
+            customerType: true,
+            email: true,
+            address: true,
+          }
+        },
+        branch: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            bhfId: true,
+            address: true,
           }
         },
         user: {
@@ -391,39 +544,7 @@ export const getSaleById = async (req: BranchAuthRequest, res: Response) => {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
 
-    const sale = await prisma.sale.findFirst({
-      where: {
-        id,
-        organizationId,
-        ...buildBranchFilter(req)
-      },
-      include: {
-        customer: {
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-            TIN: true,
-            customerType: true,
-            email: true,
-            address: true
-          }
-        },
-        user: {
-          select: {
-            id: true,
-            name: true,
-            role: true
-          }
-        },
-        saleItems: {
-          include: { product: true },
-        },
-        ebmTransactions: {
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    })
+    const sale = await loadSaleWithContext(req, id, organizationId)
 
     if (!sale) {
       return res.status(404).json(apiError("Sale not found"))
@@ -433,6 +554,63 @@ export const getSaleById = async (req: BranchAuthRequest, res: Response) => {
   } catch (error) {
     console.error("[Get Sale Error]:", error)
     res.status(500).json(apiError("Failed to get sale"))
+  }
+}
+
+export const recordSaleReprint = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id)
+    const organizationId = parseInt(req.params.organizationId)
+
+    const existingSale = await prisma.sale.findFirst({
+      where: {
+        id,
+        organizationId,
+        ...buildBranchFilter(req)
+      },
+      select: {
+        id: true,
+        saleNumber: true,
+        reprintCount: true,
+      }
+    })
+
+    if (!existingSale) {
+      return res.status(404).json(apiError("Sale not found"))
+    }
+
+    await prisma.sale.update({
+      where: { id },
+      data: {
+        reprintCount: { increment: 1 },
+      },
+    })
+
+    const updatedSale = await loadSaleWithContext(req, id, organizationId)
+
+    if (!updatedSale) {
+      return res.status(404).json(apiError("Sale not found"))
+    }
+
+    try {
+      await auditLogger.sales(req, {
+        type: 'SALE_UPDATE',
+        description: `Receipt copy generated for Sale #${updatedSale.saleNumber}`,
+        entityType: 'Sale',
+        entityId: updatedSale.id,
+        metadata: {
+          previousReprintCount: existingSale.reprintCount,
+          reprintCount: updatedSale.reprintCount,
+        }
+      })
+    } catch (auditError) {
+      console.error("[Sale Reprint Audit Error]:", auditError)
+    }
+
+    res.json(success(updatedSale, "Sale receipt copy recorded"))
+  } catch (error) {
+    console.error("[Sale Reprint Error]:", error)
+    res.status(500).json(apiError("Failed to record sale receipt copy"))
   }
 }
 
@@ -458,6 +636,10 @@ export const payDebt = async (req: BranchAuthRequest, res: Response) => {
 
     if (sale.status === 'REFUNDED' || sale.status === 'CANCELLED') {
       return res.status(400).json(apiError(`Cannot process payment for ${sale.status.toLowerCase()} sale`))
+    }
+
+    if (sale.status === 'PENDING') {
+      return res.status(409).json(apiError("Cannot process payment for a pending sale until fiscalization completes"))
     }
 
     const remainingDebt = (sale.debtAmount as Decimal).toNumber() - amount
@@ -518,81 +700,107 @@ const executeWithRetry = async (fn: () => Promise<any>, retries = 0): Promise<an
 };
 
 export const refundSale = async (req: BranchAuthRequest, res: Response) => {
+  let refundEbmSubmission: Awaited<ReturnType<typeof submitRefundToEbm>> | null = null;
   try {
+    const id = parseInt(req.params.id);
+    const organizationId = parseInt(req.params.organizationId);
+    const { reason, reasonCode, items: refundItems } = req.body;
+    const userId = req.user?.userId;
+    const ebmEnabled = isEbmEnabled();
+
+    const sale = await prisma.sale.findFirst({
+      where: {
+        id,
+        organizationId,
+        ...buildBranchFilter(req)
+      } as any,
+      include: {
+        saleItems: {
+          include: {
+            product: true,
+            batch: true
+          }
+        },
+        customer: true
+      } as any
+    });
+
+    if (!sale) {
+      return res.status(404).json(apiError("Sale not found"));
+    }
+
+    if (sale.status === 'REFUNDED') {
+      return res.status(400).json(apiError("Sale already refunded"));
+    }
+
+    if (sale.status === 'CANCELLED') {
+      return res.status(400).json(apiError("Cannot refund a cancelled sale"));
+    }
+
+    if (sale.status === 'PENDING') {
+      return res.status(409).json(apiError("Cannot refund a pending sale. Cancel it instead."));
+    }
+
+    if (!sale.saleItems || sale.saleItems.length === 0) {
+      return res.status(400).json(apiError("Sale has no items to refund"));
+    }
+
+    if (refundItems && refundItems.length > 0 && refundItems.length < sale.saleItems.length) {
+      return res.status(400).json(apiError("Partial refunds are not allowed. Only full refunds are permitted."));
+    }
+
+    const itemsToRefund = ((sale as any).saleItems || []).map((item: any) => ({
+      saleItemId: item.id,
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice.toNumber(),
+      totalPrice: item.totalPrice.toNumber(),
+      taxRate: item.taxRate?.toNumber?.() || 0,
+      taxAmount: item.taxAmount?.toNumber?.() || 0,
+      taxCode: item.taxCode ?? null,
+      costPrice: item.costPrice?.toNumber?.() || 0,
+      profit: item.profit?.toNumber?.() || 0,
+    }));
+
+    const totalRefundAmount = itemsToRefund.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
+    const refundProcessedAt = new Date();
+    const refundSaleNumber = `REFUND-${sale.saleNumber}-${refundProcessedAt.getTime()}`;
+    const refundInvoiceNumber = ebmEnabled ? await generateInvoiceNumber(organizationId!) : null;
+
+    if (ebmEnabled && refundInvoiceNumber) {
+      refundEbmSubmission = await submitRefundToEbm({
+        organizationId,
+        originalSaleId: id,
+        refundInvoiceNumber,
+        refundedAt: refundProcessedAt,
+        reason,
+        reasonCode,
+      });
+
+      if (!refundEbmSubmission.success) {
+        const status =
+          refundEbmSubmission.code === 'NOT_FISCALIZED'
+            ? 409
+            : refundEbmSubmission.code === 'VALIDATION'
+              ? 400
+              : 502;
+        return res.status(status).json(apiError(refundEbmSubmission.error || "Failed to fiscalize refund"));
+      }
+    }
+
     const result = await executeWithRetry(async () => {
       return await prisma.$transaction(async (prisma) => {
-        const id = parseInt(req.params.id);
-        const organizationId = parseInt(req.params.organizationId);
-        const { reason, items: refundItems } = req.body;
-        const userId = req.user?.userId;
-
-        // Get the sale with items
-        const sale = await prisma.sale.findFirst({
-          where: {
-            id,
-            organizationId,
-            ...buildBranchFilter(req)
-          } as any,
-          include: {
-            saleItems: {
-              include: {
-                product: true,
-                batch: true
-              }
-            },
-            customer: true
-          } as any
-        });
-
-        if (!sale) {
-          throw { status: 404, message: "Sale not found" };
-        }
-
-        if (sale.status === 'REFUNDED') {
-          throw { status: 400, message: "Sale already refunded" };
-        }
-
-        if (sale.status === 'CANCELLED') {
-          throw { status: 400, message: "Cannot refund a cancelled sale" };
-        }
-
-        // Ensure sale has items
-        if (!sale.saleItems || sale.saleItems.length === 0) {
-          throw { status: 400, message: "Sale has no items to refund" };
-        }
-
-        // Strict Rule: Partial refunds are not allowed
-        if (refundItems && refundItems.length > 0 && refundItems.length < sale.saleItems.length) {
-          throw { status: 400, message: "Partial refunds are not allowed. Only full refunds are permitted." };
-        }
-
-        // Get all sale items for full refund
-        const itemsToRefund = ((sale as any).saleItems || []).map((item: any) => ({
-          saleItemId: item.id,
-          productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice.toNumber(),
-          totalPrice: item.totalPrice.toNumber()
-        }));
-
-        // Calculate total refund amount
-        const totalRefundAmount = itemsToRefund.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
-
-        // Update original sale status
         await prisma.sale.update({
           where: { id },
           data: {
             status: 'REFUNDED',
-            refundedAt: new Date(),
+            refundedAt: refundProcessedAt,
             refundedById: parseInt(userId as string),
             refundReason: reason
           }
         });
 
-        // Create a new REFUND sale record with negative amounts
-        const refundSaleNumber = `REFUND-${sale.saleNumber}-${Date.now()}`;
-
-        const refundSale = await prisma.sale.create({
+        const refundRecord = await prisma.sale.create({
           data: {
             saleNumber: refundSaleNumber,
             customerId: sale.customerId,
@@ -600,19 +808,30 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             organizationId: organizationId!,
             branchId: (sale as any).branchId,
             paymentType: sale.paymentType,
-            cashAmount: -totalRefundAmount, // Negative amount
+            cashAmount: -totalRefundAmount,
             insuranceAmount: 0,
             debtAmount: 0,
-            totalAmount: -totalRefundAmount, // Negative total
+            totalAmount: -totalRefundAmount,
+            vatAmount: -((sale as any).vatAmount?.toNumber?.() || 0),
+            taxableAmount: -((sale as any).taxableAmount?.toNumber?.() || 0),
             status: 'REFUNDED',
             refundReason: reason,
-            originalSaleId: id, // Link to original sale
+            refundedAt: refundProcessedAt,
+            refundedById: parseInt(userId as string),
+            originalSaleId: id,
+            invoiceNumber: refundInvoiceNumber,
+            createdAt: refundProcessedAt,
             saleItems: {
               create: itemsToRefund.map((item: any) => ({
                 productId: item.productId,
-                quantity: -item.quantity, // Negative quantity
+                quantity: -item.quantity,
                 unitPrice: item.unitPrice,
-                totalPrice: -item.totalPrice, // Negative total
+                totalPrice: -item.totalPrice,
+                taxRate: item.taxRate,
+                taxAmount: -item.taxAmount,
+                taxCode: item.taxCode,
+                costPrice: item.costPrice,
+                profit: -item.profit,
               }))
             }
           } as any,
@@ -622,7 +841,13 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           }
         });
 
-        // Update product quantities (restore inventory) and record movements in ledger (Stock IN)
+        if (refundEbmSubmission?.transactionId) {
+          await prisma.ebmTransaction.update({
+            where: { id: refundEbmSubmission.transactionId },
+            data: { saleId: refundRecord.id }
+          });
+        }
+
         for (const item of itemsToRefund) {
           await addStock({
             organizationId: organizationId!,
@@ -634,11 +859,10 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             reference: refundSaleNumber,
             referenceType: 'SALE_REFUND',
             note: `Refund for Sale #${sale.saleNumber} (Full)`,
-            tx: prisma, // Pass transaction client to avoid nested transactions
+            tx: prisma,
           });
         }
 
-        // Update customer balance
         await prisma.customer.update({
           where: { id: sale.customerId },
           data: {
@@ -646,43 +870,48 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           }
         });
 
-        // Log the activity
-        await auditLogger.sales(req, {
-          type: 'SALE_REFUNDED',
-          description: `Full refund issued for Sale #${sale.saleNumber}${reason ? `: ${reason}` : ''}`,
-          entityType: 'Sale',
-          entityId: id,
-          metadata: {
-            refundSaleId: refundSale.id,
-            refundAmount: totalRefundAmount,
-            reason,
-          }
-        });
-
         return {
           success: true,
-          message: 'Refund transaction created successfully',
+          message: ebmEnabled ? 'Refund completed and fiscalized successfully' : 'Refund transaction created successfully',
           refundAmount: totalRefundAmount,
-          refundSale: refundSale,
+          refundSale: refundRecord,
           refundedItems: itemsToRefund
         };
       }, {
-        maxWait: 30000,   // 30 seconds
-        timeout: 60000,   // 60 seconds
+        maxWait: 30000,
+        timeout: 60000,
       });
     });
 
-    if (isEbmEnabled() && result.refundSale?.id && result.success) {
-      submitRefundToEbm({
-        organizationId: parseInt(req.params.organizationId),
-        originalSaleId: parseInt(req.params.id),
-        refundSaleId: result.refundSale.id,
-        reason: req.body?.reason,
-      }).catch((err) => console.error("[EBM] Refund submit failed (non-blocking):", err));
+    try {
+      await auditLogger.sales(req, {
+        type: 'SALE_REFUNDED',
+        description: `Full refund issued for Sale #${sale.saleNumber}${reason ? `: ${reason}` : ''}`,
+        entityType: 'Sale',
+        entityId: id,
+        metadata: {
+          refundSaleId: result.refundSale.id,
+          refundAmount: totalRefundAmount,
+          reason,
+          reasonCode: reasonCode ?? null,
+        }
+      });
+    } catch (auditError) {
+      console.error("[Refund Audit Error]:", auditError);
     }
 
-    res.status(200).json(success(result));
+    res.status(200).json(success(result, result.message));
   } catch (error: any) {
+    if (refundEbmSubmission?.transactionId) {
+      await prisma.ebmTransaction.update({
+        where: { id: refundEbmSubmission.transactionId },
+        data: {
+          errorMessage: `Local refund finalization failed after gateway success: ${error.message || 'Unknown error'}`,
+        },
+      }).catch((ebmUpdateError) => {
+        console.error("[Refund Reconciliation Error]:", ebmUpdateError);
+      });
+    }
     console.error("[Refund Error]:", error);
     const status = error.status || 500;
     const message = error.message || "Failed to process refund";
@@ -692,6 +921,7 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
 
 
 export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
+  let voidEbmSubmission: Awaited<ReturnType<typeof submitVoidToEbm>> | null = null;
   try {
     const saleId = parseInt(req.params.saleId);
     const organizationId = parseInt(req.params.organizationId);
@@ -728,20 +958,42 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
       return res.status(400).json(apiError(`Cannot cancel a ${sale.status.toLowerCase()} sale`));
     }
 
-    // Start a transaction
+    const ebmEnabled = isEbmEnabled();
+    const shouldFiscalCancel = ebmEnabled && sale.status !== 'PENDING';
+    const cancelledAt = new Date();
+
+    if (shouldFiscalCancel) {
+      const cancelInvoiceNumber = await generateInvoiceNumber(organizationId!);
+      voidEbmSubmission = await submitVoidToEbm({
+        organizationId,
+        saleId,
+        cancelInvoiceNumber,
+        cancelledAt,
+        reason,
+      });
+
+      if (!voidEbmSubmission.success) {
+        const status =
+          voidEbmSubmission.code === 'NOT_FISCALIZED'
+            ? 409
+            : voidEbmSubmission.code === 'VALIDATION'
+              ? 400
+              : 502;
+        return res.status(status).json(apiError(voidEbmSubmission.error || "Failed to fiscalize cancellation"));
+      }
+    }
+
     await prisma.$transaction(async (prisma) => {
-      // Update sale status
       await prisma.sale.update({
         where: { id: saleId },
         data: {
           status: 'CANCELLED',
-          cancelledAt: new Date(),
+          cancelledAt,
           cancelledById: parseInt(userId as string),
           cancellationReason: reason
         }
       });
 
-      // Return items to inventory and record movements in ledger (Stock IN)
       for (const item of sale.saleItems) {
         await addStock({
           organizationId: organizationId!,
@@ -753,13 +1005,10 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
           reference: sale.saleNumber,
           referenceType: 'SALE_CANCELLATION',
           note: `Sale cancellation: ${sale.saleNumber}`,
-          tx: prisma, // Pass transaction client to avoid nested transactions
+          tx: prisma,
         });
       }
 
-      // Revert customer balance for debt portion only
-      // During sale creation, we added the debt amount to customer balance
-      // During cancellation, we need to subtract it
       const debtAmount = (sale as any).debtAmount?.toNumber?.() || 0;
       if (debtAmount > 0) {
         await prisma.customer.update({
@@ -769,8 +1018,9 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
           }
         });
       }
+    });
 
-      // Log the activity
+    try {
       await auditLogger.sales(req, {
         type: 'SALE_CANCELLED',
         description: `Sale #${sale.saleNumber} cancelled${reason ? `: ${reason}` : ''}`,
@@ -778,18 +1028,26 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
         entityId: saleId,
         metadata: { cancellationReason: reason }
       });
-    });
-
-    if (isEbmEnabled()) {
-      submitVoidToEbm({
-        organizationId,
-        saleId,
-        reason,
-      }).catch((err) => console.error("[EBM] Void submit failed (non-blocking):", err));
+    } catch (auditError) {
+      console.error("[Cancel Sale Audit Error]:", auditError);
     }
 
-    res.status(200).json(success({ message: "Sale cancelled successfully" }));
+    const message = shouldFiscalCancel
+      ? "Sale cancelled and fiscalized successfully"
+      : "Sale cancelled successfully";
+
+    res.status(200).json(success({ message }, message));
   } catch (error) {
+    if (voidEbmSubmission?.transactionId) {
+      await prisma.ebmTransaction.update({
+        where: { id: voidEbmSubmission.transactionId },
+        data: {
+          errorMessage: `Local cancellation finalization failed after gateway success: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        },
+      }).catch((ebmUpdateError) => {
+        console.error("[Cancel Reconciliation Error]:", ebmUpdateError);
+      });
+    }
     console.error("[Cancel Sale Error]:", error);
     res.status(500).json(apiError("Failed to cancel sale"));
   }

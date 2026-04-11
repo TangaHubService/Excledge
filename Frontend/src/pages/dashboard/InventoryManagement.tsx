@@ -54,13 +54,18 @@ import ViewProductDialog from "./inventory/ViewProductDialog";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import InventoryHistoryDialog from "./inventory/InventoryHistoryDialog";
 import StockAdjustmentDialog from "./inventory/StockAdjustmentDialog";
-import { History, Edit } from "lucide-react";
+import { History, Edit, Pencil } from "lucide-react";
 
 type ProductNameItem = {
   value: string | number;
   label: string;
   id: number;
   name: string;
+  sku?: string;
+  itemCode?: string;
+  itemClassCode?: string;
+  packageUnitCode?: string;
+  quantityUnitCode?: string;
   expiryDate: string;
   batchNumber: string;
   category: string;
@@ -68,6 +73,87 @@ type ProductNameItem = {
   minStock: number;
   description: string;
 };
+
+type ProductFormState = {
+  batchNumber: string;
+  name: string;
+  sku: string;
+  itemCode: string;
+  itemClassCode: string;
+  packageUnitCode: string;
+  quantityUnitCode: string;
+  quantity: number;
+  unitPrice: number;
+  expiryDate: string;
+  minStock: number;
+  description: string;
+  imageUrl: string;
+};
+
+const createEmptyProductForm = (): ProductFormState => ({
+  batchNumber: "",
+  name: "",
+  sku: "",
+  itemCode: "",
+  itemClassCode: "",
+  packageUnitCode: "",
+  quantityUnitCode: "",
+  quantity: 0,
+  unitPrice: 0,
+  expiryDate: "",
+  minStock: 0,
+  description: "",
+  imageUrl: "",
+});
+
+const normalizeDateForInput = (value?: string | null) =>
+  value ? value.slice(0, 10) : "";
+
+const buildProductOption = (
+  source: Partial<ProductNameItem> & {
+    value: string | number;
+    label: string;
+    id?: number;
+    name?: string;
+  }
+): ProductNameItem => ({
+  value: source.value,
+  label: source.label,
+  id: typeof source.id === "number" ? source.id : Number(source.id ?? 0),
+  name: source.name ?? source.label,
+  sku: source.sku ?? "",
+  itemCode: source.itemCode ?? "",
+  itemClassCode: source.itemClassCode ?? "",
+  packageUnitCode: source.packageUnitCode ?? "",
+  quantityUnitCode: source.quantityUnitCode ?? "",
+  expiryDate: source.expiryDate ?? "",
+  batchNumber: source.batchNumber ?? "",
+  category: source.category ?? "",
+  unitPrice: source.unitPrice ?? 0,
+  minStock: source.minStock ?? 0,
+  description: source.description ?? "",
+});
+
+const productToFormData = (
+  product: Partial<Product> & Partial<ProductNameItem>
+): ProductFormState => ({
+  batchNumber: product.batchNumber ?? "",
+  name: product.name ?? product.label ?? "",
+  sku: product.sku ?? "",
+  itemCode: product.itemCode ?? "",
+  itemClassCode: product.itemClassCode ?? "",
+  packageUnitCode: product.packageUnitCode ?? "",
+  quantityUnitCode: product.quantityUnitCode ?? "",
+  quantity: typeof product.quantity === "number" ? product.quantity : 0,
+  unitPrice: typeof product.unitPrice === "number" ? product.unitPrice : 0,
+  expiryDate: normalizeDateForInput(product.expiryDate),
+  minStock: typeof product.minStock === "number" ? product.minStock : 0,
+  description: product.description ?? "",
+  imageUrl:
+    "imageUrl" in product && typeof product.imageUrl === "string"
+      ? product.imageUrl
+      : "",
+});
 
 
 function getDaysRemaining(expiryDate: string) {
@@ -88,6 +174,11 @@ const fetchProductNames = async (query: string) => {
       label: item.name,
       id: item.id,
       name: item.name,
+      sku: item.sku ?? "",
+      itemCode: item.itemCode ?? "",
+      itemClassCode: item.itemClassCode ?? "",
+      packageUnitCode: item.packageUnitCode ?? "",
+      quantityUnitCode: item.quantityUnitCode ?? "",
       category: item.category ?? "",
       expiryDate: item.expiryDate ?? "",
       batchNumber: item.batchNumber ?? "",
@@ -114,16 +205,9 @@ export const InventoryManagement = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [viewProduct, setViewProduct] = useState<Product | null>(null);
   const [categoryInput, setCategoryInput] = useState("");
-  const [formData, setFormData] = useState({
-    batchNumber: "",
-    name: "",
-    quantity: 0,
-    unitPrice: 0,
-    expiryDate: "",
-    minStock: 0,
-    description: "",
-    imageUrl: "",
-  });
+  const [formData, setFormData] = useState<ProductFormState>(
+    createEmptyProductForm()
+  );
 
   const [totalPages, setTotalPages] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -137,10 +221,8 @@ export const InventoryManagement = () => {
   >([]);
   const [loading, setLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<{
-    value: string;
-    label: string;
-  } | null>(null);
+  const [selectedProduct, setSelectedProduct] =
+    useState<ProductNameItem | null>(null);
   const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
   const [productSearch, setProductSearch] = useState("");
   const [debouncedProductSearch] = useDebounce(productSearch, 400);
@@ -285,6 +367,11 @@ export const InventoryManagement = () => {
       label: p.name,
       id: typeof p.id === "number" ? p.id : Number(p.id),
       name: p.name,
+      sku: p.sku || "",
+      itemCode: p.itemCode || "",
+      itemClassCode: p.itemClassCode || "",
+      packageUnitCode: p.packageUnitCode || "",
+      quantityUnitCode: p.quantityUnitCode || "",
       category: p.category || "",
       expiryDate: p.expiryDate || "",
       batchNumber: p.batchNumber || "",
@@ -304,6 +391,50 @@ export const InventoryManagement = () => {
     };
     loadProductNames();
   }, [debouncedProductSearch]);
+
+  const resetProductForm = () => {
+    setEditingProduct(null);
+    setSelectedProduct(null);
+    setCategoryInput("");
+    setFormData(createEmptyProductForm());
+    setImageFile(null);
+    setImagePreview("");
+    setFormErrors({});
+  };
+
+  const openCreateDialog = () => {
+    resetProductForm();
+    setIsDialogOpen(true);
+  };
+
+  const openEditDialog = (product: Product) => {
+    setEditingProduct(product);
+    setSelectedProduct(
+      buildProductOption({
+        value: product.id,
+        label: product.name,
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        itemCode: product.itemCode,
+        itemClassCode: product.itemClassCode,
+        packageUnitCode: product.packageUnitCode,
+        quantityUnitCode: product.quantityUnitCode,
+        category: product.category,
+        expiryDate: product.expiryDate,
+        batchNumber: product.batchNumber,
+        unitPrice: product.unitPrice,
+        minStock: product.minStock,
+        description: product.description,
+      })
+    );
+    setCategoryInput(product.category || "");
+    setFormData(productToFormData(product));
+    setImageFile(null);
+    setImagePreview("");
+    setFormErrors({});
+    setIsDialogOpen(true);
+  };
 
   const handleSaveProduct = async () => {
     // Validate form before submission
@@ -370,25 +501,12 @@ export const InventoryManagement = () => {
         expiryStatus,
         page: currentPage,
         limit: itemsPerPage,
+        branchId: selectedBranchId,
       });
 
       // Reset form
       setIsDialogOpen(false);
-      setEditingProduct(null);
-      setCategoryInput("");
-      setFormData({
-        batchNumber: "",
-        name: "",
-        quantity: 0,
-        unitPrice: 0,
-        expiryDate: "",
-        minStock: 0,
-        description: "",
-        imageUrl: "",
-      });
-      setImageFile(null);
-      setImagePreview("");
-      setFormErrors({}); // Clear any previous errors
+      resetProductForm();
     } catch (error) {
       console.error("Failed to save product:", error);
       toast.error(t('messages.saveError'));
@@ -412,6 +530,7 @@ export const InventoryManagement = () => {
         expiryStatus,
         page: currentPage,
         limit: itemsPerPage,
+        branchId: selectedBranchId,
       });
     } catch (error: any) {
       toast.error(`${t('messages.deleteError')}: ${error.message}`);
@@ -434,6 +553,11 @@ export const InventoryManagement = () => {
         "Description",
         "Expiry Date (YYYY/MM/DD) - Optional",
         "Batch Number",
+        "SKU",
+        "VSDC Item Code",
+        "VSDC Item Class Code",
+        "Package Unit Code",
+        "Quantity Unit Code",
       ],
       [
         "Paracetamol",
@@ -444,6 +568,11 @@ export const InventoryManagement = () => {
         "Pain reliever",
         "2025/12/31",
         "BATCH001",
+        "PARA-500",
+        "RW1NTXU0000001",
+        "5059690800",
+        "BX",
+        "EA",
       ],
       [
         "Bandage",
@@ -454,6 +583,11 @@ export const InventoryManagement = () => {
         "For wounds",
         "2025/12/31",
         "BATCH002",
+        "BAND-STD",
+        "RW1NTXU0000002",
+        "3005100000",
+        "PK",
+        "EA",
       ],
     ];
 
@@ -469,6 +603,11 @@ export const InventoryManagement = () => {
       { wch: 30 }, // Description
       { wch: 20 }, // Expiry Date
       { wch: 15 }, // Batch Number
+      { wch: 16 }, // SKU
+      { wch: 22 }, // Item Code
+      { wch: 22 }, // Item Class Code
+      { wch: 18 }, // Package Unit Code
+      { wch: 18 }, // Quantity Unit Code
     ];
     ws["!cols"] = wscols;
 
@@ -565,6 +704,11 @@ export const InventoryManagement = () => {
             description: String(row[5] || "").trim(),
             expiryDate: expiryDate ? expiryDate.toISOString() : "",
             batchNumber: String(row[7] || `BATCH-${Date.now()}-${i}`).trim(),
+            sku: String(row[8] || "").trim(),
+            itemCode: String(row[9] || "").trim(),
+            itemClassCode: String(row[10] || "").trim(),
+            packageUnitCode: String(row[11] || "").trim(),
+            quantityUnitCode: String(row[12] || "").trim(),
           };
 
           if (isNaN(product.unitPrice) || product.unitPrice < 0) {
@@ -615,6 +759,7 @@ export const InventoryManagement = () => {
         expiryStatus,
         page: currentPage,
         limit: itemsPerPage,
+        branchId: selectedBranchId,
       });
       toast.success(`Successfully imported ${previewItems.length} product(s)`);
       setIsPreviewModalOpen(false);
@@ -687,13 +832,18 @@ export const InventoryManagement = () => {
             </Button>
 
             {/* Add Product Modal */}
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <Dialog
+              open={isDialogOpen}
+              onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) {
+                  resetProductForm();
+                }
+              }}
+            >
               <DialogTrigger asChild>
                 <Button
-                  onClick={() => {
-                    setEditingProduct(null);
-                    setIsDialogOpen(true);
-                  }}
+                  onClick={openCreateDialog}
                   className="bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200 h-10"
                 >
                   <Plus className="mr-2 h-4 w-4" />
@@ -733,11 +883,19 @@ export const InventoryManagement = () => {
 
                       onInputChange={(value) => setProductSearch(value)}
                       onChange={(newValue: any) => {
-                        setSelectedProduct(newValue);
+                        const selectedOption = newValue
+                          ? buildProductOption(newValue)
+                          : null;
+                        setSelectedProduct(selectedOption);
                         if (newValue) {
                           setFormData((prev) => ({
                             ...prev,
                             name: newValue.label,
+                            sku: newValue.sku || "",
+                            itemCode: newValue.itemCode || "",
+                            itemClassCode: newValue.itemClassCode || "",
+                            packageUnitCode: newValue.packageUnitCode || "",
+                            quantityUnitCode: newValue.quantityUnitCode || "",
                             unitPrice: newValue.unitPrice || prev.unitPrice || 0,
                             minStock: newValue.minStock || prev.minStock || 0,
                             description: newValue.description || prev.description || "",
@@ -749,6 +907,11 @@ export const InventoryManagement = () => {
                           setFormData((prev) => ({
                             ...prev,
                             name: "",
+                            sku: "",
+                            itemCode: "",
+                            itemClassCode: "",
+                            packageUnitCode: "",
+                            quantityUnitCode: "",
                             unitPrice: 0,
                             minStock: 0,
                             description: "",
@@ -757,12 +920,20 @@ export const InventoryManagement = () => {
                         }
                       }}
                       onCreateOption={(inputValue) => {
-                        const newProduct = {
+                        const newProduct = buildProductOption({
                           value: inputValue,
                           label: inputValue,
-                        };
+                        });
                         setSelectedProduct(newProduct);
-                        setFormData((prev) => ({ ...prev, name: inputValue }));
+                        setFormData((prev) => ({
+                          ...prev,
+                          name: inputValue,
+                          sku: "",
+                          itemCode: "",
+                          itemClassCode: "",
+                          packageUnitCode: "",
+                          quantityUnitCode: "",
+                        }));
                       }}
                       options={uniqueProductNames}
                       value={selectedProduct}
@@ -902,6 +1073,71 @@ export const InventoryManagement = () => {
                         }),
                       }}
                     />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>SKU</Label>
+                      <Input
+                        placeholder="e.g., PARA-500"
+                        value={formData.sku}
+                        onChange={(e) =>
+                          setFormData({ ...formData, sku: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>VSDC Item Code</Label>
+                      <Input
+                        placeholder="e.g., RW1NTXU0000001"
+                        value={formData.itemCode}
+                        onChange={(e) =>
+                          setFormData({ ...formData, itemCode: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>VSDC Item Class Code</Label>
+                      <Input
+                        placeholder="e.g., 5059690800"
+                        value={formData.itemClassCode}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            itemClassCode: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Package Unit Code</Label>
+                      <Input
+                        placeholder="e.g., BX"
+                        value={formData.packageUnitCode}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            packageUnitCode: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Quantity Unit Code</Label>
+                      <Input
+                        placeholder="e.g., EA"
+                        value={formData.quantityUnitCode}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            quantityUnitCode: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
                   </div>
 
                   {/* Image Upload Input */}
@@ -1424,6 +1660,15 @@ export const InventoryManagement = () => {
                                   <Button
                                     variant="ghost"
                                     size="sm"
+                                    onClick={() => openEditDialog(item)}
+                                    className="h-8 px-2"
+                                    title={t('inventory.editProduct') || 'Edit Product'}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
                                     onClick={() => {
                                       setSelectedProductForHistory(item.id);
                                       setHistoryDialogOpen(true);
@@ -1650,7 +1895,7 @@ export const InventoryManagement = () => {
               </p>
 
               <ScrollArea className="h-[60vh] border rounded-md">
-                <div className="min-w-[1000px]">
+                <div className="min-w-[1500px]">
                   <Table>
                     <TableHeader className={theme === "dark" ? "bg-gray-800" : "bg-gray-50"}>
                       <TableRow>
@@ -1662,6 +1907,11 @@ export const InventoryManagement = () => {
                         <TableHead className="whitespace-nowrap">Description</TableHead>
                         <TableHead className="whitespace-nowrap">Expiry</TableHead>
                         <TableHead className="whitespace-nowrap">Batch</TableHead>
+                        <TableHead className="whitespace-nowrap">SKU</TableHead>
+                        <TableHead className="whitespace-nowrap">Item Code</TableHead>
+                        <TableHead className="whitespace-nowrap">Item Class</TableHead>
+                        <TableHead className="whitespace-nowrap">Pkg Unit</TableHead>
+                        <TableHead className="whitespace-nowrap">Qty Unit</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1677,6 +1927,11 @@ export const InventoryManagement = () => {
                             {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : 'N/A'}
                           </TableCell>
                           <TableCell className="whitespace-nowrap font-mono text-xs">{item.batchNumber}</TableCell>
+                          <TableCell className="whitespace-nowrap font-mono text-xs">{item.sku || 'N/A'}</TableCell>
+                          <TableCell className="whitespace-nowrap font-mono text-xs">{item.itemCode || 'N/A'}</TableCell>
+                          <TableCell className="whitespace-nowrap font-mono text-xs">{item.itemClassCode || 'N/A'}</TableCell>
+                          <TableCell className="whitespace-nowrap font-mono text-xs">{item.packageUnitCode || 'N/A'}</TableCell>
+                          <TableCell className="whitespace-nowrap font-mono text-xs">{item.quantityUnitCode || 'N/A'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

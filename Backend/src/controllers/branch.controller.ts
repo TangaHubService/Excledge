@@ -95,7 +95,7 @@ export const getUserPrimaryBranchController = async (req: AuthRequest, res: Resp
 export const createBranchController = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
-    const { name, code, location, address, phone, metadata } = req.body;
+    const { name, code, bhfId, location, address, phone, metadata } = req.body;
 
     if (!name || !code) {
       return res.status(400).json({ error: 'Branch name and code are required' });
@@ -105,6 +105,7 @@ export const createBranchController = async (req: AuthRequest, res: Response) =>
       organizationId,
       name,
       code,
+      bhfId,
       location,
       address,
       phone,
@@ -119,6 +120,7 @@ export const createBranchController = async (req: AuthRequest, res: Response) =>
       metadata: {
         name,
         code,
+        bhfId: bhfId ?? null,
       },
     });
 
@@ -136,10 +138,12 @@ export const updateBranchController = async (req: AuthRequest, res: Response) =>
   try {
     const organizationId = parseInt(req.params.organizationId);
     const branchId = parseInt(req.params.id);
-    const { name, location, address, phone, status, metadata } = req.body;
+    const { name, code, bhfId, location, address, phone, status, metadata } = req.body;
 
     const branch = await updateBranch(branchId, organizationId, {
       name,
+      code,
+      bhfId,
       location,
       address,
       phone,
@@ -154,6 +158,8 @@ export const updateBranchController = async (req: AuthRequest, res: Response) =>
       entityId: branch.id.toString(),
       metadata: {
         name: branch.name,
+        code: branch.code,
+        bhfId: (branch as any).bhfId ?? null,
       },
     });
 

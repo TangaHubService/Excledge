@@ -19,14 +19,16 @@ Use this as a working checklist alongside RRA’s official forms. Requirements c
 - [INTEGRATION.md](./INTEGRATION.md) — env vars and payload overview  
 - [TEST-CASES-TEMPLATE.md](./TEST-CASES-TEMPLATE.md) — certification test matrix  
 - [SLA-OUTLINE.md](./SLA-OUTLINE.md) — draft SLA sections for RRA and customers  
+- [OPERATIONS-RUNBOOK.md](./OPERATIONS-RUNBOOK.md) — setup, sync, retry, and evidence guide  
+- [PRE-VERIFICATION-CHECKLIST.md](./PRE-VERIFICATION-CHECKLIST.md) — ordered technical readiness checklist  
 
 ## Technical evidence (prepare before submission)
 
 - [ ] Sandbox credentials received; all test cases executed in sandbox
 - [ ] Evidence logs: sample requests/responses (redact secrets) for sale, refund, void
-- [ ] Description of retry and dead-letter behavior (`ebm_queue`, max retries)
-- [ ] Data retention and audit trail (`ebm_transactions`, activity logs)
-- [ ] Per-tenant TIN and device id/serial configuration process documented
+- [x] Description of retry and dead-letter behavior (`ebm_queue`, max retries) documented in `OPERATIONS-RUNBOOK.md`
+- [x] Data retention and audit trail (`ebm_transactions`, `vsdc_sync_snapshots`, `activity_logs`) documented in `OPERATIONS-RUNBOOK.md`
+- [x] Per-tenant TIN and device id/serial configuration process documented in `OPERATIONS-RUNBOOK.md`
 - [ ] Receipt/PDF shows RRA-mandated fields returned by the gateway (after mapping is finalized)
 
 ## Excledge-specific test ideas

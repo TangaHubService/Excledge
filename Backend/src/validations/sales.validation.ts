@@ -15,6 +15,7 @@ export const createSaleSchema = z.object({
     cashAmount: z.coerce.number().nonnegative('Cash amount cannot be negative').optional(),
     debtAmount: z.coerce.number().nonnegative('Debt amount cannot be negative').optional(),
     insuranceAmount: z.coerce.number().nonnegative('Insurance amount cannot be negative').optional(),
+    purchaseOrderCode: z.string().max(50, 'Purchase order code too long').optional(),
     notes: z.string().optional(),
   }),
   params: z.object({

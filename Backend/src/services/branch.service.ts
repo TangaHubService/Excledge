@@ -5,6 +5,7 @@ export interface CreateBranchParams {
   organizationId: number;
   name: string;
   code: string;
+  bhfId?: string;
   location?: string;
   address?: string;
   phone?: string;
@@ -13,12 +14,27 @@ export interface CreateBranchParams {
 
 export interface UpdateBranchParams {
   name?: string;
+  code?: string;
+  bhfId?: string;
   location?: string;
   address?: string;
   phone?: string;
   status?: BranchStatus;
   metadata?: any;
 }
+
+const normalizeOptionalText = (value?: string | null) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
 
 /**
  * Get all branches for an organization
@@ -79,7 +95,7 @@ export async function getBranchById(branchId: number, organizationId: number) {
  * Create a new branch
  */
 export async function createBranch(params: CreateBranchParams) {
-  const { organizationId, name, code, location, address, phone, metadata } = params;
+  const { organizationId, name, code, bhfId, location, address, phone, metadata } = params;
 
   // Check if code is unique within organization
   const existing = await prisma.branch.findFirst({
@@ -99,6 +115,7 @@ export async function createBranch(params: CreateBranchParams) {
       organizationId,
       name,
       code,
+      bhfId: normalizeOptionalText(bhfId),
       location,
       address,
       phone,
@@ -127,10 +144,27 @@ export async function updateBranch(
     throw new Error(`Branch with ID ${branchId} not found`);
   }
 
+  if (data.code && data.code !== branch.code) {
+    const existing = await prisma.branch.findFirst({
+      where: {
+        organizationId,
+        code: data.code,
+        NOT: { id: branchId },
+      },
+    });
+
+    if (existing) {
+      throw new Error(`Branch code ${data.code} already exists in this organization`);
+    }
+  }
+
   // Update branch
   return await prisma.branch.update({
     where: { id: branchId },
-    data,
+    data: {
+      ...data,
+      ...(data.bhfId !== undefined ? { bhfId: normalizeOptionalText(data.bhfId) } : {}),
+    },
   });
 }
 

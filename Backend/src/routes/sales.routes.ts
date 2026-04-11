@@ -3,6 +3,7 @@ import {
   createSale,
   getSales,
   getSaleById,
+  recordSaleReprint,
   payDebt,
   refundSale,
   cancelSale
@@ -42,6 +43,15 @@ router.get(
   orgAccess,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   getSaleById
+);
+
+// Record a sale receipt reprint / copy
+router.post(
+  "/:organizationId/:id/reprint",
+  authenticate,
+  orgAccess,
+  authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
+  recordSaleReprint
 );
 
 // Pay off debt for a sale

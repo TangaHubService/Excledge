@@ -14,6 +14,10 @@ export interface Product {
     id: number;
     name: string;
     sku?: string;
+    itemCode?: string;
+    itemClassCode?: string;
+    packageUnitCode?: string;
+    quantityUnitCode?: string;
     batchNumber?: string;
     quantity: number;
     unitPrice: number;

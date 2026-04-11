@@ -7,8 +7,17 @@ import { generateStrongPassword } from "../utils/generatePassword";
 import { auditLogger } from "../utils/auditLogger";
 import { deleteFromCloudinary, uploadToCloudinary } from "../config/cloudinary";
 import { SubscriptionService } from "../services/subscription.service";
+import {
+  getOrganizationVsdcSyncReport,
+  getOrganizationVsdcStockSyncReport,
+  runOrganizationVsdcReferenceSync,
+  runOrganizationVsdcStockSync,
+} from "../services/rra-ebm.service";
 
 import type { Request, Response } from "express";
+
+const hasNonEmptyText = (value: unknown): boolean =>
+  typeof value === "string" && value.trim().length > 0;
 
 export const getUserOrganizations = async (req: Request, res: Response) => {
   try {
@@ -114,6 +123,345 @@ export const getOrganizationById = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error fetching organization:", error);
     res.status(500).json({ error: "Failed to fetch organization" });
+  }
+};
+
+export const getOrganizationVsdcReadiness = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    //@ts-ignore
+    const userId = parseInt(req.user?.userId as string);
+
+    const userOrganization = await prisma.userOrganization.findFirst({
+      where: {
+        userId,
+        organizationId: id,
+      },
+    });
+
+    if (!userOrganization) {
+      return res
+        .status(403)
+        .json({ error: "Access denied to this organization" });
+    }
+
+    const [organization, branches, products] = await Promise.all([
+      prisma.organization.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          name: true,
+          TIN: true,
+          ebmDeviceId: true,
+          ebmSerialNo: true,
+        },
+      }),
+      prisma.branch.findMany({
+        where: {
+          organizationId: id,
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          bhfId: true,
+          location: true,
+          address: true,
+          status: true,
+        },
+        orderBy: [
+          { name: 'asc' },
+        ],
+      }),
+      prisma.product.findMany({
+        where: {
+          organizationId: id,
+          deletedAt: null,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          category: true,
+          batchNumber: true,
+          quantity: true,
+          itemCode: true,
+          itemClassCode: true,
+          packageUnitCode: true,
+          quantityUnitCode: true,
+        },
+        orderBy: [
+          { name: 'asc' },
+        ],
+      }),
+    ]);
+
+    if (!organization) {
+      return res.status(404).json({ error: "Organization not found" });
+    }
+
+    const organizationMissingFields = [
+      !hasNonEmptyText(organization.TIN) ? 'TIN' : null,
+      !hasNonEmptyText(organization.ebmDeviceId) ? 'ebmDeviceId' : null,
+      !hasNonEmptyText(organization.ebmSerialNo) ? 'ebmSerialNo' : null,
+    ].filter(Boolean) as string[];
+
+    const branchItems = branches.map((branch) => {
+      const missingFields = [
+        !hasNonEmptyText(branch.bhfId) ? 'bhfId' : null,
+      ].filter(Boolean) as string[];
+
+      return {
+        ...branch,
+        missingFields,
+      };
+    });
+
+    const productItems = products.map((product) => {
+      const missingFields = [
+        !hasNonEmptyText(product.itemCode) ? 'itemCode' : null,
+        !hasNonEmptyText(product.itemClassCode) ? 'itemClassCode' : null,
+        !hasNonEmptyText(product.packageUnitCode) ? 'packageUnitCode' : null,
+        !hasNonEmptyText(product.quantityUnitCode) ? 'quantityUnitCode' : null,
+      ].filter(Boolean) as string[];
+
+      return {
+        ...product,
+        itemCode: product.itemCode,
+        itemClassCode: product.itemClassCode,
+        packageUnitCode: product.packageUnitCode,
+        quantityUnitCode: product.quantityUnitCode,
+        missingFields,
+      };
+    });
+
+    const branchMissingItems = branchItems.filter((branch) => branch.missingFields.length > 0);
+    const productMissingItems = productItems.filter((product) => product.missingFields.length > 0);
+
+    const readinessReport = {
+      summary: {
+        ready:
+          organizationMissingFields.length === 0 &&
+          branchMissingItems.length === 0 &&
+          productMissingItems.length === 0,
+        organizationReady: organizationMissingFields.length === 0,
+        branchesReady: branchMissingItems.length === 0,
+        productsReady: productMissingItems.length === 0,
+      },
+      organization: {
+        id: organization.id,
+        name: organization.name,
+        missingFields: organizationMissingFields,
+      },
+      branches: {
+        total: branchItems.length,
+        readyCount: branchItems.length - branchMissingItems.length,
+        missingCount: branchMissingItems.length,
+        missingFieldCounts: {
+          bhfId: branchMissingItems.filter((branch) => branch.missingFields.includes('bhfId')).length,
+        },
+        items: branchMissingItems,
+      },
+      products: {
+        total: productItems.length,
+        readyCount: productItems.length - productMissingItems.length,
+        missingCount: productMissingItems.length,
+        missingFieldCounts: {
+          itemCode: productMissingItems.filter((product) => product.missingFields.includes('itemCode')).length,
+          itemClassCode: productMissingItems.filter((product) => product.missingFields.includes('itemClassCode')).length,
+          packageUnitCode: productMissingItems.filter((product) => product.missingFields.includes('packageUnitCode')).length,
+          quantityUnitCode: productMissingItems.filter((product) => product.missingFields.includes('quantityUnitCode')).length,
+        },
+        items: productMissingItems,
+      },
+    };
+
+    res.json({ readiness: readinessReport });
+  } catch (error) {
+    console.error("Error fetching VSDC readiness:", error);
+    res.status(500).json({ error: "Failed to fetch VSDC readiness" });
+  }
+};
+
+export const getOrganizationVsdcSync = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    //@ts-ignore
+    const userId = parseInt(req.user?.userId as string);
+
+    const userOrganization = await prisma.userOrganization.findFirst({
+      where: {
+        userId,
+        organizationId: id,
+      },
+    });
+
+    if (!userOrganization) {
+      return res
+        .status(403)
+        .json({ error: "Access denied to this organization" });
+    }
+
+    const sync = await getOrganizationVsdcSyncReport(id);
+    res.json({ sync });
+  } catch (error) {
+    console.error("Error fetching VSDC sync status:", error);
+    res.status(500).json({ error: "Failed to fetch VSDC sync status" });
+  }
+};
+
+export const runOrganizationVsdcSync = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    //@ts-ignore
+    const userId = parseInt(req.user?.userId as string);
+    const requestedTarget =
+      typeof req.body?.target === "string" && req.body.target.trim().length > 0
+        ? req.body.target.trim().toUpperCase()
+        : "ALL";
+
+    const userOrganization = await prisma.userOrganization.findFirst({
+      where: {
+        userId,
+        organizationId: id,
+      },
+    });
+
+    if (!userOrganization) {
+      return res
+        .status(403)
+        .json({ error: "Access denied to this organization" });
+    }
+
+    const sync = await runOrganizationVsdcReferenceSync({
+      organizationId: id,
+      target: requestedTarget as
+        | "ALL"
+        | "INIT_INFO"
+        | "CODE_TABLES"
+        | "BRANCHES"
+        | "NOTICES",
+    });
+
+    await auditLogger.system(req, {
+      type: "ORGANIZATION_UPDATE",
+      description: `VSDC reference sync executed (${requestedTarget})`,
+      entityType: "Organization",
+      entityId: id.toString(),
+      metadata: {
+        target: requestedTarget,
+        canSync: sync.canSync,
+        snapshots: Object.entries(sync.snapshots).reduce<Record<string, string | null>>(
+          (acc, [key, value]) => {
+            acc[key] = value?.submissionStatus ?? null;
+            return acc;
+          },
+          {}
+        ),
+      },
+    });
+
+    res.json({
+      message: `VSDC reference sync completed for ${requestedTarget}`,
+      sync,
+    });
+  } catch (error: any) {
+    console.error("Error running VSDC sync:", error);
+    const message = error?.message || "Failed to run VSDC sync";
+    const status = /required|configure|unsupported/i.test(message) ? 400 : 500;
+    res.status(status).json({ error: message });
+  }
+};
+
+export const getOrganizationVsdcStockSync = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    //@ts-ignore
+    const userId = parseInt(req.user?.userId as string);
+
+    const userOrganization = await prisma.userOrganization.findFirst({
+      where: {
+        userId,
+        organizationId: id,
+      },
+    });
+
+    if (!userOrganization) {
+      return res
+        .status(403)
+        .json({ error: "Access denied to this organization" });
+    }
+
+    const stockSync = await getOrganizationVsdcStockSyncReport(id);
+    res.json({ stockSync });
+  } catch (error) {
+    console.error("Error fetching VSDC stock sync status:", error);
+    res.status(500).json({ error: "Failed to fetch VSDC stock sync status" });
+  }
+};
+
+export const runOrganizationVsdcStockSyncController = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    //@ts-ignore
+    const userId = parseInt(req.user?.userId as string);
+    const requestedTarget =
+      typeof req.body?.target === "string" && req.body.target.trim().length > 0
+        ? req.body.target.trim().toUpperCase()
+        : "ALL";
+
+    const userOrganization = await prisma.userOrganization.findFirst({
+      where: {
+        userId,
+        organizationId: id,
+      },
+    });
+
+    if (!userOrganization) {
+      return res
+        .status(403)
+        .json({ error: "Access denied to this organization" });
+    }
+
+    const stockSync = await runOrganizationVsdcStockSync({
+      organizationId: id,
+      target: requestedTarget as
+        | "ALL"
+        | "BRANCH_MASTER"
+        | "ITEM_MASTER"
+        | "STOCK_MASTER"
+        | "STOCK_MOVEMENTS",
+    });
+
+    await auditLogger.system(req, {
+      type: "ORGANIZATION_UPDATE",
+      description: `VSDC stock sync executed (${requestedTarget})`,
+      entityType: "Organization",
+      entityId: id.toString(),
+      metadata: {
+        target: requestedTarget,
+        canSync: stockSync.canSync,
+        snapshots: Object.entries(stockSync.snapshots).reduce<Record<string, string | null>>(
+          (acc, [key, value]) => {
+            acc[key] = value?.submissionStatus ?? null;
+            return acc;
+          },
+          {}
+        ),
+      },
+    });
+
+    res.json({
+      message: `VSDC stock sync completed for ${requestedTarget}`,
+      stockSync,
+    });
+  } catch (error: any) {
+    console.error("Error running VSDC stock sync:", error);
+    const message = error?.message || "Failed to run VSDC stock sync";
+    const status = /required|configure|unsupported|complete/i.test(message) ? 400 : 500;
+    res.status(status).json({ error: message });
   }
 };
 

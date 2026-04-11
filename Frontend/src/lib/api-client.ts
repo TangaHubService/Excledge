@@ -298,6 +298,38 @@ class ApiClient {
     return this.request(`/organizations/${id}`);
   }
 
+  async getOrganizationVsdcReadiness(id: string) {
+    return this.request(`/organizations/${id}/vsdc-readiness`);
+  }
+
+  async getOrganizationVsdcSync(id: string) {
+    return this.request(`/organizations/${id}/vsdc-sync`);
+  }
+
+  async runOrganizationVsdcSync(
+    id: string,
+    target: "ALL" | "INIT_INFO" | "CODE_TABLES" | "BRANCHES" | "NOTICES" = "ALL"
+  ) {
+    return this.request(`/organizations/${id}/vsdc-sync`, {
+      method: "POST",
+      body: JSON.stringify({ target }),
+    });
+  }
+
+  async getOrganizationVsdcStockSync(id: string) {
+    return this.request(`/organizations/${id}/vsdc-stock-sync`);
+  }
+
+  async runOrganizationVsdcStockSync(
+    id: string,
+    target: "ALL" | "BRANCH_MASTER" | "ITEM_MASTER" | "STOCK_MASTER" | "STOCK_MOVEMENTS" = "ALL"
+  ) {
+    return this.request(`/organizations/${id}/vsdc-stock-sync`, {
+      method: "POST",
+      body: JSON.stringify({ target }),
+    });
+  }
+
   async updateOrganization(data: any) {
     return this.request(`/organizations/${this.getOrganizationId()}`, {
       method: "PUT",
@@ -441,6 +473,13 @@ class ApiClient {
   async getSale(id: string) {
     return this.request(`/sales/${this.getOrganizationId()}/${id}`);
   }
+
+  async recordSaleReprint(id: string) {
+    return this.request(`/sales/${this.getOrganizationId()}/${id}/reprint`, {
+      method: "POST",
+    });
+  }
+
   async recordPayment(id: string, data: { amount: number }) {
     return this.request(`/sales/${id}/${this.getOrganizationId()}`, {
       method: "PUT",
@@ -1323,6 +1362,7 @@ class ApiClient {
   async createBranch(data: {
     name: string;
     code?: string;
+    bhfId?: string;
     address?: string;
     location?: string;
     phone?: string;
@@ -1341,6 +1381,7 @@ class ApiClient {
   async updateBranch(branchId: number, data: {
     name?: string;
     code?: string;
+    bhfId?: string;
     address?: string;
     location?: string;
     phone?: string;

@@ -42,6 +42,7 @@ model Organization {
   supplierPayments  SupplierPayment[]
   suppliers         Supplier[]
   userOrganizations UserOrganization[]
+  vsdcSyncSnapshots VsdcSyncSnapshot[]
   warehouses        Warehouse[]
   branches          Branch[]                 // NEW: Branch management
   taxConfigurations TaxConfiguration[]
@@ -57,6 +58,7 @@ model Branch {
   organizationId Int
   name           String
   code           String       // e.g., "NYC-001", "MAIN", "KIGALI-01"
+  bhfId          String?      @map("bhf_id") // Official RRA/VSDC branch identifier
   location       String?
   address        String?
   phone          String?
@@ -327,6 +329,10 @@ model Payment {
 model Product {
   name               String
   sku                String?
+  itemCode           String?             @map("item_code")
+  itemClassCode      String?             @map("item_class_code")
+  packageUnitCode    String?             @map("package_unit_code")
+  quantityUnitCode   String?             @map("quantity_unit_code")
   batchNumber        String?
   quantity           Int
   unitPrice          Decimal             @db.Decimal(10, 2)
@@ -410,6 +416,7 @@ model DebtPayment {
 model Sale {
   saleNumber         String           @unique
   paymentType        SalePaymentType
+  purchaseOrderCode  String?          @map("purchase_order_code")
   cashAmount         Decimal          @default(0) @db.Decimal(10, 2)
   insuranceAmount    Decimal          @default(0) @db.Decimal(10, 2)
   debtAmount         Decimal          @default(0) @db.Decimal(10, 2)
@@ -748,6 +755,27 @@ model EbmQueue {
   @@index([nextRetryAt])
   @@index([priority])
   @@map("ebm_queue")
+}
+
+model VsdcSyncSnapshot {
+  id               Int                 @id @default(autoincrement())
+  organizationId   Int
+  snapshotType     String
+  endpointPath     String
+  submissionStatus EbmSubmissionStatus @default(PENDING)
+  requestPayload   Json?
+  responseData     Json?
+  summary          Json?
+  errorMessage     String?
+  lastSyncedAt     DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, snapshotType])
+  @@index([organizationId])
+  @@index([snapshotType])
+  @@map("vsdc_sync_snapshots")
 }
 
 model Expense {

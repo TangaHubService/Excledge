@@ -184,9 +184,17 @@ VITE_CONTACT_FORM_SCRIPT_ID=
 | `EBM_API_KEY` | Authentication key or username |
 | `EBM_API_SECRET` | Authentication secret or password |
 | `EBM_ENVIRONMENT` | `sandbox` or `production` |
-| `EBM_SALE_PATH` | Sale submission path |
-| `EBM_REFUND_PATH` | Refund submission path |
-| `EBM_VOID_PATH` | Void submission path |
+| `EBM_SALE_PATH` | Sale submission path (default `/trnsSales/saveSales`) |
+| `EBM_REFUND_PATH` | Refund correction path (defaults to `/trnsSales/saveSales`) |
+| `EBM_VOID_PATH` | Cancel correction path (defaults to `/trnsSales/saveSales`) |
+| `EBM_INIT_INFO_PATH` | Initialization info sync path (default `/initializer/selectInitInfo`) |
+| `EBM_CODE_TABLE_PATH` | Code-table sync path (default `/codes/selectCodes`) |
+| `EBM_BRANCH_LOOKUP_PATH` | Branch lookup sync path (default `/branches/selectBranches`) |
+| `EBM_NOTICES_PATH` | Notice sync path (default `/notices/selectNotices`) |
+| `EBM_BRANCH_SAVE_PATH` | Branch master sync path (default `/branches/saveBranches`) |
+| `EBM_ITEM_SAVE_PATH` | Item master sync path (default `/items/saveItems`) |
+| `EBM_STOCK_MASTER_PATH` | Stock master sync path (default `/stocks/saveStockMaster`) |
+| `EBM_STOCK_IO_PATH` | Stock movement sync path (default `/stocks/saveStockItems`) |
 | `EBM_REQUEST_TIMEOUT_MS` | HTTP timeout |
 | `EBM_USE_MOCK` | Mock mode for testing |
 | `EBM_MAX_QUEUE_RETRIES` | Retry limit for queued submissions |

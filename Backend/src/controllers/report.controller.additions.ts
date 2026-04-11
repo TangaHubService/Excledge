@@ -53,7 +53,7 @@ export const getDebtPaymentsReport = async (req: AuthRequest, res: Response) => 
             where: {
                 organizationId: Number(organizationId),
                 debtAmount: { gt: 0 },
-                status: { not: 'CANCELLED' }
+                status: { notIn: ['CANCELLED', 'PENDING'] }
             },
             _sum: {
                 debtAmount: true

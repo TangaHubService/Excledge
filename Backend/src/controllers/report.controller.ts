@@ -737,7 +737,7 @@ export const getDebtPaymentsReport = async (req: BranchAuthRequest, res: Respons
       where: {
         organizationId,
         debtAmount: { gt: 0 },
-        status: { not: 'CANCELLED' } // Ensure cancelled sales don't count
+        status: { notIn: ['CANCELLED', 'PENDING'] } // Pending sales are not finalized debt
       },
       _sum: {
         debtAmount: true
@@ -764,7 +764,7 @@ export const getDebtPaymentsReport = async (req: BranchAuthRequest, res: Respons
           customerId: payment.customerId,
           debtAmount: { gt: 0 },
           createdAt: { lte: payment.paymentDate },
-          status: { not: 'CANCELLED' }
+          status: { notIn: ['CANCELLED', 'PENDING'] }
         },
         orderBy: { createdAt: 'asc' }
       });

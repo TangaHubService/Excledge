@@ -2,6 +2,9 @@ import { Router } from "express";
 import {
   getUserOrganizations,
   getOrganizationById,
+  getOrganizationVsdcReadiness,
+  getOrganizationVsdcSync,
+  getOrganizationVsdcStockSync,
   createOrganization,
   updateOrganization,
   deleteOrganization,
@@ -13,6 +16,8 @@ import {
   getInvitationDetails,
   cancelInvitation,
   declineInvitation,
+  runOrganizationVsdcSync,
+  runOrganizationVsdcStockSyncController,
   updateOrganizationAvatar,
 } from "../controllers/organization.controller";
 import { authenticate } from "../middleware/auth.middleware";
@@ -26,6 +31,11 @@ const orgAccessById = requireOrganizationAccess("id");
 
 router.get("/", authenticate, getUserOrganizations);
 router.get("/:id", authenticate, orgAccessById, getOrganizationById);
+router.get("/:id/vsdc-readiness", authenticate, orgAccessById, getOrganizationVsdcReadiness);
+router.get("/:id/vsdc-sync", authenticate, orgAccessById, getOrganizationVsdcSync);
+router.post("/:id/vsdc-sync", authenticate, orgAccessById, runOrganizationVsdcSync);
+router.get("/:id/vsdc-stock-sync", authenticate, orgAccessById, getOrganizationVsdcStockSync);
+router.post("/:id/vsdc-stock-sync", authenticate, orgAccessById, runOrganizationVsdcStockSyncController);
 router.post("/", authenticate, createOrganization);
 router.put("/:id", authenticate, orgAccessById, updateOrganization);
 router.put(

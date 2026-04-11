@@ -408,6 +408,7 @@ export default function SalesForm() {
   const [searchTerm, setSearchTerm] = useState('');
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [purchaseOrderCode, setPurchaseOrderCode] = useState('');
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -419,6 +420,11 @@ export default function SalesForm() {
   const isLoadingMoreRef = useRef(false);
   const [displayedProductsCount, setDisplayedProductsCount] = useState(30); // Show 30 products initially (10 rows of 3)
   const ITEMS_PER_LOAD = 15; // Load 15 more items each time (5 rows of 3)
+  const selectedCustomerRecord = useMemo(
+    () => customers.find((customer) => customer.id === selectedCustomer) ?? null,
+    [customers, selectedCustomer]
+  );
+  const showPurchaseOrderField = selectedCustomerRecord?.type === 'CORPORATE';
 
 
   // Close dropdown when clicking outside
@@ -510,6 +516,10 @@ export default function SalesForm() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  useEffect(() => {
+    setPurchaseOrderCode('');
+  }, [selectedCustomer]);
 
   // Synchronize offline sales
   useEffect(() => {
@@ -838,27 +848,34 @@ export default function SalesForm() {
         insuranceAmount,
         debtAmount,
         branchId: selectedBranchId,
-        paymentStatus: remainingDebt > 0 ? 'MIXED' : 'PAID'
+        paymentStatus: remainingDebt > 0 ? 'MIXED' : 'PAID',
+        purchaseOrderCode: purchaseOrderCode.trim() || undefined,
       };
 
       if (!isOnline) {
         offlineQueue.enqueue(payload);
         toast.warning(t('pos.offlineQueued') || 'Offline: Sale has been queued and will sync when online.');
         setCart([]);
+        setPurchaseOrderCode('');
         setIsPaymentModalOpen(false);
         return;
       }
 
-      await apiClient.createSale(payload);
+      const saleResponse = await apiClient.createSale(payload);
       await fetchRecentSales();
 
-      if (remainingDebt > 0) {
+      if (saleResponse?.data?.status === 'PENDING') {
+        toast.warning(
+          saleResponse?.message || 'Sale created, but fiscal submission is pending.'
+        );
+      } else if (remainingDebt > 0) {
         toast.success(t('pos.paymentDebtSuccess', { paid: totalPaid, debt: remainingDebt }));
       } else {
         toast.success(t('pos.paymentSuccess'));
       }
 
       setCart([]);
+      setPurchaseOrderCode('');
       setIsPaymentModalOpen(false);
       // Refresh products to get updated stock
       const response = await apiClient.getProducts({
@@ -900,7 +917,16 @@ export default function SalesForm() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [cart, selectedCustomer, total, t, fetchRecentSales]);
+  }, [
+    cart,
+    selectedCustomer,
+    total,
+    t,
+    fetchRecentSales,
+    purchaseOrderCode,
+    isOnline,
+    selectedBranchId,
+  ]);
 
 
   return (
@@ -1118,6 +1144,20 @@ export default function SalesForm() {
                       </div>
                     )}
                   </div>
+                  {showPurchaseOrderField && (
+                    <div className="space-y-1">
+                      <Label className="text-sm">Purchase Order Code</Label>
+                      <Input
+                        value={purchaseOrderCode}
+                        onChange={(e) => setPurchaseOrderCode(e.target.value)}
+                        placeholder="e.g., PO-2026-001"
+                        className={theme === 'dark' ? 'bg-gray-800 border-gray-700 text-white' : ''}
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Recommended for corporate VSDC sales so the fiscal payload uses the customer&apos;s real purchase code.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
