@@ -378,6 +378,7 @@ type VsdcBranchMasterData = {
   name: string;
   code: string;
   bhfId: string | null;
+  isActive?: boolean;
 } | null;
 
 type VsdcProductMasterData = {
@@ -394,9 +395,23 @@ export function assertVsdcBranchMasterData(branch: VsdcBranchMasterData): string
     vsdcMasterDataError('a branch with a configured BHF ID is required for fiscalization');
   }
 
+  if (branch.isActive === false) {
+    vsdcMasterDataError(
+      `branch "${branch.name}" is not active and cannot be used for fiscalization`
+    );
+  }
+
   const explicitBhfId = digitsOnly(branch.bhfId);
   if (explicitBhfId) {
-    return explicitBhfId.slice(-2).padStart(2, '0');
+    const bhfId = explicitBhfId.slice(-2).padStart(2, '0');
+    
+    if (!/^\d{2}$/.test(bhfId)) {
+      vsdcMasterDataError(
+        `branch "${branch.name}" BHF ID must be exactly 2 digits after normalization`
+      );
+    }
+    
+    return bhfId;
   }
 
   vsdcMasterDataError(
@@ -417,10 +432,17 @@ export function assertVsdcProductMasterData(
     vsdcMasterDataError(`product "${product.name}" is missing its VSDC item code`);
   }
 
-  const itemClassCode = digitsOnly(product.itemClassCode);
+  let itemClassCode = digitsOnly(product.itemClassCode);
   if (!itemClassCode) {
     vsdcMasterDataError(
       `product "${product.name}" is missing its VSDC item classification code`
+    );
+  }
+
+  itemClassCode = itemClassCode.slice(0, 10).padStart(10, '0');
+  if (!/^\d{10}$/.test(itemClassCode)) {
+    vsdcMasterDataError(
+      `product "${product.name}" item classification code must be exactly 10 digits (got ${itemClassCode.length})`
     );
   }
 
@@ -431,6 +453,11 @@ export function assertVsdcProductMasterData(
     );
   }
 
+  const validPackageUnits = ['NT', 'U', 'KG', 'L', 'ME', 'PK', 'BX', 'CS', 'PD', 'TN', 'ML'];
+  if (!validPackageUnits.includes(packageUnitCode.toUpperCase())) {
+    console.warn(`[VSDC] Product "${product.name}" has non-standard package unit: ${packageUnitCode}`);
+  }
+
   const quantityUnitCode = truncateText(product.quantityUnitCode, 10);
   if (!quantityUnitCode) {
     vsdcMasterDataError(
@@ -438,9 +465,14 @@ export function assertVsdcProductMasterData(
     );
   }
 
+  const validQuantityUnits = ['U', 'KG', 'L', 'ME', 'PK', 'BX', 'NO', 'PR', 'SET', 'PA', 'GRM', 'MTR'];
+  if (!validQuantityUnits.includes(quantityUnitCode.toUpperCase())) {
+    console.warn(`[VSDC] Product "${product.name}" has non-standard quantity unit: ${quantityUnitCode}`);
+  }
+
   return {
     itemCode,
-    itemClassCode: itemClassCode.slice(0, 10).padStart(10, '0'),
+    itemClassCode,
     packageUnitCode,
     quantityUnitCode,
   };
@@ -475,19 +507,22 @@ type VsdcTaxCode = 'A' | 'B' | 'C' | 'D';
 
 function mapInternalTaxCodeToVsdcCode(localCode: string | null, taxRate: number): VsdcTaxCode {
   if (taxRate > 0) {
-    return 'B';
+    if (taxRate === 18) {
+      return 'B';
+    }
+    return 'D';
   }
 
-  // Excledge historically used A/B/D internally; the official VSDC spec maps
-  // B to 18% and A to exempt. Keep the remaining zero-rate bucket on C until
-  // sandbox responses confirm otherwise.
   switch (localCode) {
+    case 'EXEMPT':
     case 'D':
       return 'A';
+    case 'ZERO_RATED':
     case 'B':
       return 'C';
+    case 'STANDARD':
     case 'A':
-      return 'B';
+      return taxRate > 0 ? 'B' : 'A';
     case 'C':
       return 'C';
     default:
@@ -622,6 +657,63 @@ function gatewayResultMessage(normalized: NormalizedEbmResponse, fallback: strin
   }
 
   return fallback;
+}
+
+export type VsdcErrorCategory = 'SUCCESS' | 'VALIDATION' | 'CONFIGURATION' | 'NETWORK' | 'SERVER' | 'UNKNOWN';
+
+interface VsdcErrorDetail {
+  category: VsdcErrorCategory;
+  message: string;
+  isRecoverable: boolean;
+}
+
+const VSDC_ERROR_CODES: Record<string, VsdcErrorDetail> = {
+  '000': { category: 'SUCCESS', message: 'Operation succeeded', isRecoverable: false },
+  '001': { category: 'SUCCESS', message: 'No search result', isRecoverable: false },
+  '881': { category: 'VALIDATION', message: 'Purchase is mandatory', isRecoverable: false },
+  '882': { category: 'VALIDATION', message: 'Purchase code is invalid', isRecoverable: false },
+  '883': { category: 'VALIDATION', message: 'Purchase already used', isRecoverable: false },
+  '884': { category: 'VALIDATION', message: 'Invalid customer TIN provided', isRecoverable: false },
+  '891': { category: 'SERVER', message: 'Error creating request URL', isRecoverable: true },
+  '892': { category: 'SERVER', message: 'Error creating request header', isRecoverable: true },
+  '893': { category: 'VALIDATION', message: 'Error creating request body', isRecoverable: false },
+  '894': { category: 'NETWORK', message: 'Server communication error', isRecoverable: true },
+  '895': { category: 'SERVER', message: 'Invalid request method', isRecoverable: false },
+  '896': { category: 'SERVER', message: 'Invalid request status', isRecoverable: true },
+  '899': { category: 'SERVER', message: 'Client error', isRecoverable: true },
+  '900': { category: 'CONFIGURATION', message: 'Missing header information', isRecoverable: false },
+  '901': { category: 'CONFIGURATION', message: 'Invalid device', isRecoverable: false },
+  '902': { category: 'CONFIGURATION', message: 'Device already installed', isRecoverable: false },
+  '903': { category: 'CONFIGURATION', message: 'Only VSDC device can be verified', isRecoverable: false },
+  '910': { category: 'VALIDATION', message: 'Request parameter error', isRecoverable: false },
+  '911': { category: 'VALIDATION', message: 'Missing request data', isRecoverable: false },
+  '912': { category: 'VALIDATION', message: 'Request method error', isRecoverable: false },
+  '921': { category: 'VALIDATION', message: 'Sales data not found', isRecoverable: false },
+  '922': { category: 'VALIDATION', message: 'Sales invoice requires prior sales data', isRecoverable: false },
+  '990': { category: 'SERVER', message: 'Maximum views exceeded', isRecoverable: true },
+  '991': { category: 'SERVER', message: 'Registration error', isRecoverable: true },
+  '992': { category: 'SERVER', message: 'Modification error', isRecoverable: true },
+  '993': { category: 'SERVER', message: 'Deletion error', isRecoverable: true },
+  '994': { category: 'VALIDATION', message: 'Data overlap', isRecoverable: false },
+  '995': { category: 'SERVER', message: 'No downloaded file', isRecoverable: true },
+  '999': { category: 'UNKNOWN', message: 'Unknown error - contact administrator', isRecoverable: true },
+};
+
+export function getVsdcErrorDetails(resultCode: string): VsdcErrorDetail {
+  return VSDC_ERROR_CODES[resultCode] || {
+    category: 'UNKNOWN',
+    message: `Unexpected error code: ${resultCode}`,
+    isRecoverable: true
+  };
+}
+
+export function isVsdcErrorRecoverable(resultCode: string): boolean {
+  const details = getVsdcErrorDetails(resultCode);
+  return details.isRecoverable;
+}
+
+export function getVsdcErrorCategory(resultCode: string): VsdcErrorCategory {
+  return getVsdcErrorDetails(resultCode).category;
 }
 
 function authHeader(): string | undefined {

@@ -4,14 +4,14 @@ import { useEffect } from 'react';
 import PhoneInputWithCountryCode from '../../components/PhoneInputWithCountryCode';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { yupResolver } from '@hookform/resolvers/yup';
+import { zodResolver } from '@hookform/resolvers/zod';
 
-import type { CustomerFormData } from '../../types/customer';
-import { customerSchema } from '../../schema/customer';
+import type { Customer } from '../../types/customer';
+import { createCustomerSchema, updateCustomerSchema, type CreateCustomerInput, type UpdateCustomerInput } from '../../schema';
 
 interface CustomerFormProps {
-    initialData: Partial<CustomerFormData>;
-    onSubmit: (data: CustomerFormData) => void;
+    initialData?: Partial<Customer>;
+    onSubmit: (data: CreateCustomerInput | UpdateCustomerInput) => void;
     onClose: () => void;
     isLoading: boolean;
 }
@@ -25,6 +25,8 @@ export function CustomerForm({
     const { t } = useTranslation();
     const { theme } = useTheme();
 
+    const isEditMode = !!initialData?.id;
+    const schema = isEditMode ? updateCustomerSchema : createCustomerSchema;
 
     const {
         register,
@@ -33,14 +35,13 @@ export function CustomerForm({
         reset,
         formState: { errors: formErrors },
         watch,
-    } = useForm<CustomerFormData>({
-        resolver: yupResolver(customerSchema) as any,
+    } = useForm<CreateCustomerInput | UpdateCustomerInput>({
+        resolver: zodResolver(schema),
         defaultValues: {
             name: '',
             email: '',
             phone: '',
-            type: 'INDIVIDUAL',
-            balance: 0,
+            customerType: 'INDIVIDUAL',
         },
     });
 
@@ -50,8 +51,7 @@ export function CustomerForm({
                 name: initialData.name || '',
                 email: initialData.email || '',
                 phone: initialData.phone || '',
-                type: initialData.type || 'INDIVIDUAL',
-                balance: initialData.balance || 0,
+                customerType: (initialData as any).customerType || 'INDIVIDUAL',
             };
             reset(formData);
         } else {
@@ -59,17 +59,14 @@ export function CustomerForm({
                 name: '',
                 email: '',
                 phone: '',
-                type: 'INDIVIDUAL',
-                balance: 0,
+                customerType: 'INDIVIDUAL',
             });
         }
     }, [initialData, reset]);
 
     const phoneValue = watch('phone');
 
-
-
-    const handleFormSubmit = (data: CustomerFormData) => {
+    const handleFormSubmit = (data: CreateCustomerInput | UpdateCustomerInput) => {
         onSubmit(data);
     };
 
@@ -83,7 +80,6 @@ export function CustomerForm({
                         {initialData?.id ? t('customers.editCustomer') : t('customers.addNewCustomer')}
                     </DialogTitle>
                 </DialogHeader>
-
 
                 <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 w-full max-w-full">
                     <div>
@@ -101,7 +97,7 @@ export function CustomerForm({
                             {...register('name')}
                         />
                         {formErrors.name && (
-                            <p className="mt-1 text-sm text-red-600">{formErrors.name.message}</p>
+                            <p className="mt-1 text-sm text-red-600">{String(formErrors.name.message)}</p>
                         )}
                     </div>
 
@@ -135,48 +131,47 @@ export function CustomerForm({
 
                     <div>
                         <label
-                            htmlFor="type"
+                            htmlFor="customerType"
                             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                         >
                             {t('customers.customerType')} *
                         </label>
 
                         <select
-                            id="type"
-                            className={`w-full max-w-full rounded-md border ${formErrors.type ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white`}
-                            {...register('type')}
+                            id="customerType"
+                            className={`w-full max-w-full rounded-md border ${formErrors.customerType ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white`}
+                            {...register('customerType')}
                         >
                             <option value="INDIVIDUAL">{t('customers.individual')}</option>
                             <option value="CORPORATE">{t('customers.corporate')}</option>
                             <option value="INSURANCE">{t('customers.insurance')}</option>
                         </select>
 
-                        {formErrors.type && (
-                            <p className="mt-1 text-sm text-red-600">{formErrors.type.message}</p>
+                        {formErrors.customerType && (
+                            <p className="mt-1 text-sm text-red-600">{String(formErrors.customerType.message)}</p>
                         )}
                     </div>
 
-                    <div>
-                        <label
-                            htmlFor="balance"
-                            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                        >
-                            {t('common.total')} *
-                        </label>
+                    {isEditMode && (
+                        <div>
+                            <label
+                                htmlFor="TIN"
+                                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                            >
+                                {t('customers.tin')}
+                            </label>
 
-                        <input
-                            id="balance"
-                            type="number"
-                            step="0.01"
-                            className={`w-full max-w-full rounded-md border ${formErrors.balance ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white ${initialData?.id ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : ''}`}
-                            {...register('balance')}
-                            readOnly={!!initialData?.id}
-                            disabled={!!initialData?.id}
-                        />
-                        {formErrors.balance && (
-                            <p className="mt-1 text-sm text-red-600">{formErrors.balance.message}</p>
-                        )}
-                    </div>
+                            <input
+                                id="TIN"
+                                type="text"
+                                className={`w-full max-w-full rounded-md border ${formErrors.TIN ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white`}
+                                {...register('TIN')}
+                            />
+                            {formErrors.TIN && (
+                                <p className="mt-1 text-sm text-red-600">{String(formErrors.TIN.message)}</p>
+                            )}
+                        </div>
+                    )}
 
                     <DialogFooter className="flex justify-end space-x-3 pt-4">
                         <button

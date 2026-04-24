@@ -1,14 +1,10 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { yupResolver } from "@hookform/resolvers/yup";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { apiClient } from "../../lib/api-client";
-import * as yup from "yup";
+import { forgotPasswordSchema, type ForgotPasswordInput } from "../../schema";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Loader2, Package } from "lucide-react";
-
-const forgotPasswordSchema = yup.object().shape({
-    email: yup.string().email("Invalid email").required("Email is required"),
-});
 
 export default function ForgotPasswordPage() {
     const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +16,7 @@ export default function ForgotPasswordPage() {
         handleSubmit,
         formState: { errors },
     } = useForm({
-        resolver: yupResolver(forgotPasswordSchema),
+        resolver: zodResolver(forgotPasswordSchema),
     });
 
     const showToast = (message: string, type: "error" | "success") => {
@@ -37,7 +33,7 @@ export default function ForgotPasswordPage() {
         }, 5000);
     };
 
-    const onSubmit = async (data: { email: string }) => {
+    const onSubmit = async (data: ForgotPasswordInput) => {
         setIsLoading(true);
         try {
             await apiClient.requestPasswordReset({

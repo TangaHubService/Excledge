@@ -33,6 +33,7 @@ import branchRoutes from "./routes/branch.routes";
 import expenseRoutes from "./routes/expense.routes";
 import supplierPaymentRoutes from "./routes/supplier-payment.routes";
 import stockTransferRoutes from "./routes/stock-transfer.routes";
+import warehouseRoutes from "./routes/warehouse.routes";
 
 import { errorHandler } from "./middleware/error.middleware";
 import webhookRoutes from "./routes/paypack-webhook.routes";
@@ -129,6 +130,7 @@ app.use("/api/branches", branchRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/supplier-payments", supplierPaymentRoutes);
 app.use("/api/stock-transfers", stockTransferRoutes);
+app.use("/api/warehouses", warehouseRoutes);
 
 // Serve uploaded files statically
 app.use('/uploads', express.static('uploads'));

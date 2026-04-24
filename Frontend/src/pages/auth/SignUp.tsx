@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
-import { yupResolver } from "@hookform/resolvers/yup";
-import * as yup from "yup";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate, Link } from "react-router-dom";
 import { Package, Eye, EyeOff, Loader2 } from "lucide-react";
 import { apiClient } from "../../lib/api-client";
-import { signUpSchema } from "../../schema/auth";
+import { signUpSchema, type SignUpInput } from "../../schema";
 import PhoneInputWithCountryCode from "../../components/PhoneInputWithCountryCode";
 
-type FormData = yup.InferType<typeof signUpSchema>;
+type FormData = SignUpInput;
 
 export default function SignupPage() {
     const navigate = useNavigate();
@@ -24,7 +23,7 @@ export default function SignupPage() {
         formState: { errors },
         control,
     } = useForm<FormData>({
-        resolver: yupResolver(signUpSchema),
+        resolver: zodResolver(signUpSchema),
         defaultValues: {
             name: '',
             email: '',

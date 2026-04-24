@@ -1,21 +1,10 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { yupResolver } from "@hookform/resolvers/yup";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, Eye, EyeOff, Package } from "lucide-react";
 import { apiClient } from "../../lib/api-client";
-import * as yup from "yup";
-
-const resetPasswordSchema = yup.object().shape({
-    newPassword: yup
-        .string()
-        .min(8, "Password must be at least 8 characters")
-        .required("New password is required"),
-    confirmPassword: yup
-        .string()
-        .oneOf([yup.ref("newPassword")], "Passwords must match")
-        .required("Please confirm your password"),
-});
+import { resetPasswordSchema, type ResetPasswordInput } from "../../schema";
 
 export default function ResetPasswordPage() {
     const navigate = useNavigate();
@@ -31,7 +20,7 @@ export default function ResetPasswordPage() {
         handleSubmit,
         formState: { errors },
     } = useForm({
-        resolver: yupResolver(resetPasswordSchema),
+        resolver: zodResolver(resetPasswordSchema),
     });
 
     const showToast = (message: string, type: "error" | "success") => {
@@ -48,7 +37,7 @@ export default function ResetPasswordPage() {
         }, 5000);
     };
 
-    const onSubmit = async (data: { newPassword: string; confirmPassword: string }) => {
+    const onSubmit = async (data: ResetPasswordInput) => {
         setIsLoading(true);
         try {
             const code = searchParams.get("token");
@@ -58,7 +47,7 @@ export default function ResetPasswordPage() {
 
             await apiClient.resetPassword({
                 code,
-                newPassword: data.newPassword,
+                newPassword: data.password,
             });
             showToast("Password reset successfully! You can now log in.", "success");
             setTimeout(() => {
@@ -122,7 +111,7 @@ export default function ResetPasswordPage() {
                                     <input
                                         type={showNewPassword ? "text" : "password"}
                                         placeholder="••••••••"
-                                        {...register("newPassword")}
+                                        {...register("password")}
                                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
                                     />
                                     <button
@@ -133,9 +122,9 @@ export default function ResetPasswordPage() {
                                         {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                     </button>
                                 </div>
-                                {errors.newPassword && (
+                                {errors.password && (
                                     <p className="text-xs text-red-500 font-medium">
-                                        {errors.newPassword.message}
+                                        {errors.password.message}
                                     </p>
                                 )}
                             </div>

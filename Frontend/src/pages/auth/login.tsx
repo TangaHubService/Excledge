@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { yupResolver } from "@hookform/resolvers/yup";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Package, Eye, EyeOff } from "lucide-react";
 import { apiClient } from "../../lib/api-client";
-import { LoginSchema } from "../../schema/auth";
+import { loginSchema } from "../../schema";
 import { useAuth } from "../../context/AuthContext";
 
 export default function LoginPage() {
@@ -19,7 +19,7 @@ export default function LoginPage() {
         handleSubmit,
         formState: { errors },
     } = useForm({
-        resolver: yupResolver(LoginSchema),
+        resolver: zodResolver(loginSchema),
     });
 
     useEffect(() => {

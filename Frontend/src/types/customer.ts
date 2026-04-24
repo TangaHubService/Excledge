@@ -1,26 +1,29 @@
 export interface Customer {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   phone: string;
-  type: string;
-  balance: number;
-  insuranceProvider?: string;
-  countryCode?: string;
+  customerType?: 'INDIVIDUAL' | 'CORPORATE' | 'INSURANCE';
+  TIN?: string;
+  address?: string;
+  balance: string;
+  totalPurchases?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  type?: 'INDIVIDUAL' | 'CORPORATE' | 'INSURANCE';
 }
 
 export interface CustomerFormData {
-  id?: string;
   name: string;
-  email?: string | null;
+  email?: string;
   phone: string;
-  countryCode?: string;
-  type: string;
-  balance: number;
+  customerType?: 'INDIVIDUAL' | 'CORPORATE' | 'INSURANCE';
 }
 
 export interface CustomerFilters {
   searchTerm: string;
+  hasDebt?: boolean;
+  showInactive?: boolean;
   page: number;
   limit: number;
 }

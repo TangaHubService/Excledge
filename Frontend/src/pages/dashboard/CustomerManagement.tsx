@@ -22,12 +22,13 @@ import { useTheme } from "../../context/ThemeContext";
 export interface Customer {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   phone: string;
-  type: "INDIVIDUAL" | "CORPORATE" | "INSURANCE";
+  customerType: 'INDIVIDUAL' | 'CORPORATE' | 'INSURANCE';
+  TIN?: string;
+  address?: string;
   balance: string;
   totalPurchases?: number;
-  address?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -108,11 +109,11 @@ export function CustomerManagement() {
       ...customer,
       id: String(customer.id),
       balance: String(customer.balance || 0),
-      type: customer.type || 'INDIVIDUAL',
+      customerType: customer.customerType || 'INDIVIDUAL',
     });
     try {
       setLoadingSales(true);
-      const customerData = await apiClient.getCustomerById(customer.id, organizationId || "");
+      const customerData = await apiClient.getCustomerById(String(customer.id), organizationId || "");
       if (customerData) {
         setViewingCustomer({
           id: String(customerData.id || customer.id),
@@ -121,9 +122,7 @@ export function CustomerManagement() {
           phone: customerData.phone || customer.phone || '',
           address: customerData.address || customer.address || '',
           balance: String(customerData.balance || customer.balance || 0),
-          type: (customerData.customerType || customerData.type || customer.type || 'INDIVIDUAL') as "INDIVIDUAL" | "CORPORATE" | "INSURANCE",
-          createdAt: customerData.createdAt || customer.createdAt,
-          updatedAt: customerData.updatedAt || customer.updatedAt,
+          customerType: customerData.customerType || 'INDIVIDUAL',
         });
         if (customerData.sales && Array.isArray(customerData.sales)) {
           setTotalSales(customerData.sales.length);
@@ -475,22 +474,18 @@ export function CustomerManagement() {
 
       {isDialogOpen && (
         <CustomerForm
-          initialData={
+initialData={
             editingCustomer
               ? {
-                ...editingCustomer,
-                balance:
-                  typeof editingCustomer.balance === "string"
-                    ? parseFloat(editingCustomer.balance)
-                    : editingCustomer.balance,
-              }
+                  ...editingCustomer,
+                  customerType: editingCustomer.customerType,
+                }
               : {
-                name: "",
-                email: "",
-                phone: "",
-                type: "INDIVIDUAL",
-                balance: 0,
-              }
+                  name: "",
+                  email: "",
+                  phone: "",
+                  customerType: "INDIVIDUAL",
+                }
           }
           onSubmit={handleSubmit}
           onClose={() => setIsDialogOpen(false)}
@@ -568,21 +563,26 @@ export function CustomerManagement() {
                     {t('customers.customerType')}
                   </label>
                   <p className={`text-lg ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-                    {viewingCustomer.type}
+                    {viewingCustomer.customerType}
                   </p>
-                </div>
+</div>
                 <div>
                   <label className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>
                     {t('customers.table.balance')}
                   </label>
-                  <p className={`text-lg font-medium ${parseFloat(viewingCustomer.balance) > 0 ? (theme === "dark" ? "text-red-400" : "text-red-600") : (theme === "dark" ? "text-white" : "text-gray-900")}`}>
-                    {parseFloat(viewingCustomer.balance).toLocaleString(undefined, {
-                      style: 'currency',
-                      currency: 'RWF',
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 0,
-                    })}
-                  </p>
+                  {(() => {
+                    const balanceNum = parseFloat(String(viewingCustomer.balance || '0'));
+                    return (
+                      <p className={`text-lg font-medium ${balanceNum > 0 ? (theme === "dark" ? "text-red-400" : "text-red-600") : (theme === "dark" ? "text-white" : "text-gray-900")}`}>
+                        {balanceNum.toLocaleString(undefined, {
+                          style: 'currency',
+                          currency: 'RWF',
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 0,
+                        })}
+                      </p>
+                    );
+                  })()}
                 </div>
                 {viewingCustomer.createdAt && (
                   <div>

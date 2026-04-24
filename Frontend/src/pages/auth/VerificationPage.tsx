@@ -1,15 +1,11 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { yupResolver } from "@hookform/resolvers/yup";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, Loader2, Package } from "lucide-react";
 import { apiClient } from "../../lib/api-client";
-import * as yup from "yup";
+import { verificationSchema } from "../../schema";
 import { toast } from "react-toastify";
-
-const verificationSchema = yup.object().shape({
-    code: yup.string().required("Verification code is required"),
-});
 
 export default function VerificationPage() {
     const navigate = useNavigate();
@@ -23,7 +19,7 @@ export default function VerificationPage() {
         handleSubmit,
         formState: { errors },
     } = useForm({
-        resolver: yupResolver(verificationSchema),
+        resolver: zodResolver(verificationSchema),
     });
 
 

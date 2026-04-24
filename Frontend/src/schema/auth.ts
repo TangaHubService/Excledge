@@ -1,41 +1,50 @@
+import { z } from 'zod';
 
-import * as yup from "yup";
-export const LoginSchema = yup.object().shape({
-    email: yup
-        .string()
-        .email("Please enter a valid email address")
-        .required("Email is required"),
-    password: yup
-        .string()
-        .required("Password is required"),
+export const loginSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(1, 'Password is required'),
 });
 
-// Validation schema
-yup.setLocale({
-    mixed: {
-        required: 'This field is required',
-    },
-    string: {
-        email: 'Please enter a valid email address',
-        min: '${path} must be at least ${min} characters',
-    },
+export const signUpSchema = z.object({
+  name: z.string().min(1, 'Full name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
+  email: z.string().email('Invalid email address'),
+  phone: z.string().min(10, 'Phone number must be at least 10 digits'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  confirmPassword: z.string().min(1, 'Please confirm your password'),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'Passwords must match',
+  path: ['confirmPassword'],
 });
 
-export const signUpSchema = yup.object().shape({
-    name: yup.string().required().label('Full Name'),
-    lastName: yup.string().required().label('Last Name'),
-    email: yup.string().email().required().label('Email'),
-    phone: yup
-        .string()
-        .test('is-valid-phone', 'Please enter a valid phone number', (value) => {
-            if (!value) return false;
-            const digitsOnly = value.replace(/\D/g, '');
-            return digitsOnly.length >= 10;
-        })
-        .required('Phone number is required'),
-    password: yup.string().min(6).required().label('Password'),
-    confirmPassword: yup
-        .string()
-        .oneOf([yup.ref('password')], 'Passwords must match')
-        .required('Please confirm your password'),
+export const verificationSchema = z.object({
+  code: z.string().min(1, 'Verification code is required'),
 });
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email('Invalid email address'),
+});
+
+export const resetPasswordSchema = z.object({
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  confirmPassword: z.string().min(1, 'Please confirm your password'),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'Passwords must match',
+  path: ['confirmPassword'],
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(6, 'New password must be at least 6 characters'),
+  confirmPassword: z.string().min(1, 'Please confirm your password'),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: 'Passwords must match',
+  path: ['confirmPassword'],
+});
+
+export type LoginInput = z.infer<typeof loginSchema>;
+export type SignUpInput = z.infer<typeof signUpSchema>;
+export type VerificationInput = z.infer<typeof verificationSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

@@ -1,11 +1,11 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { yupResolver } from "@hookform/resolvers/yup";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Building2, Loader2 } from "lucide-react";
 import PhoneInputWithCountryCode from "../components/PhoneInputWithCountryCode";
 import { apiClient } from "../lib/api-client";
-import { createOrganizationSchema } from "../schema/organizations";
+import { createOrganizationSchema } from "../schema";
 import { useAuth } from "../context/AuthContext";
 import { useOrganization } from "../context/OrganizationContext";
 
@@ -22,7 +22,7 @@ export default function CreateOrganizationPage() {
     watch,
     reset,
   } = useForm({
-    resolver: yupResolver(createOrganizationSchema),
+    resolver: zodResolver(createOrganizationSchema),
   });
 
   const [toast, setToast] = React.useState<{
