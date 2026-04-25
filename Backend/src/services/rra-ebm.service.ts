@@ -2414,6 +2414,10 @@ export async function submitInvoiceToEbm(params: {
         } as object,
       },
     });
+    await prisma.sale.update({
+      where: { id: sale.id },
+      data: { status: 'COMPLETED' },
+    });
     return { success: true, ebmInvoiceNumber: mockRef };
   }
 
