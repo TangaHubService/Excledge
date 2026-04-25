@@ -123,7 +123,7 @@ export const getSales = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId)
     const branchId = getBranchIdForOperation(req)
-    const { startDate, endDate, customerId, limit, search, status, paymentType } = req.query
+    const { startDate, endDate, customerId, limit, search, status, paymentType, page } = req.query
 
     const params: SaleFilterParams = {
       organizationId,
@@ -132,13 +132,14 @@ export const getSales = async (req: BranchAuthRequest, res: Response) => {
       endDate: endDate as string,
       customerId: customerId as string,
       limit: limit ? parseInt(limit as string) : undefined,
+      page: page ? parseInt(page as string) : undefined,
       search: search as string,
       status: status as string,
       paymentType: paymentType as string,
     }
 
-    const sales = await SaleService.getSales(params)
-    res.json(success(sales))
+    const result = await SaleService.getSales(params)
+    res.json(success(result))
   } catch (err) {
     console.error("[Get Sales Error]:", err)
     res.status(500).json(apiError("Failed to get sales"))

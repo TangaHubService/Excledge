@@ -91,7 +91,7 @@ export default function SalesPage() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [isDownloadingInvoice, setIsDownloadingInvoice] = useState<string | null>(null);
 
-    const limit = 10;
+    const limit = 50;
 
     const fetchSales = useCallback(async () => {
         try {

@@ -44,6 +44,7 @@ export interface SaleFilterParams {
   endDate?: string
   customerId?: string
   limit?: number
+  page?: number
   search?: string
   status?: string
   paymentType?: string
@@ -427,7 +428,7 @@ export const finalizeEbmSubmission = async (
 }
 
 export const getSales = async (params: SaleFilterParams) => {
-  const { organizationId, branchId, startDate, endDate, customerId, limit, search, status, paymentType } = params
+  const { organizationId, branchId, startDate, endDate, customerId, limit, page, search, status, paymentType } = params
 
   const where: any = {
     organizationId,
@@ -473,49 +474,67 @@ export const getSales = async (params: SaleFilterParams) => {
     ]
   }
 
-  return prisma.sale.findMany({
-    where,
-    include: {
-      customer: {
-        select: {
-          id: true,
-          name: true,
-          phone: true,
-          TIN: true,
-          customerType: true,
-          email: true,
-          address: true,
-        }
+  const pageNum = Number(page) || 1
+  const limitNum = Math.min(Number(limit) || 50, 500)
+  const skip = (pageNum - 1) * limitNum
+
+  const [sales, totalCount] = await Promise.all([
+    prisma.sale.findMany({
+      where,
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            TIN: true,
+            customerType: true,
+            email: true,
+            address: true,
+          }
+        },
+        branch: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            bhfId: true,
+            address: true,
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            role: true
+          }
+        },
+        saleItems: {
+          include: { product: true },
+        },
+        ebmTransactions: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
       },
-      branch: {
-        select: {
-          id: true,
-          name: true,
-          code: true,
-          bhfId: true,
-          address: true,
-        }
+      orderBy: {
+        createdAt: 'desc',
       },
-      user: {
-        select: {
-          id: true,
-          name: true,
-          role: true
-        }
-      },
-      saleItems: {
-        include: { product: true },
-      },
-      ebmTransactions: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
-    },
-    orderBy: {
-      createdAt: 'asc',
-    },
-    take: Math.min(Number(limit) || 50, 500),
-  }) as Promise<Sale[]>
+      skip,
+      take: limitNum,
+    }),
+    prisma.sale.count({ where })
+  ])
+
+  return {
+    data: sales,
+    pagination: {
+      totalItems: totalCount,
+      totalPages: Math.ceil(totalCount / limitNum),
+      currentPage: pageNum,
+      limit: limitNum,
+    }
+  }
 }
 
 export const getSaleById = async (
