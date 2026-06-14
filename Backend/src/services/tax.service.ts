@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { TaxCategory } from '@prisma/client';
+import { TaxCategory, RraTaxCode } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
 export interface TaxCalculationResult {
@@ -7,7 +7,7 @@ export interface TaxCalculationResult {
     taxAmount: number;
     totalAmount: number;
     taxRate: number;
-    taxCode: string;
+    taxCode: RraTaxCode;
 }
 
 export interface SaleTaxSummary {
@@ -17,7 +17,7 @@ export interface SaleTaxSummary {
         productId: number;
         taxRate: number;
         taxAmount: number;
-        taxCode: string;
+        taxCode: RraTaxCode;
         taxableAmount: number;
     }>;
 }
@@ -26,16 +26,16 @@ export class TaxService {
     /**
      * Get RRA Tax Code for a category
      */
-    static getTaxCode(category: TaxCategory): string {
+    static getTaxCode(category: TaxCategory): RraTaxCode {
         switch (category) {
             case 'STANDARD':
-                return 'A';
+                return RraTaxCode.A;
             case 'ZERO_RATED':
-                return 'B';
+                return RraTaxCode.B;
             case 'EXEMPT':
-                return 'D';
+                return RraTaxCode.D;
             default:
-                return 'A';
+                return RraTaxCode.A;
         }
     }
 

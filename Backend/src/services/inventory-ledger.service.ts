@@ -782,7 +782,7 @@ export async function getInventorySummary(params: GetSummaryParams) {
  * Helper function to get current stock within a transaction
  * Used internally to ensure consistency during ledger writes
  */
-async function getCurrentStockInTransaction(
+export async function getCurrentStockInTransaction(
   tx: any,
   organizationId: number,
   productId: number,

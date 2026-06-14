@@ -16,6 +16,8 @@ import { WifiOff } from 'lucide-react';
 
 
 import { PaymentModal } from '../../../components/pos/PaymentModal';
+import { VsdcStatusBanner } from '../../../components/VsdcStatusBanner';
+import { useVsdcOnlineStatus } from '../../../hooks/useVsdcOnlineStatus';
 import { useTheme } from '../../../context/ThemeContext';
 import { useBranch } from '../../../context/BranchContext';
 
@@ -402,6 +404,7 @@ export default function SalesForm() {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const { selectedBranchId } = useBranch();
+  const vsdcStatus = useVsdcOnlineStatus();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -1168,11 +1171,18 @@ export default function SalesForm() {
                 <span className="text-blue-600 dark:text-blue-400">{total.toFixed(2)} RWF</span>
               </div>
 
+              {vsdcStatus.status === 'blocked' && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded-lg px-3 py-2 mb-2">
+                  <p className="text-xs text-red-700 dark:text-red-300 font-medium">
+                    VSDC blocked — cannot process payments. Contact administrator.
+                  </p>
+                </div>
+              )}
               <Button
                 onClick={handleOpenPaymentModal}
-                disabled={cart.length === 0 || isSubmitting || !selectedCustomer}
+                disabled={cart.length === 0 || isSubmitting || !selectedCustomer || vsdcStatus.status === 'blocked'}
                 className={`w-full bg-blue-600 hover:bg-blue-700 py-4 text-base text-white font-semibold mt-3 ${theme === 'dark' ? 'dark:bg-blue-700 dark:hover:bg-blue-600' : ''
-                  } ${cart.length === 0 || !selectedCustomer ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  } ${cart.length === 0 || !selectedCustomer || vsdcStatus.status === 'blocked' ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {isSubmitting ? (
                   <>

@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { Sidebar } from "../components/Sidebar";
 import { Header } from "../components/Header";
 import { SubscriptionAlert } from "../components/SubscriptionAlert";
+import { VsdcStatusBanner } from "../components/VsdcStatusBanner";
 import { useOrganization } from "../context/OrganizationContext";
 import { useAuth } from "../context/AuthContext";
 import { ToastContainer } from "react-toastify";
@@ -57,6 +58,7 @@ export function DashboardLayout() {
                         subscriptionStatus={organization?.subscriptionStatus}
                         subscriptionEndDate={organization?.subscriptionEndDate}
                     />
+                    <VsdcStatusBanner />
                     <Outlet />
                 </main>
             </div>

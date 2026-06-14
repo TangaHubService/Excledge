@@ -33,6 +33,7 @@ import branchRoutes from "./routes/branch.routes";
 import expenseRoutes from "./routes/expense.routes";
 import supplierPaymentRoutes from "./routes/supplier-payment.routes";
 import stockTransferRoutes from "./routes/stock-transfer.routes";
+import ebmOutboxRoutes from "./routes/ebm-outbox.routes";
 
 import { errorHandler } from "./middleware/error.middleware";
 import webhookRoutes from "./routes/paypack-webhook.routes";
@@ -46,6 +47,7 @@ import {
   dailyReportJob,
 } from "./jobs/product-expiry.job";
 import { ebmQueueJob } from "./jobs/ebm-queue.job";
+import { ebmOutboxJob } from "./jobs/ebm-outbox.job";
 import pesapalRoutes from "./routes/pesapal.route";
 import uploadRoutes from "./routes/upload.route";
 
@@ -61,9 +63,9 @@ const corsOptions: any = {
   origin: [
     "http://localhost:3000",
     "http://localhost:5173",
-    process.env.FRONTEND_URL,
-    process.env.FRONTEND_URL,
-  ].filter(Boolean),
+    "https://tap2serve.netlify.app",
+    ...(process.env.FRONTEND_URL?.split(",").map(s => s.trim()).filter(Boolean) ?? []),
+  ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "x-branch-scope", "x-branch-ids"],
@@ -129,6 +131,7 @@ app.use("/api/branches", branchRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/supplier-payments", supplierPaymentRoutes);
 app.use("/api/stock-transfers", stockTransferRoutes);
+app.use("/api/organizations", ebmOutboxRoutes);
 
 // Serve uploaded files statically
 app.use('/uploads', express.static('uploads'));
@@ -153,6 +156,7 @@ if (process.env.RUN_JOBS !== "false") {
   productExpiryAlertJob.start();
   dailyReportJob.start();
   ebmQueueJob.start();
+  ebmOutboxJob.start();
 }
 
 

@@ -2,11 +2,12 @@ import { prisma } from '../lib/prisma';
 import { config } from '../config';
 import type { Decimal } from '@prisma/client/runtime/library';
 
-type SaleWithRelations = {
+export type SaleWithRelations = {
   id: number;
   saleNumber: string;
   invoiceNumber: string | null;
   createdAt: Date;
+  status?: string;
   paymentType: string;
   cashAmount: Decimal;
   debtAmount: Decimal;
@@ -54,7 +55,7 @@ type InvoiceSequenceMode = 'unknown' | 'per_org' | 'legacy_sequence';
 let invoiceSequenceMode: InvoiceSequenceMode = 'unknown';
 let loggedLegacyInvoiceFallback = false;
 
-function gatewayErrorMessage(http: { json: unknown | null; status: number }, fallback: string): string {
+export function gatewayErrorMessage(http: { json: unknown | null; status: number }, fallback: string): string {
   if (http.json && typeof http.json === 'object') {
     const rec = http.json as Record<string, unknown>;
     if (rec.message != null && String(rec.message).length > 0) {
@@ -209,7 +210,7 @@ async function allocateNextInvoiceSequence(organizationId: number): Promise<numb
   }
 }
 
-async function postToGateway(
+export async function postToGateway(
   path: string,
   body: Record<string, unknown>
 ): Promise<{ ok: boolean; status: number; json: unknown | null; rawText: string }> {
@@ -248,8 +249,28 @@ async function postToGateway(
   }
 }
 
-function buildSaleGatewayPayload(sale: SaleWithRelations, org: { TIN: string | null; ebmDeviceId: string | null; ebmSerialNo: string | null; name: string }) {
-  return {
+export function buildSaleGatewayPayload(sale: SaleWithRelations, org: { TIN: string | null; ebmDeviceId: string | null; ebmSerialNo: string | null; name: string }) {
+  return <{
+    environment: string;
+    operation: string;
+    idempotencyKey?: string;
+    seller: { tin: string | null; deviceId: string | null; serialNo: string | null; name: string };
+    branch: { id: number; code: string; name: string } | null;
+    invoice: {
+      internalNumber: string | null;
+      saleId: number;
+      saleNumber: string;
+      issuedAt: string;
+      customer: { name: string; phone: string; email: string | null; tin: string | null; customerType: string };
+      payment: { type: string; cashAmount: number; debtAmount: number; insuranceAmount: number };
+      totals: { totalAmount: number; taxableAmount: number; vatAmount: number };
+      lines: Array<{
+        productName: string; productId: number; quantity: number;
+        unitPrice: number; totalPrice: number; taxCode: string | null;
+        taxRate: number; taxAmount: number;
+      }>;
+    };
+  }>{
     environment: config.ebm.environment,
     operation: 'SALE',
     seller: {
