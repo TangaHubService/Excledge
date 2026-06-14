@@ -48,6 +48,7 @@ import VerificationPage from "./pages/auth/VerificationPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import SalesForm from "./pages/dashboard/sales/pos";
+import { EbmOutboxDashboard } from "./pages/dashboard/ebm/EbmOutboxDashboard";
 import DebtManagement from "./pages/dashboard/dept";
 import SubscriptionManagementPage from "./pages/billing/SubscriptionManagementPage";
 import BillingHistoryPage from "./pages/billing/BillingHistoryPage";
@@ -137,6 +138,7 @@ function App() {
                       <Route path="pos" element={<SalesForm />} />
                       <Route path="users" element={<UserManagement />} />
                       <Route path="activity-logs" element={<ActivityLogs />} />
+                      <Route path="ebm-outbox" element={<EbmOutboxDashboard />} />
                       <Route path="profile" element={<Profile />} />
                       <Route path="suppliers" element={<SuppliersPage />} />
                       <Route path="orders">

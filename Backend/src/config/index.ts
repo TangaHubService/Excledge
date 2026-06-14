@@ -41,5 +41,6 @@ export const config = {
     requestTimeoutMs: Number.parseInt(process.env.EBM_REQUEST_TIMEOUT_MS || "30000", 10),
     useMock: process.env.EBM_USE_MOCK === "true",
     maxQueueRetries: Number.parseInt(process.env.EBM_MAX_QUEUE_RETRIES || "10", 10),
+    statusCheckPath: process.env.EBM_STATUS_CHECK_PATH || "",
   },
 }

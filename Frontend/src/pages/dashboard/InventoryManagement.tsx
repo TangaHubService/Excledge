@@ -54,6 +54,9 @@ import ViewProductDialog from "./inventory/ViewProductDialog";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import InventoryHistoryDialog from "./inventory/InventoryHistoryDialog";
 import StockAdjustmentDialog from "./inventory/StockAdjustmentDialog";
+import { RraTaxCodeSelect } from "../../components/RraTaxCodeSelect";
+import { MeasurementUnitSelect } from "../../components/MeasurementUnitSelect";
+import { RraTaxCode, MeasurementUnit } from "../../types/ebm";
 import { History, Edit } from "lucide-react";
 
 type ProductNameItem = {
@@ -123,6 +126,9 @@ export const InventoryManagement = () => {
     minStock: 0,
     description: "",
     imageUrl: "",
+    taxCode: undefined as RraTaxCode | undefined,
+    measurementUnit: 'PCS' as MeasurementUnit,
+    exemptionReference: "",
   });
 
   const [totalPages, setTotalPages] = useState(1);
@@ -190,6 +196,10 @@ export const InventoryManagement = () => {
 
     if (data.minStock < 0) {
       errors.minStock = "Minimum stock cannot be negative";
+    }
+
+    if ((data as any).taxCode === 'C' && !(data as any).exemptionReference?.trim()) {
+      errors.exemptionReference = "Exemption reference is required for tax code C (Exempt)";
     }
 
     setFormErrors(errors);
@@ -350,6 +360,9 @@ export const InventoryManagement = () => {
         imageUrl,
         branchId: selectedBranchId,
         id: editingProduct?.id || crypto.randomUUID(),
+        taxCode: (formData as any).taxCode,
+        measurementUnit: (formData as any).measurementUnit,
+        exemptionReference: (formData as any).taxCode === 'C' ? (formData as any).exemptionReference : undefined,
       };
 
       if (editingProduct) {
@@ -385,6 +398,9 @@ export const InventoryManagement = () => {
         minStock: 0,
         description: "",
         imageUrl: "",
+        taxCode: undefined as any,
+        measurementUnit: 'PCS' as any,
+        exemptionReference: "",
       });
       setImageFile(null);
       setImagePreview("");
@@ -995,6 +1011,49 @@ export const InventoryManagement = () => {
                       {formErrors.expiryDate && <span className="text-red-500 text-sm">{formErrors.expiryDate}</span>}
                     </div>
                   </div>
+
+                  {/* RRA Tax Code & Measurement Unit */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label>RRA Tax Code</Label>
+                      </div>
+                      <RraTaxCodeSelect
+                        value={(formData as any).taxCode}
+                        onChange={(v) => setFormData({ ...formData, taxCode: v } as any)}
+                        error={formErrors.taxCode}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label>Measurement Unit</Label>
+                      </div>
+                      <MeasurementUnitSelect
+                        value={(formData as any).measurementUnit}
+                        onChange={(v) => setFormData({ ...formData, measurementUnit: v } as any)}
+                        error={formErrors.measurementUnit}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Exemption Reference (conditional) */}
+                  {(formData as any).taxCode === 'C' && (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label>Exemption Reference <span className="text-red-500">*</span></Label>
+                        {formErrors.exemptionReference && <span className="text-red-500 text-sm">{formErrors.exemptionReference}</span>}
+                      </div>
+                      <Input
+                        placeholder="e.g., RRA exemption certificate no."
+                        value={(formData as any).exemptionReference}
+                        onChange={(e) =>
+                          setFormData({ ...formData, exemptionReference: e.target.value } as any)
+                        }
+                        className={formErrors.exemptionReference ? 'border-red-500' : ''}
+                      />
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">

@@ -23,6 +23,7 @@ import {
   Building2,
   Plus,
   LogOut,
+  Wifi,
 } from "lucide-react";
 import { apiClient } from "../lib/api-client";
 import { useOrganization } from "../context/OrganizationContext";
@@ -165,6 +166,12 @@ const adminNavigation: NavigationItem[] = [
     href: "activity-logs",
     icon: Activity,
     id: "activity-logs",
+  },
+  {
+    name: "EBM Outbox",
+    href: "ebm-outbox",
+    icon: Wifi,
+    id: "ebm-outbox",
   },
   // Billing Section
   {
