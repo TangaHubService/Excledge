@@ -2,6 +2,9 @@
   "name": "pharmacy-backend",
   "version": "1.0.0",
   "description": "Backend for Pharmacy Management System",
+  "engines": {
+    "node": ">=20"
+  },
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
