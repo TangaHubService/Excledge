@@ -3,6 +3,7 @@ import type { Response } from "express"
 import type { AuthRequest } from "../middleware/auth.middleware"
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 import { Decimal } from "@prisma/client/runtime/library"
+import { EbmOperation } from "@prisma/client"
 import { auditLogger } from "../utils/auditLogger"
 import { removeStock, addStock } from "../services/inventory-ledger.service"
 import {
@@ -254,21 +255,28 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         });
       }
 
+      // 6. Write transactional outbox entry (atomic with the sale)
+      if (isEbmEnabled()) {
+        const operation: EbmOperation = 'SALE';
+        const idempotencyKey = `ebm-${operation}-${organizationId}-${newSale.id}`;
+        await tx.ebmOutbox.create({
+          data: {
+            organizationId: organizationId!,
+            saleId: newSale.id,
+            operation,
+            idempotencyKey,
+            payload: { version: 1, saleId: newSale.id, organizationId: organizationId!, operation } as any,
+            status: 'PENDING',
+            nextAttemptAt: new Date(),
+          },
+        });
+      }
+
       return newSale;
     }, {
       maxWait: 30000,   // 30 seconds
       timeout: 60000,   // 60 seconds
     });
-
-    // 5. Submit to EBM/VSDC if enabled (outside transaction, async)
-    if (isEbmEnabled()) {
-      submitInvoiceToEbm({
-        saleId: sale.id,
-        organizationId: organizationId!,
-      }).catch((error) => {
-        console.error("[EBM] Failed to submit invoice (non-blocking):", error);
-      });
-    }
 
     // 6. Log activity (outside transaction for performance, but after successful sale)
     await auditLogger.sales(req, {
@@ -465,19 +473,21 @@ export const payDebt = async (req: BranchAuthRequest, res: Response) => {
       return res.status(400).json(apiError("Amount exceeds debt"))
     }
 
-    await prisma.sale.update({
-      where: { id },
-      data: {
-        debtAmount: remainingDebt,
-        cashAmount: { increment: amount },
-      },
-    })
+    await prisma.$transaction(async (tx) => {
+      await tx.sale.update({
+        where: { id },
+        data: {
+          debtAmount: remainingDebt,
+          cashAmount: { increment: amount },
+        },
+      })
 
-    await prisma.customer.update({
-      where: { id: sale.customerId },
-      data: {
-        balance: { decrement: amount },
-      },
+      await tx.customer.update({
+        where: { id: sale.customerId },
+        data: {
+          balance: { decrement: amount },
+        },
+      })
     })
 
     await auditLogger.sales(req, {

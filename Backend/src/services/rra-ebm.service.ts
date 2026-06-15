@@ -522,19 +522,28 @@ export async function submitInvoiceToEbm(params: {
       return { success: false, error: msg };
     }
 
-    await prisma.ebmTransaction.update({
-      where: { id: txRow.id },
-      data: {
-        submissionStatus: 'SUCCESS',
-        ebmInvoiceNumber: normalized.ebmInvoiceNumber,
-        submittedAt: new Date(),
-        responseData: {
-          raw: http.json ?? http.rawText,
-          normalized,
-          requestPayload: payload,
-        } as object,
-      },
-    });
+    await prisma.$transaction([
+      prisma.ebmTransaction.update({
+        where: { id: txRow.id },
+        data: {
+          submissionStatus: 'SUCCESS',
+          ebmInvoiceNumber: normalized.ebmInvoiceNumber,
+          submittedAt: new Date(),
+          responseData: {
+            raw: http.json ?? http.rawText,
+            normalized,
+            requestPayload: payload,
+          } as object,
+        },
+      }),
+      prisma.organization.update({
+        where: { id: params.organizationId },
+        data: {
+          lastSuccessfulVdsContact: new Date(),
+          lastSyncCursor: new Date(),
+        },
+      }),
+    ]);
 
     return { success: true, ebmInvoiceNumber: normalized.ebmInvoiceNumber };
   } catch (e: unknown) {
