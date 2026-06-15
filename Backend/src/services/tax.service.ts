@@ -3,29 +3,26 @@ import { TaxCategory, RraTaxCode } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
 export interface TaxCalculationResult {
-    taxableAmount: number;
-    taxAmount: number;
-    totalAmount: number;
-    taxRate: number;
+    taxableAmount: Decimal;
+    taxAmount: Decimal;
+    totalAmount: Decimal;
+    taxRate: Decimal;
     taxCode: RraTaxCode;
 }
 
 export interface SaleTaxSummary {
-    taxableAmount: number;
-    vatAmount: number;
+    taxableAmount: Decimal;
+    vatAmount: Decimal;
     items: Array<{
         productId: number;
-        taxRate: number;
-        taxAmount: number;
+        taxRate: Decimal;
+        taxAmount: Decimal;
         taxCode: RraTaxCode;
-        taxableAmount: number;
+        taxableAmount: Decimal;
     }>;
 }
 
 export class TaxService {
-    /**
-     * Get RRA Tax Code for a category
-     */
     static getTaxCode(category: TaxCategory): RraTaxCode {
         switch (category) {
             case 'STANDARD':
@@ -39,10 +36,7 @@ export class TaxService {
         }
     }
 
-    /**
-     * Get current VAT rate for an organization
-     */
-    static async getVatRate(organizationId: number): Promise<number> {
+    static async getVatRate(organizationId: number): Promise<Decimal> {
         const config = await prisma.taxConfiguration.findFirst({
             where: {
                 organizationId,
@@ -55,52 +49,35 @@ export class TaxService {
             },
         });
 
-        return config ? Number(config.vatRate) : 18.0; // Default to 18%
+        return config ? config.vatRate : new Decimal(18);
     }
 
-    /**
-     * Calculate tax for an item
-     */
     static calculateItemTax(
-        unitPrice: number,
-        quantity: number,
+        unitPrice: number | Decimal,
+        quantity: number | Decimal,
         category: TaxCategory,
-        standardVatRate: number
+        standardVatRate: Decimal
     ): TaxCalculationResult {
-        const total = unitPrice * quantity;
-        let rate = 0;
+        const price = unitPrice instanceof Decimal ? unitPrice : new Decimal(unitPrice);
+        const qty = quantity instanceof Decimal ? quantity : new Decimal(quantity);
+        const total = price.mul(qty);
         const code = this.getTaxCode(category);
 
-        if (category === 'STANDARD') {
-            rate = standardVatRate;
-        } else if (category === 'ZERO_RATED') {
-            rate = 0;
-        } else if (category === 'EXEMPT') {
-            rate = 0;
-        }
+        const rate = category === 'STANDARD' ? standardVatRate : new Decimal(0);
 
-        // Amount = Taxable + Tax
-        // Total = Taxable * (1 + rate/100)
-        // Taxable = Total / (1 + rate/100)
-
-        // BUT usually in retail, unitPrice is TAX INCLUSIVE.
-        // Let's assume unitPrice is Tax Inclusive as per most POS systems.
-
-        const taxableAmount = total / (1 + rate / 100);
-        const taxAmount = total - taxableAmount;
+        const divisor = new Decimal(1).plus(rate.div(100));
+        const taxableAmount = total.div(divisor);
+        const taxAmount = total.minus(taxableAmount);
 
         return {
-            taxableAmount: Number(taxableAmount.toFixed(2)),
-            taxAmount: Number(taxAmount.toFixed(2)),
+            taxableAmount,
+            taxAmount,
             totalAmount: total,
             taxRate: rate,
             taxCode: code,
         };
     }
 
-    /**
-     * Generate tax summary for a sale
-     */
     static async calculateSaleTax(
         organizationId: number,
         items: Array<{ productId: number; quantity: number; unitPrice: number }>
@@ -115,16 +92,16 @@ export class TaxService {
 
         const productMap = new Map(products.map(p => [p.id, p.taxCategory]));
 
-        let totalTaxable = 0;
-        let totalVat = 0;
-        const itemSummaries = [];
+        let totalTaxable = new Decimal(0);
+        let totalVat = new Decimal(0);
+        const itemSummaries: SaleTaxSummary['items'] = [];
 
         for (const item of items) {
             const category = productMap.get(item.productId) || 'STANDARD';
             const result = this.calculateItemTax(item.unitPrice, item.quantity, category, standardRate);
 
-            totalTaxable += result.taxableAmount;
-            totalVat += result.taxAmount;
+            totalTaxable = totalTaxable.plus(result.taxableAmount);
+            totalVat = totalVat.plus(result.taxAmount);
 
             itemSummaries.push({
                 productId: item.productId,
@@ -136,8 +113,8 @@ export class TaxService {
         }
 
         return {
-            taxableAmount: Number(totalTaxable.toFixed(2)),
-            vatAmount: Number(totalVat.toFixed(2)),
+            taxableAmount: totalTaxable,
+            vatAmount: totalVat,
             items: itemSummaries,
         };
     }
