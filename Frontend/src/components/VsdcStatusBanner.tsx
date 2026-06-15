@@ -1,4 +1,4 @@
-import { AlertCircle, ShieldAlert, WifiOff, X } from 'lucide-react';
+import { ShieldAlert, WifiOff, X } from 'lucide-react';
 import { useState } from 'react';
 import { useVsdcOnlineStatus } from '../hooks/useVsdcOnlineStatus';
 

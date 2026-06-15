@@ -16,7 +16,6 @@ import { WifiOff } from 'lucide-react';
 
 
 import { PaymentModal } from '../../../components/pos/PaymentModal';
-import { VsdcStatusBanner } from '../../../components/VsdcStatusBanner';
 import { useVsdcOnlineStatus } from '../../../hooks/useVsdcOnlineStatus';
 import { useTheme } from '../../../context/ThemeContext';
 import { useBranch } from '../../../context/BranchContext';
