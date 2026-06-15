@@ -1,6 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
-import { apiClient } from '../../../lib/api-client';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import {
@@ -25,7 +23,6 @@ const API_BASE = import.meta.env.VITE_PUBLIC_API_URL || 'http://localhost:5000';
 type GroupedCounts = Record<EbmOutboxStatus, number>;
 
 export function EbmOutboxDashboard() {
-  const { t } = useTranslation();
   const [entries, setEntries] = useState<EbmOutboxEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkingId, setCheckingId] = useState<number | null>(null);
