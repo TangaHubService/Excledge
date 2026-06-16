@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_PUBLIC_API_URL || 'http://localhost:5000';
+const API_URL = (import.meta.env.VITE_PUBLIC_API_URL || 'http://localhost:5000') + '/api';
 
 const REFRESH_TOKEN_KEY = 'refresh_token';
 
