@@ -122,12 +122,14 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
         // Generate password reset token
         const { token } = generatePasswordResetToken(user.email);
         const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+        const resetExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
         // Update user with password reset token
         await prisma.user.update({
             where: { id: user.id },
             data: {
                 passwordResetToken: hashedToken,
+                passwordResetExpiry: resetExpiry,
             },
         });
 
@@ -169,7 +171,8 @@ export const resetPassword = async (req: Request, res: Response) => {
 
         if (
             !user.passwordResetToken ||
-            user.passwordResetToken !== incomingTokenHash
+            user.passwordResetToken !== incomingTokenHash ||
+            (user.passwordResetExpiry && user.passwordResetExpiry < new Date())
         ) {
             return res.status(400).json({ error: "Invalid or expired password reset code" });
         }

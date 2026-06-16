@@ -24,6 +24,15 @@ class EmailService {
     });
   }
 
+  private async sendMail(options: nodemailer.SendMailOptions) {
+    try {
+      await this.sendMail(options);
+    } catch (error) {
+      console.error(`[EmailService] Failed to send email to ${options.to}:`, error);
+      throw error;
+    }
+  }
+
   async sendInvitationEmail(
     email: string,
     organizationName: string,
@@ -37,7 +46,7 @@ class EmailService {
       ? `<p>Use this password to login: <strong>${defaultPassword}</strong> you will be requested to change it.</p>`
       : `<p>Please use your existing account credentials to login.</p>`;
 
-    await this.transporter.sendMail({
+    await this.sendMail({
       from: config.email.from,
       to: email,
       subject: `Invitation to join ${organizationName}`,
@@ -77,7 +86,7 @@ class EmailService {
       )
       .join("");
 
-    await this.transporter.sendMail({
+    await this.sendMail({
       from: config.email.from,
       to: email,
       subject: `⚠️ Product Expiry Alert - ${organizationName}`,
@@ -113,7 +122,7 @@ class EmailService {
       day: 'numeric'
     });
 
-    await this.transporter.sendMail({
+    await this.sendMail({
       from: config.email.from,
       to: email,
       subject: `📊 Daily Summary Report - ${organizationName} - ${today}`,
@@ -196,7 +205,7 @@ class EmailService {
     organizationName: string,
     daysLeft: number
   ) {
-    await this.transporter.sendMail({
+    await this.sendMail({
       from: config.email.from,
       to: email,
       subject: `⚠️ Subscription Expiring Soon - ${organizationName}`,
@@ -215,7 +224,7 @@ class EmailService {
     amount: number,
     period: string
   ) {
-    await this.transporter.sendMail({
+    await this.sendMail({
       from: config.email.from,
       to: email,
       subject: `Payment Confirmation - ${organizationName}`,
@@ -275,7 +284,7 @@ class EmailService {
   </div>
   `;
 
-    await this.transporter.sendMail({
+    await this.sendMail({
       from: config.email.from,
       to: email,
       subject: `Invitation ${status} - ${organizationName}`,
@@ -305,7 +314,7 @@ class EmailService {
       )
       .join("")
 
-    await this.transporter.sendMail({
+    await this.sendMail({
       from: config.email.from,
       to: supplierEmail,
       subject: `New Purchase Order ${orderNumber} from ${organizationName}`,
@@ -367,7 +376,7 @@ class EmailService {
       CANCELLED: "has been cancelled",
     }
 
-    await this.transporter.sendMail({
+    await this.sendMail({
       from: config.email.from,
       to: email,
       subject: `Purchase Order ${orderNumber} Status Update`,
@@ -391,7 +400,7 @@ class EmailService {
 
 
   async sendVerificationEmail(email: string, name: string, verificationCode: string) {
-    await this.transporter.sendMail({
+    await this.sendMail({
       from: config.email.from,
       to: email,
       subject: 'Verify Your Email Address',
@@ -451,7 +460,7 @@ class EmailService {
       'MMMM d, yyyy h:mm a'
     );
 
-    await this.transporter.sendMail({
+    await this.sendMail({
       from: config.email.from,
       to: email,
       subject: 'Reset Your Password',
@@ -497,7 +506,7 @@ class EmailService {
   }
 
   async sendPasswordResetConfirmation(email: string, name: string) {
-    await this.transporter.sendMail({
+    await this.sendMail({
       from: config.email.from,
       to: email,
       subject: 'Password Successfully Reset',
@@ -515,7 +524,7 @@ class EmailService {
   async sendTrialExpiryEmail(email: string, title: string, message: string, organizationName: string, expiryDate: Date) {
     const formattedExpiryDate = format(expiryDate, 'MMMM d, yyyy');
 
-    await this.transporter.sendMail({
+    await this.sendMail({
       from: config.email.from,
       to: email,
       subject: `🔔 ${title} - ${organizationName}`,
