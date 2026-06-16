@@ -185,7 +185,7 @@ export const getProductById = async (req: BranchAuthRequest, res: Response) => {
 export const createProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId)
-    const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock } = req.body
+    const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode } = req.body
     const userId = parseInt((req as any).user?.userId as string)
     const branchId = getBranchIdForOperation(req)
 
@@ -207,6 +207,11 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
           imageUrl,
           minStock: minStock || 10,
           organizationId: organizationId!,
+          sku,
+          taxCategory,
+          taxCode,
+          measurementUnit,
+          barcode,
         },
       })
 
@@ -297,6 +302,11 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
           minStock: product.minStock,
           organizationId: organizationId!,
           expiryDate: product.expiryDate ? new Date(product.expiryDate) : null,
+          sku: product.sku,
+          taxCategory: product.taxCategory,
+          taxCode: product.taxCode,
+          measurementUnit: product.measurementUnit,
+          barcode: product.barcode,
         })),
       });
 

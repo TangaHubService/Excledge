@@ -36,6 +36,10 @@ export class TaxService {
         }
     }
 
+    static resolveTaxCode(category: TaxCategory, productTaxCode?: RraTaxCode | null): RraTaxCode {
+        return productTaxCode ?? this.getTaxCode(category);
+    }
+
     static async getVatRate(organizationId: number): Promise<Decimal> {
         const config = await prisma.taxConfiguration.findFirst({
             where: {
@@ -56,12 +60,13 @@ export class TaxService {
         unitPrice: number | Decimal,
         quantity: number | Decimal,
         category: TaxCategory,
-        standardVatRate: Decimal
+        standardVatRate: Decimal,
+        overrideTaxCode?: RraTaxCode | null
     ): TaxCalculationResult {
         const price = unitPrice instanceof Decimal ? unitPrice : new Decimal(unitPrice);
         const qty = quantity instanceof Decimal ? quantity : new Decimal(quantity);
         const total = price.mul(qty);
-        const code = this.getTaxCode(category);
+        const code = overrideTaxCode ?? this.getTaxCode(category);
 
         const rate = category === 'STANDARD' ? standardVatRate : new Decimal(0);
 
@@ -87,18 +92,19 @@ export class TaxService {
         const productIds = items.map(i => i.productId);
         const products = await prisma.product.findMany({
             where: { id: { in: productIds } },
-            select: { id: true, taxCategory: true }
+            select: { id: true, taxCategory: true, taxCode: true }
         });
 
-        const productMap = new Map(products.map(p => [p.id, p.taxCategory]));
+        const productMap = new Map(products.map(p => [p.id, { taxCategory: p.taxCategory, taxCode: p.taxCode }]));
 
         let totalTaxable = new Decimal(0);
         let totalVat = new Decimal(0);
         const itemSummaries: SaleTaxSummary['items'] = [];
 
         for (const item of items) {
-            const category = productMap.get(item.productId) || 'STANDARD';
-            const result = this.calculateItemTax(item.unitPrice, item.quantity, category, standardRate);
+            const product = productMap.get(item.productId);
+            const category = product?.taxCategory || 'STANDARD';
+            const result = this.calculateItemTax(item.unitPrice, item.quantity, category, standardRate, product?.taxCode);
 
             totalTaxable = totalTaxable.plus(result.taxableAmount);
             totalVat = totalVat.plus(result.taxAmount);
