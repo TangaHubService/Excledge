@@ -1,6 +1,5 @@
 import crypto from 'crypto';
 import { addHours } from 'date-fns';
-import jwt from 'jsonwebtoken';
 
 export const generateToken = (): string => {
     return crypto.randomBytes(32).toString('hex');
@@ -15,9 +14,10 @@ export const generateVerificationToken = () => {
 
 
 
-export const generatePasswordResetToken = (email: string) => {
-    const token = jwt.sign({ email }, process.env.JWT_SECRET as string, { expiresIn: '1h' });
-    return { token };
+export const generatePasswordResetToken = () => {
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = addHours(new Date(), 1);
+    return { token, expires };
 };
 
 export const isTokenExpired = (expiryDate: Date | null): boolean => {

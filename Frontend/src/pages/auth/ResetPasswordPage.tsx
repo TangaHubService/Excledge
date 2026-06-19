@@ -65,11 +65,10 @@ export default function ResetPasswordPage() {
                 navigate("/login");
             }, 3000);
         } catch (error: any) {
-            if (error instanceof Error) {
-                showToast(error.message, "error");
-            } else {
-                showToast("Failed to reset password", "error");
-            }
+            showToast(
+                error.response?.data?.error || error.message || "Failed to reset password",
+                "error"
+            );
         } finally {
             setIsLoading(false);
         }

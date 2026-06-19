@@ -26,7 +26,7 @@ class EmailService {
 
   private async sendMail(options: nodemailer.SendMailOptions) {
     try {
-      await this.sendMail(options);
+      await this.transporter.sendMail(options);
     } catch (error) {
       console.error(`[EmailService] Failed to send email to ${options.to}:`, error);
       throw error;
