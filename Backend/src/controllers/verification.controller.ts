@@ -134,6 +134,8 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
         // Send password reset email
         await emailService.sendPasswordResetEmail(user.email, user.name, token);
 
+        console.log(`[Password Reset] Requested for user=${user.email} userId=${user.id} tokenPrefix=${token.slice(0, 8)}...`);
+
         return res.json({ message: "Password reset email sent successfully" });
     } catch (error) {
         console.error("[Request Password Reset Error]:", error);
