@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
             );
         } catch (error: any) {
             showToast(
-                error.response?.data?.message || "Failed to process your request",
+                error.response?.data?.error || error.message || "Failed to process your request",
                 "error"
             );
         } finally {

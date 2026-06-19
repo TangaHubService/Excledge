@@ -213,7 +213,11 @@ export const getInventoryReport = async (req: BranchAuthRequest, res: Response) 
     }
 
     // Base where clause
-    const where: any = { organizationId, ...buildBranchFilter(req) }
+    const branchFilter = buildBranchFilter(req)
+    const where: any = { organizationId }
+    if (branchFilter.branchId) {
+      where.batches = { some: { branchId: branchFilter.branchId } }
+    }
 
     // Apply filters
     if (category && category !== 'all') {
