@@ -375,7 +375,7 @@ export const InventoryReport = () => {
                                 <select
                                     value={filterCategory}
                                     onChange={(e) => setFilterCategory(e.target.value)}
-                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-700 dark:text-gray-200"
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 dark:border-gray-700 dark:text-gray-200"
                                 >
                                     <option value="all" className="dark:text-gray-200 dark:bg-gray-700">{t('inventoryReport.allCategories')}</option>
                                     {categories.map(cat => (
@@ -388,7 +388,7 @@ export const InventoryReport = () => {
                                 <select
                                     value={filterStatus}
                                     onChange={(e) => setFilterStatus(e.target.value)}
-                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-700 dark:text-gray-200"
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 dark:border-gray-700 dark:text-gray-200"
                                 >
                                     <option value="all" className="dark:text-gray-200 dark:bg-gray-700">{t('inventoryReport.allStatus')}</option>
                                     <option value="critical" className="dark:text-gray-200 dark:bg-gray-700">{t('inventoryReport.criticalStock')}</option>

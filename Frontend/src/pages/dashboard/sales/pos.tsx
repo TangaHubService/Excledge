@@ -6,7 +6,7 @@ import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { ShoppingCart, Loader2, UserPlus, Search, X } from 'lucide-react';
 import PhoneInputWithCountryCode from '../../../components/PhoneInputWithCountryCode';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '../../../components/ui/drawer';
 import { toast } from "react-toastify";
 import { apiClient } from '../../../lib/api-client';
 import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response';
@@ -319,11 +319,11 @@ const AddCustomerDialog = memo(({ onCustomerAdded, isOpen, onOpenChange }: any) 
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md dark:bg-gray-800 dark:text-white bg-white dark:border-gray-700">
-        <DialogHeader>
-          <DialogTitle>{t('pos.addNewCustomer')}</DialogTitle>
-        </DialogHeader>
+    <Drawer open={isOpen} onOpenChange={onOpenChange}>
+      <DrawerContent className="sm:max-w-md dark:bg-gray-800 dark:text-white bg-white dark:border-gray-700">
+        <DrawerHeader>
+          <DrawerTitle>{t('pos.addNewCustomer')}</DrawerTitle>
+        </DrawerHeader>
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">{t('pos.customerName')}</Label>
@@ -394,8 +394,8 @@ const AddCustomerDialog = memo(({ onCustomerAdded, isOpen, onOpenChange }: any) 
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </DrawerContent>
+    </Drawer>
   );
 });
 // Main Component

@@ -9,7 +9,7 @@ import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Textarea } from '../../../components/ui/textarea';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '../../../components/ui/dialog';
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, DrawerFooter } from '../../../components/ui/drawer';
 
 interface CashFlowItem {
     date: string;
@@ -278,7 +278,7 @@ export const CashFlowReport = () => {
                         type="date"
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-800 dark:text-white"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white"
                     />
                 </div>
                 <div>
@@ -288,7 +288,7 @@ export const CashFlowReport = () => {
                     <select
                         value={transactionType}
                         onChange={(e) => setTransactionType(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-800 dark:text-white"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white"
                     >
                         <option value="ALL">All Methods</option>
                         <option value="CASH">Cash</option>
@@ -303,7 +303,7 @@ export const CashFlowReport = () => {
                     <select
                         value={categoryFilter}
                         onChange={(e) => setCategoryFilter(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-800 dark:text-white"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white"
                     >
                         <option value="ALL">All Categories</option>
                         <option value="Sales">Sales</option>
@@ -460,14 +460,14 @@ export const CashFlowReport = () => {
             </div>
 
             {/* Add Expense Modal */}
-            <Dialog open={isExpenseModalOpen} onOpenChange={setIsExpenseModalOpen}>
-                <DialogContent className="sm:max-w-[500px] bg-white dark:bg-gray-900 dark:text-white">
-                    <DialogHeader>
-                        <DialogTitle>{t('expenses.addExpense')}</DialogTitle>
-                        <DialogDescription>
+            <Drawer open={isExpenseModalOpen} onOpenChange={setIsExpenseModalOpen}>
+                <DrawerContent className="sm:max-w-[500px] bg-white dark:bg-gray-900 dark:text-white">
+                    <DrawerHeader>
+                        <DrawerTitle>{t('expenses.addExpense')}</DrawerTitle>
+                        <DrawerDescription>
                             Record a new operating expense for your business.
-                        </DialogDescription>
-                    </DialogHeader>
+                        </DrawerDescription>
+                    </DrawerHeader>
                     <form onSubmit={handleCreateExpense} className="space-y-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
@@ -559,7 +559,7 @@ export const CashFlowReport = () => {
                             />
                         </div>
 
-                        <DialogFooter>
+                        <DrawerFooter>
                             <Button type="button" variant="outline" onClick={() => setIsExpenseModalOpen(false)}>
                                 {t('common.cancel')}
                             </Button>
@@ -567,20 +567,20 @@ export const CashFlowReport = () => {
                                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 {t('common.save')}
                             </Button>
-                        </DialogFooter>
+                        </DrawerFooter>
                     </form>
-                </DialogContent>
-            </Dialog>
+                </DrawerContent>
+            </Drawer>
 
             {/* Record Supplier Payment Modal */}
-            <Dialog open={isPaymentModalOpen} onOpenChange={setIsPaymentModalOpen}>
-                <DialogContent className="sm:max-w-[500px] bg-white dark:bg-gray-900 dark:text-white">
-                    <DialogHeader>
-                        <DialogTitle>{t('supplierPayments.recordPayment')}</DialogTitle>
-                        <DialogDescription>
+            <Drawer open={isPaymentModalOpen} onOpenChange={setIsPaymentModalOpen}>
+                <DrawerContent className="sm:max-w-[500px] bg-white dark:bg-gray-900 dark:text-white">
+                    <DrawerHeader>
+                        <DrawerTitle>{t('supplierPayments.recordPayment')}</DrawerTitle>
+                        <DrawerDescription>
                             Record a payment made to a supplier for a purchase order.
-                        </DialogDescription>
-                    </DialogHeader>
+                        </DrawerDescription>
+                    </DrawerHeader>
                     <form onSubmit={handleRecordPayment} className="space-y-4 py-4">
                         <div className="space-y-2">
                             <Label htmlFor="po">{t('supplierPayments.purchaseOrder')}</Label>
@@ -673,7 +673,7 @@ export const CashFlowReport = () => {
                             />
                         </div>
 
-                        <DialogFooter>
+                        <DrawerFooter>
                             <Button type="button" variant="outline" onClick={() => setIsPaymentModalOpen(false)}>
                                 {t('common.cancel')}
                             </Button>
@@ -681,10 +681,10 @@ export const CashFlowReport = () => {
                                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 {t('supplierPayments.recordPayment')}
                             </Button>
-                        </DialogFooter>
+                        </DrawerFooter>
                     </form>
-                </DialogContent>
-            </Dialog>
+                </DrawerContent>
+            </Drawer>
         </div>
     );
 };

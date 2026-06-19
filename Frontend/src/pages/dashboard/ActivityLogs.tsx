@@ -17,7 +17,7 @@ import { Button } from '../../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Card, CardContent, CardHeader } from '../../components/ui/card';
 import { Search, Filter, RefreshCw, Copy, X, Clock, User, Activity, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '../../components/ui/drawer';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useQuery } from '@tanstack/react-query';
@@ -716,16 +716,16 @@ const ActivityLogs = () => {
             </Card>
 
             {/* Details Dialog */}
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0 border-none bg-white dark:bg-gray-900 shadow-2xl">
-                    <DialogHeader className="p-6 pb-4 border-b dark:border-gray-800">
-                        <DialogTitle className="flex items-center gap-3 text-xl font-bold dark:text-white">
+            <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DrawerContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0 border-none bg-white dark:bg-gray-900 shadow-2xl">
+                    <DrawerHeader className="p-6 pb-4 border-b dark:border-gray-800">
+                        <DrawerTitle className="flex items-center gap-3 text-xl font-bold dark:text-white">
                             <div className="p-2 rounded-lg bg-primary/10">
                                 <Activity className="h-6 w-6 text-primary" />
                             </div>
                             {t('logs.logDetails')}
-                        </DialogTitle>
-                    </DialogHeader>
+                        </DrawerTitle>
+                    </DrawerHeader>
 
                     {selectedLog && (
                         <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-800">
@@ -860,8 +860,8 @@ const ActivityLogs = () => {
                             {t('common.close')}
                         </Button>
                     </div>
-                </DialogContent>
-            </Dialog>
+                </DrawerContent>
+            </Drawer>
         </div>
     );
 };

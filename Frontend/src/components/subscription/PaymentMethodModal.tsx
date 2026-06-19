@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '../ui/drawer';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -355,8 +355,8 @@ export const PaymentMethodModal = ({
     };
 
     return (
-        <Dialog open={isOpen} onOpenChange={(open) => !open && handleModalClose()}>
-            <DialogContent
+        <Drawer open={isOpen} onOpenChange={(open) => !open && handleModalClose()}>
+            <DrawerContent
                 className="sm:max-w-md bg-white max-h-[90vh] overflow-y-auto !p-4"
                 onInteractOutside={(e) => {
                     e.preventDefault();
@@ -369,16 +369,16 @@ export const PaymentMethodModal = ({
                     renderLoadingContent()
                 ) : (
                     <>
-                        <DialogHeader>
-                            <DialogTitle className="text-center text-lg">
+                        <DrawerHeader>
+                            <DrawerTitle className="text-center text-lg">
                                 {paymentStatus === 'success' ? 'Payment Successful' :
                                     paymentStatus === 'error' ? 'Payment Failed' : 'Select Payment Method'}
-                            </DialogTitle>
-                        </DialogHeader>
+                            </DrawerTitle>
+                        </DrawerHeader>
                         {renderPaymentForm()}
                     </>
                 )}
-            </DialogContent>
-        </Dialog>
+            </DrawerContent>
+        </Drawer>
     );
 };

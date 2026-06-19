@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from '../../components/ui/drawer';
 import { useTheme } from '../../context/ThemeContext';
 import { useEffect } from 'react';
 import PhoneInputWithCountryCode from '../../components/PhoneInputWithCountryCode';
@@ -74,15 +74,15 @@ export function CustomerForm({
     };
 
     return (
-        <Dialog open={true} onOpenChange={onClose}>
-            <DialogContent
+        <Drawer open={true} onOpenChange={onClose}>
+            <DrawerContent
                 className={`w-full ${theme === 'dark' ? 'bg-gray-800 border border-gray-700 text-white' : 'bg-white border border-gray-200 text-gray-900'} rounded-lg p-6`}
             >
-                <DialogHeader>
-                    <DialogTitle className="text-xl font-semibold mb-2">
+                <DrawerHeader>
+                    <DrawerTitle className="text-xl font-semibold mb-2">
                         {initialData?.id ? t('customers.editCustomer') : t('customers.addNewCustomer')}
-                    </DialogTitle>
-                </DialogHeader>
+                    </DrawerTitle>
+                </DrawerHeader>
 
 
                 <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 w-full max-w-full">
@@ -143,7 +143,7 @@ export function CustomerForm({
 
                         <select
                             id="type"
-                            className={`w-full max-w-full rounded-md border ${formErrors.type ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white`}
+                            className={`w-full max-w-full rounded-md border ${formErrors.type ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-white`}
                             {...register('type')}
                         >
                             <option value="INDIVIDUAL">{t('customers.individual')}</option>
@@ -178,7 +178,7 @@ export function CustomerForm({
                         )}
                     </div>
 
-                    <DialogFooter className="flex justify-end space-x-3 pt-4">
+                    <DrawerFooter className="flex justify-end space-x-3 pt-4">
                         <button
                             type="button"
                             onClick={onClose}
@@ -224,9 +224,9 @@ export function CustomerForm({
                             )}
 
                         </button>
-                    </DialogFooter>
+                    </DrawerFooter>
                 </form>
-            </DialogContent>
-        </Dialog>
+            </DrawerContent>
+        </Drawer>
     );
 }

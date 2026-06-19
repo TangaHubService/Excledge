@@ -444,7 +444,7 @@ export const SalesReport = () => {
                         <select
                             value={selectedCategory}
                             onChange={(e) => setSelectedCategory(e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white"
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 dark:text-white"
                         >
                             <option value="all">{t('common.all')}</option>
                             {availableCategories.map(cat => (
@@ -457,7 +457,7 @@ export const SalesReport = () => {
                         <select
                             value={selectedSeller}
                             onChange={(e) => setSelectedSeller(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white"
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 dark:text-white"
                         >
                             <option value="all">{t('common.all')}</option>
                             {availableSellers.map(seller => (
@@ -611,7 +611,7 @@ export const SalesReport = () => {
                                     setItemsPerPage(Number(e.target.value));
                                     setCurrentPage(1);
                                 }}
-                                className="border border-gray-300 rounded-lg px-3 py-1 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                                className="border border-gray-300 rounded-lg px-3 py-1 bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600"
                             >
                                 <option value={10}>10</option>
                                 <option value={25}>25</option>

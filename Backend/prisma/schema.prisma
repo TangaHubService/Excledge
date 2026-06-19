@@ -120,6 +120,7 @@ model Supplier {
   purchaseOrders PurchaseOrder[]
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId])
   @@map("suppliers")
 }
 
@@ -145,6 +146,9 @@ model PurchaseOrder {
   supplierPayments SupplierPayment[]
   User             User[]              @relation("CreatedOrders")
 
+  @@index([organizationId])
+  @@index([supplierId])
+  @@index([userId])
   @@map("purchase_orders")
 }
 
@@ -159,6 +163,8 @@ model PurchaseOrderItem {
   product         Product?      @relation(fields: [productId], references: [id])
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
+  @@index([purchaseOrderId])
+  @@index([productId])
   @@map("purchase_order_items")
 }
 
@@ -217,6 +223,7 @@ model UserOrganization {
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, organizationId])
+  @@index([organizationId])
   @@map("user_organizations")
 }
 
@@ -237,6 +244,9 @@ model OrganizationInvitation {
   invitedUser     User?            @relation("InvitedUser", fields: [invitedUserId], references: [id])
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId])
+  @@index([invitedBy])
+  @@index([email])
   @@map("organization_invitations")
 }
 
@@ -360,7 +370,10 @@ model Product {
 
   @@map("products")
   @@index([name])
+  @@index([sku])
+  @@index([barcode])
   @@index([category])
+  @@index([organizationId, category])
   @@index([organizationId, isActive])
   @@index([deletedAt])
 }
@@ -384,6 +397,7 @@ model Customer {
   sales          Sale[]
 
   @@map("customers")
+  @@index([organizationId])
   @@index([phone])
   @@index([organizationId, customerType])
   @@index([deletedAt])
@@ -506,6 +520,9 @@ model SaleItem {
   product Product @relation(fields: [productId], references: [id])
   sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
+  @@index([saleId])
+  @@index([productId])
+  @@index([batchId])
   @@map("sale_items")
 }
 
@@ -605,6 +622,7 @@ model Batch {
   @@index([receivedAt])
   @@index([branchId])              // NEW
   @@index([branchId, productId])   // NEW
+  @@index([productId, branchId])   // Optimizes product+branch stock lookups
   @@map("batches")
 }
 
@@ -690,6 +708,9 @@ model StockTransfer {
   organization   Organization         @relation(fields: [organizationId], references: [id])
   fromBranch     Branch               @relation("TransferFrom", fields: [fromBranchId], references: [id])
   toBranch       Branch               @relation("TransferTo", fields: [toBranchId], references: [id])
+  @@index([organizationId])
+  @@index([fromBranchId])
+  @@index([toBranchId])
   @@map("stock_transfers")
 }
 
@@ -700,6 +721,8 @@ model StockTransferItem {
   quantity         Int
   transfer         StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
   product          Product       @relation(fields: [productId], references: [id])
+  @@index([transferId])
+  @@index([productId])
   @@map("stock_transfer_items")
 }
 

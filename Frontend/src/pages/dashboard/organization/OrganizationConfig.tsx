@@ -23,7 +23,7 @@ import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../../components/ui/dialog';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerDescription } from '../../../components/ui/drawer';
 import { Badge } from '../../../components/ui/badge';
 import PhoneInputWithCountryCode from '../../../components/PhoneInputWithCountryCode';
 import { apiClient } from '../../../lib/api-client';
@@ -534,16 +534,16 @@ export function OrganizationConfig() {
             </Tabs>
 
             {/* Branch Upsert Dialog */}
-            <Dialog open={branchDialogOpen} onOpenChange={setBranchDialogOpen}>
-                <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
-                    <DialogHeader className="p-6 bg-indigo-600 text-white">
-                        <DialogTitle className="text-xl font-bold">
+            <Drawer open={branchDialogOpen} onOpenChange={setBranchDialogOpen}>
+                <DrawerContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
+                    <DrawerHeader className="p-6 bg-indigo-600 text-white">
+                        <DrawerTitle className="text-xl font-bold">
                             {editingBranch ? 'Edit Branch' : 'Create New Branch'}
-                        </DialogTitle>
-                        <DialogDescription className="text-indigo-100">
+                        </DrawerTitle>
+                        <DrawerDescription className="text-indigo-100">
                             Enter the details for your business branch.
-                        </DialogDescription>
-                    </DialogHeader>
+                        </DrawerDescription>
+                    </DrawerHeader>
                     <div className="p-6 space-y-4 bg-white dark:bg-gray-800">
                         <div className="space-y-2">
                             <Label htmlFor="branch-name">Branch Name</Label>
@@ -576,16 +576,16 @@ export function OrganizationConfig() {
                             />
                         </div>
                     </div>
-                    <DialogFooter className="p-6 bg-gray-50 dark:bg-gray-900/50 flex gap-2">
+                    <DrawerFooter className="p-6 bg-gray-50 dark:bg-gray-900/50 flex gap-2">
                         <Button variant="ghost" onClick={() => setBranchDialogOpen(false)} className="rounded-xl">
                             Cancel
                         </Button>
                         <Button onClick={handleBranchSave} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-4">
                             {editingBranch ? 'Update Branch' : 'Create Branch'}
                         </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                    </DrawerFooter>
+                </DrawerContent>
+            </Drawer>
         </div>
     );
 }

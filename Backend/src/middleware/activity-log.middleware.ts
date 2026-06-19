@@ -15,6 +15,7 @@ export interface ManualActivityLogParams {
   metadata?: Record<string, any>;
   ipAddress?: string;
   userAgent?: string;
+  branchId?: number | null;
 }
 
 /**
@@ -36,6 +37,7 @@ export async function logManualActivity(params: ManualActivityLogParams) {
       metadata: params.metadata || {},
       ipAddress: params.ipAddress || '0.0.0.0',
       userAgent: params.userAgent || 'system',
+      branchId: params.branchId || null,
     });
 
     return { success: true };

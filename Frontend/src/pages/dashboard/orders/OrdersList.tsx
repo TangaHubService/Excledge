@@ -40,10 +40,10 @@ import {
     DropdownMenuLabel,
 } from '../../../components/ui/dropdown-menu';
 import {
-    Dialog,
-    DialogContent,
-    DialogFooter,
-} from "../../../components/ui/dialog";
+    Drawer,
+    DrawerContent,
+    DrawerFooter,
+} from "../../../components/ui/drawer";
 import { ScrollArea } from '../../../components/ui/scroll-area';
 import type { OrdersListProps, Order } from '../suppliers/types/supplierTypes';
 
@@ -459,8 +459,8 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
             </div>
 
             {/* Improved Order Details Modal */}
-            <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
-                <DialogContent className={`max-w-3xl p-0 overflow-hidden border-none shadow-xl rounded-md ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'
+            <Drawer open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
+                <DrawerContent className={`max-w-3xl p-0 overflow-hidden border-none shadow-xl rounded-md ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'
                     }`}>
                     {selectedOrder && (
                         <>
@@ -616,7 +616,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                 </div>
                             </div>
 
-                            <DialogFooter className={`p-4 gap-2 ${theme === 'dark' ? 'bg-gray-800/50 border-t border-gray-700' : 'bg-gray-50 border-t border-gray-100'}`}>
+                            <DrawerFooter className={`p-4 gap-2 ${theme === 'dark' ? 'bg-gray-800/50 border-t border-gray-700' : 'bg-gray-50 border-t border-gray-100'}`}>
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -651,11 +651,11 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </div>
-                            </DialogFooter>
+                            </DrawerFooter>
                         </>
                     )}
-                </DialogContent>
-            </Dialog>
+                </DrawerContent>
+            </Drawer>
         </div>
     );
 };

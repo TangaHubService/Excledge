@@ -12,11 +12,11 @@ import { CustomerForm } from "../../components/customers/CustomerForm";
 import TableSkeleton from "../../components/ui/TableSkeleton";
 import { CustomerImport } from "./imports/CustomerImport";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "../../components/ui/dialog";
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "../../components/ui/drawer";
 import { useTheme } from "../../context/ThemeContext";
 
 export interface Customer {
@@ -499,34 +499,34 @@ export function CustomerManagement() {
       )}
 
 
-      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-        <DialogContent
+      <Drawer open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DrawerContent
           className={`max-w-4xl max-h-[90vh] overflow-y-auto ${theme === "dark"
             ? "bg-gray-900 border-gray-700 text-gray-100"
             : "bg-white border-gray-200 text-gray-900"
             }`}
         >
-          <DialogHeader>
-            <DialogTitle className={theme === "dark" ? "text-white" : "text-gray-900"}>
+          <DrawerHeader>
+            <DrawerTitle className={theme === "dark" ? "text-white" : "text-gray-900"}>
               {t("customers.importCustomers")}
-            </DialogTitle>
-          </DialogHeader>
+            </DrawerTitle>
+          </DrawerHeader>
           <CustomerImport onSuccess={handleImportSuccess} />
-        </DialogContent>
-      </Dialog>
+        </DrawerContent>
+      </Drawer>
 
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent
+      <Drawer open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DrawerContent
           className={`max-w-4xl max-h-[90vh] overflow-y-auto ${theme === "dark"
             ? "bg-gray-900 border-gray-700 text-gray-100"
             : "bg-white border-gray-200 text-gray-900"
             }`}
         >
-          <DialogHeader>
-            <DialogTitle className={theme === "dark" ? "text-white" : "text-gray-900"}>
+          <DrawerHeader>
+            <DrawerTitle className={theme === "dark" ? "text-white" : "text-gray-900"}>
               {t('customers.customerDetails')}
-            </DialogTitle>
-          </DialogHeader>
+            </DrawerTitle>
+          </DrawerHeader>
           {viewingCustomer && (
             <div className="space-y-6">
               {/* Customer Information */}
@@ -639,8 +639,8 @@ export function CustomerManagement() {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+        </DrawerContent>
+      </Drawer>
       <ConfirmDialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}

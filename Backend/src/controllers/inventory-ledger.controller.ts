@@ -189,6 +189,13 @@ export const adjustInventoryStock = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Branch ID is required for stock adjustments (multi-branch isolation)
+    if (!req.body.branchId) {
+      return res.status(400).json({
+        error: 'branchId is required for stock adjustments',
+      });
+    }
+
     // Parse quantity - can be positive or negative for adjustments
     const adjustmentQuantity = Number(quantity);
     if (isNaN(adjustmentQuantity)) {
@@ -202,7 +209,7 @@ export const adjustInventoryStock = async (req: AuthRequest, res: Response) => {
       productId: parseInt(productId),
       userId,
       quantity: adjustmentQuantity, // Can be positive or negative
-      branchId: req.body.branchId ? parseInt(req.body.branchId) : null,
+      branchId: parseInt(req.body.branchId),
       warehouseId: warehouseId ? parseInt(warehouseId) : null,
       unitCost: unitCost ? parseFloat(unitCost) : undefined,
       reference,

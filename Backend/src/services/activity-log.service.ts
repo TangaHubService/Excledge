@@ -13,6 +13,7 @@ type ActivityLogData = {
   metadata?: any;
   ipAddress?: string;
   userAgent?: string;
+  branchId?: number | null;
 };
 
 class ActivityLogService {
@@ -37,6 +38,7 @@ class ActivityLogService {
           organizationId: data.organizationId && data.organizationId !== 0 ? data.organizationId : null,
           userId: data.userId && data.userId !== 0 ? data.userId : null,
           status: data.status || 'SUCCESS',
+          branchId: data.branchId || null,
           entityId: data.entityId !== undefined ? String(data.entityId) : null,
           metadata: data.metadata ? JSON.parse(JSON.stringify(data.metadata)) : undefined,
         },

@@ -220,8 +220,8 @@ export default function DPOPaymentPage() {
                                     value={formData.description}
                                     onChange={handleInputChange}
                                     placeholder="What is this payment for?"
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    required
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 dark:text-white"
+                                        required
                                 />
                             </div>
                         </div>
@@ -342,7 +342,7 @@ export default function DPOPaymentPage() {
                                         name="country"
                                         value={formData.country}
                                         onChange={handleInputChange}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 dark:text-white"
                                     >
                                         {countries.map(country => (
                                             <option key={country.code} value={country.code}>

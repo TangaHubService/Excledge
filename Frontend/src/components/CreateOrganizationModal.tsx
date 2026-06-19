@@ -2,12 +2,13 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
-import { Building2, Loader2, X } from "lucide-react";
+import { Building2, Loader2 } from "lucide-react";
 import PhoneInputWithCountryCode from "./PhoneInputWithCountryCode";
 import { apiClient } from "../lib/api-client";
 import { createOrganizationSchema } from "../schema/organizations";
 import { useOrganization } from "../context/OrganizationContext";
 import { useAuth } from "../context/AuthContext";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "./ui/drawer";
 
 interface CreateOrganizationModalProps {
   isOpen: boolean;
@@ -86,33 +87,24 @@ export default function CreateOrganizationModal({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-md max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6 pb-4 flex items-center justify-between">
+    <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DrawerContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+        <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20">
               <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              <DrawerTitle className="text-xl font-semibold text-gray-900 dark:text-white">
                 Create Your Organization
-              </h2>
+              </DrawerTitle>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Set up your organization to get started
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-          </button>
-        </div>
+        </DrawerHeader>
 
         {/* Toast */}
         {toast && (
@@ -277,7 +269,7 @@ export default function CreateOrganizationModal({
             </div>
           </form>
         </div>
-      </div>
-    </div>
+      </DrawerContent>
+    </Drawer>
   );
 }

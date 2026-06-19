@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Loader2, Plus, Search, Shield, User, X } from "lucide-react";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from "../../../components/ui/drawer";
 import { apiClient } from "../../../lib/api-client";
 import { toast } from "react-toastify";
 import { TableSkeleton } from "../../../components/ui/TableSkeleton";
@@ -418,78 +419,75 @@ export const UserManagement = () => {
         </div>
 
         {/* Add User Dialog */}
-        {isDialogOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 w-full max-w-md mx-4">
-              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  {editingUserId ? t('userManagement.editUser') : t('userManagement.addUser')}
-                </h2>
-                <button
-                  onClick={() => setIsDialogOpen(false)}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                >
+        <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DrawerContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 w-full max-w-md mx-auto">
+            <DrawerHeader className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 p-6">
+              <DrawerTitle className="text-xl font-semibold text-gray-900 dark:text-white">
+                {editingUserId ? t('userManagement.editUser') : t('userManagement.addUser')}
+              </DrawerTitle>
+              <DrawerClose asChild>
+                <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
                   <X className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                 </button>
+              </DrawerClose>
+            </DrawerHeader>
+            <div className="p-6 space-y-4">
+              <em className="text-sm text-gray-600 dark:text-gray-400">
+                {editingUserId
+                  ? t('userManagement.updateUserRole')
+                  : t('userManagement.inviteUserDesc')}
+                {currentUserIsAdmin && " " + t('userManagement.adminNote')}
+              </em>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-900 dark:text-white">
+                  Email
+                </label>
+                <input
+                  name="email"
+                  type="email"
+                  placeholder={t('userManagement.enterUserEmail')}
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  disabled={!!editingUserId}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 disabled:opacity-60"
+                />
               </div>
-              <div className="p-6 space-y-4">
-                <em className="text-sm text-gray-600 dark:text-gray-400">
-                  {editingUserId
-                    ? t('userManagement.updateUserRole')
-                    : t('userManagement.inviteUserDesc')}
-                  {currentUserIsAdmin && " " + t('userManagement.adminNote')}
-                </em>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-900 dark:text-white">
-                    Email
-                  </label>
-                  <input
-                    name="email"
-                    type="email"
-                    placeholder={t('userManagement.enterUserEmail')}
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    disabled={!!editingUserId}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 disabled:opacity-60"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-900 dark:text-white">
-                    Role
-                  </label>
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-                  >
-                    <option value="">{t('userManagement.selectRole')}</option>
-                    {currentUserIsAdmin && <option value="ADMIN">ADMIN</option>}
-                    <option value="ACCOUNTANT">ACCOUNTANT</option>
-                    <option value="SELLER">SELLER</option>
-                  </select>
-                  {currentUserIsAdmin && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {t('userManagement.onlyAdminsNote')}
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={handleSubmit}
-                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-medium rounded-lg transition-colors"
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-900 dark:text-white">
+                  Role
+                </label>
+                <select
+                  name="role"
+                  value={formData.role}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
                 >
-                  {inviteLoading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <Loader2 className="animate-spin" /> {t('userManagement.inviting')}
-                    </span>
-                  ) : (
-                    t('userManagement.send')
-                  )}
-                </button>
+                  <option value="">{t('userManagement.selectRole')}</option>
+                  {currentUserIsAdmin && <option value="ADMIN">ADMIN</option>}
+                  <option value="ACCOUNTANT">ACCOUNTANT</option>
+                  <option value="SELLER">SELLER</option>
+                </select>
+                {currentUserIsAdmin && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {t('userManagement.onlyAdminsNote')}
+                  </p>
+                )}
               </div>
+              <button
+                onClick={handleSubmit}
+                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-medium rounded-lg transition-colors"
+              >
+                {inviteLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="animate-spin" /> {t('userManagement.inviting')}
+                  </span>
+                ) : (
+                  t('userManagement.send')
+                )}
+              </button>
             </div>
-          </div>
-        )}
+          </DrawerContent>
+        </Drawer>
       </div>
     </div>
   );

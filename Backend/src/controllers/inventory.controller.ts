@@ -1,4 +1,5 @@
 import type { Response } from "express"
+import { Prisma } from '@prisma/client'
 import { prisma } from "../lib/prisma"
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 import { buildBranchFilter, getBranchIdForOperation } from "../middleware/branchAuth.middleware"
@@ -6,7 +7,6 @@ import { auditLogger } from "../utils/auditLogger"
 import {
   adjustStock as ledgerAdjustStock,
   removeStock as ledgerRemoveStock,
-  getCurrentStock,
   addStock as ledgerAddStock
 } from "../services/inventory-ledger.service"
 import { success, error as apiError } from "../utils/apiResponse"
@@ -39,6 +39,8 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
     if (search) {
       where.OR = [
         { name: { contains: search as string, mode: "insensitive" } },
+        { sku: { contains: search as string, mode: "insensitive" } },
+        { barcode: { contains: search as string, mode: "insensitive" } },
         { batchNumber: { contains: search as string, mode: "insensitive" } },
       ]
     }
@@ -47,28 +49,29 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
       where.category = category
     }
 
-    const expiryCondition: any = {};
+    // Expiry filter — default excludes expired products from the listing
     if (expiryStatus === "expired") {
-      expiryCondition.expiryDate = {
-        not: null,
-        lt: new Date(),
-      }
+      where.expiryDate = { not: null, lt: new Date() }
     } else if (expiryStatus === "expiring") {
-      expiryCondition.expiryDate = {
+      where.expiryDate = {
         not: null,
         gte: new Date(),
         lte: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
       }
     } else {
-      // DEFAULT: Exclude expired products
-      expiryCondition.OR = [
-        { expiryDate: null },
-        { expiryDate: { gte: new Date() } }
-      ];
+      // DEFAULT: Exclude expired products from listing
+      const expiryFilter = {
+        OR: [
+          { expiryDate: null },
+          { expiryDate: { gte: new Date() } },
+        ],
+      }
+      // If search OR exists, nest under AND to avoid overwrite
+      where.AND = where.OR
+        ? [expiryFilter, { OR: where.OR }]
+        : [expiryFilter]
+      delete where.OR
     }
-
-    // Combine into where using AND to avoid overwriting search's OR if present
-    where.AND = [expiryCondition];
 
     const [products, totalCount] = await Promise.all([
       prisma.product.findMany({
@@ -80,62 +83,93 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
       prisma.product.count({ where }),
     ])
 
-    // Calculate actual stock from ledger for each product (source of truth)
-    // If no ledger entries exist, fall back to database quantity
+    // -------------------------------------------------------
+    // 1. Single-pass stock aggregation — replaces N+1 loop
+    // -------------------------------------------------------
     const branchForLedger =
       req.selectedBranchId !== null && req.selectedBranchId !== undefined
         ? req.selectedBranchId
         : undefined
 
-    const productsWithStock = await Promise.all(
-      products.map(async (product) => {
-        const ledgerEntryCount = await prisma.inventoryLedger.count({
-          where: {
-            productId: product.id,
-            organizationId: organizationId,
-            ...(branchForLedger != null ? { branchId: branchForLedger } : {}),
-          },
-        });
+    const productIds = products.map(p => p.id);
+    const stockMap: Record<number, number> = {};
 
-        let actualStock;
-        if (ledgerEntryCount === 0) {
-          actualStock = product.quantity;
-        } else {
-          actualStock = await getCurrentStock(organizationId, product.id, branchForLedger);
-        }
+    if (productIds.length > 0) {
+      const ledgerWhere: any = {
+        organizationId,
+        productId: { in: productIds },
+      };
+      if (branchForLedger !== undefined) {
+        ledgerWhere.branchId = branchForLedger;
+      }
 
-        return {
-          ...product,
-          quantity: actualStock,
-        };
-      })
-    );
+      const stockAggregates = await prisma.inventoryLedger.groupBy({
+        by: ['productId', 'direction'],
+        where: ledgerWhere,
+        _sum: { quantity: true },
+      });
 
+      for (const pid of productIds) { stockMap[pid] = 0; }
+      for (const row of stockAggregates) {
+        const net = row._sum.quantity || 0;
+        stockMap[row.productId] += row.direction === 'IN' ? net : -net;
+      }
+    }
 
-    // Count products where quantity is at or below minStock threshold
-    // Prisma doesn't support direct field-to-field comparison, so we use a raw query
-    const lowStockResult = await prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(*)::int as count
-      FROM products
-      WHERE "organizationId" = ${organizationId}
-        AND quantity <= "minStock"
-        AND "minStock" > 0
-    `
-    const lowStockProducts = Number(lowStockResult[0]?.count || 0)
+    const productsWithStock = products.map(product => ({
+      ...product,
+      quantity: stockMap[product.id] ?? 0,
+    }));
+
+    // -------------------------------------------------------
+    // 2. Branch-scoped low-stock count (raw SQL)
+    // -------------------------------------------------------
+    const lowStockProducts = branchForLedger !== undefined
+      ? Number((await prisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(*)::int as count
+          FROM products p
+          WHERE p."organizationId" = ${organizationId}
+            AND p."isActive" = true
+            AND p."deletedAt" IS NULL
+            AND p."minStock" > 0
+            AND (
+              SELECT COALESCE(SUM(b.quantity), 0)
+              FROM batches b
+              WHERE b."productId" = p.id
+                AND b."branchId" = ${branchForLedger}
+                AND b."isActive" = true
+            ) <= p."minStock"
+        `)[0]?.count || 0)
+      : Number((await prisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(*)::int as count
+          FROM products p
+          WHERE p."organizationId" = ${organizationId}
+            AND p."isActive" = true
+            AND p."deletedAt" IS NULL
+            AND p."minStock" > 0
+            AND p.quantity <= p."minStock"
+        `)[0]?.count || 0)
+
+    const branchScope = branchForLedger !== undefined
+      ? { batches: { some: { branchId: branchForLedger } } }
+      : {}
 
     const expiredProducts = await prisma.product.count({
       where: {
         organizationId,
-        expiryDate: {
-          not: null,
-          lt: new Date(),
-        },
+        isActive: true,
+        deletedAt: null,
+        ...branchScope,
+        expiryDate: { not: null, lt: new Date() },
       },
     })
 
     const expiringProducts = await prisma.product.count({
       where: {
         organizationId,
+        isActive: true,
+        deletedAt: null,
+        ...branchScope,
         expiryDate: {
           not: null,
           gte: new Date(),
@@ -193,7 +227,25 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       return res.status(400).json(apiError("Expiry date cannot be in the past"))
     }
 
-    // Use transaction to ensure product creation and ledger entry are atomic
+    // Duplicate batchNumber check (same pattern as bulk import)
+    if (batchNumber) {
+      const existingProduct = await prisma.product.findFirst({
+        where: {
+          organizationId,
+          batchNumber,
+          deletedAt: null,
+        },
+        select: { id: true, name: true },
+      });
+
+      if (existingProduct) {
+        return res.status(400).json(apiError(
+          `Product with batch number "${batchNumber}" already exists (${existingProduct.name})`
+        ));
+      }
+    }
+
+    // Use transaction to ensure product creation, batch, and ledger are atomic
     const result = await prisma.$transaction(async (tx) => {
       const product = await tx.product.create({
         data: {
@@ -215,6 +267,36 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
         },
       })
 
+      // Create batch record to link product to branch
+      // Uses { increment } in the update path so existing stock is never overwritten
+      const batchUnitCost = unitPrice ? Number(unitPrice) : 0;
+      const batchName = batchNumber || `DEFAULT-${product.id}`;
+      await tx.batch.upsert({
+        where: {
+          productId_batchNumber_branchId: {
+            productId: product.id,
+            batchNumber: batchName,
+            branchId,
+          }
+        },
+        update: {
+          quantity: { increment: quantity || 0 },
+          unitCost: batchUnitCost,
+          expiryDate: expiryDate ? new Date(expiryDate) : null,
+          isActive: true,
+        },
+        create: {
+          productId: product.id,
+          organizationId: organizationId!,
+          branchId,
+          batchNumber: batchName,
+          quantity: quantity || 0,
+          unitCost: batchUnitCost,
+          expiryDate: expiryDate ? new Date(expiryDate) : null,
+          isActive: true,
+        },
+      });
+
       // Create initial ledger entry if quantity > 0
       if (quantity > 0) {
         await ledgerAddStock({
@@ -223,7 +305,7 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
           userId,
           quantity,
           movementType: 'INITIAL_STOCK',
-          branchId: branchId || 0,
+          branchId,
           reference: `INIT-${product.id}`,
           referenceType: 'INITIAL_STOCK',
           note: 'Initial stock from product creation',
@@ -248,6 +330,10 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
 
     res.status(201).json(success(result))
   } catch (error: any) {
+    // Distinguish validation errors from server errors
+    if (error.message && error.message.includes('already exists')) {
+      return res.status(400).json(apiError(error.message))
+    }
     console.error("[Create Product Error]:", error)
     res.status(500).json(apiError("Failed to create product"))
   }
@@ -260,35 +346,61 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
     const products = req.body
     const userId = parseInt((req as any).user?.userId as string)
 
-    const existingProducts = await prisma.product.findMany({
-      where: {
-        organizationId,
-        batchNumber: {
-          in: products.map((product: any) => product.batchNumber),
+    // Filter out products without batch numbers
+    const productsWithBatch = products.filter((p: any) => p.batchNumber);
+    const batchNumbers = productsWithBatch.map((p: any) => p.batchNumber);
+
+    if (batchNumbers.length > 0) {
+      // Check for existing Products with matching batch numbers
+      const existingProducts = await prisma.product.findMany({
+        where: {
+          organizationId,
+          batchNumber: { in: batchNumbers },
+          deletedAt: null,
         },
-      },
-      select: {
-        batchNumber: true,
-        name: true,
-      },
-    });
+        select: { batchNumber: true, name: true },
+      });
 
-    if (existingProducts.length > 0) {
-      const duplicateBatchNumbers = existingProducts.map(p => p.batchNumber).join(', ');
-      const duplicateCount = existingProducts.length;
+      if (existingProducts.length > 0) {
+        const duplicates = existingProducts.map(p => p.batchNumber).join(', ');
+        return res.status(400).json(apiError(
+          existingProducts.length === 1
+            ? `Product with batch number "${duplicates}" already exists`
+            : `${existingProducts.length} products with batch numbers already exist: ${duplicates}`,
+          undefined,
+          existingProducts.map(p => ({
+            batchNumber: p.batchNumber,
+            name: p.name,
+          })),
+        ))
+      }
 
-      return res.status(400).json(apiError(duplicateCount === 1
-        ? `Product with batch number "${duplicateBatchNumbers}" already exists`
-        : `${duplicateCount} products with batch numbers already exist: ${duplicateBatchNumbers}`,
-        undefined,
-        existingProducts.map(p => ({
-          batchNumber: p.batchNumber,
-          name: p.name,
-        })),
-      ))
+      // Also check for existing Batches that would violate the compound unique key
+      // (productId_batchNumber_branchId). Since batches reference products via FK,
+      // a batch can only exist if its product does. This catches any edge case
+      // where a product exists but was missed by the above check.
+      const existingBatches = await prisma.batch.findMany({
+        where: {
+          organizationId,
+          branchId,
+          batchNumber: { in: batchNumbers },
+          isActive: true,
+        },
+        select: {
+          batchNumber: true,
+          product: { select: { name: true } },
+        },
+      });
+
+      if (existingBatches.length > 0) {
+        const conflictBatchNumbers = existingBatches.map(b => b.batchNumber).join(', ');
+        return res.status(400).json(apiError(
+          `Batch records already exist for: ${conflictBatchNumbers}`
+        ));
+      }
     }
 
-    // Use transaction to ensure all products and ledger entries are created atomically
+    // Use transaction to ensure all products, batches, and ledger entries are atomic
     const result = await prisma.$transaction(async (tx) => {
       await tx.product.createMany({
         data: products.map((product: any) => ({
@@ -320,8 +432,38 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
         },
       });
 
-      // Create initial ledger entries for products with quantity > 0
+      // Create batch records and initial ledger entries for each product
       for (const product of createdProducts) {
+        // Create batch to link product to branch
+        // Uses { increment } in the update path so existing stock is never overwritten
+        const batchUnitCost = product.unitPrice ? Number(product.unitPrice) : 0;
+        const batchName = product.batchNumber || `DEFAULT-${product.id}`;
+        await tx.batch.upsert({
+          where: {
+            productId_batchNumber_branchId: {
+              productId: product.id,
+              batchNumber: batchName,
+              branchId,
+            }
+          },
+          update: {
+            quantity: { increment: product.quantity || 0 },
+            unitCost: batchUnitCost,
+            expiryDate: product.expiryDate || null,
+            isActive: true,
+          },
+          create: {
+            productId: product.id,
+            organizationId: organizationId!,
+            branchId,
+            batchNumber: batchName,
+            quantity: product.quantity || 0,
+            unitCost: batchUnitCost,
+            expiryDate: product.expiryDate || null,
+            isActive: true,
+          },
+        });
+
         if (product.quantity > 0) {
           await ledgerAddStock({
             organizationId: organizationId!,
@@ -329,7 +471,7 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
             userId,
             quantity: product.quantity,
             movementType: 'INITIAL_STOCK',
-            branchId: branchId || 0,
+            branchId,
             reference: `INIT-${product.id}`,
             referenceType: 'INITIAL_STOCK',
             note: 'Initial stock from bulk import',
@@ -356,6 +498,10 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
 
     res.status(201).json(success(result))
   } catch (error: any) {
+    // Distinguish validation errors from server errors
+    if (error.message && (error.message.includes('already exists') || error.message.includes('already exist'))) {
+      return res.status(400).json(apiError(error.message))
+    }
     console.error("[Create Products Error]:", error)
     res.status(500).json(apiError("Failed to create products"))
   }
@@ -548,81 +694,82 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
     const organizationId = parseInt(req.params.organizationId)
     const { limit = "10", page = "1", search, status } = req.query
 
-    const minStock = await prisma.product.findFirst({
-      where: {
-        organizationId,
-        deletedAt: null,
-        ...buildBranchFilter(req)
-      },
-      select: { minStock: true },
-    })
+    const branchId: number | undefined =
+      req.selectedBranchId !== null && req.selectedBranchId !== undefined
+        ? req.selectedBranchId
+        : undefined
 
-    const baseMinStock = minStock?.minStock || 10
+    const stockExpr = branchId !== undefined
+      ? Prisma.sql`COALESCE((SELECT SUM(b.quantity) FROM batches b WHERE b."productId" = p.id AND b."branchId" = ${branchId} AND b."isActive" = true), 0)`
+      : Prisma.sql`p.quantity`
 
-    const branchFilter = buildBranchFilter(req)
-    const where: any = {
-      organizationId,
-      deletedAt: null,
-      quantity: {
-        lt: baseMinStock,
-      },
+    const searchVal = search && typeof search === 'string' ? search.trim() : ''
+    const hasSearch = searchVal.length > 0
+    const searchExpr = hasSearch
+      ? Prisma.sql`AND (p.name ILIKE ${'%' + searchVal + '%'}
+          OR p.sku ILIKE ${'%' + searchVal + '%'}
+          OR p.barcode ILIKE ${'%' + searchVal + '%'}
+          OR p.batch_number ILIKE ${'%' + searchVal + '%'})`
+      : Prisma.empty
+
+    // Status sub-filter (critical / low / warning thresholds)
+    const statusVal = status && typeof status === 'string' ? status.toLowerCase() : ''
+    let statusExpr = Prisma.empty
+    if (statusVal === 'critical') {
+      statusExpr = Prisma.sql`AND ${stockExpr} <= (p."minStock" * 0.25)`
+    } else if (statusVal === 'low') {
+      statusExpr = Prisma.sql`AND ${stockExpr} > (p."minStock" * 0.25) AND ${stockExpr} <= (p."minStock" * 0.50)`
+    } else if (statusVal === 'warning') {
+      statusExpr = Prisma.sql`AND ${stockExpr} > (p."minStock" * 0.50) AND ${stockExpr} < p."minStock"`
     }
 
-    if (branchFilter.branchId) {
-      where.batches = {
-        some: {
-          branchId: branchFilter.branchId
-        }
-      }
-    }
+    const baseWhere = Prisma.sql`
+      WHERE p."organizationId" = ${organizationId}
+        AND p."isActive" = true
+        AND p."deletedAt" IS NULL
+        AND p."minStock" > 0
+        AND ${stockExpr} < p."minStock"
+        ${searchExpr}
+        ${statusExpr}
+    `
 
-    // Add search filter (name, SKU, batch number)
-    if (search && typeof search === 'string' && search.trim()) {
-      where.OR = [
-        { name: { contains: search.trim(), mode: 'insensitive' } },
-        { sku: { contains: search.trim(), mode: 'insensitive' } },
-        { batchNumber: { contains: search.trim(), mode: 'insensitive' } },
-      ]
-    }
-
-    // Add status filter
-    if (status && typeof status === 'string' && status !== 'all') {
-      const statusFilter = status.toLowerCase()
-      if (statusFilter === 'critical') {
-        // Critical: quantity <= 25% of minStock
-        where.quantity = {
-          ...where.quantity,
-          lte: Math.floor(baseMinStock * 0.25),
-        }
-      } else if (statusFilter === 'low') {
-        // Low: quantity > 25% and <= 50% of minStock
-        where.AND = [
-          { quantity: { gt: Math.floor(baseMinStock * 0.25) } },
-          { quantity: { lte: Math.floor(baseMinStock * 0.5) } },
-        ]
-        delete where.quantity
-      } else if (statusFilter === 'warning') {
-        // Warning: quantity > 50% and < minStock
-        where.AND = [
-          { quantity: { gt: Math.floor(baseMinStock * 0.5) } },
-          { quantity: { lt: baseMinStock } },
-        ]
-        delete where.quantity
-      }
-    }
+    const totalCount = Number((await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*)::int as count FROM products p ${baseWhere}
+    `)[0]?.count || 0)
 
     const skip = (Number.parseInt(page as string) - 1) * Number.parseInt(limit as string)
     const take = Number.parseInt(limit as string)
 
-    const [products, totalCount] = await Promise.all([
-      prisma.product.findMany({
-        where,
-        orderBy: { quantity: "asc" },
-        skip,
-        take,
-      }),
-      prisma.product.count({ where }),
-    ])
+    const rows = await prisma.$queryRaw<Array<{
+      id: number; name: string; sku: string | null; barcode: string | null;
+      batch_number: string | null; unit_price: number; min_stock: number;
+      category: string | null; expiry_date: Date | null;
+      measurement_unit: string; image_url: string | null;
+      stock: number;
+    }>>`
+      SELECT p.id, p.name, p.sku, p.barcode, p.batch_number,
+             p.unit_price, p.min_stock, p.category, p.expiry_date,
+             p.measurement_unit, p.image_url,
+             ${stockExpr} as stock
+      FROM products p ${baseWhere}
+      ORDER BY stock ASC
+      LIMIT ${take} OFFSET ${skip}
+    `
+
+    const products = rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      sku: r.sku,
+      barcode: r.barcode,
+      batchNumber: r.batch_number,
+      unitPrice: r.unit_price,
+      minStock: r.min_stock,
+      category: r.category,
+      expiryDate: r.expiry_date,
+      measurementUnit: r.measurement_unit,
+      imageUrl: r.image_url,
+      quantity: r.stock,
+    }))
 
     res.json(success({
       data: products,
@@ -660,8 +807,8 @@ export const adjustStock = async (req: BranchAuthRequest, res: Response) => {
       organizationId: organizationId!,
       productId: id,
       userId: userId!,
-      quantity: quantity, // Can be positive or negative
-      branchId: branchId ?? null,
+      quantity: quantity,
+      branchId,
       reference: `ADJ-${id}-${Date.now()}`,
       referenceType: 'ADJUSTMENT',
       note: note || "Manual adjustment",
@@ -713,7 +860,7 @@ export const markAsDamage = async (req: BranchAuthRequest, res: Response) => {
       userId: userId!,
       quantity: quantity,
       movementType: 'DAMAGE',
-      branchId: branchId ?? null,
+      branchId,
       reference: `DAMAGE-${id}-${Date.now()}`,
       referenceType: 'DAMAGE',
       note: note || "Marked as damage",
@@ -764,7 +911,7 @@ export const processExpiredStock = async (req: BranchAuthRequest, res: Response)
       userId: userId!,
       quantity: qtyToRemove,
       movementType: 'EXPIRED',
-      branchId: branchId ?? null,
+      branchId,
       reference: `EXPIRED-${id}-${Date.now()}`,
       referenceType: 'EXPIRED',
       note: note || "Processed expired stock",

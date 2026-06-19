@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { apiClient } from "../../../lib/api-client";
+import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
 import { type Product } from "../../../types";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -62,9 +63,10 @@ export const LowStock = () => {
         }
 
         const response = await apiClient.getLowStockProducts(params);
-        setProducts(response.data);
-        setTotalPages(response.pagination.totalPages);
-        setTotalItems(response.pagination.totalItems);
+        const parsed = parseInventoryGetProductsResponse(response);
+        setProducts(parsed.items as Product[]);
+        setTotalPages(parsed.pagination.totalPages || 1);
+        setTotalItems(parsed.pagination.totalItems || 0);
         setError(null);
       } catch (err) {
         console.error("Error fetching low stock products:", err);

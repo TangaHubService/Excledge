@@ -202,10 +202,9 @@ export default function LedgerHistoryPage() {
 
   const exportToPDF = async () => {
     try {
-      // Fetch all entries if we're on a filtered/paginated view
       const params: any = {
         page: 1,
-        limit: 10000, // Large limit to get all entries
+        limit: 10000,
       };
 
       if (productId) params.productId = parseInt(productId);
@@ -217,29 +216,45 @@ export default function LedgerHistoryPage() {
       const response = await apiClient.getInventoryLedger(params);
       const allEntries = response.entries || [];
 
-      // Create PDF
       const doc = new jsPDF('landscape') as jsPDF & { autoTable: (options: UserOptions) => void };
+      const pageWidth = doc.internal.pageSize.getWidth();
 
-      // Add title
+      // ── Header section ─────────────────────────────
+      doc.setFillColor(22, 101, 52);
+      doc.rect(0, 0, pageWidth, 28, 'F');
+      doc.setTextColor(255, 255, 255);
       doc.setFontSize(16);
-      doc.text('Stock Movement History', 14, 15);
+      doc.text('Stock Movement History', 14, 12);
+      doc.setFontSize(9);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 20);
 
-      // Add date range if filtered
-      let subtitle = '';
-      if (startDate || endDate) {
-        subtitle = `Period: ${startDate || 'Start'} to ${endDate || 'End'}`;
-      } else {
-        subtitle = 'All Time';
-      }
-      doc.setFontSize(10);
-      doc.text(subtitle, 14, 22);
+      // ── Subheader with filter info ────────────────
+      let filterParts: string[] = [];
+      if (startDate || endDate) filterParts.push(`Period: ${startDate || '…'} → ${endDate || '…'}`);
+      if (movementType) filterParts.push(`Type: ${movementType}`);
+      if (productId) filterParts.push(`Product ID: ${productId}`);
+      if (branchId) filterParts.push(`Branch ID: ${branchId}`);
+      if (filterParts.length === 0) filterParts.push('All entries');
 
-      // Prepare table data
+      doc.setTextColor(80, 80, 80);
+      doc.setFontSize(9);
+      doc.text(filterParts.join('  |  '), 14, 36);
+
+      // ── Summary stats ──────────────────────────────
+      const totalIn = allEntries.filter((e: LedgerEntry) => e.direction === 'IN').reduce((s: number, e: LedgerEntry) => s + e.quantity, 0);
+      const totalOut = allEntries.filter((e: LedgerEntry) => e.direction === 'OUT').reduce((s: number, e: LedgerEntry) => s + e.quantity, 0);
+      const uniqueProducts = new Set(allEntries.map((e: LedgerEntry) => e.product.name)).size;
+
+      doc.setTextColor(40, 40, 40);
+      doc.setFontSize(9);
+      doc.text(`Total entries: ${allEntries.length}  |  In: +${totalIn}  |  Out: -${totalOut}  |  Products: ${uniqueProducts}`, 14, 43);
+
+      // ── Table ──────────────────────────────────────
       const tableData = allEntries.map((entry: LedgerEntry) => [
         formatDateShort(entry.createdAt),
         entry.product.name,
         entry.movementType.replace(/_/g, ' '),
-        entry.direction,
+        entry.direction === 'IN' ? 'IN' : 'OUT',
         entry.direction === 'IN' ? `+${entry.quantity}` : `-${entry.quantity}`,
         entry.runningBalance.toString(),
         entry.branch?.name || 'Main',
@@ -248,30 +263,61 @@ export default function LedgerHistoryPage() {
         entry.note || '-',
       ]);
 
-      // Add table
       autoTable(doc, {
-        head: [['Date', 'Product', 'Movement Type', 'Direction', 'Quantity Change', 'Balance After', 'Branch', 'User', 'Reference', 'Note']],
+        head: [['Date', 'Product', 'Type', 'Dir', 'Change', 'Balance', 'Branch', 'User', 'Reference', 'Note']],
         body: tableData,
-        startY: 28,
-        styles: { fontSize: 7, cellPadding: 2 },
-        headStyles: { fillColor: [66, 139, 202], textColor: 255, fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [245, 245, 245] },
-        margin: { top: 28 },
+        startY: 48,
+        styles: {
+          fontSize: 7.5,
+          cellPadding: 2.5,
+          lineColor: [200, 200, 200],
+          lineWidth: 0.1,
+        },
+        headStyles: {
+          fillColor: [22, 101, 52],
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 8,
+          halign: 'center',
+        },
+        bodyStyles: {
+          textColor: [50, 50, 50],
+        },
+        alternateRowStyles: {
+          fillColor: [245, 248, 250],
+        },
+        margin: { top: 48, bottom: 20, left: 14, right: 14 },
         columnStyles: {
-          0: { cellWidth: 25 },
-          1: { cellWidth: 35 },
-          2: { cellWidth: 30 },
-          3: { cellWidth: 20 },
-          4: { cellWidth: 25 },
-          5: { cellWidth: 25 },
-          6: { cellWidth: 30 },
-          7: { cellWidth: 30 },
+          0: { cellWidth: 22, halign: 'center' },
+          1: { cellWidth: 48 },
+          2: { cellWidth: 28 },
+          3: { cellWidth: 14, halign: 'center' },
+          4: { cellWidth: 20, halign: 'right' },
+          5: { cellWidth: 20, halign: 'right' },
+          6: { cellWidth: 28 },
+          7: { cellWidth: 28 },
           8: { cellWidth: 30 },
           9: { cellWidth: 40 },
         },
+        didDrawPage: (data: any) => {
+          // Footer
+          const pageHeight = doc.internal.pageSize.getHeight();
+          doc.setFontSize(7);
+          doc.setTextColor(150, 150, 150);
+          doc.text(
+            `Page ${data.pageNumber}`,
+            pageWidth - 20,
+            pageHeight - 10,
+            { align: 'right' },
+          );
+          doc.text(
+            'Stock Movement History',
+            14,
+            pageHeight - 10,
+          );
+        },
       });
 
-      // Save PDF
       const fileName = `stock-movement-history-${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(fileName);
 
@@ -291,26 +337,20 @@ export default function LedgerHistoryPage() {
         <div className="flex items-center gap-2">
           <Button
             onClick={exportToExcel}
-            variant="outline"
+            variant="default"
             size="sm"
-            className={theme === 'dark'
-              ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700 hover:text-white'
-              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-            }
+            className="bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm gap-1.5"
           >
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            <FileSpreadsheet className="h-4 w-4" />
             {t('inventory.exportExcel') || 'Export Excel'}
           </Button>
           <Button
             onClick={exportToPDF}
-            variant="outline"
+            variant="default"
             size="sm"
-            className={theme === 'dark'
-              ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700 hover:text-white'
-              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-            }
+            className="bg-red-600 text-white hover:bg-red-700 shadow-sm gap-1.5"
           >
-            <FileText className="h-4 w-4 mr-2" />
+            <FileText className="h-4 w-4" />
             {t('inventory.exportPDF') || 'Export PDF'}
           </Button>
         </div>
@@ -402,10 +442,7 @@ export default function LedgerHistoryPage() {
               <Button
                 onClick={handleResetFilters}
                 variant="outline"
-                className={`w-full ${theme === 'dark'
-                  ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600 hover:text-white'
-                  : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
+                className="w-full border-gray-300 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700 gap-1.5"
               >
                 {t('common.reset') || 'Reset'}
               </Button>
@@ -567,24 +604,18 @@ export default function LedgerHistoryPage() {
                     size="sm"
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage(currentPage - 1)}
-                    className={theme === 'dark'
-                      ? 'border-gray-700 text-white hover:bg-gray-700 hover:text-white disabled:text-gray-500'
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900 disabled:text-gray-400'
-                    }
+                    className="border-gray-300 text-gray-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 disabled:text-gray-300 disabled:hover:bg-transparent disabled:hover:text-gray-300 disabled:hover:border-gray-200 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-blue-900/20 dark:hover:text-blue-300 gap-1"
                   >
-                    <ChevronLeft className="h-4 w-4 mr-1" /> {t('common.prev')}
+                    <ChevronLeft className="h-4 w-4" /> {t('common.prev')}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={currentPage === totalPages}
                     onClick={() => setCurrentPage(currentPage + 1)}
-                    className={theme === 'dark'
-                      ? 'border-gray-700 text-white hover:bg-gray-700 hover:text-white disabled:text-gray-500'
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900 disabled:text-gray-400'
-                    }
+                    className="border-gray-300 text-gray-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 disabled:text-gray-300 disabled:hover:bg-transparent disabled:hover:text-gray-300 disabled:hover:border-gray-200 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-blue-900/20 dark:hover:text-blue-300 gap-1"
                   >
-                    {t('common.next')} <ChevronRight className="h-4 w-4 ml-1" />
+                    {t('common.next')} <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
               </div>

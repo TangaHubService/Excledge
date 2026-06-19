@@ -7,6 +7,7 @@ import { useToast } from '../../hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { apiClient } from '../../lib/api-client';
 import { useTranslation } from 'react-i18next';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "../ui/drawer";
 
 interface PaymentModalProps {
     sale: {
@@ -74,27 +75,20 @@ export function PaymentModal({ sale, onClose, onPaymentSuccess }: PaymentModalPr
     };
 
     return (
-        <div className="fixed inset-0 bg-background/80 dark:bg-gray-900/80 flex items-center justify-center p-4 z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md shadow-lg">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium text-blue-600">{t('debtManagement.recordPayment')}</h3>
-                    <button
-                        onClick={onClose}
-                        className="text-muted-foreground hover:text-foreground p-1 w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center border border-gray-200"
-                        disabled={isSubmitting}
-                    >
-                        <span className="text-sm">✕</span>
-                    </button>
-                </div>
+        <Drawer open onOpenChange={(open) => !open && onClose()}>
+            <DrawerContent>
+                <DrawerHeader>
+                    <DrawerTitle className="text-blue-600">{t('debtManagement.recordPayment')}</DrawerTitle>
+                </DrawerHeader>
 
-                <div className="mb-4 bg-muted/30 rounded-md flex justify-between gap-2">
+                <div className="mb-4 bg-muted/30 rounded-md flex justify-between gap-2 mx-6">
                     <div className="font-medium flex-1">{sale.customer.name}</div>
                     <div className="text-lg font-bold whitespace-nowrap text-right">
                         {sale.debtAmount} Rwf {t('debtManagement.due')}
                     </div>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-4 px-6">
                     <div className="space-y-2">
                         <Label htmlFor="amount">{t('debtManagement.amountRwf')}</Label>
                         <div className="relative">
@@ -131,28 +125,34 @@ export function PaymentModal({ sale, onClose, onPaymentSuccess }: PaymentModalPr
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="flex justify-end gap-3 pt-4">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={onClose}
-                            disabled={isSubmitting}
-                        >
-                            {t('common.cancel')}
-                        </Button>
-                        <Button type="submit" disabled={isSubmitting || !amount} className="bg-blue-600 hover:bg-blue-700 text-white">
-                            {isSubmitting ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    {t('pos.processing')}
-                                </>
-                            ) : (
-                                t('debtManagement.recordPayment')
-                            )}
-                        </Button>
-                    </div>
                 </form>
-            </div>
-        </div>
+
+                <DrawerFooter>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={onClose}
+                        disabled={isSubmitting}
+                    >
+                        {t('common.cancel')}
+                    </Button>
+                    <Button
+                        type="submit"
+                        onClick={handleSubmit}
+                        disabled={isSubmitting || !amount}
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                        {isSubmitting ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                {t('pos.processing')}
+                            </>
+                        ) : (
+                            t('debtManagement.recordPayment')
+                        )}
+                    </Button>
+                </DrawerFooter>
+            </DrawerContent>
+        </Drawer>
     );
 }
