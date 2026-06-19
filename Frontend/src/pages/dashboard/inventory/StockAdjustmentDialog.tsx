@@ -17,9 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-import { Skeleton } from "../../../components/ui/skeleton";
 import { useTheme } from "../../../context/ThemeContext";
-import { useTranslation } from "react-i18next";
 import { useBranch } from "../../../context/BranchContext";
 import { apiClient } from "../../../lib/api-client";
 import { toast } from "react-toastify";
@@ -96,7 +94,6 @@ export default function StockAdjustmentDialog({
   onOpenChange,
   onSuccess,
 }: StockAdjustmentDialogProps) {
-  const { t } = useTranslation();
   const { theme } = useTheme();
   const { selectedBranchId, userBranches, primaryBranch } = useBranch();
 

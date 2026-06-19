@@ -1,5 +1,3 @@
-import React, { useCallback } from 'react'
-import { useTranslation } from 'react-i18next'
 import { Button } from '../ui/button'
 import {
   Select,
@@ -32,8 +30,6 @@ export function PaginationBar({
   pageSizeOptions = [10, 25, 50, 100],
   className,
 }: PaginationBarProps) {
-  const { t } = useTranslation()
-
   const startItem = (currentPage - 1) * pageSize + 1
   const endItem = Math.min(currentPage * pageSize, totalItems)
 

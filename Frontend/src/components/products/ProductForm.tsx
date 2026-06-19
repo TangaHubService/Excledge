@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
 import {
   Accordion,
   AccordionItem,
@@ -20,7 +19,6 @@ import {
 import { Skeleton } from '../ui/skeleton'
 import { BranchBadge } from '../ui/branch-badge'
 import { StepIndicator, type Step } from './StepIndicator'
-import { cn } from '../../lib/utils'
 import * as yup from 'yup'
 import {
   productSchema,
@@ -127,7 +125,6 @@ export function ProductForm({
   onSave,
   onCancel,
 }: ProductFormProps) {
-  const { t } = useTranslation()
   const [activeSection, setActiveSection] = useState<SectionId>('basic')
   const [values, setValues] = useState<ProductFormValues>({
     ...DEFAULT_VALUES,
@@ -174,7 +171,7 @@ export function ProductForm({
 
     try {
       setSaving(true)
-      await onSave(values)
+      await onSave(values as any)
     } catch (err: any) {
       setServerError(err?.message || 'Failed to save product')
     } finally {
@@ -310,9 +307,11 @@ export function ProductForm({
                     onChange={e => setField('name', e.target.value)}
                     onBlur={() => handleBlur('name')}
                     placeholder="e.g. Paracetamol 500mg Tablets"
-                    error={errors.name}
                     className="h-11"
                   />
+                  {errors.name && (
+                    <p className="text-caption text-red-500">{errors.name}</p>
+                  )}
                 </FieldGroup>
                 <FieldGroup>
                   <Label htmlFor="category">Category *</Label>
@@ -345,8 +344,7 @@ export function ProductForm({
                     className="h-11"
                   />
                 </FieldGroup>
-                <FieldGroup />
-              </FieldRow>
+            </FieldRow>
               <FieldGroup>
                 <Label htmlFor="description">Description</Label>
                 <Textarea
@@ -397,9 +395,11 @@ export function ProductForm({
                     onChange={e => setField('unitPrice', e.target.value ? parseFloat(e.target.value) : null)}
                     onBlur={() => handleBlur('unitPrice')}
                     placeholder="0.00"
-                    error={errors.unitPrice}
                     className="h-11"
                   />
+                  {errors.unitPrice && (
+                    <p className="text-caption text-red-500">{errors.unitPrice}</p>
+                  )}
                 </FieldGroup>
               </FieldRow>
               <FieldRow>
@@ -429,9 +429,11 @@ export function ProductForm({
                         onChange={e => setField('exemptionReference', e.target.value)}
                         onBlur={() => handleBlur('exemptionReference')}
                         placeholder="e.g. MINISANTE/2024/001"
-                        error={errors.exemptionReference}
                         className="h-11"
                       />
+                      {errors.exemptionReference && (
+                        <p className="text-caption text-red-500">{errors.exemptionReference}</p>
+                      )}
                     </>
                   )}
                 </FieldGroup>
@@ -460,9 +462,11 @@ export function ProductForm({
                     onChange={e => setField('sku', e.target.value)}
                     onBlur={() => handleBlur('sku')}
                     placeholder="e.g. PCM-001"
-                    error={errors.sku}
                     className="h-11"
                   />
+                  {errors.sku && (
+                    <p className="text-caption text-red-500">{errors.sku}</p>
+                  )}
                 </FieldGroup>
                 <FieldGroup>
                   <Label htmlFor="barcode">Barcode</Label>
@@ -501,9 +505,11 @@ export function ProductForm({
                     onChange={e => setField('minStock', e.target.value ? parseInt(e.target.value) : null)}
                     onBlur={() => handleBlur('minStock')}
                     placeholder="e.g. 100"
-                    error={errors.minStock}
                     className="h-11"
                   />
+                  {errors.minStock && (
+                    <p className="text-caption text-red-500">{errors.minStock}</p>
+                  )}
                 </FieldGroup>
                 <FieldGroup>
                   <Label htmlFor="maxStock">Maximum Stock</Label>

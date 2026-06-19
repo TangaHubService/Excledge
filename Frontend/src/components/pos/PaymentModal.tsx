@@ -99,7 +99,6 @@ export function PaymentModal({
 
   const totalPaid = calculateTotalPaid();
   const remaining = calculateRemaining();
-  const isComplete = Math.abs(remaining) < 0.01;
   const currentPayment = payments[currentPaymentIndex] || payments[0] || { id: '', method: 'CASH', amount: 0 };
 
   // Ensure currentPaymentIndex is valid

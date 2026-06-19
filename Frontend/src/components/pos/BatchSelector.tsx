@@ -1,13 +1,9 @@
-import React, { useState, useCallback, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Button } from '../ui/button'
+import React, { useState, useMemo } from 'react'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
 import { cn } from '../../lib/utils'
 import {
   CheckCircle2,
-  AlertTriangle,
-  XCircle,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react'
@@ -70,7 +66,6 @@ export function BatchSelector({
   onUnitPriceChange,
   maxQuantity,
 }: BatchSelectorProps) {
-  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
 
   /* ── FIFO recommendation ────────────────────────────── */

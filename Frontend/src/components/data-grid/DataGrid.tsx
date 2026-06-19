@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react'
 import { cn } from '../../lib/utils'
 import { Skeleton } from '../ui/skeleton'
 import { Checkbox } from '../ui/checkbox'
-import { ChevronUp, ChevronDown, ChevronsUpDown, AlertCircle, PackageX } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronsUpDown, PackageX } from 'lucide-react'
 
 /* ─── Types ─────────────────────────────────────────── */
 
