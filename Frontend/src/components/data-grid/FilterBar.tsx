@@ -1,5 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useState, useRef, useEffect } from 'react'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
@@ -9,7 +8,6 @@ import {
   Search,
   X,
   Plus,
-  SlidersHorizontal,
   Check,
 } from 'lucide-react'
 
@@ -71,7 +69,6 @@ export function FilterBar({
   className,
   searchClassName,
 }: FilterBarProps) {
-  const { t } = useTranslation()
   const searchRef = useRef<HTMLInputElement>(null)
 
   /* ── Global keyboard shortcut: Ctrl+K / Cmd+K ────── */

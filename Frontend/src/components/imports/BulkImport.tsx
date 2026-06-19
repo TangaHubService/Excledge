@@ -1,8 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Label } from '../ui/label';
 import {
   Select,
   SelectContent,
@@ -14,26 +12,18 @@ import { Badge } from '../ui/badge';
 import { cn } from '../../lib/utils';
 import {
   Upload,
-  FileSpreadsheet,
   CheckCircle2,
   XCircle,
   AlertCircle,
-  ChevronDown,
   ChevronRight,
   RefreshCw,
   ArrowLeft,
   Loader2,
-  Trash2,
   SkipForward,
   Download,
 } from 'lucide-react';
 
 /* ─── Types ─────────────────────────────────────────── */
-
-interface ImportRow {
-  rowNumber: number;
-  data: Record<string, string>;
-}
 
 interface ImportError {
   rowNumber: number;
@@ -136,9 +126,7 @@ export function BulkImport({
   onImport,
   validateRow = defaultValidate,
   onDownloadTemplate,
-  loading = false,
 }: BulkImportProps) {
-  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   /* Wizard step: upload → mapping → validation → review → done */
@@ -363,7 +351,6 @@ export function BulkImport({
           groupedErrors={groupedErrors}
           skippedRows={skippedRows}
           resolvedErrors={resolvedErrors}
-          systemFields={systemFields}
           onSkipRow={skipRow}
           onResolveError={resolveError}
           onBack={() => setStep('mapping')}
@@ -643,7 +630,6 @@ function ValidationStep({
   groupedErrors,
   skippedRows,
   resolvedErrors,
-  systemFields,
   onSkipRow,
   onResolveError,
   onBack,
@@ -655,18 +641,12 @@ function ValidationStep({
   groupedErrors: { key: string; field: string; message: string; rows: number[]; count: number; allSkipped: boolean }[];
   skippedRows: Set<number>;
   resolvedErrors: Record<string, string>;
-  systemFields: { value: string; label: string }[];
   onSkipRow: (rowNumber: number) => void;
   onResolveError: (key: string, value: string) => void;
   onBack: () => void;
   onContinue: () => void;
   importing: boolean;
 }) {
-  const validCount = parsedRows.filter(r => {
-    const rowErrors = errors.filter(e => e.rowNumber === r._rowNumber);
-    return rowErrors.length === 0 || skippedRows.has(r._rowNumber);
-  }).length;
-
   const errorRowNumbers = new Set(errors.map(e => e.rowNumber));
 
   return (

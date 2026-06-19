@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -24,11 +24,9 @@ import {
   Plus,
   LogOut,
   Wifi,
-  Search,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "../lib/utils";
-import { apiClient } from "../lib/api-client";
 import { useOrganization } from "../context/OrganizationContext";
 import { useAuth } from "../context/AuthContext";
 

@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
@@ -26,7 +25,6 @@ import {
   CheckCircle2,
   ArrowLeft,
   ArrowRight,
-  Package,
   Receipt,
   Loader2,
   X,
@@ -113,8 +111,6 @@ export function ReturnWorkflow({
   onFetchSaleById,
   onSubmitReturn,
 }: ReturnWorkflowProps) {
-  const { t } = useTranslation()
-
   const [step, setStep] = useState<Step>('search')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Sale[]>([])
