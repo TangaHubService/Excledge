@@ -10,6 +10,7 @@ import {
 } from '../services/stripe.service';
 import { stripe } from '../lib/stripe';
 import { convertUsdToRwf } from '../utils/currencyConverter';
+import { config } from '../config';
 
 /**
  * Get all active subscription plans with features
@@ -191,9 +192,8 @@ export const createCheckout = async (req: Request, res: Response) => {
         }
 
         // Create Stripe checkout session
-        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-        const successUrl = `${baseUrl}/subscription/success`;
-        const cancelUrl = `${baseUrl}/subscription/cancel`;
+        const successUrl = `${config.primaryFrontendUrl}/subscription/success`;
+        const cancelUrl = `${config.primaryFrontendUrl}/subscription/cancel`;
 
         let priceInRwf = plan.price;
         if (plan.currency.toUpperCase() === 'USD') {

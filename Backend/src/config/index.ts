@@ -2,11 +2,17 @@ import dotenv from "dotenv"
 
 dotenv.config()
 
+function getPrimaryFrontendUrl(): string {
+  const urls = (process.env.FRONTEND_URL || "http://localhost:3000").split(',').map(s => s.trim()).filter(Boolean);
+  return urls.find(u => u.startsWith('https://')) ?? urls[0] ?? 'http://localhost:3000';
+}
+
 export const config = {
   appName: process.env.APP_NAME || "Exceldge-ERP",
   port: process.env.PORT || 5000,
   jwtSecret: process.env.JWT_SECRET as string,
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:3000",
+  primaryFrontendUrl: getPrimaryFrontendUrl(),
   dpo: {
     companyToken: process.env.DPO_COMPANY_TOKEN || "",
     serviceType: process.env.DPO_SERVICE_TYPE || "",

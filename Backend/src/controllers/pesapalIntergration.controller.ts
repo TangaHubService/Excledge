@@ -6,6 +6,8 @@ import { prisma } from "../lib/prisma";
 import { SubscriptionStatus } from "@prisma/client";
 import { convertUsdToRwf } from "../utils/currencyConverter";
 
+import { config } from "../config";
+
 const PESAPAL_API_URL = process.env.PESAPAL_API_URL;
 
 // Helper function to get transaction status
@@ -174,7 +176,7 @@ export const pesapalOrderRequest = async (req: Request, res: Response) => {
             currency: "RWF",
             amount: Math.round(amountInRwf),
             description: `Subscription for ${plan.name} (${plan.billingCycle})`,
-            callback_url: `${process.env.FRONTEND_URL}/subscription/callback?planId=${planId}`,
+            callback_url: `${config.primaryFrontendUrl}/subscription/callback?planId=${planId}`,
             notification_id: process.env.PESAPAL_IPN_ID,
             billing_address: {
                 email_address: user.email,
