@@ -35,7 +35,7 @@ export function EbmOutboxDashboard() {
         headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
       });
       const data = await res.json();
-      setEntries(data?.data ?? data ?? []);
+      setEntries(Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []);
     } catch {
       console.error('Failed to fetch EBM outbox');
     } finally {
