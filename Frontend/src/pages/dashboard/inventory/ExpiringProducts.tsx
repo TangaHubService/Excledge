@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { apiClient } from "../../../lib/api-client";
+import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
 import { format } from "date-fns";
 import { useTheme } from "../../../context/ThemeContext";
 import { Button } from "../../../components/ui/button";
@@ -48,9 +49,10 @@ export const ExpiringProducts = () => {
         });
 
         // Add days until expiry to each product if needed, but we can compute it on render
-        setProducts(response.data);
-        setTotalPages(response.pagination.totalPages);
-        setTotalItems(response.pagination.totalItems);
+        const parsed = parseInventoryGetProductsResponse(response);
+        setProducts(parsed.items as Product[]);
+        setTotalPages(parsed.pagination.totalPages || 1);
+        setTotalItems(parsed.pagination.totalItems || 0);
         setError(null);
       } catch (err) {
         console.error("Error fetching expiring products:", err);

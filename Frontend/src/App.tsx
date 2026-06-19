@@ -8,6 +8,7 @@ import Signup from "./pages/auth/SignUp";
 import CreateOrganization from "./pages/CreateOrganization";
 import { InventoryManagement } from "./pages/dashboard/InventoryManagement";
 import { ThemeProvider } from "./context/ThemeContext";
+import { TooltipProvider } from "./components/ui/tooltip";
 import { OrganizationProvider } from "./context/OrganizationContext";
 import { BranchProvider } from "./context/BranchContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
@@ -73,6 +74,7 @@ const ProtectedSystemOwnerRoute = ({ children }: { children: React.ReactNode }) 
 
 function App() {
   return (
+    <TooltipProvider>
     <ThemeProvider>
       <AuthProvider>
         <OrganizationProvider>
@@ -171,6 +173,7 @@ function App() {
         </OrganizationProvider>
       </AuthProvider>
     </ThemeProvider>
+      </TooltipProvider>
   );
 }
 

@@ -272,11 +272,13 @@ export async function addStock(params: AddStockParams) {
       },
     });
 
-    // Update product quantity cache (for performance - can be recalculated from ledger)
+    // Update product quantity cache (global aggregate across all branches)
+    // Use incremental update so branch-specific operations don't overwrite
+    // stock belonging to other branches
     await tx.product.update({
       where: { id: productId },
       data: {
-        quantity: newBalance,
+        quantity: { increment: quantity },
       },
     });
 
@@ -400,11 +402,11 @@ export async function removeStock(params: RemoveStockParams) {
       },
     });
 
-    // Update product quantity cache
+    // Update product quantity cache (global aggregate across all branches)
     await tx.product.update({
       where: { id: productId },
       data: {
-        quantity: newBalance,
+        quantity: { decrement: quantity },
       },
     });
 
@@ -460,7 +462,7 @@ export async function adjustStock(params: AdjustStockParams) {
     productId,
     userId,
     quantity, // Can be positive or negative
-    branchId = null,
+    branchId,
     warehouseId = null,
     unitCost,
     reference,
@@ -469,17 +471,9 @@ export async function adjustStock(params: AdjustStockParams) {
     metadata,
   } = params;
 
-  let effectiveBranchId = branchId;
-
-  // If branchId is not provided, try to find the organization's first branch
-  // Get first branch for organization to use as default branchId (order by id to get oldest)
-  if (!effectiveBranchId) {
-    const firstBranch = await prisma.branch.findFirst({
-      where: { organizationId },
-      orderBy: { id: 'asc' },
-      select: { id: true }
-    });
-    effectiveBranchId = firstBranch?.id || null;
+  // Require branchId — no silent fallback to prevent cross-branch data leakage
+  if (branchId === null || branchId === undefined) {
+    throw new Error('Branch ID is required for stock adjustments');
   }
 
   // Validate quantity is not zero
@@ -499,29 +493,27 @@ export async function adjustStock(params: AdjustStockParams) {
     throw new Error(`Product with ID ${productId} not found in organization ${organizationId}`);
   }
 
-  // Validate branch if provided
-  if (branchId !== null && branchId !== undefined) {
-    const branch = await prisma.branch.findFirst({
-      where: {
-        id: branchId,
-        organizationId,
-        status: 'ACTIVE',
-      },
-    });
+  // Validate branch exists and is active
+  const branch = await prisma.branch.findFirst({
+    where: {
+      id: branchId,
+      organizationId,
+      status: 'ACTIVE',
+    },
+  });
 
-    if (!branch) {
-      throw new Error(`Branch with ID ${branchId} not found or inactive`);
-    }
+  if (!branch) {
+    throw new Error(`Branch with ID ${branchId} not found or inactive`);
   }
 
   // Use transaction
   return await prisma.$transaction(async (tx) => {
-    // Get current balance
+    // Get current balance for this specific branch
     const currentBalance = await getCurrentStockInTransaction(
       tx,
       organizationId,
       productId,
-      effectiveBranchId
+      branchId
     );
 
     // Determine direction and movement type
@@ -563,11 +555,12 @@ export async function adjustStock(params: AdjustStockParams) {
       } as any,
     });
 
-    // Update product quantity cache
+    // Update product quantity cache (global aggregate across all branches)
+    // quantity may be positive (IN) or negative (OUT); { increment } handles both
     await tx.product.update({
       where: { id: productId },
       data: {
-        quantity: newBalance,
+        quantity: { increment: quantity },
       },
     });
 
@@ -811,19 +804,11 @@ export async function getCurrentStockInTransaction(
     },
   });
 
-  // If no ledger entries exist, fall back to product.quantity
+  // If no ledger entries exist for this product+branch, return 0
+  // (the product.quantity cache is a cross-branch aggregate and must not be
+  // used as a branch-specific value)
   if (stockAggregates.length === 0) {
-    const product = await tx.product.findFirst({
-      where: {
-        id: productId,
-        organizationId,
-      },
-      select: {
-        quantity: true,
-      },
-    });
-
-    return product?.quantity || 0;
+    return 0;
   }
 
   // Calculate from aggregated totals
@@ -871,8 +856,6 @@ export async function getInventoryHistory(
 
   if (branchId !== undefined && branchId !== null) {
     where.branchId = branchId;
-  } else {
-    where.branchId = null;
   }
 
   const entries = await prisma.inventoryLedger.findMany({

@@ -141,6 +141,11 @@ class ApiClient {
       if (refreshed) {
         return this.request(endpoint, { ...fetchOptions, _authRetried: true });
       }
+      // Refresh failed — token is dead
+      handleTokenExpiration();
+      const error = new Error("Session expired. Please login again.");
+      (error as any).response = { status: 401, data: { error: "Unauthorized" } };
+      throw error;
     }
 
     if (!response.ok) {

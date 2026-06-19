@@ -21,12 +21,12 @@ import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Badge } from '../../../components/ui/badge';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '../../../components/ui/dialog';
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerFooter,
+} from '../../../components/ui/drawer';
 import { Loader2, Plus, Edit, Trash2, Warehouse as WarehouseIcon } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -287,21 +287,21 @@ export default function WarehouseManagement() {
       </Card>
 
       {/* Create/Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent
+      <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DrawerContent
           className={`sm:max-w-[500px] ${
             theme === 'dark'
               ? 'bg-gray-900 border-gray-700 text-gray-100'
               : 'bg-white border-gray-200'
           }`}
         >
-          <DialogHeader>
-            <DialogTitle className={theme === 'dark' ? 'text-white' : 'text-gray-900'}>
+          <DrawerHeader>
+            <DrawerTitle className={theme === 'dark' ? 'text-white' : 'text-gray-900'}>
               {editingWarehouse
                 ? t('inventory.editWarehouse') || 'Edit Warehouse'
                 : t('inventory.addWarehouse') || 'Add Warehouse'}
-            </DialogTitle>
-          </DialogHeader>
+            </DrawerTitle>
+          </DrawerHeader>
 
           <form onSubmit={handleSubmit}>
             <div className="space-y-4 py-4">
@@ -357,7 +357,7 @@ export default function WarehouseManagement() {
               </div>
             </div>
 
-            <DialogFooter>
+            <DrawerFooter>
               <Button
                 type="button"
                 variant="outline"
@@ -369,10 +369,10 @@ export default function WarehouseManagement() {
               <Button type="submit">
                 {editingWarehouse ? t('common.save') : t('common.create')}
               </Button>
-            </DialogFooter>
+            </DrawerFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

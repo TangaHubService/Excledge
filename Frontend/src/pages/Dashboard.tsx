@@ -321,7 +321,7 @@ export const Dashboard = () => {
 
                                 <div className="flex items-end gap-2">
                                     <h3 className="text-xl font-bold tabular-nums text-gray-900 dark:text-white">
-                                        RWF {Math.floor(systemOwnerStats.totalRevenue / 1000)}k
+                                        {formatCurrency(systemOwnerStats.totalRevenue)}
                                     </h3>
                                 </div>
                             </div>
@@ -373,7 +373,7 @@ export const Dashboard = () => {
 
                                 <div className="flex items-end gap-2">
                                     <h3 className="text-xl font-bold tabular-nums text-gray-900 dark:text-white">
-                                        RWF {Math.floor(stats.totalInventoryValue / 1000)}k
+                                        {formatCurrency(stats.totalInventoryValue)}
                                     </h3>
                                 </div>
                                 <div className="mt-2 flex items-center gap-1.5 text-xs">

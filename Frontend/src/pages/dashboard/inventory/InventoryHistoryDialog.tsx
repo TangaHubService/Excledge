@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "../../../components/ui/dialog";
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerFooter,
+} from "../../../components/ui/drawer";
 import { Button } from "../../../components/ui/button";
 import { useTheme } from "../../../context/ThemeContext";
 import { useTranslation } from "react-i18next";
@@ -100,18 +100,18 @@ export default function InventoryHistoryDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent
         className={`sm:max-w-[900px] max-h-[80vh] overflow-hidden flex flex-col ${theme === "dark"
           ? "bg-gray-900 border-gray-700 text-gray-100"
           : "bg-white border-gray-200"
           }`}
       >
-        <DialogHeader>
-          <DialogTitle className={theme === "dark" ? "text-white" : "text-gray-900"}>
+        <DrawerHeader>
+          <DrawerTitle className={theme === "dark" ? "text-white" : "text-gray-900"}>
             {t('inventory.inventoryHistory')} {productName && `- ${productName}`}
-          </DialogTitle>
-        </DialogHeader>
+          </DrawerTitle>
+        </DrawerHeader>
 
         <div className="flex-1 overflow-y-auto py-4">
           {loading ? (
@@ -188,7 +188,7 @@ export default function InventoryHistoryDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DrawerFooter>
           <Button
             type="button"
             variant="outline"
@@ -197,8 +197,8 @@ export default function InventoryHistoryDialog({
           >
             {t('common.close')}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { SupplierDialogProps } from '../types/supplierTypes';
 import PhoneInputWithCountryCode from '../../../../components/PhoneInputWithCountryCode';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerClose } from "../../../../components/ui/drawer";
 
 interface FormErrors {
     name?: string;
@@ -67,19 +68,15 @@ export const SupplierDialog: React.FC<SupplierDialogProps> = ({
         }));
     };
 
-    if (!isOpen) return null;
-
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full dark:bg-gray-800 max-h-[90vh] flex flex-col">
-                <div className="p-4 border-b">
-                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                        {editingSupplier ? "Edit Supplier" : "Add New Supplier"}
-                    </h2>
-                    <p className="text-sm text-gray-500 mt-0.5">
+        <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
+            <DrawerContent className="max-w-md w-full">
+                <DrawerHeader>
+                    <DrawerTitle>{editingSupplier ? "Edit Supplier" : "Add New Supplier"}</DrawerTitle>
+                    <p className="text-sm text-muted-foreground mt-0.5">
                         {editingSupplier ? "Update supplier information" : "Add a new supplier"}
                     </p>
-                </div>
+                </DrawerHeader>
 
                 <form onSubmit={handleSubmit} className="p-4 space-y-3 overflow-y-auto">
                     <div>
@@ -151,15 +148,16 @@ export const SupplierDialog: React.FC<SupplierDialogProps> = ({
                         />
                     </div>
 
-                    <div className="flex justify-end space-x-3 pt-2">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            disabled={loading}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            Cancel
-                        </button>
+                    <DrawerFooter className="px-0 pb-0">
+                        <DrawerClose asChild>
+                            <button
+                                type="button"
+                                disabled={loading}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Cancel
+                            </button>
+                        </DrawerClose>
                         <button
                             type="submit"
                             disabled={loading}
@@ -178,9 +176,9 @@ export const SupplierDialog: React.FC<SupplierDialogProps> = ({
                                 editingSupplier ? 'Update' : 'Add'
                             )}
                         </button>
-                    </div>
+                    </DrawerFooter>
                 </form>
-            </div>
-        </div>
+            </DrawerContent>
+        </Drawer>
     );
 };

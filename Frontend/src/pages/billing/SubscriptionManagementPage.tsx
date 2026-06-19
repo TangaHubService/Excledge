@@ -15,13 +15,13 @@ import {
     AlertTriangle
 } from 'lucide-react';
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "../../components/ui/dialog";
+    Drawer,
+    DrawerContent,
+    DrawerDescription,
+    DrawerFooter,
+    DrawerHeader,
+    DrawerTitle,
+} from "../../components/ui/drawer";
 import { apiClient } from '../../lib/api-client';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
@@ -407,21 +407,21 @@ const SubscriptionManagementPage = () => {
                 </Button>
             </div>
 
-            <Dialog open={isCancelModalOpen} onOpenChange={setIsCancelModalOpen}>
-                <DialogContent className="sm:max-w-md bg-white dark:bg-gray-800">
-                    <DialogHeader>
+            <Drawer open={isCancelModalOpen} onOpenChange={setIsCancelModalOpen}>
+                <DrawerContent className="sm:max-w-md bg-white dark:bg-gray-800">
+                    <DrawerHeader>
                         <div className="flex items-center gap-4">
                             <div className="p-3 rounded-full bg-red-100 flex items-center justify-center">
                                 <AlertTriangle className="h-6 w-6 text-red-600" />
                             </div>
                             <div>
-                                <DialogTitle className="text-xl text-red-600">{t('billing.confirmCancelTitle')}</DialogTitle>
-                                <DialogDescription className="mt-2 text-gray-600">
+                                <DrawerTitle className="text-xl text-red-600">{t('billing.confirmCancelTitle')}</DrawerTitle>
+                                <DrawerDescription className="mt-2 text-gray-600">
                                     {t('billing.confirmCancelDesc')}
-                                </DialogDescription>
+                                </DrawerDescription>
                             </div>
                         </div>
-                    </DialogHeader>
+                    </DrawerHeader>
 
                     <div className="py-4">
                         <div className="p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-800/50 rounded-lg text-sm text-red-800 dark:text-red-200">
@@ -438,16 +438,16 @@ const SubscriptionManagementPage = () => {
                         </p>
                     </div>
 
-                    <DialogFooter className="gap-2">
+                    <DrawerFooter className="gap-2">
                         <Button variant="outline" onClick={() => setIsCancelModalOpen(false)} className="border-gray-300">
                             {t('billing.keepSubscription')}
                         </Button>
                         <Button variant="destructive" onClick={confirmCancellation} disabled={isUpdating} className="bg-red-600 hover:bg-red-700">
                             {isUpdating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t('billing.cancelSolution')}
                         </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                    </DrawerFooter>
+                </DrawerContent>
+            </Drawer>
         </div>
     );
 };

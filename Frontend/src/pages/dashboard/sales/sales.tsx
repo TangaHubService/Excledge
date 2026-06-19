@@ -10,7 +10,7 @@ import { format } from 'date-fns';
 import { ChevronLeft, ChevronRight, Loader2, Search, Download, Eye, RefreshCw, X } from 'lucide-react';
 import { TableSkeleton } from '../../../components/ui/TableSkeleton';
 import { apiClient } from '../../../lib/api-client';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../../components/ui/dialog';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from '../../../components/ui/drawer';
 import { Label } from '../../../components/ui/label';
 import { toast } from 'react-toastify';
 import { pdf } from '@react-pdf/renderer';
@@ -283,7 +283,7 @@ export default function SalesPage() {
                                 <div className="flex flex-col gap-1">
                                     <Label className="text-xs">{t('sales.status')}</Label>
                                     <select
-                                        className="h-9 w-40 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                        className="h-9 w-40 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
                                         value={statusFilter}
                                         onChange={(e) => setStatusFilter(e.target.value)}
                                     >
@@ -296,7 +296,7 @@ export default function SalesPage() {
                                 <div className="flex flex-col gap-1">
                                     <Label className="text-xs">{t('sales.table.method')}</Label>
                                     <select
-                                        className="h-9 w-40 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                        className="h-9 w-40 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
                                         value={paymentFilter}
                                         onChange={(e) => setPaymentFilter(e.target.value)}
                                     >
@@ -643,14 +643,14 @@ export default function SalesPage() {
                 </Card>
 
                 {/* Refund Modal */}
-                <Dialog open={isRefundModalOpen} onOpenChange={setIsRefundModalOpen}>
-                    <DialogContent className="sm:max-w-2xl bg-background border-border/50 bg-white dark:bg-[#111827] dark:text-white">
-                        <DialogHeader>
-                            <DialogTitle>{t('sales.processRefund', { number: saleToRefund?.saleNumber })}</DialogTitle>
-                            <DialogDescription>
+                <Drawer open={isRefundModalOpen} onOpenChange={setIsRefundModalOpen}>
+                    <DrawerContent className="sm:max-w-2xl bg-background border-border/50 bg-white dark:bg-[#111827] dark:text-white">
+                        <DrawerHeader>
+                            <DrawerTitle>{t('sales.processRefund', { number: saleToRefund?.saleNumber })}</DrawerTitle>
+                            <DrawerDescription>
                                 {t('sales.refundDesc')}
-                            </DialogDescription>
-                        </DialogHeader>
+                            </DrawerDescription>
+                        </DrawerHeader>
 
                         <div className="space-y-4 py-4">
                             <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/30 rounded-lg">
@@ -701,7 +701,7 @@ export default function SalesPage() {
                             </div>
                         </div>
 
-                        <DialogFooter>
+                        <DrawerFooter>
                             <Button
                                 variant="outline"
                                 onClick={() => setIsRefundModalOpen(false)}
@@ -723,9 +723,9 @@ export default function SalesPage() {
                                     t('sales.refund')
                                 )}
                             </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                        </DrawerFooter>
+                    </DrawerContent>
+                </Drawer>
 
                 <ConfirmDialog
                     open={isDeleteDialogOpen}

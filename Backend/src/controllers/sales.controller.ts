@@ -576,13 +576,14 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           throw { status: 400, message: "Partial refunds are not allowed. Only full refunds are permitted." };
         }
 
-        // Get all sale items for full refund
+        // Get all sale items for full refund — include batchId to restore batch quantities
         const itemsToRefund = ((sale as any).saleItems || []).map((item: any) => ({
           saleItemId: item.id,
           productId: item.productId,
           quantity: item.quantity,
           unitPrice: item.unitPrice.toNumber(),
-          totalPrice: item.totalPrice.toNumber()
+          totalPrice: item.totalPrice.toNumber(),
+          batchId: item.batchId || item.batch?.id || null,
         }));
 
         // Calculate total refund amount
@@ -646,6 +647,22 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             note: `Refund for Sale #${sale.saleNumber} (Full)`,
             tx: prisma, // Pass transaction client to avoid nested transactions
           });
+
+          // Restore batch quantity — reverse the deduction made during sale creation
+          if (item.batchId) {
+            const existingBatch = await prisma.batch.findFirst({
+              where: { id: item.batchId, organizationId: organizationId! },
+            });
+            if (existingBatch) {
+              await prisma.batch.update({
+                where: { id: item.batchId },
+                data: {
+                  quantity: existingBatch.quantity + item.quantity,
+                  isActive: true,
+                },
+              });
+            }
+          }
         }
 
         // Update customer balance
@@ -718,7 +735,8 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
       include: {
         saleItems: {
           include: {
-            product: true
+            product: true,
+            batch: true
           }
         },
         customer: true,
@@ -765,6 +783,23 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
           note: `Sale cancellation: ${sale.saleNumber}`,
           tx: prisma, // Pass transaction client to avoid nested transactions
         });
+
+        // Restore batch quantity — reverse the deduction made during sale creation
+        const batchId = (item as any).batchId || (item as any).batch?.id || null;
+        if (batchId) {
+          const existingBatch = await prisma.batch.findFirst({
+            where: { id: batchId, organizationId: organizationId! },
+          });
+          if (existingBatch) {
+            await prisma.batch.update({
+              where: { id: batchId },
+              data: {
+                quantity: existingBatch.quantity + item.quantity,
+                isActive: true,
+              },
+            });
+          }
+        }
       }
 
       // Revert customer balance for debt portion only

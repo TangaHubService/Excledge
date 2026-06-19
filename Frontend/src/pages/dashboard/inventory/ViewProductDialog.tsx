@@ -1,11 +1,12 @@
 import { useState } from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "../../../components/ui/dialog";
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerFooter,
+  DrawerClose,
+} from "../../../components/ui/drawer";
 import { Button } from "../../../components/ui/button";
 import { useTheme } from "../../../context/ThemeContext";
 import { type Product } from "../../../types";
@@ -40,24 +41,24 @@ export default function ViewProductDialog({
 
 
   return (
-    <Dialog
+    <Drawer
       open={!!viewProduct}
       onOpenChange={(open) => !open && setViewProduct(null)}
     >
-      <DialogContent
+      <DrawerContent
         className={`sm:max-w-[500px] ${theme === "dark"
           ? "bg-gray-900 border-gray-700 text-gray-100"
           : "bg-white border-gray-200"
           }`}
       >
-        <DialogHeader>
-          <DialogTitle
+        <DrawerHeader>
+          <DrawerTitle
             className={theme === "dark" ? "text-white" : "text-gray-900"}
           >
             {t('inventory.productDetails')}
-          </DialogTitle>
+          </DrawerTitle>
 
-        </DialogHeader>
+        </DrawerHeader>
 
         {viewProduct && (
           <div className="space-y-4 py-2">
@@ -167,7 +168,7 @@ export default function ViewProductDialog({
           </div>
         )}
 
-        <DialogFooter className="flex justify-between">
+        <DrawerFooter className="flex justify-between">
           <div className="flex gap-2">
             <Button
               type="button"
@@ -192,18 +193,19 @@ export default function ViewProductDialog({
               {t('inventory.adjustStock')}
             </Button>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setViewProduct(null)}
-            className={
-              theme === "dark" ? "border-gray-700 hover:bg-gray-800" : ""
-            }
-          >
-            {t('common.close')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+          <DrawerClose asChild>
+            <Button
+              type="button"
+              variant="outline"
+              className={
+                theme === "dark" ? "border-gray-700 hover:bg-gray-800" : ""
+              }
+            >
+              {t('common.close')}
+            </Button>
+          </DrawerClose>
+        </DrawerFooter>
+      </DrawerContent>
 
       {/* Inventory History Dialog */}
       <InventoryHistoryDialog
@@ -225,6 +227,6 @@ export default function ViewProductDialog({
           setViewProduct(null); // Close product dialog after adjustment
         }}
       />
-    </Dialog>
+    </Drawer>
   );
 }

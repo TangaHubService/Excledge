@@ -5,6 +5,7 @@ import { useSubscription } from "../context/SubscriptionContext";
 import { PricingCard } from "../components/landing/PricingCard";
 import { subscriptionService } from "../services/subscriptionService";
 import { PaymentMethodModal } from "../components/subscription/PaymentMethodModal";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "../components/ui/drawer";
 import { io, Socket } from "socket.io-client";
 import { toast } from "react-toastify";
 
@@ -371,108 +372,112 @@ const SubscriptionPage = ({ showPlanHeader = true }: SubscriptionPageProps) => {
             )}
 
             {/* Payment Result Modal */}
-            {showPaymentResult && paymentResult && (
-                <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 p-4">
-                    <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                        <div className="text-center">
-                            <div
-                                className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${paymentResult.success
-                                    ? "bg-green-100"
-                                    : "bg-red-100"
-                                    }`}
-                            >
-                                {paymentResult.success ? (
-                                    <svg
-                                        className="h-6 w-6 text-green-600"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M5 13l4 4L19 7"
-                                        />
-                                    </svg>
-                                ) : (
-                                    <svg
-                                        className="h-6 w-6 text-red-600"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M6 18L18 6M6 6l12 12"
-                                        />
-                                    </svg>
-                                )}
-                            </div>
+            <Drawer open={showPaymentResult && !!paymentResult} onOpenChange={setShowPaymentResult}>
+                <DrawerContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                    <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4 mb-4">
+                        <DrawerTitle className="text-center">
+                            {paymentResult?.success
+                                ? "Payment Successful"
+                                : "Payment Failed"}
+                        </DrawerTitle>
+                    </DrawerHeader>
+                    {paymentResult && (
+                        <div className="px-6 pb-6">
+                            <div className="text-center">
+                                <div
+                                    className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${paymentResult.success
+                                        ? "bg-green-100"
+                                        : "bg-red-100"
+                                        }`}
+                                >
+                                    {paymentResult.success ? (
+                                        <svg
+                                            className="h-6 w-6 text-green-600"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M5 13l4 4L19 7"
+                                            />
+                                        </svg>
+                                    ) : (
+                                        <svg
+                                            className="h-6 w-6 text-red-600"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M6 18L18 6M6 6l12 12"
+                                            />
+                                        </svg>
+                                    )}
+                                </div>
 
-                            <h3 className="text-xl font-bold mt-3">
-                                {paymentResult.success
-                                    ? "Payment Successful 🎉"
-                                    : "Payment Failed ❌"}
-                            </h3>
-                            <p className="text-sm text-gray-600 mt-2">
-                                {paymentResult.message}
-                            </p>
-
-                            {paymentResult.transactionId && (
-                                <p className="text-xs text-gray-400 mt-2">
-                                    Transaction ID: {paymentResult.transactionId}
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                                    {paymentResult.message}
                                 </p>
-                            )}
 
-                            <div className="mt-4 flex flex-col sm:flex-row sm:justify-center sm:space-x-3 space-y-2 sm:space-y-0">
-                                {paymentResult.success ? (
-                                    <button
-                                        onClick={() => {
-                                            handleModalClose();
-                                            navigate("/dashboard");
-                                        }}
-                                        className="w-full sm:w-auto px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-                                    >
-                                        Go to Dashboard
-                                    </button>
-                                ) : (
-                                    <>
+                                {paymentResult.transactionId && (
+                                    <p className="text-xs text-gray-400 mt-2">
+                                        Transaction ID: {paymentResult.transactionId}
+                                    </p>
+                                )}
+
+                                <div className="mt-6 flex flex-col sm:flex-row sm:justify-center sm:space-x-3 space-y-2 sm:space-y-0">
+                                    {paymentResult.success ? (
                                         <button
                                             onClick={() => {
                                                 handleModalClose();
-                                                navigate("/");
+                                                navigate("/dashboard");
                                             }}
-                                            className="w-full sm:w-auto px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                                            className="w-full sm:w-auto px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
                                         >
-                                            Go Home
+                                            Go to Dashboard
                                         </button>
+                                    ) : (
+                                        <>
+                                            <button
+                                                onClick={() => {
+                                                    handleModalClose();
+                                                    navigate("/");
+                                                }}
+                                                className="w-full sm:w-auto px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                                            >
+                                                Go Home
+                                            </button>
 
-                                        <button
-                                            onClick={() => {
-                                                setShowPaymentResult(false);
-                                                setPaymentStatus("idle");
-                                                setPaymentResult({
-                                                    success: false,
-                                                    message: "Payment failed",
-                                                    transactionId: "",
-                                                });
-                                                if (selectedPlan)
-                                                    setShowPaymentModal(true);
-                                            }}
-                                            className="w-full sm:w-auto px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-                                        >
-                                            Retry
-                                        </button>
-                                    </>
-                                )}
+                                            <button
+                                                onClick={() => {
+                                                    setShowPaymentResult(false);
+                                                    setPaymentStatus("idle");
+                                                    setPaymentResult({
+                                                        success: false,
+                                                        message: "Payment failed",
+                                                        transactionId: "",
+                                                    });
+                                                    if (selectedPlan)
+                                                        setShowPaymentModal(true);
+                                                }}
+                                                className="w-full sm:w-auto px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                                            >
+                                                Retry
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            )}
+                    )}
+                </DrawerContent>
+            </Drawer>
         </div>
     );
 };

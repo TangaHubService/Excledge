@@ -8,11 +8,11 @@ import {
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import { SupplierImport } from '../imports/SupplierImport';
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from "../../../components/ui/dialog";
+    Drawer,
+    DrawerContent,
+    DrawerHeader,
+    DrawerTitle,
+} from "../../../components/ui/drawer";
 import { useTheme } from '../../../context/ThemeContext';
 import type {
     Supplier,
@@ -188,24 +188,24 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
                 editingSupplier={editingSupplier}
             />
 
-            <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-                <DialogContent
+            <Drawer open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+                <DrawerContent
                     className={`max-w-4xl max-h-[90vh] overflow-y-auto ${theme === "dark"
                         ? "bg-gray-900 border-gray-700 text-gray-100"
                         : "bg-white border-gray-200 text-gray-900"
                         }`}
                 >
-                    <DialogHeader>
-                        <DialogTitle className={theme === "dark" ? "text-white" : "text-gray-900"}>
+                    <DrawerHeader>
+                        <DrawerTitle className={theme === "dark" ? "text-white" : "text-gray-900"}>
                             {t("import.supplierImport")}
-                        </DialogTitle>
-                    </DialogHeader>
+                        </DrawerTitle>
+                    </DrawerHeader>
                     <SupplierImport onSuccess={() => {
                         setIsImportDialogOpen(false);
                         fetchSuppliers();
                     }} />
-                </DialogContent>
-            </Dialog>
+                </DrawerContent>
+            </Drawer>
 
             <ConfirmDialog
                 open={deleteDialogOpen}

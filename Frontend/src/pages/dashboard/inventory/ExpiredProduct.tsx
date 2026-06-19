@@ -18,6 +18,7 @@ import {
 import { useTheme } from "../../../context/ThemeContext";
 import { format } from "date-fns";
 import { apiClient } from "../../../lib/api-client";
+import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
 import {
   Select,
   SelectContent,
@@ -54,9 +55,10 @@ export default function ExpiredProducts() {
           page: currentPage,
           limit: limit
         });
-        setProducts(response.data);
-        setTotalPages(response.pagination.totalPages);
-        setTotalItems(response.pagination.totalItems);
+        const parsed = parseInventoryGetProductsResponse(response);
+        setProducts(parsed.items as Product[]);
+        setTotalPages(parsed.pagination.totalPages || 1);
+        setTotalItems(parsed.pagination.totalItems || 0);
         setError(null);
       } catch (err) {
         console.error("Error fetching expired products:", err);

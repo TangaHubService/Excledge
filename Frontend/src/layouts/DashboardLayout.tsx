@@ -4,64 +4,97 @@ import { Sidebar } from "../components/Sidebar";
 import { Header } from "../components/Header";
 import { SubscriptionAlert } from "../components/SubscriptionAlert";
 import { VsdcStatusBanner } from "../components/VsdcStatusBanner";
+import { AppShellSkeleton } from "../components/ui/app-shell-skeleton";
 import { useOrganization } from "../context/OrganizationContext";
 import { useAuth } from "../context/AuthContext";
 import { ToastContainer } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
+import { cn } from "../lib/utils";
 
 export function DashboardLayout() {
-    const navigate = useNavigate();
-    const location = useLocation();
-    const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const { organization } = useOrganization();
-    const { isSystemOwner, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const { organization } = useOrganization();
+  const { isSystemOwner, isAuthenticated } = useAuth();
 
-    const hasOrganization = organization !== null || localStorage.getItem('current_organization_id') !== null;
+  const hasOrganization =
+    organization !== null || localStorage.getItem('current_organization_id') !== null;
 
-    useEffect(() => {
-        // Only redirect if authenticated, not system owner, and has no organization
-        if (isAuthenticated && !isSystemOwner() && !hasOrganization) {
-            if (location.pathname !== '/create-organization') {
-                navigate('/create-organization', { replace: true });
-            }
-        }
-    }, [isAuthenticated, isSystemOwner, hasOrganization, location.pathname, navigate]);
+  /* Wait for auth to settle before rendering the shell or redirecting */
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    /* Give the auth context a tick to hydrate */
+    const timer = setTimeout(() => setAuthReady(true), 100);
+    return () => clearTimeout(timer);
+  }, [isAuthenticated]);
 
-    return (
-        <div className="min-h-screen bg-slate-100 dark:bg-zinc-900">
-            <Sidebar
-                isOpen={sidebarOpen}
-                onClose={() => setSidebarOpen(false)}
-                onCollapsedChange={setSidebarCollapsed}
-            />
+  useEffect(() => {
+    if (!authReady) return;
+    if (isAuthenticated && !isSystemOwner() && !hasOrganization) {
+      if (location.pathname !== '/create-organization') {
+        navigate('/create-organization', { replace: true });
+      }
+    }
+  }, [authReady, isAuthenticated, isSystemOwner, hasOrganization, location.pathname, navigate]);
 
-            <div
-                className={`flex min-h-screen flex-col ${sidebarCollapsed ? "lg:pl-16" : "lg:pl-64"}`}
-            >
-                <Header onMenuClick={() => setSidebarOpen(true)} />
-                <main className="dashboard-main dashboard-main-padding min-h-0">
-                    <ToastContainer
-                        position="top-right"
-                        autoClose={3000}
-                        hideProgressBar={false}
-                        newestOnTop={false}
-                        closeOnClick
-                        rtl={false}
-                        pauseOnFocusLoss
-                        draggable
-                        pauseOnHover
-                        theme="colored"
-                    />
-                    <SubscriptionAlert
-                        hasActiveSubscription={organization?.hasActiveSubscription}
-                        subscriptionStatus={organization?.subscriptionStatus}
-                        subscriptionEndDate={organization?.subscriptionEndDate}
-                    />
-                    <VsdcStatusBanner />
-                    <Outlet />
-                </main>
-            </div>
-        </div>
-    );
+  /* ── Auth is still hydrating — show skeleton ────────── */
+  if (!authReady) {
+    return <AppShellSkeleton sidebarCollapsed={sidebarCollapsed} />;
+  }
+
+  /* ── Full shell ────────────────────────────────────── */
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-100 dark:bg-zinc-900">
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onCollapsedChange={setSidebarCollapsed}
+      />
+
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 flex-col transition-all duration-300",
+          sidebarCollapsed ? "lg:pl-16" : "lg:pl-64",
+        )}
+      >
+        <Header onMenuClick={() => setSidebarOpen(true)} />
+
+        {/* Toast container — rendered above the scrollable content */}
+        <ToastContainer
+          position="top-right"
+          autoClose={3000}
+          hideProgressBar={false}
+          newestOnTop={false}
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          theme="colored"
+          className="mt-14"
+        />
+
+        {/* Subscription & status banners */}
+        <SubscriptionAlert
+          hasActiveSubscription={organization?.hasActiveSubscription}
+          subscriptionStatus={organization?.subscriptionStatus}
+          subscriptionEndDate={organization?.subscriptionEndDate}
+        />
+        <VsdcStatusBanner />
+
+        {/* ── Scrollable content area ─────────────────── */}
+        <main
+          className="flex-1 overflow-y-auto"
+          id="dashboard-main-content"
+        >
+          <div className="dashboard-main-padding min-h-full">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+    </div>
+  );
 }

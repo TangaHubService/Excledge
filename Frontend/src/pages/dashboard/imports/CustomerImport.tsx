@@ -9,12 +9,12 @@ import { toast } from 'react-toastify';
 import { ImportPreviewTable } from '../../../components/imports/ImportPreviewTable';
 import type { PreviewRow } from '../../../components/imports/ImportPreviewTable';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '../../../components/ui/dialog';
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerFooter,
+} from '../../../components/ui/drawer';
 
 interface CustomerImportProps {
   onSuccess?: () => void;
@@ -226,18 +226,18 @@ export function CustomerImport({ onSuccess }: CustomerImportProps) {
         </div>
       </div>
 
-      <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
-        <DialogContent
+      <Drawer open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
+        <DrawerContent
           className={`!max-w-[95vw] !w-[95vw] max-h-[90vh] overflow-y-auto border-none shadow-2xl p-6 ${theme === "dark"
             ? "bg-gray-900 text-gray-100"
             : "bg-white text-gray-900"
             }`}
         >
-          <DialogHeader className="mb-6">
-            <DialogTitle className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+          <DrawerHeader className="mb-6">
+            <DrawerTitle className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
               {t('import.previewTitle')}
-            </DialogTitle>
-          </DialogHeader>
+            </DrawerTitle>
+          </DrawerHeader>
 
           {previewData && (
             <div className="space-y-8">
@@ -289,7 +289,7 @@ export function CustomerImport({ onSuccess }: CustomerImportProps) {
             </div>
           )}
 
-          <DialogFooter className={`mt-8 gap-3 sm:gap-0 pt-6 border-t ${theme === "dark" ? "border-gray-800" : "border-gray-100"
+          <DrawerFooter className={`mt-8 gap-3 sm:gap-0 pt-6 border-t ${theme === "dark" ? "border-gray-800" : "border-gray-100"
             }`}>
             <Button
               variant="ghost"
@@ -332,9 +332,9 @@ export function CustomerImport({ onSuccess }: CustomerImportProps) {
                 )}
               </Button>
             </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

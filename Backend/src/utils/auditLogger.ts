@@ -19,6 +19,9 @@ export const auditLogger = {
     }) => {
         const userId = req.user?.userId;
         const organizationId = parseInt(req.params?.organizationId || req.user?.organizationId || '0');
+        const branchId = req.selectedBranchId !== undefined && req.selectedBranchId !== null
+            ? req.selectedBranchId
+            : undefined;
 
         return logManualActivity({
             userId: userId ? parseInt(userId as string) : 0,
@@ -32,6 +35,7 @@ export const auditLogger = {
             metadata: params.metadata,
             ipAddress: req.ip,
             userAgent: req.headers?.['user-agent'],
+            branchId,
         });
     },
 

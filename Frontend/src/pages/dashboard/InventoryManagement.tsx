@@ -38,8 +38,14 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "../../components/ui/dialog";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "../../components/ui/drawer";
 import { ScrollArea, ScrollBar } from "../../components/ui/scroll-area";
 
 import { Label } from "../../components/ui/label";
@@ -318,6 +324,12 @@ export const InventoryManagement = () => {
   const handleSaveProduct = async () => {
     // Validate form before submission
     if (!validateForm(formData)) {
+      return;
+    }
+
+    // Require a specific branch to be selected for product creation
+    if (!selectedBranchId) {
+      toast.error(t('messages.selectBranchForProduct') || 'Please select a specific branch to create a product');
       return;
     }
 
@@ -622,6 +634,13 @@ export const InventoryManagement = () => {
 
   const handleConfirmImport = async () => {
     if (previewItems.length === 0) return;
+
+    // Require a specific branch to be selected for product import
+    if (!selectedBranchId) {
+      toast.error(t('messages.selectBranchForProduct') || 'Please select a specific branch to import products');
+      return;
+    }
+
     setLoading(true);
     try {
       await apiClient.createProducts(previewItems, selectedBranchId);
@@ -703,8 +722,8 @@ export const InventoryManagement = () => {
             </Button>
 
             {/* Add Product Modal */}
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
+            <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DrawerTrigger asChild>
                 <Button
                   onClick={() => {
                     setEditingProduct(null);
@@ -715,22 +734,22 @@ export const InventoryManagement = () => {
                   <Plus className="mr-2 h-4 w-4" />
                   {t('inventory.addProduct')}
                 </Button>
-              </DialogTrigger>
-              <DialogContent
+              </DrawerTrigger>
+              <DrawerContent
                 className={`max-h-[90vh] overflow-y-auto sm:max-w-[600px] ${theme === "dark"
                   ? "bg-gray-900 border-gray-700 text-gray-100"
                   : "bg-white border-gray-200"
                   } shadow-xl transition-all duration-200`}
               >
-                <DialogHeader className="border-b border-gray-200 dark:border-gray-700 pb-4">
-                  <DialogTitle
+                <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4">
+                  <DrawerTitle
                     className={`text-lg font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"
                       }`}
                   >
                     {editingProduct ? t('inventory.editProduct') : t('inventory.addNewProduct')}
-                  </DialogTitle>
+                  </DrawerTitle>
 
-                </DialogHeader>
+                </DrawerHeader>
                 <div
                   className={`space-y-6 py-2 px-1 ${theme === "dark" ? "bg-gray-900 t" : "bg-white"
                     }`}
@@ -1148,8 +1167,8 @@ export const InventoryManagement = () => {
                         : "Add Product"}
                   </Button>
                 </div>
-              </DialogContent>
-            </Dialog>
+              </DrawerContent>
+            </Drawer>
           </div>
         </div>
 
