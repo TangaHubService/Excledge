@@ -19,6 +19,7 @@ import SalesInvoicePDF, { type SaleEbmTransaction } from '../../../components/in
 import { useOrganization } from '../../../context/OrganizationContext';
 import { useTheme } from '../../../context/ThemeContext';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
+import { Badge } from '../../../components/ui/badge';
 
 const formatTime = (dateString: string) => {
     return format(new Date(dateString), 'HH:mm');
@@ -115,6 +116,7 @@ export default function SalesPage() {
     const [isRefunding, setIsRefunding] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isDownloadingInvoice, setIsDownloadingInvoice] = useState<string | null>(null);
+    const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
 
     const limit = 10;
 
@@ -169,7 +171,8 @@ export default function SalesPage() {
     };
 
     const handleViewSale = (saleId: string) => {
-        navigate(`/dashboard/sales/${saleId}`);
+        const sale = sales.find(s => s.id === saleId);
+        if (sale) setSelectedSale(sale);
     };
 
     const confirmDelete = async () => {
@@ -724,6 +727,191 @@ export default function SalesPage() {
                                 )}
                             </Button>
                         </DrawerFooter>
+                    </DrawerContent>
+                </Drawer>
+
+                {/* Sale Details Drawer */}
+                <Drawer open={!!selectedSale} onOpenChange={(open) => !open && setSelectedSale(null)}>
+                    <DrawerContent className="sm:max-w-2xl bg-background border-border/50 bg-white dark:bg-[#111827] dark:text-white overflow-y-auto max-h-screen">
+                        {selectedSale && (
+                            <>
+                                <DrawerHeader className="border-b border-gray-100 dark:border-gray-700">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <DrawerTitle className="text-lg font-bold">
+                                                {t('sales.saleDetails') || 'Sale Details'}
+                                            </DrawerTitle>
+                                            <DrawerDescription>
+                                                {selectedSale.invoiceNumber || selectedSale.saleNumber}
+                                            </DrawerDescription>
+                                        </div>
+                                        <Badge className={cn(
+                                            "px-2.5 py-0.5 text-xs font-medium rounded-full",
+                                            {
+                                                'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100': selectedSale.status === 'COMPLETED',
+                                                'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100': selectedSale.status === 'PENDING',
+                                                'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100': selectedSale.status === 'CANCELLED',
+                                                'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100': selectedSale.status === 'REFUNDED',
+                                            }
+                                        )}>
+                                            {t(`sales.statuses.${selectedSale.status}`, selectedSale.status)}
+                                        </Badge>
+                                    </div>
+                                </DrawerHeader>
+
+                                <div className="p-6 space-y-6">
+                                    {/* Quick Info Grid */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div>
+                                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('sales.table.dateTime')}</p>
+                                            <p className="mt-0.5 text-sm font-semibold">
+                                                {format(new Date(selectedSale.createdAt), 'MMM d, yyyy')} {formatTime(selectedSale.createdAt)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('sales.table.customer')}</p>
+                                            <p className="mt-0.5 text-sm font-semibold">{selectedSale.customer.name}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('sales.paymentMethod')}</p>
+                                            <p className="mt-0.5 text-sm font-semibold capitalize">{getPaymentMethodLabel(selectedSale.paymentType, t)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('sales.table.total')}</p>
+                                            <p className="mt-0.5 text-sm font-bold text-blue-600 dark:text-blue-400">
+                                                {formatCurrency(selectedSale.totalAmount)}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Items Table */}
+                                    <div>
+                                        <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-3">
+                                            {t('sales.table.items')} ({selectedSale.saleItems.length})
+                                        </h4>
+                                        <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                            <Table>
+                                                <TableHeader className="bg-gray-50 dark:bg-gray-800">
+                                                    <TableRow>
+                                                        <TableHead className="text-xs">{t('inventory.product')}</TableHead>
+                                                        <TableHead className="text-xs text-right">{t('inventory.qty')}</TableHead>
+                                                        <TableHead className="text-xs text-right">{t('inventory.unitPrice')}</TableHead>
+                                                        <TableHead className="text-xs text-right">{t('common.total')}</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {selectedSale.saleItems.map((item) => (
+                                                        <TableRow key={item.id}>
+                                                            <TableCell className="text-sm font-medium">{item.product.name}</TableCell>
+                                                            <TableCell className="text-sm text-right">{item.quantity}</TableCell>
+                                                            <TableCell className="text-sm text-right">{formatCurrency(item.unitPrice)}</TableCell>
+                                                            <TableCell className="text-sm text-right font-semibold">{formatCurrency(item.totalPrice)}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </div>
+
+                                    {/* Payment Breakdown */}
+                                    {getPaymentMethods(selectedSale).length > 1 && (
+                                        <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900/30">
+                                            <p className="text-xs font-semibold mb-2">{t('sales.paymentBreakdown') || 'Payment Breakdown'}</p>
+                                            <div className="space-y-1.5">
+                                                {getPaymentMethods(selectedSale).map((payment, idx) => (
+                                                    <div key={idx} className="flex justify-between text-sm">
+                                                        <span className="text-gray-600 dark:text-gray-400">{getPaymentMethodLabel(payment.method, t)}</span>
+                                                        <span className={payment.method === 'DEBT' ? 'text-amber-600 font-semibold' : 'font-semibold'}>
+                                                            {formatCurrency(payment.amount.toString())}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* EBM Transactions */}
+                                    {selectedSale.ebmTransactions && selectedSale.ebmTransactions.length > 0 && (
+                                        <div className="space-y-2">
+                                            <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">RRA EBM / VSDC</h4>
+                                            {selectedSale.ebmTransactions.map((tx, idx) => (
+                                                <div key={idx} className="text-sm p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                                    <p className="font-medium">{tx.operation ?? 'SALE'} — {tx.submissionStatus}</p>
+                                                    {tx.ebmInvoiceNumber && (
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">EBM #: {tx.ebmInvoiceNumber}</p>
+                                                    )}
+                                                    {tx.errorMessage && (
+                                                        <p className="text-xs text-red-500 mt-1">{tx.errorMessage}</p>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Total & Profit */}
+                                    <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('sales.table.total')}</span>
+                                            <span className="text-lg font-bold">{formatCurrency(selectedSale.totalAmount)}</span>
+                                        </div>
+                                        {(() => {
+                                            const profit = selectedSale.saleItems.reduce((sum, item) => {
+                                                const p = item.profit;
+                                                const n = typeof p === 'number' ? p : parseFloat(String(p ?? '0'));
+                                                return sum + (Number.isFinite(n) ? n : 0);
+                                            }, 0);
+                                            return profit !== 0 ? (
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('sales.table.profit') || 'Profit'}</span>
+                                                    <span className={`text-base font-semibold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                        {formatCurrency(profit.toString())}
+                                                    </span>
+                                                </div>
+                                            ) : null;
+                                        })()}
+                                    </div>
+                                </div>
+
+                                <DrawerFooter className="border-t border-gray-100 dark:border-gray-700 p-4 flex-row gap-2">
+                                    <Button
+                                        variant="ghost"
+                                        onClick={() => setSelectedSale(null)}
+                                        className="rounded-lg"
+                                    >
+                                        {t('common.close')}
+                                    </Button>
+                                    <Button
+                                        onClick={async () => {
+                                            setIsDownloadingInvoice(selectedSale.id);
+                                            try {
+                                                const blob = await pdf(<SalesInvoicePDF
+                                                    sale={selectedSale}
+                                                    organizationName={organization?.name}
+                                                    organizationLogo={organization?.avatar}
+                                                    organizationTin={organization?.TIN ?? organization?.tin}
+                                                />).toBlob();
+                                                saveAs(blob, `invoice-${selectedSale.saleNumber}.pdf`);
+                                                toast.success(t('sales.invoiceDownloadSuccess'));
+                                            } catch (error) {
+                                                console.error('Failed to generate invoice:', error);
+                                                toast.error(t('sales.invoiceGenerationError'));
+                                            } finally {
+                                                setIsDownloadingInvoice(null);
+                                            }
+                                        }}
+                                        disabled={isDownloadingInvoice === selectedSale.id}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                                    >
+                                        {isDownloadingInvoice === selectedSale.id ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <Download className="h-4 w-4 mr-2" />
+                                        )}
+                                        {t('sales.downloadInvoice') || 'Download PDF'}
+                                    </Button>
+                                </DrawerFooter>
+                            </>
+                        )}
                     </DrawerContent>
                 </Drawer>
 

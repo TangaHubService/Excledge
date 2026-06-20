@@ -30,7 +30,6 @@ import InventorySummaryDashboard from "./pages/dashboard/inventory/InventorySumm
 import StockTransfersPage from "./pages/dashboard/inventory/StockTransfersPage";
 import WarehouseManagement from "./pages/dashboard/inventory/WarehouseManagement";
 
-import SaleDetailsPage from "./pages/dashboard/sales/SaleDetailsPage";
 import { AcceptInvitationPage } from "./pages/auth/AcceptInvitation";
 import { SuppliersPage } from "./pages/dashboard/suppliers/SuppliersPage";
 import { OrdersPage } from "./pages/dashboard/orders/OrdersPage";
@@ -131,7 +130,7 @@ function App() {
                       <Route path="stock-transfers" element={<StockTransfersPage />} />
                       <Route path="warehouses" element={<WarehouseManagement />} />
                       <Route path="sales" element={<SalesPage />} />
-                      <Route path="sales/:id" element={<SaleDetailsPage />} />
+                      <Route path="sales/:id" element={<Navigate to="/dashboard/sales" replace />} />
                       <Route path="organization-config" element={<OrganizationConfig />} />
 
                       {/* Redirect legacy routes */}
