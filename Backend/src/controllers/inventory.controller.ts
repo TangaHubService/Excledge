@@ -719,7 +719,7 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
       ? Prisma.sql`AND (p.name ILIKE ${'%' + searchVal + '%'}
           OR p.sku ILIKE ${'%' + searchVal + '%'}
           OR p.barcode ILIKE ${'%' + searchVal + '%'}
-          OR p.batch_number ILIKE ${'%' + searchVal + '%'})`
+          OR p."batchNumber" ILIKE ${'%' + searchVal + '%'})`
       : Prisma.empty
 
     // Status sub-filter (critical / low / warning thresholds)
@@ -757,9 +757,9 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
       measurement_unit: string; image_url: string | null;
       stock: number;
     }>>`
-      SELECT p.id, p.name, p.sku, p.barcode, p.batch_number,
-             p.unit_price, p.min_stock, p.category, p.expiry_date,
-             p.measurement_unit, p.image_url,
+      SELECT p.id, p.name, p.sku, p.barcode, p."batchNumber",
+             p."unitPrice", p."minStock", p.category, p."expiryDate",
+             p."measurementUnit", p."imageUrl",
              ${stockExpr} as stock
       FROM products p ${baseWhere}
       ORDER BY stock ASC
@@ -771,13 +771,13 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
       name: r.name,
       sku: r.sku,
       barcode: r.barcode,
-      batchNumber: r.batch_number,
-      unitPrice: r.unit_price,
-      minStock: r.min_stock,
+      batchNumber: r.batchNumber,
+      unitPrice: r.unitPrice,
+      minStock: r.minStock,
       category: r.category,
-      expiryDate: r.expiry_date,
-      measurementUnit: r.measurement_unit,
-      imageUrl: r.image_url,
+      expiryDate: r.expiryDate,
+      measurementUnit: r.measurementUnit,
+      imageUrl: r.imageUrl,
       quantity: r.stock,
     }))
 
