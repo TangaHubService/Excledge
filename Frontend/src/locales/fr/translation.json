@@ -74,6 +74,8 @@
         "copied": "Copié dans le presse-papiers",
         "user": "Utilisateur",
         "appName": "Excledge - ERP",
+        "all_branches": "Toutes les Succursales",
+        "select_branch": "Sélectionner une Succursale",
         "previous": "Précédent",
         "page": "Page",
         "of": "de",
@@ -154,6 +156,10 @@
         "stockTransfers": "Transferts de stock",
         "warehouses": "Entrepôts",
         "branches": "Succursales"
+    },
+    "organizations": {
+        "noOrganizations": "Aucune organisation trouvée",
+        "createNew": "Créer Nouveau"
     },
     "languages": {
         "en": "Anglais",

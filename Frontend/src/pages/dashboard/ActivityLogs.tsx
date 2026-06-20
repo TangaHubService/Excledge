@@ -425,7 +425,7 @@ const ActivityLogs = () => {
                                 />
 
                             </div>
-                            <Button type="submit" size="default" disabled={isRefreshing} className="sm:w-auto w-full">
+                            <Button type="submit" size="default" disabled={isRefreshing} className="sm:w-auto w-full bg-blue-600 hover:bg-blue-700 text-white">
                                 {t('common.search')}
                             </Button>
 
@@ -661,7 +661,7 @@ const ActivityLogs = () => {
                                 size="sm"
                                 onClick={() => setPage(p => Math.max(1, p - 1))}
                                 disabled={page === 1 || isRefreshing}
-                                className="h-9 px-3 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300"
+                                className="h-9 px-3 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300"
                             >
                                 <ChevronLeft className="h-4 w-4 mr-1" />
                                 {t('common.previous')}
@@ -705,7 +705,7 @@ const ActivityLogs = () => {
                                 size="sm"
                                 onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
                                 disabled={page >= pagination.totalPages || isRefreshing}
-                                className="h-9 px-3 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300"
+                                className="h-9 px-3 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300"
                             >
                                 {t('common.next')}
                                 <ChevronRight className="h-4 w-4 ml-1" />

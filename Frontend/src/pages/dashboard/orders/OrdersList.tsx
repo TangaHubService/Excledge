@@ -316,7 +316,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                     {searchTerm ? t('common.noSearchResults') : t('purchaseOrders.noOrdersFoundDesc') || 'No purchase orders yet.'}
                                 </p>
                                 {!searchTerm && (
-                                    <Button size="sm" onClick={() => navigate('/dashboard/orders/new')} className="mt-6 rounded-md px-6 h-9 font-semibold shadow-sm">
+                                    <Button size="sm" onClick={() => navigate('/dashboard/orders/new')} className="mt-6 rounded-md px-6 h-9 font-semibold shadow-sm bg-blue-600 hover:bg-blue-700 text-white">
                                         {t('purchaseOrders.createOrder')}
                                     </Button>
                                 )}
