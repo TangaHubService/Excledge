@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import { apiClient } from '../lib/api-client';
 import { toast } from 'react-toastify';
@@ -9,16 +10,28 @@ type Notification = {
   id: string;
   title: string;
   message: string;
+  type?: string;
+  data?: Record<string, any>;
   isRead: boolean;
   createdAt: string;
 };
 
 export default function NotificationBell({ toolbar = false }: { toolbar?: boolean }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const mounted = useRef(true);
+
+  const getNotificationLink = (n: Notification): string | null => {
+    if (n.type === 'WARNING' || n.type === 'ALERT') return '/dashboard/low-stock';
+    if (n.type === 'SALE') return '/dashboard/sales';
+    if (n.type === 'PURCHASE_ORDER') return '/dashboard/orders';
+    if (n.data?.productId) return '/dashboard/inventory-all';
+    if (n.data?.userId) return '/dashboard/users';
+    return null;
+  };
 
   // Get organization ID from localStorage
   const organizationId = localStorage.getItem('current_organization_id');
@@ -136,15 +149,29 @@ export default function NotificationBell({ toolbar = false }: { toolbar?: boolea
             {notifications.length === 0 ? (
               <div className="p-4 text-sm text-muted-foreground">{t('common.noNotifications') || 'No notifications'}</div>
             ) : (
-              notifications.map((n) => (
-                <div key={n.id} className={`p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 ${n.isRead ? 'opacity-80' : ''}`} onClick={() => markAsRead(n.id)}>
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium">{n.title}</div>
-                    <div className="text-xs text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</div>
+              notifications.map((n) => {
+                const link = getNotificationLink(n);
+                return (
+                  <div
+                    key={n.id}
+                    className={`p-3 cursor-pointer border-b border-gray-100 dark:border-gray-800 last:border-0 ${
+                      n.isRead
+                        ? 'opacity-70 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        : 'bg-blue-50/70 dark:bg-blue-900/20 hover:bg-blue-100/70 dark:hover:bg-blue-900/30'
+                    }`}
+                    onClick={() => {
+                      if (link) navigate(link);
+                      if (!n.isRead) markAsRead(n.id);
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className={`text-sm ${n.isRead ? 'font-normal' : 'font-semibold'}`}>{n.title}</div>
+                      <div className="text-xs text-muted-foreground shrink-0">{new Date(n.createdAt).toLocaleString()}</div>
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-1">{n.message}</div>
                   </div>
-                  <div className="text-sm text-muted-foreground mt-1">{n.message}</div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
