@@ -71,7 +71,7 @@ export const pesapalIpnController = async (req: Request, res: Response) => {
                         data: {
                             amount: transaction.amount,
                             currency: transaction.currency,
-                            paymentMethod: 'STRIPE',
+                            paymentMethod: 'PESAPA',
                             status: 'COMPLETED',
                             paymentId: OrderTrackingId,
                             subscription: {
@@ -138,7 +138,7 @@ export const pesapalOrderRequest = async (req: Request, res: Response) => {
             await prisma.subscription.update({
                 where: { id: activeSubscription.id },
                 data: {
-                    paymentMethod: 'STRIPE',
+                    paymentMethod: 'PESAPA',
                     paymentDetails: {
                         ref: pesapalUniqueRef,
                         amount: plan.price,
@@ -154,7 +154,7 @@ export const pesapalOrderRequest = async (req: Request, res: Response) => {
                     planId: Number(planId),
                     organizationId: Number(organizationId),
                     status: SubscriptionStatus.PENDING,
-                    paymentMethod: 'STRIPE',
+                    paymentMethod: 'PESAPA',
                     paymentDetails: {
                         ref: pesapalUniqueRef,
                         amount: plan.price,

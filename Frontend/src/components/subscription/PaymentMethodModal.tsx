@@ -207,7 +207,7 @@ export const PaymentMethodModal = ({
                         planId={planId}
                         amount={price}
                         onSuccess={() => {
-                            onPaymentInitiated('CARD');
+                            setLocalPaymentStatus('success');
                         }}
                         onError={(error) => {
                             setError({
