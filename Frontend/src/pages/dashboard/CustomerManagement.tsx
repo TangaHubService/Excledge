@@ -501,7 +501,7 @@ export function CustomerManagement() {
 
       <Drawer open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
         <DrawerContent
-          className={`max-w-4xl max-h-[90vh] overflow-y-auto ${theme === "dark"
+          className={`max-w-4xl overflow-y-auto ${theme === "dark"
             ? "bg-gray-900 border-gray-700 text-gray-100"
             : "bg-white border-gray-200 text-gray-900"
             }`}
@@ -517,7 +517,7 @@ export function CustomerManagement() {
 
       <Drawer open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DrawerContent
-          className={`max-w-4xl max-h-[90vh] overflow-y-auto ${theme === "dark"
+          className={`max-w-4xl overflow-y-auto ${theme === "dark"
             ? "bg-gray-900 border-gray-700 text-gray-100"
             : "bg-white border-gray-200 text-gray-900"
             }`}

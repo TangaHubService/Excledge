@@ -102,7 +102,7 @@ export default function InventoryHistoryDialog({
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent
-        className={`sm:max-w-[900px] max-h-[80vh] overflow-hidden flex flex-col ${theme === "dark"
+        className={`sm:max-w-[900px] overflow-hidden flex flex-col ${theme === "dark"
           ? "bg-gray-900 border-gray-700 text-gray-100"
           : "bg-white border-gray-200"
           }`}

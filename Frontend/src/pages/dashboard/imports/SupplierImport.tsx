@@ -219,7 +219,7 @@ export function SupplierImport({ onSuccess }: SupplierImportProps) {
 
       <Drawer open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
         <DrawerContent
-          className={`!max-w-[95vw] !w-[95vw] max-h-[90vh] overflow-y-auto border-none shadow-2xl p-6 ${theme === "dark"
+          className={`!max-w-[95vw] !w-[95vw] overflow-y-auto border-none shadow-2xl p-6 ${theme === "dark"
             ? "bg-gray-900 text-gray-100"
             : "bg-white text-gray-900"
             }`}

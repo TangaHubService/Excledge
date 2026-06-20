@@ -357,7 +357,7 @@ export const PaymentMethodModal = ({
     return (
         <Drawer open={isOpen} onOpenChange={(open) => !open && handleModalClose()}>
             <DrawerContent
-                className="sm:max-w-md bg-white max-h-[90vh] overflow-y-auto !p-4"
+                className="sm:max-w-md bg-white overflow-y-auto !p-4"
                 onInteractOutside={(e) => {
                     e.preventDefault();
                 }}
