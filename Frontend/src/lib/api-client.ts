@@ -57,7 +57,9 @@ class ApiClient {
     return (
       endpoint.startsWith('/auth/login') ||
       endpoint.startsWith('/auth/signup') ||
-      endpoint.startsWith('/auth/refresh')
+      endpoint.startsWith('/auth/refresh') ||
+      endpoint.startsWith('/auth/reset-password') ||
+      endpoint.startsWith('/auth/request-password-reset')
     );
   }
 

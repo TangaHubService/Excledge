@@ -30,7 +30,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         const initializeAuth = async () => {
             // Skip auth initialization on public pages to prevent redirect loops
-            if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+            if (typeof window !== 'undefined' && (
+                window.location.pathname === '/login' ||
+                window.location.pathname === '/reset-password' ||
+                window.location.pathname === '/forgot-password'
+            )) {
                 setIsAuthenticated(false);
                 return;
             }
