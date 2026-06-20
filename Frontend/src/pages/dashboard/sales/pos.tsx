@@ -30,6 +30,7 @@ interface Product {
   unitPrice?: number;
   batchNumber: string;
   expiryDate: string;
+  imageUrl?: string;
 }
 
 interface Customer {
@@ -66,12 +67,20 @@ const ProductCard = memo(({ product, onAddToCart }: any) => {
         }`}
       onClick={() => onAddToCart(product)}
     >
-      <div className={`w-full h-24 rounded-lg flex items-center justify-center mb-2 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'
+      <div className={`w-full h-24 rounded-lg flex items-center justify-center mb-2 overflow-hidden ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'
         }`}>
-        <span className={`text-4xl font-bold ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'
-          }`}>
-          {getProductInitial(product.name)}
-        </span>
+        {product.imageUrl ? (
+          <img
+            src={product.imageUrl}
+            alt={product.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <span className={`text-4xl font-bold ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'
+            }`}>
+            {getProductInitial(product.name)}
+          </span>
+        )}
       </div>
       <div className="w-full text-center">
         <h3 className={`font-semibold text-sm mb-1 line-clamp-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'
@@ -127,12 +136,20 @@ const OrderItem = memo(({ item, onRemove, onUpdateQuantity, onUpdatePrice }: any
       ? 'bg-gray-700 border-gray-600'
       : 'bg-gray-50 border-gray-200'
       }`}>
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden ${theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'
         }`}>
-        <span className={`text-lg font-bold ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'
-          }`}>
-          {getProductInitial(item.product.name)}
-        </span>
+        {item.product.imageUrl ? (
+          <img
+            src={item.product.imageUrl}
+            alt={item.product.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <span className={`text-lg font-bold ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'
+            }`}>
+            {getProductInitial(item.product.name)}
+          </span>
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <h4 className={`font-medium text-sm truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'

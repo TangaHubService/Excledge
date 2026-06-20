@@ -6,7 +6,7 @@ const subscriptionPlans = [
     // Free Trial Plan
     {
         title: 'Free Trial',
-        description: '14-day free trial with full access to all features',
+        description: '7-day free trial with full access to all features',
         price: 0,
         period: 'MONTHLY',
         isActive: true,
