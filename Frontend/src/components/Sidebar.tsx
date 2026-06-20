@@ -24,7 +24,6 @@ import {
   Plus,
   LogOut,
   Wifi,
-  Check,
   Loader2,
   type LucideIcon,
 } from "lucide-react";
