@@ -153,7 +153,7 @@ async function handleCompletedTransaction(transactionStatus: PesapalTransactionS
                 amount: transactionStatus.amount,
                 currency: transactionStatus.currency,
                 status: mapPesapalStatusToPaymentStatus(transactionStatus.payment_status_description),
-                paymentMethod: 'STRIPE',
+                paymentMethod: 'PESAPA',
                 paymentId: transactionStatus.order_tracking_id,
                 subscriptionId: subscription.id,
                 metadata: {
