@@ -752,9 +752,9 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
 
     const rows = await prisma.$queryRaw<Array<{
       id: number; name: string; sku: string | null; barcode: string | null;
-      batch_number: string | null; unit_price: number; min_stock: number;
-      category: string | null; expiry_date: Date | null;
-      measurement_unit: string; image_url: string | null;
+      batchNumber: string | null; unitPrice: number; minStock: number;
+      category: string | null; expiryDate: Date | null;
+      measurementUnit: string; imageUrl: string | null;
       stock: number;
     }>>`
       SELECT p.id, p.name, p.sku, p.barcode, p."batchNumber",
