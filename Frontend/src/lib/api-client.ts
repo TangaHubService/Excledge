@@ -2,10 +2,21 @@ const API_URL = (import.meta.env.VITE_PUBLIC_API_URL || 'http://localhost:5000')
 
 const REFRESH_TOKEN_KEY = 'refresh_token';
 
+// Public auth pages where we should never redirect to /login (prevents refresh loops)
+const isPublicAuthPage = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname;
+  return path === '/login' ||
+    path === '/reset-password' ||
+    path === '/forgot-password' ||
+    path === '/signup' ||
+    path === '/verify';
+};
+
 // Helper function to handle JWT expiration and logout
 const handleTokenExpiration = () => {
-  // Prevent infinite redirect loop — we're already on the login page
-  if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+  // Prevent redirect loop — we're already on a public auth page
+  if (isPublicAuthPage()) {
     return;
   }
   // Clear all authentication-related data from localStorage
