@@ -165,10 +165,10 @@ export class SubscriptionService {
             throw new Error('Plan not found');
         }
 
-        // Calculate trial end date (14 days from now)
+        // Calculate trial end date (7 days from now)
         const startDate = new Date();
         const endDate = new Date();
-        endDate.setDate(startDate.getDate() + 14);
+        endDate.setDate(startDate.getDate() + 7);
 
         // Get organization with users
         const organization = await this.prisma.organization.findUnique({

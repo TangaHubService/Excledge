@@ -44,7 +44,7 @@ export const CTASection = () => (
         </div>
 
         <p className="text-xs sm:text-sm opacity-75 animate-fade-in delay-300">
-          ✓ No credit card required • ✓ 2-day free trial • ✓ Cancel anytime
+          ✓ No credit card required • ✓ 7-day free trial • ✓ Cancel anytime
         </p>
       </div>
     </div>
