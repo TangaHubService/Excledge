@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import { cn } from '../../../lib/utils';
 import { Card, CardContent, CardHeader } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
@@ -96,7 +95,6 @@ type Sale = {
 
 export default function SalesPage() {
     const { t } = useTranslation();
-    const navigate = useNavigate();
     const { theme } = useTheme();
     const { organization } = useOrganization();
     const [sales, setSales] = useState<Sale[]>([]);
