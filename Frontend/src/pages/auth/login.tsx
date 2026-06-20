@@ -25,9 +25,9 @@ export default function LoginPage() {
     useEffect(() => {
         const currentPharmacyId = localStorage.getItem("current_pharmacy_id");
         if (currentPharmacyId) {
-            navigate("/");
+            navigate("/", { replace: true });
         }
-    }, [navigate]);
+    }, []);
 
     const showToast = (message: string, type: "error" | "success") => {
         if (type === "error") {

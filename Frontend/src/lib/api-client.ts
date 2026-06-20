@@ -4,6 +4,10 @@ const REFRESH_TOKEN_KEY = 'refresh_token';
 
 // Helper function to handle JWT expiration and logout
 const handleTokenExpiration = () => {
+  // Prevent infinite redirect loop — we're already on the login page
+  if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+    return;
+  }
   // Clear all authentication-related data from localStorage
   localStorage.removeItem('token');
   localStorage.removeItem(REFRESH_TOKEN_KEY);

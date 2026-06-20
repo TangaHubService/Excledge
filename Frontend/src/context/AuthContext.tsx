@@ -29,6 +29,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     useEffect(() => {
         const initializeAuth = async () => {
+            // Skip auth initialization on public pages to prevent redirect loops
+            if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+                setIsAuthenticated(false);
+                return;
+            }
+
             const storedToken = localStorage.getItem('token');
             const storedUser = localStorage.getItem('user');
 
