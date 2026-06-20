@@ -30,6 +30,7 @@ import { apiClient } from '../../../lib/api-client';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../../context/AuthContext';
 import { useOrganization } from '../../../context/OrganizationContext';
+import { useBranch } from '../../../context/BranchContext';
 
 type OrganizationData = {
     id: number;
@@ -59,6 +60,7 @@ export function OrganizationConfig() {
     const { t } = useTranslation();
     const { user } = useAuth();
     const { setOrganization: updateGlobalOrg } = useOrganization();
+    const { refreshBranches } = useBranch();
 
     const [organization, setOrganization] = useState<OrganizationData | null>(null);
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -195,6 +197,7 @@ export function OrganizationConfig() {
             }
             setBranchDialogOpen(false);
             fetchData();
+            refreshBranches();
         } catch (error: any) {
             toast.error(error.message || 'Failed to save branch');
         }
@@ -206,6 +209,7 @@ export function OrganizationConfig() {
             await apiClient.updateBranch(branch.id, { ...branch, status: newStatus });
             toast.success(`Branch ${newStatus === 'ACTIVE' ? 'activated' : 'deactivated'} successfully`);
             fetchData();
+            refreshBranches();
         } catch (error: any) {
             toast.error(error.message || 'Failed to update branch status');
         }
@@ -216,6 +220,7 @@ export function OrganizationConfig() {
             await apiClient.setDefaultBranch(branch.id);
             toast.success(t('branches.setDefault') || 'Default branch updated');
             fetchData();
+            refreshBranches();
         } catch (error: any) {
             toast.error(error.message || 'Failed to set default branch');
         }
