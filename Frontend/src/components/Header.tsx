@@ -9,7 +9,7 @@ import {
 import { ThemeToggle } from "./ThemeToggle";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { BranchSelector } from "./BranchSelector";
-import { OrganizationSwitcher } from "./OrganizationSwitcher";
+
 import { apiClient } from "../lib/api-client";
 import { Link, useNavigate } from "react-router-dom";
 import NotificationBell from "./NotificationBell";
@@ -87,7 +87,6 @@ export function Header({ onMenuClick }: HeaderProps) {
 
       {/* Right side controls */}
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
-        <OrganizationSwitcher toolbar />
         <BranchSelector toolbar />
 
         <div className="hidden items-center gap-2 sm:flex">

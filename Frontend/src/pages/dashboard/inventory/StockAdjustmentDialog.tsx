@@ -473,7 +473,7 @@ export default function StockAdjustmentDialog({
               type="button"
               onClick={() => setConfirmStep(true)}
               disabled={!canSubmit}
-              className="h-11 min-w-[140px] gap-2"
+              className="h-11 min-w-[140px] gap-2 bg-blue-600 hover:bg-blue-700 text-white"
             >
               <CheckCircle2 className="h-4 w-4" />
               Review Adjustment
@@ -485,7 +485,9 @@ export default function StockAdjustmentDialog({
               disabled={!canSubmit || loading}
               className={cn(
                 'h-11 min-w-[140px] gap-2',
-                isNegative && 'bg-red-600 hover:bg-red-700',
+                isNegative
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white',
               )}
             >
               {loading ? (

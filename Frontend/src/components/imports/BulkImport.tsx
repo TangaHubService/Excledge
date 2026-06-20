@@ -613,7 +613,7 @@ function MappingStep({
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
-        <Button type="button" onClick={onContinue} className="h-11 gap-1.5">
+        <Button type="button" onClick={onContinue} className="h-11 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white">
           Validate {csvRows.length} rows
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -792,7 +792,7 @@ function ValidationStep({
           type="button"
           onClick={onContinue}
           disabled={importing}
-          className="h-11 gap-1.5"
+          className="h-11 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
         >
           {importing ? (
             <Loader2 className="h-4 w-4 animate-spin" />

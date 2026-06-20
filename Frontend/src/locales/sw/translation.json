@@ -74,6 +74,8 @@
         "copied": "Imenakiliwa kwenye ubao wa kunakili",
         "user": "Mtumiaji",
         "appName": "Excledge - ERP",
+        "all_branches": "Matawi Yote",
+        "select_branch": "Chagua Tawi",
         "previous": "Iliyopita",
         "page": "Ukurasa",
         "of": "wa",
@@ -157,6 +159,10 @@
         "stockTransfers": "Uhamisho wa stocki",
         "warehouses": "Maghala",
         "branches": "Matawi"
+    },
+    "organizations": {
+        "noOrganizations": "Hakuna mashirika yaliyopatikana",
+        "createNew": "Unda Mpya"
     },
     "languages": {
         "en": "Kiingereza",

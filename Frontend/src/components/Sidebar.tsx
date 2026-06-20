@@ -1,5 +1,5 @@
-import { useState, useCallback, useMemo } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard,
@@ -24,11 +24,21 @@ import {
   Plus,
   LogOut,
   Wifi,
+  Check,
+  Loader2,
   type LucideIcon,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 import { cn } from "../lib/utils";
 import { useOrganization } from "../context/OrganizationContext";
 import { useAuth } from "../context/AuthContext";
+import { apiClient } from "../lib/api-client";
 
 /* ─── Types ─────────────────────────────────────────── */
 
@@ -152,10 +162,78 @@ function resolveNavigation(
 export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
   const { t } = useTranslation();
   const location = useLocation();
-  const { organization } = useOrganization();
-  const { user, isSystemOwner, logout } = useAuth();
+  const navigate = useNavigate();
+  const { organization, setOrganization } = useOrganization();
+  const { user, isSystemOwner, login, logout, refreshUserProfile } = useAuth();
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [organizations, setOrganizations] = useState<
+    { id: number; name: string; businessType: string; role: string; isOwner: boolean }[]
+  >([]);
+  const [orgLoading, setOrgLoading] = useState(false);
+  const [switching, setSwitching] = useState(false);
+
+  useEffect(() => {
+    const fetchOrgs = async () => {
+      try {
+        setOrgLoading(true);
+        const data = await apiClient.getUserOrganizations();
+        const orgs = Array.isArray(data) ? data : (data.organizations || []);
+        setOrganizations(orgs);
+      } catch (err) {
+        console.error('Failed to load organizations:', err);
+      } finally {
+        setOrgLoading(false);
+      }
+    };
+    if (organization) fetchOrgs();
+  }, [organization]);
+
+  const handleSelectOrganization = useCallback(async (selectedOrgId: string) => {
+    if (String(selectedOrgId) === String(organization?.id)) return;
+    const selectedOrg = organizations.find(o => String(o.id) === selectedOrgId);
+    if (!selectedOrg) return;
+    try {
+      setSwitching(true);
+      localStorage.removeItem('branch_scope');
+      localStorage.removeItem('selected_branch_ids');
+      const response = await apiClient.switchOrganization({ organizationId: Number(selectedOrgId) });
+      if (response.organization && response.token && response.user) {
+        localStorage.setItem('current_organization_id', String(selectedOrgId));
+        localStorage.setItem('organization', JSON.stringify(response.organization));
+        setOrganization({
+          id: response.organization.id,
+          name: response.organization.name,
+          businessType: response.organization.businessType,
+          address: response.organization.address,
+          phone: response.organization.phone,
+          email: response.organization.email,
+          avatar: response.organization.avatar,
+          hasActiveSubscription: response.organization.hasActiveSubscription,
+        });
+        apiClient.setToken(response.token);
+        localStorage.setItem('token', response.token);
+        login({
+          id: String(response.user.id),
+          email: response.user.email,
+          name: response.user.name,
+          token: response.token,
+          role: response.user.role,
+        });
+        await refreshUserProfile();
+        if (window.location.pathname.startsWith('/dashboard')) {
+          navigate('/dashboard', { replace: true });
+          window.location.reload();
+        } else {
+          navigate('/dashboard');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to switch organization:', err);
+    } finally {
+      setSwitching(false);
+    }
+  }, [organization, organizations, setOrganization, login, refreshUserProfile, navigate]);
 
   const toggleCollapsed = useCallback(() => {
     setIsCollapsed(prev => {
@@ -215,18 +293,86 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
           isCollapsed ? "w-16" : "w-64",
         )}
       >
-        {/* ── Logo area ───────────────────────────────── */}
+        {/* ── Logo / Organization area ───────────────── */}
         <div className="flex h-14 shrink-0 items-center border-b border-white/15 px-3 lg:px-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-800/90 ring-1 ring-white/15">
-              <Package className="h-5 w-5 text-white" />
+          {organization && !isCollapsed ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  disabled={switching || orgLoading}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pr-1 text-left transition-colors hover:bg-white/10"
+                >
+                  {organization.avatar ? (
+                    <img
+                      src={organization.avatar}
+                      alt={organization.name}
+                      className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-white/25"
+                    />
+                  ) : (
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-800/90 ring-1 ring-white/15">
+                      <Package className="h-5 w-5 text-white" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-white">{organization.name}</p>
+                  </div>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-300" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                sideOffset={6}
+                className="w-[220px] overflow-hidden rounded-lg border border-white/20 bg-slate-800 p-1 shadow-xl"
+              >
+                {switching || orgLoading ? (
+                  <div className="flex items-center justify-center gap-2 px-4 py-6">
+                    <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
+                    <span className="text-sm text-slate-300">{t('common.loading')}</span>
+                  </div>
+                ) : organizations.length === 0 ? (
+                  <div className="px-4 py-3 text-sm text-slate-400">{t('organizations.noOrganizations')}</div>
+                ) : (
+                  <DropdownMenuRadioGroup
+                    value={String(organization?.id)}
+                    onValueChange={handleSelectOrganization}
+                  >
+                    {organizations.map(org => (
+                      <DropdownMenuRadioItem
+                        key={org.id}
+                        value={String(org.id)}
+                        className="flex items-center gap-3 px-3 py-2.5 text-sm text-slate-300 focus:bg-white/10 focus:text-white"
+                      >
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-800/60 ring-1 ring-white/15">
+                          <Building2 className="h-4 w-4 text-white" />
+                        </div>
+                        <span className="flex-1 truncate">{org.name}</span>
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {organization?.avatar ? (
+                <img
+                  src={organization.avatar}
+                  alt={organization.name}
+                  className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-white/25"
+                />
+              ) : (
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-800/90 ring-1 ring-white/15">
+                  <Package className="h-5 w-5 text-white" />
+                </div>
+              )}
+              {!isCollapsed && (
+                <span className="truncate text-base font-semibold tracking-tight text-white">
+                  {organization?.name || t('common.appName')}
+                </span>
+              )}
             </div>
-            {!isCollapsed && (
-              <span className="truncate text-base font-semibold tracking-tight text-white">
-                {t('common.appName')}
-              </span>
-            )}
-          </div>
+          )}
           <div className="ml-auto flex shrink-0 items-center gap-0.5">
             <button
               type="button"
@@ -245,33 +391,6 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
             </button>
           </div>
         </div>
-
-        {/* ── Organization badge ──────────────────────── */}
-        {organization && (
-          <div className={cn("border-b border-white/15 py-3", isCollapsed ? "px-2" : "px-3")}>
-            <div
-              className={cn(
-                "flex items-center gap-2 rounded-lg border border-white/20 bg-white/10",
-                isCollapsed ? "justify-center px-1 py-2" : "px-3 py-2.5",
-              )}
-            >
-              <img
-                src={organization.avatar}
-                alt={organization.name}
-                className={cn(
-                  "shrink-0 rounded-full object-cover ring-2 ring-white/25",
-                  isCollapsed ? "h-8 w-8" : "h-11 w-11",
-                )}
-              />
-              {!isCollapsed && (
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-white">{organization.name}</p>
-                  <p className="truncate text-xs text-slate-400">{organization.address}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* ── Scrollable nav area ─────────────────────── */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3" id="sidebar-nav">
