@@ -156,7 +156,7 @@ export default function NotificationBell({ toolbar = false }: { toolbar?: boolea
                     key={n.id}
                     className={`p-3 cursor-pointer border-b border-gray-100 dark:border-gray-800 last:border-0 ${
                       n.isRead
-                        ? 'opacity-70 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        ? 'hover:bg-gray-50 dark:hover:bg-gray-800'
                         : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}
                     onClick={() => {
@@ -165,10 +165,10 @@ export default function NotificationBell({ toolbar = false }: { toolbar?: boolea
                     }}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <div className={`text-sm ${n.isRead ? 'font-normal' : 'font-semibold'}`}>{n.title}</div>
-                      <div className="text-xs text-muted-foreground shrink-0">{new Date(n.createdAt).toLocaleString()}</div>
+                      <div className={`text-sm ${n.isRead ? 'font-normal text-gray-500 dark:text-gray-400' : 'font-semibold text-gray-900 dark:text-white'}`}>{n.title}</div>
+                      <div className={`text-xs shrink-0 ${n.isRead ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'}`}>{new Date(n.createdAt).toLocaleString()}</div>
                     </div>
-                    <div className="text-sm text-muted-foreground mt-1">{n.message}</div>
+                    <div className={`text-sm mt-1 ${n.isRead ? 'text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-300'}`}>{n.message}</div>
                   </div>
                 );
               })
