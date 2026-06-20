@@ -63,7 +63,7 @@ import StockAdjustmentDialog from "./inventory/StockAdjustmentDialog";
 import { RraTaxCodeSelect } from "../../components/RraTaxCodeSelect";
 import { MeasurementUnitSelect } from "../../components/MeasurementUnitSelect";
 import { RraTaxCode, MeasurementUnit } from "../../types/ebm";
-import { History, Edit } from "lucide-react";
+import { History, Edit, Pencil } from "lucide-react";
 
 type ProductNameItem = {
   value: string | number;
@@ -321,6 +321,13 @@ export const InventoryManagement = () => {
     };
     loadProductNames();
   }, [debouncedProductSearch]);
+
+  // Reset form when drawer closes
+  useEffect(() => {
+    if (!isDialogOpen) {
+      setEditingProduct(null);
+    }
+  }, [isDialogOpen]);
 
   const handleSaveProduct = async () => {
     // Validate form before submission
@@ -740,7 +747,24 @@ export const InventoryManagement = () => {
                 <Button
                   onClick={() => {
                     setEditingProduct(null);
+                    setCategoryInput("");
+                    setImageFile(null);
+                    setImagePreview("");
                     setImageRemoved(false);
+                    setFormErrors({});
+                    setFormData({
+                      batchNumber: "",
+                      name: "",
+                      quantity: 0,
+                      unitPrice: 0,
+                      expiryDate: "",
+                      minStock: 0,
+                      description: "",
+                      imageUrl: "",
+                      taxCode: undefined as any,
+                      measurementUnit: 'PCS' as any,
+                      exemptionReference: "",
+                    });
                     setIsDialogOpen(true);
                   }}
                   className="bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200 h-10"
@@ -1000,7 +1024,7 @@ export const InventoryManagement = () => {
                               setImageRemoved(true);
                               setFormData({ ...formData, imageUrl: "" });
                             }}
-                            className="text-red-600 hover:text-red-700"
+                            className="text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border-red-200 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:border-red-800"
                           >
                             Remove
                           </Button>
@@ -1515,6 +1539,35 @@ export const InventoryManagement = () => {
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setEditingProduct(item);
+                                      setFormData({
+                                        batchNumber: item.batchNumber || "",
+                                        name: item.name,
+                                        quantity: item.quantity,
+                                        unitPrice: item.unitPrice,
+                                        expiryDate: item.expiryDate || "",
+                                        minStock: item.minStock,
+                                        description: item.description || "",
+                                        imageUrl: item.imageUrl || "",
+                                        taxCode: (item as any).taxCode as RraTaxCode | undefined,
+                                        measurementUnit: ((item as any).measurementUnit || 'PCS') as MeasurementUnit,
+                                        exemptionReference: (item as any).exemptionReference || "",
+                                      });
+                                      setCategoryInput(item.category || "");
+                                      setImageFile(null);
+                                      setImagePreview(item.imageUrl || "");
+                                      setImageRemoved(false);
+                                      setIsDialogOpen(true);
+                                    }}
+                                    className="h-8 px-2"
+                                    title={t('common.edit') || 'Edit'}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
                                   <Button
                                     variant="ghost"
                                     size="sm"
