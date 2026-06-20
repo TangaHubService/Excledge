@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
-import { Package, Eye, EyeOff } from "lucide-react";
+import { Package, Eye, EyeOff, MailCheck } from "lucide-react";
 import { apiClient } from "../../lib/api-client";
 import { LoginSchema } from "../../schema/auth";
 import { useAuth } from "../../context/AuthContext";
@@ -14,6 +14,7 @@ export default function LoginPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
+    const [emailForVerification, setEmailForVerification] = useState("");
     const {
         register,
         handleSubmit,
@@ -94,11 +95,20 @@ export default function LoginPage() {
 
             showToast(`Welcome back ${result?.user.name}!`, "success");
             setTimeout(() => navigate("/dashboard"), 2000);
-        } catch (error) {
-            showToast(
-                error instanceof Error ? error.message : "Invalid credentials",
-                "error"
-            );
+        } catch (error: any) {
+            const isEmailNotVerified = error?.response?.status === 403 &&
+                error?.response?.data?.code === "EMAIL_NOT_VERIFIED";
+
+            if (isEmailNotVerified) {
+                setEmailForVerification(data.email);
+                setError("Your email is not verified. Please verify your email to continue.");
+                setSuccess("");
+            } else {
+                showToast(
+                    error instanceof Error ? error.message : "Invalid credentials",
+                    "error"
+                );
+            }
         } finally {
             setIsLoading(false);
         }
@@ -134,6 +144,15 @@ export default function LoginPage() {
                         {error && (
                             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
                                 <p className="text-xs text-red-600 dark:text-red-400 font-medium">{error}</p>
+                                {emailForVerification && (
+                                    <Link
+                                        to={`/verify?email=${encodeURIComponent(emailForVerification)}`}
+                                        className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-all"
+                                    >
+                                        <MailCheck className="h-3.5 w-3.5" />
+                                        Verify Email
+                                    </Link>
+                                )}
                             </div>
                         )}
                         {success && (

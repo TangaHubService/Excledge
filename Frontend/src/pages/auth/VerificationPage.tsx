@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import { ArrowLeft, Loader2, Package } from "lucide-react";
@@ -13,11 +13,12 @@ const verificationSchema = yup.object().shape({
 
 export default function VerificationPage() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [isLoading, setIsLoading] = useState(false);
     const [isResendLoading, setIsResendLoading] = useState(false);
     const [showEmailInput, setShowEmailInput] = useState(false);
     const [resendEmail, setResendEmail] = useState("");
-    const [email, setEmail] = useState("");
+    const [email, setEmail] = useState(searchParams.get("email") || "");
     const {
         register,
         handleSubmit,
