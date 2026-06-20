@@ -157,7 +157,7 @@ export default function NotificationBell({ toolbar = false }: { toolbar?: boolea
                     className={`p-3 cursor-pointer border-b border-gray-100 dark:border-gray-800 last:border-0 ${
                       n.isRead
                         ? 'opacity-70 hover:bg-gray-50 dark:hover:bg-gray-800'
-                        : 'bg-blue-50/70 dark:bg-blue-900/20 hover:bg-blue-100/70 dark:hover:bg-blue-900/30'
+                        : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}
                     onClick={() => {
                       if (link) navigate(link);
