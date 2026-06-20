@@ -111,7 +111,7 @@ export function PaymentModal({
   return (
     <Drawer open={isOpen} onOpenChange={onClose}>
       <DrawerContent
-        className={`sm:max-w-md max-h-[90vh] overflow-y-auto p-4 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white'
+        className={`sm:max-w-md overflow-y-auto p-4 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white'
           }`}
       >
         <DrawerHeader className="pb-2">

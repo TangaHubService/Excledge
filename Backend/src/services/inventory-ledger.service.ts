@@ -217,8 +217,8 @@ export async function addStock(params: AddStockParams) {
   } = params;
 
   // Validate quantity
-  if (quantity <= 0) {
-    throw new Error('Quantity must be positive for stock IN operations');
+  if (quantity < 0) {
+    throw new Error('Quantity must be non-negative for stock IN operations');
   }
 
   // Use provided transaction client or create a new one

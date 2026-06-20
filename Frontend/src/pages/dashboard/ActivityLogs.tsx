@@ -717,7 +717,7 @@ const ActivityLogs = () => {
 
             {/* Details Dialog */}
             <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DrawerContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0 border-none bg-white dark:bg-gray-900 shadow-2xl">
+                <DrawerContent className="max-w-2xl overflow-hidden flex flex-col p-0 border-none bg-white dark:bg-gray-900 shadow-2xl">
                     <DrawerHeader className="p-6 pb-4 border-b dark:border-gray-800">
                         <DrawerTitle className="flex items-center gap-3 text-xl font-bold dark:text-white">
                             <div className="p-2 rounded-lg bg-primary/10">

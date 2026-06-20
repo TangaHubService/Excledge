@@ -179,6 +179,7 @@ export const InventoryManagement = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>("");
+  const [imageRemoved, setImageRemoved] = useState(false);
 
 
   const validateForm = (data: typeof formData) => {
@@ -344,7 +345,7 @@ export const InventoryManagement = () => {
         formDataImage.append('image', imageFile);
 
         try {
-          const response = await fetch(`${import.meta.env.VITE_PUBLIC_API_URL}/upload/image`, {
+          const response = await fetch(`${import.meta.env.VITE_PUBLIC_API_URL}/api/upload/image`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -366,16 +367,26 @@ export const InventoryManagement = () => {
         }
       }
 
-      const productData = {
-        ...formData,
+      const productData: Record<string, any> = {
+        name: formData.name,
         category: categoryInput,
-        imageUrl,
         branchId: selectedBranchId,
-        id: editingProduct?.id || crypto.randomUUID(),
+        batchNumber: formData.batchNumber,
+        quantity: formData.quantity,
+        unitPrice: formData.unitPrice,
+        expiryDate: formData.expiryDate,
+        minStock: formData.minStock,
+        description: formData.description,
         taxCode: (formData as any).taxCode,
         measurementUnit: (formData as any).measurementUnit,
         exemptionReference: (formData as any).taxCode === 'C' ? (formData as any).exemptionReference : undefined,
       };
+
+      if (imageUrl) {
+        productData.imageUrl = imageUrl;
+      } else if (imageRemoved) {
+        productData.imageUrl = "";
+      }
 
       if (editingProduct) {
         // Update existing product
@@ -395,6 +406,7 @@ export const InventoryManagement = () => {
         expiryStatus,
         page: currentPage,
         limit: itemsPerPage,
+        branchId: selectedBranchId,
       });
 
       // Reset form
@@ -416,6 +428,7 @@ export const InventoryManagement = () => {
       });
       setImageFile(null);
       setImagePreview("");
+      setImageRemoved(false);
       setFormErrors({}); // Clear any previous errors
     } catch (error) {
       console.error("Failed to save product:", error);
@@ -727,6 +740,7 @@ export const InventoryManagement = () => {
                 <Button
                   onClick={() => {
                     setEditingProduct(null);
+                    setImageRemoved(false);
                     setIsDialogOpen(true);
                   }}
                   className="bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200 h-10"
@@ -736,7 +750,7 @@ export const InventoryManagement = () => {
                 </Button>
               </DrawerTrigger>
               <DrawerContent
-                className={`max-h-[90vh] overflow-y-auto sm:max-w-[600px] ${theme === "dark"
+                className={`sm:max-w-[600px] ${theme === "dark"
                   ? "bg-gray-900 border-gray-700 text-gray-100"
                   : "bg-white border-gray-200"
                   } shadow-xl transition-all duration-200`}
@@ -952,6 +966,7 @@ export const InventoryManagement = () => {
                             const file = e.target.files?.[0];
                             if (file) {
                               setImageFile(file);
+                              setImageRemoved(false);
                               // Create preview
                               const reader = new FileReader();
                               reader.onloadend = () => {
@@ -982,6 +997,7 @@ export const InventoryManagement = () => {
                             onClick={() => {
                               setImageFile(null);
                               setImagePreview("");
+                              setImageRemoved(true);
                               setFormData({ ...formData, imageUrl: "" });
                             }}
                             className="text-red-600 hover:text-red-700"

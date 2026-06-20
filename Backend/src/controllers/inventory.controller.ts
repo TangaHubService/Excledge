@@ -297,23 +297,21 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
         },
       });
 
-      // Create initial ledger entry if quantity > 0
-      if (quantity > 0) {
-        await ledgerAddStock({
-          organizationId: organizationId!,
-          productId: product.id,
-          userId,
-          quantity,
-          movementType: 'INITIAL_STOCK',
-          branchId,
-          reference: `INIT-${product.id}`,
-          referenceType: 'INITIAL_STOCK',
-          note: 'Initial stock from product creation',
-          batchNumber,
-          expiryDate: expiryDate ? new Date(expiryDate) : undefined,
-          tx, // Pass transaction client
-        });
-      }
+      // Create initial ledger entry for branch-scoped stock tracking
+      await ledgerAddStock({
+        organizationId: organizationId!,
+        productId: product.id,
+        userId,
+        quantity: quantity || 0,
+        movementType: 'INITIAL_STOCK',
+        branchId,
+        reference: `INIT-${product.id}`,
+        referenceType: 'INITIAL_STOCK',
+        note: 'Initial stock from product creation',
+        batchNumber,
+        expiryDate: expiryDate ? new Date(expiryDate) : undefined,
+        tx, // Pass transaction client
+      });
 
       return product;
     });
@@ -511,7 +509,7 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
-    const updateData = req.body
+    const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock, taxCode, measurementUnit, exemptionReference } = req.body
 
     const existingProduct = await prisma.product.findFirst({
       where: { id, organizationId, deletedAt: null },
@@ -521,16 +519,28 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
       return res.status(404).json(apiError("Product not found"))
     }
 
-    if (updateData.expiryDate && new Date(updateData.expiryDate) < new Date()) {
+    if (expiryDate && new Date(expiryDate) < new Date()) {
       return res.status(400).json(apiError("Expiry date cannot be in the past"))
     }
 
+    const data: any = {}
+    if (name !== undefined) data.name = name
+    if (batchNumber !== undefined) data.batchNumber = batchNumber
+    if (quantity !== undefined) data.quantity = quantity
+    if (unitPrice !== undefined) data.unitPrice = unitPrice
+    if (category !== undefined) data.category = category
+    if (description !== undefined) data.description = description
+    if (minStock !== undefined) data.minStock = minStock
+    if (taxCode !== undefined) data.taxCode = taxCode
+    if (measurementUnit !== undefined) data.measurementUnit = measurementUnit
+    if (exemptionReference !== undefined) data.exemptionReference = exemptionReference
+    data.expiryDate = expiryDate ? new Date(expiryDate) : null
+    // imageUrl: if explicitly provided (including empty string), update it; if undefined, keep existing
+    if (imageUrl !== undefined) data.imageUrl = imageUrl
+
     const product = await prisma.product.update({
       where: { id },
-      data: {
-        ...updateData,
-        expiryDate: updateData.expiryDate ? new Date(updateData.expiryDate) : null,
-      },
+      data,
     })
 
     await auditLogger.inventory(req, {
