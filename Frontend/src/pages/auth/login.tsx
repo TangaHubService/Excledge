@@ -6,10 +6,12 @@ import { Package, Eye, EyeOff, MailCheck } from "lucide-react";
 import { apiClient } from "../../lib/api-client";
 import { LoginSchema } from "../../schema/auth";
 import { useAuth } from "../../context/AuthContext";
+import { useOrganization } from "../../context/OrganizationContext";
 
 export default function LoginPage() {
     const navigate = useNavigate();
     const { login } = useAuth();
+    const { setOrganization } = useOrganization();
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
@@ -86,9 +88,12 @@ export default function LoginPage() {
                 return;
             }
             if (result?.organizations.length === 1) {
-                localStorage.setItem("current_organization_id", result?.organizations[0].id);
+                const org = result.organizations[0];
+                localStorage.setItem("current_organization_id", String(org.id));
+                localStorage.setItem("organization", JSON.stringify(org));
+                setOrganization(org);
                 showToast(`Welcome back ${result?.user.name}!`, "success");
-                apiClient.switchOrganization({ organizationId: result?.organizations[0].id });
+                apiClient.switchOrganization({ organizationId: org.id });
                 setTimeout(() => navigate("/dashboard"), 2000);
                 return;
             }

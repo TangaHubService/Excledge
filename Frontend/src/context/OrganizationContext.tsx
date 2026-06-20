@@ -25,6 +25,7 @@ interface Organization {
 interface OrganizationContextType {
     organization: Organization | null;
     setOrganization: (org: Organization | null) => void;
+    refreshOrganization: () => Promise<void>;
 }
 
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
@@ -32,42 +33,53 @@ const OrganizationContext = createContext<OrganizationContextType | undefined>(u
 export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [organization, setOrganization] = useState<Organization | null>(null);
 
-    // Load organization from localStorage on mount, or fetch from API if needed
-    useEffect(() => {
-        const loadOrganization = async () => {
-            const storedOrg = localStorage.getItem('organization');
-            const orgId = localStorage.getItem('current_organization_id');
+    const loadOrganization = async () => {
+        const storedOrg = localStorage.getItem('organization');
+        const orgId = localStorage.getItem('current_organization_id');
 
-            if (orgId) {
-                // If we have organizationId, try to load from localStorage first
-                if (storedOrg) {
-                    try {
-                        const parsedOrg = JSON.parse(storedOrg);
+        if (orgId) {
+            // Verify cached org matches current_organization_id
+            if (storedOrg) {
+                try {
+                    const parsedOrg = JSON.parse(storedOrg);
+                    if (String(parsedOrg.id) === orgId) {
                         setOrganization(parsedOrg);
                         return;
-                    } catch (e) {
-                        console.error('Failed to parse stored organization:', e);
                     }
+                } catch (e) {
+                    console.error('Failed to parse stored organization:', e);
                 }
+            }
 
-                // If not in localStorage or parse failed, fetch from API
-                try {
-                    const organizationData = await apiClient.getOrganization(orgId);
-                    if (organizationData?.organization) {
-                        setOrganization(organizationData.organization);
-                        localStorage.setItem('organization', JSON.stringify(organizationData.organization));
-                    }
-                } catch (error) {
-                    console.error('Failed to fetch organization:', error);
+            // Fetch from API if localStorage is stale or missing
+            try {
+                const organizationData = await apiClient.getOrganization(orgId);
+                if (organizationData?.organization) {
+                    setOrganization(organizationData.organization);
+                    localStorage.setItem('organization', JSON.stringify(organizationData.organization));
                 }
+            } catch (error) {
+                console.error('Failed to fetch organization:', error);
+            }
+        }
+    };
+
+    // Load organization on mount, and when a new org is set via localStorage by another tab
+    useEffect(() => {
+        loadOrganization();
+
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'current_organization_id' || e.key === 'organization') {
+                loadOrganization();
             }
         };
 
-        loadOrganization();
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
     }, []);
 
     return (
-        <OrganizationContext.Provider value={{ organization, setOrganization }}>
+        <OrganizationContext.Provider value={{ organization, setOrganization, refreshOrganization: loadOrganization }}>
             {children}
         </OrganizationContext.Provider>
     );

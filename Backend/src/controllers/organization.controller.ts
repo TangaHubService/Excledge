@@ -800,6 +800,37 @@ export const acceptInvitation = async (req: Request, res: Response) => {
       });
     }
 
+    // Auto-assign the invited user to the first active branch (or create a default one)
+    let branch = await prisma.branch.findFirst({
+      where: { organizationId: invitation.organizationId, status: 'ACTIVE' },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!branch) {
+      branch = await prisma.branch.create({
+        data: {
+          name: "Main Branch",
+          code: "MAIN-001",
+          organizationId: invitation.organizationId,
+          status: 'ACTIVE',
+        },
+      });
+    }
+
+    const existingUserBranch = await prisma.userBranch.findFirst({
+      where: { userId: user.id, branchId: branch.id },
+    });
+
+    if (!existingUserBranch) {
+      await prisma.userBranch.create({
+        data: {
+          userId: user.id,
+          branchId: branch.id,
+          isPrimary: true,
+        },
+      });
+    }
+
     await prisma.organizationInvitation.update({
       where: { id: invitation.id },
       data: {
