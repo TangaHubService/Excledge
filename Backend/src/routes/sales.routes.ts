@@ -5,7 +5,8 @@ import {
   getSaleById,
   payDebt,
   refundSale,
-  cancelSale
+  cancelSale,
+  reprintSaleReceipt
 } from "../controllers/sales.controller";
 import { authenticate, authorize } from "../middleware/auth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
@@ -70,6 +71,15 @@ router.post(
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   validate(cancelSaleSchema),
   cancelSale
+);
+
+// Reprint a sale receipt (increments reprintCount, returns isCopy=true)
+router.post(
+  "/:organizationId/:saleId/reprint",
+  authenticate,
+  orgAccess,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  reprintSaleReceipt
 );
 
 export default router;

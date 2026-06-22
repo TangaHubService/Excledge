@@ -19,6 +19,7 @@ model Organization {
   phone             String?
   email             String?
   isActive          Boolean                  @default(true)
+  trainingMode      Boolean                  @default(false)
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
   stripeCustomerId  String?
@@ -354,6 +355,8 @@ model Product {
   taxCategory        TaxCategory         @default(STANDARD)
   taxCode            RraTaxCode?
   measurementUnit    MeasurementUnit     @default(PCS)
+  ebmSyncStatus      EbmSyncStatus       @default(PENDING)
+  ebmSyncedAt        DateTime?
   barcode            String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
@@ -1158,6 +1161,12 @@ enum RraTaxCode {
   C
   D
   E
+}
+
+enum EbmSyncStatus {
+  PENDING
+  SYNCED
+  FAILED
 }
 
 enum EbmOperation {
