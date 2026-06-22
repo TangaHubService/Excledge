@@ -14,6 +14,10 @@ export interface TokenPayload {
   organizationIds?: number[];
   /** @deprecated Prefer activeOrganizationId; kept for older clients */
   organizationId?: number | number[];
+  /** Active / selected branch for the current organization scope */
+  activeBranchId?: number | null;
+  /** All branch IDs the user is assigned to within the active organization */
+  branchIds?: number[];
 }
 
 export interface TokenPair {

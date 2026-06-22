@@ -1,5 +1,6 @@
 import type { Response, NextFunction } from 'express';
 import type { AuthRequest } from './auth.middleware';
+import type { OrganizationAccessRequest } from './organizationAccess.middleware';
 import { prisma } from '../lib/prisma';
 import { UserRole } from '@prisma/client';
 
@@ -10,12 +11,46 @@ export interface BranchAuthRequest extends AuthRequest {
 }
 
 /**
+ * Resolve the effective org-level role for a user.
+ * Checks, in order:
+ * 1. `organizationRole` on request (set by `requireOrganizationAccess`)
+ * 2. `user.role` from JWT (which reflects org role after login)
+ * 3. Queries `UserOrganization` for the active org from JWT
+ */
+async function resolveOrgRole(req: AuthRequest): Promise<{ role: string; orgId: number | null }> {
+    const orgAccessReq = req as OrganizationAccessRequest;
+    if (orgAccessReq.organizationRole) {
+        return { role: orgAccessReq.organizationRole, orgId: parseInt(String(req.params.organizationId ?? req.params.id), 10) || null };
+    }
+
+    const jwtRole = req.user?.role;
+    const activeOrgId = req.user?.activeOrganizationId ?? req.user?.organizationId;
+
+    if (activeOrgId != null) {
+        const orgId = Number(activeOrgId);
+        if (!isNaN(orgId)) {
+            const membership = await prisma.userOrganization.findFirst({
+                where: { userId: Number(req.user!.userId), organizationId: orgId },
+                select: { role: true },
+            });
+            if (membership) {
+                return { role: membership.role, orgId };
+            }
+        }
+    }
+
+    return { role: jwtRole ?? '', orgId: activeOrgId != null ? Number(activeOrgId) || null : null };
+}
+
+/**
  * Branch authorization middleware
  * Extracts optional branchId from query and validates user access
  * 
  * Rules:
  * - No branchId parameter → returns all data (selectedBranchId = null)
  * - Specific branchId → validates access and returns branch + org-level data
+ * - ADMIN at org level can access ALL branches
+ * - BRANCH_MANAGER, SELLER, ACCOUNTANT are LIMITED to assigned branches
  */
 export const branchAuth = async (
     req: BranchAuthRequest,
@@ -28,10 +63,12 @@ export const branchAuth = async (
         }
 
         const userId = parseInt(req.user.userId);
-        const userRole = req.user.role as UserRole;
 
-        // Check if user can access all branches
-        const canAccessAll = userRole === UserRole.ADMIN || userRole === UserRole.SYSTEM_OWNER;
+        // Resolve org-specific role
+        const { role: orgRole } = await resolveOrgRole(req);
+
+        // SYSTEM_OWNER and ADMIN can access all branches
+        const canAccessAll = orgRole === UserRole.ADMIN || orgRole === UserRole.SYSTEM_OWNER;
 
         // Get branchId from query parameter (optional)
         const branchIdParam = req.query.branchId as string | undefined;
@@ -54,7 +91,7 @@ export const branchAuth = async (
         req.branchIds = userBranchIds;
         req.branchScope = canAccessAll ? 'ALL' : 'LIMITED';
 
-        // If no branchId specified, allow (returns all data)
+        // If no branchId specified, allow (returns all data for admins, or org-level data)
         if (branchId === null) {
             req.selectedBranchId = null;
             return next();
@@ -91,7 +128,6 @@ export function buildBranchFilter(req: BranchAuthRequest) {
         return {};
     }
 
-    // Specific branchId = return branch data + org-level data
     // Specific branchId = return branch data only (branchId is required)
     return { branchId };
 }
@@ -132,16 +168,19 @@ export const requireBranchId = async (
         }
 
         const userId = parseInt(req.user?.userId || '0');
-        const userRole = req.user?.role as UserRole;
+
+        // Resolve org-specific role
+        const { role: orgRole } = await resolveOrgRole(req);
+        const canAccessAll = orgRole === UserRole.ADMIN || orgRole === UserRole.SYSTEM_OWNER;
 
         // Admins can access any branch
-        if (userRole === UserRole.ADMIN || userRole === UserRole.SYSTEM_OWNER) {
+        if (canAccessAll) {
             return next();
         }
 
         // Validate user has access to this branch
         const userBranch = await prisma.userBranch.findFirst({
-            where: { userId, branchId },
+            where: { userId, branchId: Number(branchId) },
         });
 
         if (!userBranch) {

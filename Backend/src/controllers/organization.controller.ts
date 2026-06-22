@@ -326,7 +326,7 @@ export const deleteOrganization = async (req: Request, res: Response) => {
 export const inviteUser = async (req: Request, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
-    const { email, role } = req.body;
+    const { email, role, branchId } = req.body;
     //@ts-ignore
     const userId = parseInt(req.user?.userId as string);
 
@@ -347,6 +347,22 @@ export const inviteUser = async (req: Request, res: Response) => {
 
     if (!userOrganization) {
       return res.status(403).json({ error: "Only admins can invite users" });
+    }
+
+    // If branchId is provided, validate it belongs to the organization
+    let validatedBranchId: number | undefined;
+    if (branchId !== undefined && branchId !== null && branchId !== '') {
+      const parsedBranchId = parseInt(String(branchId), 10);
+      if (isNaN(parsedBranchId)) {
+        return res.status(400).json({ error: "Invalid branch ID" });
+      }
+      const branch = await prisma.branch.findFirst({
+        where: { id: parsedBranchId, organizationId },
+      });
+      if (!branch) {
+        return res.status(400).json({ error: "Branch not found in this organization" });
+      }
+      validatedBranchId = parsedBranchId;
     }
 
     const existingUser = await prisma.user.findUnique({
@@ -393,6 +409,7 @@ export const inviteUser = async (req: Request, res: Response) => {
           expiresAt,
           invitedUserId: existingUser.id, // Link to existing user
           defaultPassword: "",
+          ...(validatedBranchId !== undefined ? { branchId: validatedBranchId } : {}),
         },
       });
 
@@ -441,6 +458,7 @@ export const inviteUser = async (req: Request, res: Response) => {
         defaultPassword,
         invitedBy: userId!,
         expiresAt,
+        ...(validatedBranchId !== undefined ? { branchId: validatedBranchId } : {}),
       },
       include: {
         organization: true,
@@ -660,6 +678,13 @@ export const getInvitationDetails = async (req: Request, res: Response) => {
             businessType: true,
           },
         },
+        branch: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
       },
     });
 
@@ -800,36 +825,29 @@ export const acceptInvitation = async (req: Request, res: Response) => {
       });
     }
 
-    // Auto-assign the invited user to the first active branch (or create a default one)
-    let branch = await prisma.branch.findFirst({
-      where: { organizationId: invitation.organizationId, status: 'ACTIVE' },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    if (!branch) {
-      branch = await prisma.branch.create({
-        data: {
-          name: "Main Branch",
-          code: "MAIN-001",
-          organizationId: invitation.organizationId,
-          status: 'ACTIVE',
-        },
+    // If invitation is branch-scoped, assign user to that specific branch
+    if (invitation.branchId) {
+      const branch = await prisma.branch.findFirst({
+        where: { id: invitation.branchId, organizationId: invitation.organizationId },
       });
-    }
 
-    const existingUserBranch = await prisma.userBranch.findFirst({
-      where: { userId: user.id, branchId: branch.id },
-    });
+      if (branch) {
+        const existingUserBranch = await prisma.userBranch.findFirst({
+          where: { userId: user.id, branchId: branch.id },
+        });
 
-    if (!existingUserBranch) {
-      await prisma.userBranch.create({
-        data: {
-          userId: user.id,
-          branchId: branch.id,
-          isPrimary: true,
-        },
-      });
+        if (!existingUserBranch) {
+          await prisma.userBranch.create({
+            data: {
+              userId: user.id,
+              branchId: branch.id,
+              isPrimary: true,
+            },
+          });
+        }
+      }
     }
+    // If no branchId, user has org-wide access (not restricted to any specific branch)
 
     await prisma.organizationInvitation.update({
       where: { id: invitation.id },

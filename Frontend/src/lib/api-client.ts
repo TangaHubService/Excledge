@@ -565,7 +565,7 @@ class ApiClient {
     return this.request(`/users/${this.getOrganizationId()}`);
   }
 
-  async inviteUser(data: { email: string; role: string }) {
+  async inviteUser(data: { email: string; role: string; branchId?: number | null }) {
     return this.request(`/organizations/${this.getOrganizationId()}/invite`, {
       method: "POST",
       body: JSON.stringify(data),
