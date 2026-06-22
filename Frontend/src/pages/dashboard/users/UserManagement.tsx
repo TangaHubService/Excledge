@@ -91,7 +91,7 @@ export const UserManagement = () => {
       try {
         const orgId = apiClient.getOrganizationId();
         if (!orgId) return;
-        const response = await apiClient.getBranches(orgId);
+        const response = await apiClient.getBranches();
         const data = Array.isArray(response) ? response : (response as any)?.branches ?? (response as any)?.data ?? [];
         setBranches(data);
       } catch {
@@ -384,7 +384,7 @@ export const UserManagement = () => {
                                 if (canEdit(user.id)) {
                                   setIsDialogOpen(true);
                                   setEditingUserId(user.id || null);
-                                  setFormData({ email: user.email, role: user.role });
+                                  setFormData({ email: user.email, role: user.role, branchId: user.branchId ?? "" });
                                 }
                               }}
                               disabled={!canEdit(user.id)}
