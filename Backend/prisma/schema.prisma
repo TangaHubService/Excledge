@@ -71,6 +71,7 @@ model Branch {
   // Relations
   organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userBranches      UserBranch[]
+  invitations       OrganizationInvitation[]
   sales             Sale[]
   stockMovements    StockMovement[]
   expenses          Expense[]
@@ -238,15 +239,18 @@ model OrganizationInvitation {
   updatedAt       DateTime         @updatedAt
   id              Int              @id @default(autoincrement())
   organizationId  Int
+  branchId        Int?             // Optional branch-scoped invitation
   invitedBy       Int
   invitedUserId   Int?
   inviter         User             @relation("InvitedBy", fields: [invitedBy], references: [id])
   invitedUser     User?            @relation("InvitedUser", fields: [invitedUserId], references: [id])
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch          Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([invitedBy])
   @@index([email])
+  @@index([branchId])
   @@map("organization_invitations")
 }
 

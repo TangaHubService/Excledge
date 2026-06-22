@@ -8,6 +8,10 @@ export interface JwtPayload {
   role?: string
   name?: string
   organizationId?: string | number  // Can be string (from old tokens) or number (from new tokens)
+  activeOrganizationId?: number
+  organizationIds?: number[]
+  activeBranchId?: number | null
+  branchIds?: number[]
   isVerified?: boolean
 }
 
@@ -18,6 +22,10 @@ export interface AuthRequest extends Request {
     role: string;
     name: string;
     organizationId: any;
+    activeOrganizationId?: number;
+    organizationIds?: number[];
+    activeBranchId?: number | null;
+    branchIds?: number[];
     isVerified?: boolean;
     isActive?: boolean;
   };

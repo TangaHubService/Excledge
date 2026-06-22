@@ -162,6 +162,22 @@ export const login = async (req: Request, res: Response) => {
     const primaryUo = sortedUo[0];
     const organizationIds = user.userOrganizations.map((uo) => uo.organizationId);
 
+    // Fetch branch assignments for the primary organization
+    let activeBranchId: number | null = null;
+    let branchIds: number[] = [];
+    if (primaryUo) {
+      const userBranches = await prisma.userBranch.findMany({
+        where: { userId: user.id },
+        include: { branch: { select: { organizationId: true } } },
+      });
+      // Filter branches belonging to the primary organization
+      const orgBranches = userBranches.filter(ub => ub.branch.organizationId === primaryUo.organizationId);
+      branchIds = orgBranches.map(ub => ub.branchId);
+      // Find primary branch, or use the first one
+      const primaryBranch = orgBranches.find(ub => ub.isPrimary) ?? orgBranches[0];
+      activeBranchId = primaryBranch?.branchId ?? null;
+    }
+
     const tokenPayload = {
       userId: user.id,
       email: user.email,
@@ -169,6 +185,8 @@ export const login = async (req: Request, res: Response) => {
       activeOrganizationId: primaryUo?.organizationId,
       organizationIds,
       organizationId: primaryUo?.organizationId ?? organizationIds,
+      activeBranchId,
+      branchIds,
     };
 
     const { accessToken, refreshToken } = generateTokenPair(tokenPayload);
@@ -213,8 +231,14 @@ export const login = async (req: Request, res: Response) => {
         role: primaryUo ? primaryUo.role : user.role,
         requirePasswordChange: user.requirePasswordChange,
       },
-      organizations,
+      organizations: organizations.map((org, index) => ({
+        ...org,
+        branches: index === 0 ? branchIds : undefined,
+        activeBranchId: index === 0 ? activeBranchId : undefined,
+      })),
       hasOrganization: organizations.length > 0,
+      activeBranchId,
+      branchIds,
     })
   } catch (error) {
     console.error("[Login Error]:", error)
@@ -290,6 +314,23 @@ export const refresh = async (req: Request, res: Response) => {
       roleForToken = user.userOrganizations[0]?.role ?? user.role;
     }
 
+    // Resolve branch context for the active organization
+    let activeBranchId: number | null = decoded.activeBranchId ?? null;
+    let branchIds: number[] = decoded.branchIds ?? [];
+    if (activeOrganizationId != null) {
+      const userBranches = await prisma.userBranch.findMany({
+        where: { userId: user.id },
+        include: { branch: { select: { organizationId: true } } },
+      });
+      const orgBranches = userBranches.filter(ub => ub.branch.organizationId === activeOrganizationId);
+      branchIds = orgBranches.map(ub => ub.branchId);
+      // If previously selected branch is no longer valid, pick the primary or first
+      if (activeBranchId != null && !branchIds.includes(activeBranchId)) {
+        const primaryBranch = orgBranches.find(ub => ub.isPrimary) ?? orgBranches[0];
+        activeBranchId = primaryBranch?.branchId ?? null;
+      }
+    }
+
     const tokenPayload = {
       userId: user.id,
       email: user.email,
@@ -297,6 +338,8 @@ export const refresh = async (req: Request, res: Response) => {
       activeOrganizationId,
       organizationIds: orgIdList,
       organizationId: activeOrganizationId ?? orgIdList,
+      activeBranchId,
+      branchIds,
     };
 
     const { accessToken, refreshToken: newRefreshToken } = generateTokenPair(tokenPayload);
@@ -389,6 +432,16 @@ export const switchOrganization = async (req: Request, res: Response) => {
 
     const organizationIds = fullUser.userOrganizations.map((uo) => uo.organizationId);
 
+    // Fetch branch assignments for the new organization
+    const userBranches = await prisma.userBranch.findMany({
+      where: { userId: fullUser.id },
+      include: { branch: { select: { organizationId: true } } },
+    });
+    const orgBranches = userBranches.filter(ub => ub.branch.organizationId === organization.id);
+    const branchIds = orgBranches.map(ub => ub.branchId);
+    const primaryBranch = orgBranches.find(ub => ub.isPrimary) ?? orgBranches[0];
+    const activeBranchId = primaryBranch?.branchId ?? null;
+
     const { accessToken, refreshToken } = generateTokenPair({
       userId: parseInt(userId as string),
       email: fullUser.email,
@@ -396,6 +449,8 @@ export const switchOrganization = async (req: Request, res: Response) => {
       activeOrganizationId: organization.id,
       organizationIds,
       organizationId: organization.id,
+      activeBranchId,
+      branchIds,
     });
 
     const hashedRefreshToken = crypto
@@ -525,6 +580,15 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
         orderBy: { endDate: 'desc' }
       });
 
+      // Fetch branch assignments for this organization
+      const userBranches = await prisma.userBranch.findMany({
+        where: { userId: user.id },
+        include: { branch: { select: { organizationId: true } } },
+      });
+      const orgBranches = userBranches.filter(ub => ub.branch.organizationId === uo.organization.id);
+      const branchIds = orgBranches.map(ub => ub.branchId);
+      const primaryBranch = orgBranches.find(ub => ub.isPrimary) ?? orgBranches[0];
+
       return {
         id: uo.organization.id,
         name: uo.organization.name,
@@ -537,6 +601,8 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
         hasActiveSubscription: !!activeSubscription,
         subscriptionStatus: activeSubscription?.status || (uo.organization.isActive ? 'INACTIVE' : 'EXPIRED'),
         subscriptionEndDate: activeSubscription?.endDate,
+        branchIds,
+        activeBranchId: primaryBranch?.branchId ?? null,
       };
     }))
 

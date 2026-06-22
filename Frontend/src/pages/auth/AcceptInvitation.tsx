@@ -5,7 +5,8 @@ import {
     XCircle,
     Package,
     Building2,
-    Mail
+    Mail,
+    GitBranch
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 
@@ -22,7 +23,12 @@ interface InvitationDetails {
         businessType: string;
         avatar?: string;
     };
-    invitedBy: {
+    branch?: {
+        id: number;
+        name: string;
+        code: string;
+    } | null;
+    invitedBy?: {
         name: string;
         email: string;
     };
@@ -227,6 +233,20 @@ const AcceptInvitationContent: React.FC<AcceptInvitationContentProps> = ({
                                             {invitation.email}
                                         </div>
                                     </div>
+                                    {invitation.branch && (
+                                        <div className="col-span-full p-3 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20">
+                                            <div className="flex items-center gap-2 text-[10px] font-medium text-blue-600 dark:text-blue-400 mb-1 uppercase tracking-wider">
+                                                <GitBranch className="h-3 w-3" />
+                                                Branch Access
+                                            </div>
+                                            <div className="font-semibold text-blue-900 dark:text-blue-200 text-xs">
+                                                {invitation.branch.name} ({invitation.branch.code})
+                                            </div>
+                                            <p className="text-[10px] text-blue-600/70 dark:text-blue-300/70 mt-0.5">
+                                                Your access will be restricted to this branch
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 

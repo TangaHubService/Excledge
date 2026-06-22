@@ -46,7 +46,9 @@ export const UserManagement = () => {
   const [formData, setFormData] = useState({
     email: "",
     role: "",
+    branchId: "",
   });
+  const [branches, setBranches] = useState<Array<{ id: number; name: string; code: string }>>([]);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [disablingUserId, setDisablingUserId] = useState<string | null>(null);
 
@@ -84,6 +86,21 @@ export const UserManagement = () => {
     fetchUsers();
   }, [t]);
 
+  useEffect(() => {
+    const fetchBranches = async () => {
+      try {
+        const orgId = apiClient.getOrganizationId();
+        if (!orgId) return;
+        const response = await apiClient.getBranches(orgId);
+        const data = Array.isArray(response) ? response : (response as any)?.branches ?? (response as any)?.data ?? [];
+        setBranches(data);
+      } catch {
+        // Branches are optional; silently ignore
+      }
+    };
+    fetchBranches();
+  }, []);
+
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
@@ -115,7 +132,12 @@ export const UserManagement = () => {
         );
         toast.success(t('userManagement.userUpdated'));
       } else {
-        const response = await apiClient.inviteUser(formData);
+        const invitePayload = {
+          email: formData.email,
+          role: formData.role,
+          branchId: formData.branchId ? parseInt(formData.branchId) : null,
+        };
+        const response = await apiClient.inviteUser(invitePayload);
 
         // Check the response type
         if (response.invitation) {
@@ -141,7 +163,7 @@ export const UserManagement = () => {
       const errorMessage = error instanceof Error ? error.message : t('userManagement.failedToInvite');
       toast.error(errorMessage);
     }
-    setFormData({ email: "", role: "" });
+    setFormData({ email: "", role: "", branchId: "" });
   };
 
   const handleDisableUser = async (userId?: string) => {
@@ -464,6 +486,7 @@ export const UserManagement = () => {
                 >
                   <option value="">{t('userManagement.selectRole')}</option>
                   {currentUserIsAdmin && <option value="ADMIN">ADMIN</option>}
+                  <option value="BRANCH_MANAGER">BRANCH MANAGER</option>
                   <option value="ACCOUNTANT">ACCOUNTANT</option>
                   <option value="SELLER">SELLER</option>
                 </select>
@@ -472,6 +495,27 @@ export const UserManagement = () => {
                     {t('userManagement.onlyAdminsNote')}
                   </p>
                 )}
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-900 dark:text-white">
+                  Branch (optional)
+                </label>
+                <select
+                  name="branchId"
+                  value={formData.branchId}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                >
+                  <option value="">All branches (org-wide access)</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Leave empty for org-wide access. Selecting a branch restricts the user to that branch only.
+                </p>
               </div>
               <button
                 onClick={handleSubmit}
