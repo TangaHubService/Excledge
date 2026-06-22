@@ -384,7 +384,7 @@ export const UserManagement = () => {
                                 if (canEdit(user.id)) {
                                   setIsDialogOpen(true);
                                   setEditingUserId(user.id || null);
-                                  setFormData({ email: user.email, role: user.role, branchId: user.branchId ?? "" });
+                                  setFormData({ email: user.email, role: user.role, branchId: "" });
                                 }
                               }}
                               disabled={!canEdit(user.id)}
