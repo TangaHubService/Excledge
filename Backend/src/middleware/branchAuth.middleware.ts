@@ -67,8 +67,23 @@ export const branchAuth = async (
         // Resolve org-specific role
         const { role: orgRole } = await resolveOrgRole(req);
 
-        // SYSTEM_OWNER and ADMIN can access all branches
-        const canAccessAll = orgRole === UserRole.ADMIN || orgRole === UserRole.SYSTEM_OWNER;
+        // Get user's assigned branches
+        const userBranches = await prisma.userBranch.findMany({
+            where: { userId },
+            select: { branchId: true },
+        });
+
+        const userBranchIds = userBranches.map(ub => ub.branchId);
+        req.branchIds = userBranchIds;
+
+        // SYSTEM_OWNER always has full access.
+        // ADMIN has full access ONLY when they have no specific branch assignments.
+        // Other roles (BRANCH_MANAGER, ACCOUNTANT, SELLER) are always LIMITED.
+        const hasBranchRestrictions = userBranchIds.length > 0;
+        const canAccessAll = orgRole === UserRole.SYSTEM_OWNER ||
+            (orgRole === UserRole.ADMIN && !hasBranchRestrictions);
+
+        req.branchScope = canAccessAll ? 'ALL' : 'LIMITED';
 
         // Get branchId from query parameter (optional)
         const branchIdParam = req.query.branchId as string | undefined;
@@ -80,16 +95,6 @@ export const branchAuth = async (
                 branchId = parsed;
             }
         }
-
-        // Get user's assigned branches
-        const userBranches = await prisma.userBranch.findMany({
-            where: { userId },
-            select: { branchId: true },
-        });
-
-        const userBranchIds = userBranches.map(ub => ub.branchId);
-        req.branchIds = userBranchIds;
-        req.branchScope = canAccessAll ? 'ALL' : 'LIMITED';
 
         // If no branchId specified, allow (returns all data for admins, or org-level data)
         if (branchId === null) {
@@ -171,9 +176,16 @@ export const requireBranchId = async (
 
         // Resolve org-specific role
         const { role: orgRole } = await resolveOrgRole(req);
-        const canAccessAll = orgRole === UserRole.ADMIN || orgRole === UserRole.SYSTEM_OWNER;
 
-        // Admins can access any branch
+        // Check if user has branch restrictions
+        const userBranches = await prisma.userBranch.findMany({
+            where: { userId },
+            select: { branchId: true },
+        });
+        const hasBranchRestrictions = userBranches.length > 0;
+        const canAccessAll = orgRole === UserRole.SYSTEM_OWNER ||
+            (orgRole === UserRole.ADMIN && !hasBranchRestrictions);
+
         if (canAccessAll) {
             return next();
         }

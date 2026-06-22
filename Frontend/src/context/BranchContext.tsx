@@ -70,24 +70,42 @@ export const BranchProvider: React.FC<BranchProviderProps> = ({ children }) => {
                 console.error('Failed to parse user from localStorage:', e);
             }
 
-            const canAccessAll = userRole === 'ADMIN' || userRole === 'SYSTEM_OWNER';
-            setCanAccessAllBranches(canAccessAll);
-
-            console.log('[BranchContext] Fetching branches:', { orgId, userRole, canAccessAll });
+            console.log('[BranchContext] Fetching branches:', { orgId, userRole });
 
             // Fetch branches
             let branches = [];
-            if (canAccessAll && orgId) {
-                console.log(`[BranchContext] Fetching all branches for org: ${orgId}`);
-                const response = await apiClient.get(`/branches/${orgId}`);
-                branches = response.data || [];
-                console.log(`[BranchContext] Received ${branches.length} branches:`, branches);
+            let canAccessAll = false;
+
+            if (userRole === 'SYSTEM_OWNER') {
+                // System owner always has access to all branches
+                canAccessAll = true;
+                if (orgId) {
+                    const response = await apiClient.get(`/branches/${orgId}`);
+                    branches = response.data || [];
+                }
+            } else if (userRole === 'ADMIN') {
+                // Admin: first check if they have specific branch assignments
+                const userResponse = await apiClient.get(`/branches/user/all${orgId ? `?organizationId=${orgId}` : ''}`);
+                const userBranchesData = userResponse.data || [];
+                if (userBranchesData.length > 0) {
+                    // Admin has branch restrictions
+                    canAccessAll = false;
+                    branches = userBranchesData;
+                } else if (orgId) {
+                    // Admin has no restrictions, fetch all branches
+                    canAccessAll = true;
+                    const response = await apiClient.get(`/branches/${orgId}`);
+                    branches = response.data || [];
+                }
             } else {
-                console.log('[BranchContext] Fetching user-assigned branches');
+                // Other roles: always restricted to assigned branches
+                canAccessAll = false;
                 const response = await apiClient.get(`/branches/user/all${orgId ? `?organizationId=${orgId}` : ''}`);
                 branches = response.data || [];
-                console.log(`[BranchContext] Received ${branches.length} user branches:`, branches);
             }
+
+            setCanAccessAllBranches(canAccessAll);
+            console.log(`[BranchContext] canAccessAll: ${canAccessAll}, branches: ${branches.length}`);
             setUserBranches(branches);
 
             // Find primary branch
