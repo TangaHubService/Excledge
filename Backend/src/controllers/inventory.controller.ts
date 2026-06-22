@@ -9,6 +9,7 @@ import {
   removeStock as ledgerRemoveStock,
   addStock as ledgerAddStock
 } from "../services/inventory-ledger.service"
+import { syncProductToRraAsync } from "../services/product-sync.service"
 import { success, error as apiError } from "../utils/apiResponse"
 
 export const getProducts = async (req: BranchAuthRequest, res: Response) => {
@@ -326,6 +327,8 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       }
     });
 
+    syncProductToRraAsync(result.id);
+
     res.status(201).json(success(result))
   } catch (error: any) {
     // Distinguish validation errors from server errors
@@ -553,6 +556,8 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
         updatedData: product,
       }
     });
+
+    syncProductToRraAsync(product.id);
 
     res.json(success(product))
   } catch (error: any) {

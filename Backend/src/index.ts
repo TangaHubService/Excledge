@@ -48,6 +48,7 @@ import {
 } from "./jobs/product-expiry.job";
 import { ebmQueueJob } from "./jobs/ebm-queue.job";
 import { ebmOutboxJob } from "./jobs/ebm-outbox.job";
+import { vsdcHeartbeatJob } from "./jobs/vsdc-heartbeat.job";
 import pesapalRoutes from "./routes/pesapal.route";
 import uploadRoutes from "./routes/upload.route";
 
@@ -157,6 +158,7 @@ if (process.env.RUN_JOBS !== "false") {
   dailyReportJob.start();
   ebmQueueJob.start();
   ebmOutboxJob.start();
+  vsdcHeartbeatJob.start();
 }
 
 

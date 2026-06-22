@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { config } from '../config';
 import type { Decimal } from '@prisma/client/runtime/library';
+import { buildVsdcEnvelope, saveInvc, parseVsdcResponse } from './vsdc-api.service';
 
 export type SaleWithRelations = {
   id: number;
@@ -509,29 +510,31 @@ export async function submitInvoiceToEbm(params: {
   });
 
   try {
-    const http = await postToGateway(config.ebm.salePath, payload);
-    const normalized = parseGatewayResponse(http.json ?? http.rawText);
+    const envelope = await buildVsdcEnvelope(params.organizationId, sale.branchId);
+    const result = await saveInvc(envelope, payload);
 
-    if (!http.ok || !normalized.ebmInvoiceNumber) {
-      const msg = gatewayErrorMessage(http, `Gateway HTTP ${http.status}`);
+    if (!result.success || !result.data?.rcptNo) {
+      const msg = result.error ?? 'VSDC gateway error';
       await persistFailure(msg, {
-        httpStatus: http.status,
-        responseBody: http.json ?? http.rawText,
+        vsdcResult: result,
         requestPayload: payload,
       });
       return { success: false, error: msg };
     }
+
+    const { data: vsdc } = result;
 
     await prisma.$transaction([
       prisma.ebmTransaction.update({
         where: { id: txRow.id },
         data: {
           submissionStatus: 'SUCCESS',
-          ebmInvoiceNumber: normalized.ebmInvoiceNumber,
+          ebmInvoiceNumber: vsdc.rcptNo,
           submittedAt: new Date(),
+          sdcDateTime: vsdc.sdcDateTime ? new Date(vsdc.sdcDateTime) : null,
           responseData: {
-            raw: http.json ?? http.rawText,
-            normalized,
+            raw: result.rawBody,
+            normalized: vsdc,
             requestPayload: payload,
           } as object,
         },
@@ -545,7 +548,7 @@ export async function submitInvoiceToEbm(params: {
       }),
     ]);
 
-    return { success: true, ebmInvoiceNumber: normalized.ebmInvoiceNumber };
+    return { success: true, ebmInvoiceNumber: vsdc.rcptNo };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'EBM request failed';
     await persistFailure(message, { requestPayload: payload });
@@ -651,28 +654,33 @@ export async function submitRefundToEbm(params: {
   }
 
   try {
-    const http = await postToGateway(config.ebm.refundPath, body);
-    const normalized = parseGatewayResponse(http.json ?? http.rawText);
-    if (!http.ok) {
-      const msg = gatewayErrorMessage(http, `Refund gateway HTTP ${http.status}`);
+    const envelope = await buildVsdcEnvelope(params.organizationId);
+    body.operation = 'REFUND';
+    const result = await saveInvc(envelope, body);
+
+    if (!result.success) {
+      const msg = result.error ?? 'Refund VSDC error';
       await prisma.ebmTransaction.update({
         where: { id: refundRow.id },
         data: {
           submissionStatus: 'FAILED',
           errorMessage: msg,
-          responseData: { raw: http.json ?? http.rawText, requestPayload: body } as object,
+          responseData: { vsdcResult: result, requestPayload: body } as object,
         },
       });
       return { success: false, error: msg };
     }
 
+    const { data: vsdc } = result;
+
     await prisma.ebmTransaction.update({
       where: { id: refundRow.id },
       data: {
         submissionStatus: 'SUCCESS',
-        ebmInvoiceNumber: normalized.ebmInvoiceNumber ?? `REFUND-ACK-${refundRow.id}`,
+        ebmInvoiceNumber: vsdc?.rcptNo ?? `REFUND-ACK-${refundRow.id}`,
         submittedAt: new Date(),
-        responseData: { raw: http.json ?? http.rawText, normalized, requestPayload: body } as object,
+        sdcDateTime: vsdc?.sdcDateTime ? new Date(vsdc.sdcDateTime) : null,
+        responseData: { raw: result.rawBody, normalized: vsdc, requestPayload: body } as object,
       },
     });
     return { success: true };
@@ -776,28 +784,33 @@ export async function submitVoidToEbm(params: {
   }
 
   try {
-    const http = await postToGateway(config.ebm.voidPath, body);
-    const normalized = parseGatewayResponse(http.json ?? http.rawText);
-    if (!http.ok) {
-      const msg = gatewayErrorMessage(http, `Void gateway HTTP ${http.status}`);
+    const envelope = await buildVsdcEnvelope(params.organizationId);
+    body.operation = 'VOID';
+    const result = await saveInvc(envelope, body);
+
+    if (!result.success) {
+      const msg = result.error ?? 'Void VSDC error';
       await prisma.ebmTransaction.update({
         where: { id: voidRow.id },
         data: {
           submissionStatus: 'FAILED',
           errorMessage: msg,
-          responseData: { raw: http.json ?? http.rawText, requestPayload: body } as object,
+          responseData: { vsdcResult: result, requestPayload: body } as object,
         },
       });
       return { success: false, error: msg };
     }
 
+    const { data: vsdc } = result;
+
     await prisma.ebmTransaction.update({
       where: { id: voidRow.id },
       data: {
         submissionStatus: 'SUCCESS',
-        ebmInvoiceNumber: normalized.ebmInvoiceNumber ?? `VOID-ACK-${voidRow.id}`,
+        ebmInvoiceNumber: vsdc?.rcptNo ?? `VOID-ACK-${voidRow.id}`,
         submittedAt: new Date(),
-        responseData: { raw: http.json ?? http.rawText, normalized, requestPayload: body } as object,
+        sdcDateTime: vsdc?.sdcDateTime ? new Date(vsdc.sdcDateTime) : null,
+        responseData: { raw: result.rawBody, normalized: vsdc, requestPayload: body } as object,
       },
     });
     return { success: true };

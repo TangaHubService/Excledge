@@ -2,13 +2,17 @@ import { prisma } from '../lib/prisma';
 import { config } from '../config';
 import {
   type SaleWithRelations,
-  postToGateway,
-  parseGatewayResponse,
   buildSaleGatewayPayload,
   generateInvoiceNumber,
   isEbmEnabled,
   gatewayErrorMessage,
 } from './rra-ebm.service';
+import {
+  buildVsdcEnvelope,
+  saveInvc,
+  parseVsdcResponse,
+  vsdcHeartbeat,
+} from './vsdc-api.service';
 
 export { isEbmEnabled };
 import { TaxService } from './tax.service';
@@ -261,10 +265,11 @@ async function resolveOrphanedSubmission(outboxEntry: {
   if (!statusPath) return 'RETRY';
 
   try {
-    const http = await postToGateway(statusPath, { idempotencyKey: outboxEntry.idempotencyKey });
-    if (http.ok && http.json) {
-      const normalized = parseGatewayResponse(http.json);
-      if (normalized.ebmInvoiceNumber) {
+    const envelope = await buildVsdcEnvelope(outboxEntry.organizationId);
+    const result = await vsdcHeartbeat(envelope);
+    if (result.success && result.data) {
+      const normalized = parseVsdcResponse(result.rawBody);
+      if (normalized.rcptNo) {
         await prisma.ebmOutbox.update({
           where: { id: outboxEntry.id },
           data: {
@@ -394,12 +399,25 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
     });
 
     try {
-      const path = config.ebm.salePath;
-      const http = await postToGateway(path, payload);
-      const normalized = parseGatewayResponse(http.json ?? http.rawText);
+      // Check training mode — skip live network call
+      const org = await prisma.organization.findUnique({
+        where: { id: row.organizationId },
+        select: { trainingMode: true },
+      });
+      if (org?.trainingMode) {
+        await prisma.ebmOutbox.update({
+          where: { id: row.id },
+          data: { status: 'DEAD_LETTER', lastError: 'Training mode — VSDC submission skipped' },
+        });
+        failed += 1;
+        continue;
+      }
 
-      if (!http.ok || !normalized.ebmInvoiceNumber) {
-        const msg = gatewayErrorMessage(http, `Gateway HTTP ${http.status}`);
+      const envelope = await buildVsdcEnvelope(row.organizationId, sale.branchId);
+      const result = await saveInvc(envelope, payload);
+
+      if (!result.success || !result.data?.rcptNo) {
+        const msg = result.error ?? 'VSDC gateway error';
         await failSubmission(txRow.id, msg);
 
         const nextRetry = scheduleNextRetry(row.retryCount);
@@ -419,18 +437,18 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         continue;
       }
 
-      // ── Success: persist VSDC response ──
-      const sdcDateTime: Date | null = normalized.sdcDateTime ? new Date(normalized.sdcDateTime) : null;
+      const { data: vsdc } = result;
+      const sdcDateTime: Date | null = vsdc.sdcDateTime ? new Date(vsdc.sdcDateTime) : null;
 
       await prisma.$transaction([
         prisma.ebmTransaction.update({
           where: { id: txRow.id },
           data: {
             submissionStatus: 'SUCCESS',
-            ebmInvoiceNumber: normalized.ebmInvoiceNumber,
+            ebmInvoiceNumber: vsdc.rcptNo,
             submittedAt: new Date(),
             sdcDateTime: sdcDateTime as any,
-            responseData: { raw: http.json ?? http.rawText, normalized, requestPayload: payload } as any,
+            responseData: { raw: result.rawBody, normalized: vsdc, requestPayload: payload } as any,
           },
         }),
         prisma.ebmOutbox.update({

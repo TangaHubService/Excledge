@@ -30,7 +30,7 @@ export class TaxService {
             case 'ZERO_RATED':
                 return RraTaxCode.B;
             case 'EXEMPT':
-                return RraTaxCode.D;
+                return RraTaxCode.C;
             default:
                 return RraTaxCode.A;
         }

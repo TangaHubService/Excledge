@@ -700,12 +700,19 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
     });
 
     if (isEbmEnabled() && result.refundSale?.id && result.success) {
-      submitRefundToEbm({
-        organizationId: parseInt(req.params.organizationId),
-        originalSaleId: parseInt(req.params.id),
-        refundSaleId: result.refundSale.id,
-        reason: req.body?.reason,
-      }).catch((err) => console.error("[EBM] Refund submit failed (non-blocking):", err));
+      try {
+        const ebmResult = await submitRefundToEbm({
+          organizationId: parseInt(req.params.organizationId),
+          originalSaleId: parseInt(req.params.id),
+          refundSaleId: result.refundSale.id,
+          reason: req.body?.reason,
+        });
+        if (!ebmResult.success) {
+          console.error("[EBM] Refund submit failed:", ebmResult.error);
+        }
+      } catch (err) {
+        console.error("[EBM] Refund submit error:", err);
+      }
     }
 
     res.status(200).json(success(result));
@@ -717,6 +724,51 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
   }
 };
 
+
+/**
+ * Reprint a sale receipt — increments reprintCount atomically and returns
+ * the sale with isCopy=true so the frontend can render a "COPY RECEIPT" label.
+ */
+export const reprintSaleReceipt = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const saleId = parseInt(req.params.saleId);
+    const organizationId = parseInt(req.params.organizationId);
+
+    const sale = await prisma.sale.findFirst({
+      where: { id: saleId, organizationId, ...buildBranchFilter(req) },
+      include: {
+        saleItems: { include: { product: true } },
+        customer: true,
+      },
+    });
+
+    if (!sale) {
+      return res.status(404).json(apiError("Sale not found"));
+    }
+
+    const updated = await prisma.sale.update({
+      where: { id: saleId },
+      data: { reprintCount: { increment: 1 } },
+    });
+
+    await auditLogger.sales(req, {
+      type: 'SALE_REPRINTED',
+      description: `Receipt reprinted for Sale #${sale.saleNumber} (count: ${updated.reprintCount})`,
+      entityType: 'Sale',
+      entityId: saleId,
+      metadata: { reprintCount: updated.reprintCount },
+    });
+
+    res.json(success({
+      ...sale,
+      isCopy: updated.reprintCount > 1,
+      reprintCount: updated.reprintCount,
+    }));
+  } catch (error: any) {
+    console.error("[Reprint Sale Error]:", error);
+    res.status(500).json(apiError("Failed to reprint receipt"));
+  }
+};
 
 export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -826,11 +878,18 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
     });
 
     if (isEbmEnabled()) {
-      submitVoidToEbm({
-        organizationId,
-        saleId,
-        reason,
-      }).catch((err) => console.error("[EBM] Void submit failed (non-blocking):", err));
+      try {
+        const ebmResult = await submitVoidToEbm({
+          organizationId,
+          saleId,
+          reason,
+        });
+        if (!ebmResult.success) {
+          console.error("[EBM] Void submit failed:", ebmResult.error);
+        }
+      } catch (err) {
+        console.error("[EBM] Void submit error:", err);
+      }
     }
 
     res.status(200).json(success({ message: "Sale cancelled successfully" }));
