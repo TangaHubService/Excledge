@@ -17,10 +17,10 @@ export interface BranchAuthRequest extends AuthRequest {
  * 2. `user.role` from JWT (which reflects org role after login)
  * 3. Queries `UserOrganization` for the active org from JWT
  */
-async function resolveOrgRole(req: AuthRequest): Promise<{ role: string; orgId: number | null }> {
+async function resolveOrgRole(req: AuthRequest): Promise<{ role: string; orgId: number | null; isOwner: boolean }> {
     const orgAccessReq = req as OrganizationAccessRequest;
     if (orgAccessReq.organizationRole) {
-        return { role: orgAccessReq.organizationRole, orgId: parseInt(String(req.params.organizationId ?? req.params.id), 10) || null };
+        return { role: orgAccessReq.organizationRole, orgId: parseInt(String(req.params.organizationId ?? req.params.id), 10) || null, isOwner: false };
     }
 
     const jwtRole = req.user?.role;
@@ -31,15 +31,15 @@ async function resolveOrgRole(req: AuthRequest): Promise<{ role: string; orgId: 
         if (!isNaN(orgId)) {
             const membership = await prisma.userOrganization.findFirst({
                 where: { userId: Number(req.user!.userId), organizationId: orgId },
-                select: { role: true },
+                select: { role: true, isOwner: true },
             });
             if (membership) {
-                return { role: membership.role, orgId };
+                return { role: membership.role, orgId, isOwner: membership.isOwner };
             }
         }
     }
 
-    return { role: jwtRole ?? '', orgId: activeOrgId != null ? Number(activeOrgId) || null : null };
+    return { role: jwtRole ?? '', orgId: activeOrgId != null ? Number(activeOrgId) || null : null, isOwner: false };
 }
 
 /**
@@ -65,7 +65,7 @@ export const branchAuth = async (
         const userId = parseInt(req.user.userId);
 
         // Resolve org-specific role
-        const { role: orgRole } = await resolveOrgRole(req);
+        const { role: orgRole, isOwner } = await resolveOrgRole(req);
 
         // Get user's assigned branches
         const userBranches = await prisma.userBranch.findMany({
@@ -77,11 +77,11 @@ export const branchAuth = async (
         req.branchIds = userBranchIds;
 
         // SYSTEM_OWNER always has full access.
-        // ADMIN has full access ONLY when they have no specific branch assignments.
+        // ADMIN has full access if they're an org owner OR have no branch restrictions.
         // Other roles (BRANCH_MANAGER, ACCOUNTANT, SELLER) are always LIMITED.
         const hasBranchRestrictions = userBranchIds.length > 0;
         const canAccessAll = orgRole === UserRole.SYSTEM_OWNER ||
-            (orgRole === UserRole.ADMIN && !hasBranchRestrictions);
+            (orgRole === UserRole.ADMIN && (!hasBranchRestrictions || isOwner));
 
         req.branchScope = canAccessAll ? 'ALL' : 'LIMITED';
 
@@ -175,7 +175,7 @@ export const requireBranchId = async (
         const userId = parseInt(req.user?.userId || '0');
 
         // Resolve org-specific role
-        const { role: orgRole } = await resolveOrgRole(req);
+        const { role: orgRole, isOwner } = await resolveOrgRole(req);
 
         // Check if user has branch restrictions
         const userBranches = await prisma.userBranch.findMany({
@@ -184,7 +184,7 @@ export const requireBranchId = async (
         });
         const hasBranchRestrictions = userBranches.length > 0;
         const canAccessAll = orgRole === UserRole.SYSTEM_OWNER ||
-            (orgRole === UserRole.ADMIN && !hasBranchRestrictions);
+            (orgRole === UserRole.ADMIN && (!hasBranchRestrictions || isOwner));
 
         if (canAccessAll) {
             return next();

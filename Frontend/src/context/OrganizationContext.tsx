@@ -20,6 +20,8 @@ interface Organization {
     hasActiveSubscription?: boolean;
     subscriptionStatus?: string | null;
     subscriptionEndDate?: string | null;
+    role?: string;
+    isOwner?: boolean;
 }
 
 interface OrganizationContextType {

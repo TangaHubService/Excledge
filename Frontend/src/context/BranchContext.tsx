@@ -58,19 +58,25 @@ export const BranchProvider: React.FC<BranchProviderProps> = ({ children }) => {
 
             const orgId = localStorage.getItem('current_organization_id');
 
-            // Get user role
+            // Get user role and check if they're an org owner
             let userRole = null;
+            let isOwner = false;
             try {
                 const storedUser = localStorage.getItem('user');
                 if (storedUser) {
                     const user = JSON.parse(storedUser);
                     userRole = user.role;
                 }
+                const storedOrg = localStorage.getItem('organization');
+                if (storedOrg) {
+                    const org = JSON.parse(storedOrg);
+                    isOwner = org.isOwner === true;
+                }
             } catch (e) {
-                console.error('Failed to parse user from localStorage:', e);
+                console.error('Failed to parse user/organization from localStorage:', e);
             }
 
-            console.log('[BranchContext] Fetching branches:', { orgId, userRole });
+            console.log('[BranchContext] Fetching branches:', { orgId, userRole, isOwner });
 
             // Fetch branches
             let branches = [];
@@ -84,18 +90,25 @@ export const BranchProvider: React.FC<BranchProviderProps> = ({ children }) => {
                     branches = response.data || [];
                 }
             } else if (userRole === 'ADMIN') {
-                // Admin: first check if they have specific branch assignments
-                const userResponse = await apiClient.get(`/branches/user/all${orgId ? `?organizationId=${orgId}` : ''}`);
-                const userBranchesData = userResponse.data || [];
-                if (userBranchesData.length > 0) {
-                    // Admin has branch restrictions
-                    canAccessAll = false;
-                    branches = userBranchesData;
-                } else if (orgId) {
-                    // Admin has no restrictions, fetch all branches
+                // Admin: if they're an org owner, they always see all branches
+                if (isOwner) {
                     canAccessAll = true;
-                    const response = await apiClient.get(`/branches/${orgId}`);
-                    branches = response.data || [];
+                    if (orgId) {
+                        const response = await apiClient.get(`/branches/${orgId}`);
+                        branches = response.data || [];
+                    }
+                } else {
+                    // Non-owner admin: check branch assignments
+                    const userResponse = await apiClient.get(`/branches/user/all${orgId ? `?organizationId=${orgId}` : ''}`);
+                    const userBranchesData = userResponse.data || [];
+                    if (userBranchesData.length > 0) {
+                        canAccessAll = false;
+                        branches = userBranchesData;
+                    } else if (orgId) {
+                        canAccessAll = true;
+                        const response = await apiClient.get(`/branches/${orgId}`);
+                        branches = response.data || [];
+                    }
                 }
             } else {
                 // Other roles: always restricted to assigned branches
