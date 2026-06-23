@@ -8,7 +8,7 @@ import { useOrganization } from '../../context/OrganizationContext';
 
 export default function SelectOrganization() {
     const [isClient, setIsClient] = useState(false);
-    const [organizations, setOrganizations] = useState([]);
+    const [organizations, setOrganizations] = useState<any[]>([]);
     const [loadingOrganizations, setLoadingOrganizations] = useState(true);
     const [selectedOrganizationId, setSelectedOrganizationId] = useState(null);
     const [error, setError] = useState(null);

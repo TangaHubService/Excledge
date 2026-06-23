@@ -10,7 +10,7 @@ import {
 import { toast } from 'react-toastify'
 import { apiClient } from '../../../lib/api-client'
 import { useBranch } from '../../../context/BranchContext'
-import { MeasurementUnit, MEASUREMENT_UNIT_OPTIONS } from '../../../types/ebm'
+import { MEASUREMENT_UNIT_OPTIONS } from '../../../types/ebm'
 
 const addProductSchema = yup.object({
     itemType: yup.string().oneOf(['PRODUCT', 'SERVICE']).required(),
@@ -19,26 +19,14 @@ const addProductSchema = yup.object({
     description: yup.string().max(1000),
     unitPrice: yup.number().typeError('Must be a number').required('Unit price is required').positive('Must be positive'),
     taxCode: yup.string().required('Tax code is required'),
-    batchNumber: yup.string().when('itemType', ([itemType], schema) =>
-        itemType === 'PRODUCT' ? schema : schema.notRequired(),
-    ),
-    expiryDate: yup.string().nullable().when('itemType', ([itemType], schema) =>
-        itemType === 'PRODUCT' ? schema.nullable() : schema.notRequired(),
-    ),
-    quantity: yup.number().typeError('Must be a number').when('itemType', ([itemType], schema) =>
-        itemType === 'PRODUCT' ? schema.required('Quantity is required').min(0, 'Cannot be negative') : schema.notRequired(),
-    ),
-    minStock: yup.number().typeError('Must be a number').when('itemType', ([itemType], schema) =>
-        itemType === 'PRODUCT' ? schema.required('Min stock is required').min(0, 'Cannot be negative') : schema.notRequired(),
-    ),
-    measurementUnit: yup.string().when('itemType', ([itemType], schema) =>
-        itemType === 'PRODUCT' ? schema.required('Measurement unit is required') : schema.notRequired(),
-    ),
+    batchNumber: yup.string(),
+    expiryDate: yup.string().nullable(),
+    quantity: yup.number().typeError('Must be a number').min(0, 'Cannot be negative'),
+    minStock: yup.number().typeError('Must be a number').min(0, 'Cannot be negative'),
+    measurementUnit: yup.string(),
     sku: yup.string(),
     barcode: yup.string(),
 })
-
-export type AddProductFormData = yup.InferType<typeof addProductSchema>
 
 interface TaxCodeOption {
     code: string
@@ -59,8 +47,8 @@ export default function AddProduct() {
     const [taxCodes, setTaxCodes] = useState<TaxCodeOption[]>([])
     const [uploadedImageUrl, setUploadedImageUrl] = useState<string>('')
 
-    const { register, handleSubmit, watch, setValue, formState: { errors }, reset } = useForm<AddProductFormData>({
-        resolver: yupResolver(addProductSchema),
+    const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
+        resolver: yupResolver(addProductSchema) as any,
         defaultValues: {
             itemType: 'PRODUCT',
             name: '',
@@ -135,7 +123,7 @@ export default function AddProduct() {
         }
     }
 
-    const onSubmit = async (data: AddProductFormData) => {
+    const onSubmit = async (data: Record<string, any>) => {
         if (!selectedBranchId) {
             toast.error('Please select a branch before adding a product')
             return
