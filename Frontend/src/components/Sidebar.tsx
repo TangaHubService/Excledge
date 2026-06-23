@@ -209,6 +209,8 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
           email: response.organization.email,
           avatar: response.organization.avatar,
           hasActiveSubscription: response.organization.hasActiveSubscription,
+          role: selectedOrg.role,
+          isOwner: selectedOrg.isOwner,
         });
         apiClient.setToken(response.token);
         localStorage.setItem('token', response.token);

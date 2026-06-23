@@ -73,6 +73,8 @@ export const OrganizationSwitcher: React.FC<{ toolbar?: boolean }> = ({ toolbar 
                     email: response.organization.email,
                     avatar: response.organization.avatar,
                     hasActiveSubscription: response.organization.hasActiveSubscription,
+                    role: selectedOrg.role,
+                    isOwner: selectedOrg.isOwner,
                 });
 
                 // Update auth context with new token/user
