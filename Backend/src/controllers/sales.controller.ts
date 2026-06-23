@@ -33,11 +33,15 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       return res.status(400).json(apiError("Sale must have at least one item"))
     }
 
-    // Calculate total and validate stock availability
+    // Calculate total
     let totalAmount = 0
     for (const item of items) {
       totalAmount += item.quantity * item.unitPrice
     }
+
+    // Separate product items from service items
+    const productItems = items.filter((i: any) => i.itemType !== 'SERVICE')
+    const serviceItems = items.filter((i: any) => i.itemType === 'SERVICE')
 
     // Validate payment amounts
     // Note: MOBILE_MONEY and CREDIT_CARD are treated as cashAmount in the frontend
@@ -83,8 +87,8 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
 
     // Wrap everything in a transaction for atomicity
     const sale = await prisma.$transaction(async (tx) => {
-      // 1. Validate stock availability before creating sale (using ledger as source of truth)
-      for (const item of items) {
+      // 1. Validate stock availability for PRODUCT items only
+      for (const item of productItems) {
         const product = await tx.product.findFirst({
           where: {
             id: parseInt(item.productId),
@@ -97,14 +101,12 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         }
 
         // Calculate current stock from ledger (source of truth)
-        // If no ledger entries exist, fall back to database quantity
-        // Efficient stock calculation using database aggregation
         const stockAggregates = await tx.inventoryLedger.groupBy({
           by: ['direction'],
           where: {
             productId: parseInt(item.productId),
             organizationId: organizationId!,
-            branchId: { equals: branchId as number }, // Explicitly cast branchId
+            branchId: { equals: branchId as number },
           },
           _sum: {
             quantity: true,
@@ -122,29 +124,50 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         }
       }
 
-      // Calculate tax summary
-      const taxSummary = await TaxService.calculateSaleTax(organizationId!, items.map((i: any) => ({
-        productId: parseInt(i.productId),
+      // Calculate tax summary (product items only for RRA EBM; service items pass through)
+      const allItemsForTax = items.map((i: any) => ({
+        productId: i.productId ? parseInt(i.productId) : undefined,
         quantity: i.quantity,
-        unitPrice: i.unitPrice
-      })));
+        unitPrice: i.unitPrice,
+        itemType: i.itemType || 'PRODUCT',
+      }));
+      const taxSummary = await TaxService.calculateSaleTax(organizationId!, allItemsForTax);
 
-      // 2. Select batches and calculate costs for each item (FIFO by default, can be configured)
+      // 2. Select batches and calculate costs for PRODUCT items only
       const inventoryMethod = (req.body.inventoryMethod as 'FIFO' | 'LIFO' | 'AVERAGE') || 'FIFO';
       const saleItemsData = [];
 
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        const productId = parseInt(item.productId);
+        const isService = item.itemType === 'SERVICE';
         const quantity = item.quantity;
         const unitPrice = item.unitPrice;
         const itemTax = taxSummary.items[i];
 
+        if (isService) {
+          // Service item — no stock tracking, no batch, no cost
+          saleItemsData.push({
+            quantity,
+            unitPrice,
+            totalPrice: quantity * unitPrice,
+            costPrice: 0,
+            profit: quantity * unitPrice,
+            taxRate: itemTax?.taxRate || 0,
+            taxAmount: itemTax?.taxAmount || 0,
+            taxCode: itemTax?.taxCode || null,
+            itemType: 'SERVICE',
+            serviceName: item.serviceName || null,
+            serviceDescription: item.serviceDescription || null,
+          });
+          continue;
+        }
+
+        // PRODUCT item — existing logic
+        const productId = parseInt(item.productId);
         let batchId: number | null = null;
         let costPrice = 0;
 
         try {
-          // Try to select batches for this product (pass transaction client)
           const selectedBatches = await selectBatchesForSale({
             productId,
             organizationId: organizationId!,
@@ -153,31 +176,24 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
             branchId: branchId,
           }, tx);
 
-          // Use first batch (or calculate average)
           if (selectedBatches.length > 0) {
             batchId = selectedBatches[0].batchId;
             costPrice = selectedBatches[0].unitCost;
 
-            // Update batch quantities (pass transaction client)
             for (const batch of selectedBatches) {
               await updateBatchQuantity(batch.batchId, batch.quantity, organizationId!, tx);
             }
           } else {
-            // No batches - try to get average cost (don't pass tx, use global prisma)
             const avgCost = await getAverageCost(productId, organizationId!, branchId);
             costPrice = avgCost?.averageCost || 0;
           }
         } catch (error: any) {
-          // If batch selection fails (e.g., no batches), use average cost or 0
-          // Don't pass tx, use global prisma for read operations
           const avgCost = await getAverageCost(productId, organizationId!, branchId);
           costPrice = avgCost?.averageCost || 0;
         }
 
-        // Calculate profit
         const profit = (unitPrice - costPrice) * quantity;
 
-        // Build sale item data - use relation syntax for batch
         const saleItemData: any = {
           quantity,
           unitPrice,
@@ -187,10 +203,10 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
           taxRate: itemTax.taxRate,
           taxAmount: itemTax.taxAmount,
           taxCode: itemTax.taxCode,
+          itemType: 'PRODUCT',
           product: { connect: { id: productId } },
         };
 
-        // Only include batch relation if batchId is not null
         if (batchId !== null) {
           saleItemData.batch = { connect: { id: batchId } };
         }
@@ -198,7 +214,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         saleItemsData.push(saleItemData);
       }
 
-      // 3. Create sale with items (including profit)
+      // 3. Create sale with items
       const newSale = await tx.sale.create({
         data: {
           saleNumber,
@@ -214,7 +230,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
           totalAmount,
           vatAmount: taxSummary.vatAmount,
           taxableAmount: taxSummary.taxableAmount,
-          status: 'COMPLETED', // Default to completed (can be changed to PENDING if needed)
+          status: 'COMPLETED',
           saleItems: {
             create: saleItemsData,
           },
@@ -225,9 +241,8 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         },
       } as any);
 
-      // 4. Record stock movements in ledger (Stock OUT) - atomic with sale creation
-      // Pass transaction client to avoid nested transactions
-      for (const item of items) {
+      // 4. Record stock movements for PRODUCT items only
+      for (const item of productItems) {
         const saleItem = (newSale as any).saleItems?.find((si: any) => si.productId === parseInt(item.productId));
         await removeStock({
           organizationId: organizationId!,
@@ -240,7 +255,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
           referenceType: 'SALE',
           note: `Sale #${saleNumber}`,
           batchId: saleItem?.batchId || null,
-          tx, // Pass transaction client to avoid nested transactions
+          tx,
         });
       }
 
@@ -584,6 +599,9 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           unitPrice: item.unitPrice.toNumber(),
           totalPrice: item.totalPrice.toNumber(),
           batchId: item.batchId || item.batch?.id || null,
+          itemType: item.itemType || 'PRODUCT',
+          serviceName: item.serviceName || null,
+          serviceDescription: item.serviceDescription || null,
         }));
 
         // Calculate total refund amount
@@ -620,10 +638,13 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             originalSaleId: id, // Link to original sale
             saleItems: {
               create: itemsToRefund.map((item: any) => ({
-                productId: item.productId,
-                quantity: -item.quantity, // Negative quantity
+                productId: item.productId || undefined,
+                quantity: -item.quantity,
                 unitPrice: item.unitPrice,
-                totalPrice: -item.totalPrice, // Negative total
+                totalPrice: -item.totalPrice,
+                itemType: item.itemType,
+                serviceName: item.serviceName,
+                serviceDescription: item.serviceDescription,
               }))
             }
           } as any,
@@ -634,7 +655,10 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
         });
 
         // Update product quantities (restore inventory) and record movements in ledger (Stock IN)
+        // Only restore stock for PRODUCT items; SERVICE items have no inventory
         for (const item of itemsToRefund) {
+          if (item.itemType === 'SERVICE' || !item.productId) continue;
+
           await addStock({
             organizationId: organizationId!,
             productId: item.productId,
@@ -645,10 +669,9 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             reference: refundSaleNumber,
             referenceType: 'SALE_REFUND',
             note: `Refund for Sale #${sale.saleNumber} (Full)`,
-            tx: prisma, // Pass transaction client to avoid nested transactions
+            tx: prisma,
           });
 
-          // Restore batch quantity — reverse the deduction made during sale creation
           if (item.batchId) {
             const existingBatch = await prisma.batch.findFirst({
               where: { id: item.batchId, organizationId: organizationId! },
@@ -822,10 +845,15 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
       });
 
       // Return items to inventory and record movements in ledger (Stock IN)
+      // Only restore stock for PRODUCT items; SERVICE items have no inventory
       for (const item of sale.saleItems) {
+        const isService = (item as any).itemType === 'SERVICE' || !item.productId;
+        if (isService) continue;
+
+        const productId = item.productId!;
         await addStock({
           organizationId: organizationId!,
-          productId: item.productId,
+          productId,
           userId: parseInt(userId as string),
           quantity: item.quantity,
           movementType: 'RETURN_CUSTOMER',
@@ -833,10 +861,9 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
           reference: sale.saleNumber,
           referenceType: 'SALE_CANCELLATION',
           note: `Sale cancellation: ${sale.saleNumber}`,
-          tx: prisma, // Pass transaction client to avoid nested transactions
+          tx: prisma,
         });
 
-        // Restore batch quantity — reverse the deduction made during sale creation
         const batchId = (item as any).batchId || (item as any).batch?.id || null;
         if (batchId) {
           const existingBatch = await prisma.batch.findFirst({

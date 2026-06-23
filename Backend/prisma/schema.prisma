@@ -346,30 +346,31 @@ model Product {
   name               String
   sku                String?
   batchNumber        String?
-  quantity           Int
-  unitPrice          Decimal             @db.Decimal(10, 2)
+  quantity           Int                  @default(0)
+  unitPrice          Decimal              @db.Decimal(10, 2)
   expiryDate         DateTime?
   category           String?
   description        String?
-  minStock           Int                 @default(10)
-  taxCategory        TaxCategory         @default(STANDARD)
+  minStock           Int                  @default(10)
+  taxCategory        TaxCategory          @default(STANDARD)
   taxCode            RraTaxCode?
-  measurementUnit    MeasurementUnit     @default(PCS)
-  ebmSyncStatus      EbmSyncStatus       @default(PENDING)
+  measurementUnit    MeasurementUnit      @default(PCS)
+  itemType           ItemType             @default(PRODUCT)
+  ebmSyncStatus      EbmSyncStatus        @default(PENDING)
   ebmSyncedAt        DateTime?
   barcode            String?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
   deletedAt          DateTime?
   imageUrl           String?
-  id                 Int                 @id @default(autoincrement())
+  id                 Int                  @id @default(autoincrement())
   organizationId     Int
   supplierId         Int?
-  isActive           Boolean             @default(true)
+  isActive           Boolean              @default(true)
   batches            Batch[]
   inventoryLedgers   InventoryLedger[]
-  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  supplier           Supplier?           @relation(fields: [supplierId], references: [id])
+  organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier           Supplier?            @relation(fields: [supplierId], references: [id])
   purchaseOrderItems PurchaseOrderItem[]
   saleItems          SaleItem[]
   stockTransferItems StockTransferItem[]
@@ -382,6 +383,7 @@ model Product {
   @@index([category])
   @@index([organizationId, category])
   @@index([organizationId, isActive])
+  @@index([organizationId, itemType])
   @@index([deletedAt])
 }
 
@@ -510,7 +512,7 @@ model ActivityLog {
 model SaleItem {
   id                 Int               @id @default(autoincrement())
   saleId             Int
-  productId          Int
+  productId          Int?
   batchId            Int?
   quantity           Int
   unitPrice          Decimal           @db.Decimal(10, 2)
@@ -522,10 +524,13 @@ model SaleItem {
   taxCode            RraTaxCode?
   measurementUnit    MeasurementUnit   @default(PCS)
   exemptionReference String?
+  itemType           ItemType          @default(PRODUCT)
+  serviceName        String?
+  serviceDescription String?
 
-  batch   Batch?  @relation(fields: [batchId], references: [id])
-  product Product @relation(fields: [productId], references: [id])
-  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  batch   Batch?    @relation(fields: [batchId], references: [id])
+  product Product?  @relation(fields: [productId], references: [id])
+  sale    Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
   @@index([saleId])
   @@index([productId])
@@ -1181,6 +1186,11 @@ enum EbmOutboxStatus {
   SUCCEEDED
   FAILED
   DEAD_LETTER
+}
+
+enum ItemType {
+  PRODUCT
+  SERVICE
 }
 
 enum MeasurementUnit {

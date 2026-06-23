@@ -29,6 +29,12 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
       deletedAt: null,
     }
 
+    // Default: show all items. Optionally filter by type.
+    const itemType = req.query.itemType as string | undefined
+    if (itemType === 'PRODUCT' || itemType === 'SERVICE') {
+      where.itemType = itemType
+    }
+
     if (branchFilter.branchId) {
       where.batches = {
         some: {
@@ -220,16 +226,17 @@ export const getProductById = async (req: BranchAuthRequest, res: Response) => {
 export const createProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId)
-    const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode } = req.body
+    const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode, itemType } = req.body
     const userId = parseInt((req as any).user?.userId as string)
     const branchId = getBranchIdForOperation(req)
+    const isService = itemType === 'SERVICE'
 
-    if (expiryDate && new Date(expiryDate) < new Date()) {
+    if (expiryDate && new Date(expiryDate) < new Date() && !isService) {
       return res.status(400).json(apiError("Expiry date cannot be in the past"))
     }
 
-    // Duplicate batchNumber check (same pattern as bulk import)
-    if (batchNumber) {
+    // Duplicate batchNumber check for PRODUCT items only
+    if (batchNumber && !isService) {
       const existingProduct = await prisma.product.findFirst({
         where: {
           organizationId,
@@ -251,68 +258,71 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       const product = await tx.product.create({
         data: {
           name,
-          batchNumber,
-          quantity,
+          batchNumber: isService ? null : batchNumber,
+          quantity: isService ? 0 : (quantity || 0),
           unitPrice,
-          expiryDate: expiryDate ? new Date(expiryDate) : null,
-          category,
+          expiryDate: isService ? null : (expiryDate ? new Date(expiryDate) : null),
+          category: category || (isService ? 'Services' : undefined),
           description,
           imageUrl,
-          minStock: minStock || 10,
+          minStock: isService ? 0 : (minStock || 10),
           organizationId: organizationId!,
           sku,
-          taxCategory,
+          taxCategory: taxCategory || 'STANDARD',
           taxCode,
-          measurementUnit,
+          measurementUnit: measurementUnit || 'OTHER',
+          itemType,
           barcode,
         },
       })
 
-      // Create batch record to link product to branch
-      // Uses { increment } in the update path so existing stock is never overwritten
-      const batchUnitCost = unitPrice ? Number(unitPrice) : 0;
-      const batchName = batchNumber || `DEFAULT-${product.id}`;
-      await tx.batch.upsert({
-        where: {
-          productId_batchNumber_branchId: {
+      // Skip batch and ledger for SERVICE items — no inventory tracking
+      if (!isService) {
+        // Create batch record to link product to branch
+        const batchUnitCost = unitPrice ? Number(unitPrice) : 0;
+        const batchName = batchNumber || `DEFAULT-${product.id}`;
+        await tx.batch.upsert({
+          where: {
+            productId_batchNumber_branchId: {
+              productId: product.id,
+              batchNumber: batchName,
+              branchId,
+            }
+          },
+          update: {
+            quantity: { increment: quantity || 0 },
+            unitCost: batchUnitCost,
+            expiryDate: expiryDate ? new Date(expiryDate) : null,
+            isActive: true,
+          },
+          create: {
             productId: product.id,
-            batchNumber: batchName,
+            organizationId: organizationId!,
             branchId,
-          }
-        },
-        update: {
-          quantity: { increment: quantity || 0 },
-          unitCost: batchUnitCost,
-          expiryDate: expiryDate ? new Date(expiryDate) : null,
-          isActive: true,
-        },
-        create: {
-          productId: product.id,
-          organizationId: organizationId!,
-          branchId,
-          batchNumber: batchName,
-          quantity: quantity || 0,
-          unitCost: batchUnitCost,
-          expiryDate: expiryDate ? new Date(expiryDate) : null,
-          isActive: true,
-        },
-      });
+            batchNumber: batchName,
+            quantity: quantity || 0,
+            unitCost: batchUnitCost,
+            expiryDate: expiryDate ? new Date(expiryDate) : null,
+            isActive: true,
+          },
+        });
 
-      // Create initial ledger entry for branch-scoped stock tracking
-      await ledgerAddStock({
-        organizationId: organizationId!,
-        productId: product.id,
-        userId,
-        quantity: quantity || 0,
-        movementType: 'INITIAL_STOCK',
-        branchId,
-        reference: `INIT-${product.id}`,
-        referenceType: 'INITIAL_STOCK',
-        note: 'Initial stock from product creation',
-        batchNumber,
-        expiryDate: expiryDate ? new Date(expiryDate) : undefined,
-        tx, // Pass transaction client
-      });
+        // Create initial ledger entry for branch-scoped stock tracking
+        await ledgerAddStock({
+          organizationId: organizationId!,
+          productId: product.id,
+          userId,
+          quantity: quantity || 0,
+          movementType: 'INITIAL_STOCK',
+          branchId,
+          reference: `INIT-${product.id}`,
+          referenceType: 'INITIAL_STOCK',
+          note: 'Initial stock from product creation',
+          batchNumber,
+          expiryDate: expiryDate ? new Date(expiryDate) : undefined,
+          tx,
+        });
+      }
 
       return product;
     });
@@ -347,8 +357,8 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
     const products = req.body
     const userId = parseInt((req as any).user?.userId as string)
 
-    // Filter out products without batch numbers
-    const productsWithBatch = products.filter((p: any) => p.batchNumber);
+    // Filter out PRODUCT items without batch numbers (services are fine without)
+    const productsWithBatch = products.filter((p: any) => p.batchNumber && p.itemType !== 'SERVICE');
     const batchNumbers = productsWithBatch.map((p: any) => p.batchNumber);
 
     if (batchNumbers.length > 0) {
@@ -404,23 +414,27 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
     // Use transaction to ensure all products, batches, and ledger entries are atomic
     const result = await prisma.$transaction(async (tx) => {
       await tx.product.createMany({
-        data: products.map((product: any) => ({
-          name: product.name,
-          batchNumber: product.batchNumber,
-          quantity: product.quantity,
-          unitPrice: product.unitPrice,
-          category: product.category,
-          description: product.description,
-          imageUrl: product.imageUrl,
-          minStock: product.minStock,
-          organizationId: organizationId!,
-          expiryDate: product.expiryDate ? new Date(product.expiryDate) : null,
-          sku: product.sku,
-          taxCategory: product.taxCategory,
-          taxCode: product.taxCode,
-          measurementUnit: product.measurementUnit,
-          barcode: product.barcode,
-        })),
+        data: products.map((product: any) => {
+          const isService = product.itemType === 'SERVICE';
+          return {
+            name: product.name,
+            batchNumber: isService ? null : product.batchNumber,
+            quantity: isService ? 0 : (product.quantity || 0),
+            unitPrice: product.unitPrice,
+            category: product.category || (isService ? 'Services' : undefined),
+            description: product.description,
+            imageUrl: product.imageUrl,
+            minStock: isService ? 0 : (product.minStock || 10),
+            organizationId: organizationId!,
+            expiryDate: isService ? null : (product.expiryDate ? new Date(product.expiryDate) : null),
+            sku: product.sku,
+            taxCategory: product.taxCategory || 'STANDARD',
+            taxCode: product.taxCode,
+            measurementUnit: product.measurementUnit || 'OTHER',
+            itemType: product.itemType || 'PRODUCT',
+            barcode: isService ? null : product.barcode,
+          };
+        }),
       });
 
       // Fetch created products to get their IDs
@@ -434,9 +448,10 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
       });
 
       // Create batch records and initial ledger entries for each product
+      // Skip batch/ledger for SERVICE items — no inventory tracking
       for (const product of createdProducts) {
-        // Create batch to link product to branch
-        // Uses { increment } in the update path so existing stock is never overwritten
+        if (product.itemType === 'SERVICE') continue;
+
         const batchUnitCost = product.unitPrice ? Number(product.unitPrice) : 0;
         const batchName = product.batchNumber || `DEFAULT-${product.id}`;
         await tx.batch.upsert({
@@ -478,7 +493,7 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
             note: 'Initial stock from bulk import',
             batchNumber: product.batchNumber || undefined,
             expiryDate: product.expiryDate || undefined,
-            tx, // Pass transaction client
+            tx,
           });
         }
       }
@@ -512,7 +527,7 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
-    const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock, taxCode, measurementUnit, exemptionReference } = req.body
+    const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock, taxCode, measurementUnit, exemptionReference, itemType } = req.body
 
     const existingProduct = await prisma.product.findFirst({
       where: { id, organizationId, deletedAt: null },
@@ -537,8 +552,8 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
     if (taxCode !== undefined) data.taxCode = taxCode
     if (measurementUnit !== undefined) data.measurementUnit = measurementUnit
     if (exemptionReference !== undefined) data.exemptionReference = exemptionReference
+    if (itemType !== undefined) data.itemType = itemType
     data.expiryDate = expiryDate ? new Date(expiryDate) : null
-    // imageUrl: if explicitly provided (including empty string), update it; if undefined, keep existing
     if (imageUrl !== undefined) data.imageUrl = imageUrl
 
     const product = await prisma.product.update({
@@ -610,6 +625,7 @@ export const getExpiringProducts = async (req: BranchAuthRequest, res: Response)
     const where: any = {
       organizationId,
       deletedAt: null,
+      itemType: 'PRODUCT',
       expiryDate: {
         not: null,
         gte: new Date(),
@@ -661,6 +677,7 @@ export const getExpiredProducts = async (req: BranchAuthRequest, res: Response) 
     const branchFilter = buildBranchFilter(req)
     const where: any = {
       organizationId,
+      itemType: 'PRODUCT',
       deletedAt: null,
       expiryDate: {
         not: null,
@@ -742,6 +759,7 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
       WHERE p."organizationId" = ${organizationId}
         AND p."isActive" = true
         AND p."deletedAt" IS NULL
+        AND p."itemType" != 'SERVICE'
         AND p."minStock" > 0
         AND ${stockExpr} < p."minStock"
         ${searchExpr}

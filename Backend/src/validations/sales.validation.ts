@@ -1,11 +1,22 @@
 import { z } from 'zod';
 
 export const saleItemSchema = z.object({
-  productId: z.coerce.number().positive('Product ID must be positive'),
+  productId: z.coerce.number().positive('Product ID must be positive').optional(),
   quantity: z.coerce.number().positive('Quantity must be positive'),
   unitPrice: z.coerce.number().positive('Unit price must be positive'),
   discount: z.coerce.number().nonnegative('Discount cannot be negative').optional(),
-});
+  itemType: z.enum(['PRODUCT', 'SERVICE']).default('PRODUCT'),
+  serviceName: z.string().optional(),
+  serviceDescription: z.string().optional(),
+}).refine(
+  (data) => {
+    if (data.itemType === 'PRODUCT' && !data.productId) {
+      return false;
+    }
+    return true;
+  },
+  { message: 'productId is required for PRODUCT items', path: ['productId'] }
+);
 
 export const createSaleSchema = z.object({
   body: z.object({

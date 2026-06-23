@@ -11,13 +11,16 @@ import logo from "../../assets/vdlogo.fd0748ee6ccf6d81d171.png";
 
 interface SaleItem {
     id: string;
-    product: {
+    product?: {
         name: string;
         batchNumber?: string;
-    };
+    } | null;
     quantity: number;
     unitPrice: string;
     totalPrice: string;
+    itemType?: string;
+    serviceName?: string | null;
+    serviceDescription?: string | null;
 }
 
 /** EBM/VSDC rows returned with sale detail (from API). */
@@ -372,14 +375,21 @@ const SalesInvoicePDF: React.FC<SalesInvoicePDFProps> = ({
                                 color: "#333",
                                 flex: 2,
                                 textAlign: "left"
-                            }}>Product</Text>
+                            }}>Item</Text>
                             <Text style={{
                                 fontWeight: "bold",
                                 fontSize: 10,
                                 color: "#333",
                                 flex: 1,
                                 textAlign: "center"
-                            }}>Qty</Text>
+                            }}>Type</Text>
+                            <Text style={{
+                                fontWeight: "bold",
+                                fontSize: 10,
+                                color: "#333",
+                                flex: 1,
+                                textAlign: "center"
+                            }}>Qty / Hrs</Text>
                             <Text style={{
                                 fontWeight: "bold",
                                 fontSize: 10,
@@ -397,58 +407,84 @@ const SalesInvoicePDF: React.FC<SalesInvoicePDFProps> = ({
                         </View>
 
                         {/* Table Rows */}
-                        {sale.saleItems.map((item) => (
-                            <View key={item.id} style={styles.tableRow}>
-                                <View style={styles.productCell}>
-                                    <View style={{ flexDirection: 'column', justifyContent: 'center', width: '100%' }}>
-                                        <Text style={{
-                                            fontSize: 10,
-                                            color: "#333",
-                                            fontWeight: 'bold',
-                                            lineHeight: 1.2
-                                        }}>
-                                            {item.product.name}
-                                        </Text>
-                                        {item.product.batchNumber && (
+                        {sale.saleItems.map((item) => {
+                            const isService = item.itemType === 'SERVICE';
+                            const itemName = isService
+                                ? (item.serviceName || item.product?.name || 'Service')
+                                : (item.product?.name || 'Item');
+                            return (
+                                <View key={item.id} style={styles.tableRow}>
+                                    <View style={styles.productCell}>
+                                        <View style={{ flexDirection: 'column', justifyContent: 'center', width: '100%' }}>
                                             <Text style={{
-                                                fontSize: 8,
-                                                color: "#666",
-                                                fontStyle: 'italic',
-                                                fontWeight: 'normal',
-                                                lineHeight: 1.1,
-                                                marginTop: 1
+                                                fontSize: 10,
+                                                color: "#333",
+                                                fontWeight: 'bold',
+                                                lineHeight: 1.2
                                             }}>
-                                                Batch: {item.product.batchNumber}
+                                                {itemName}
                                             </Text>
-                                        )}
+                                            {item.serviceDescription && isService && (
+                                                <Text style={{
+                                                    fontSize: 8,
+                                                    color: "#666",
+                                                    fontStyle: 'italic',
+                                                    fontWeight: 'normal',
+                                                    lineHeight: 1.1,
+                                                    marginTop: 1
+                                                }}>
+                                                    {item.serviceDescription}
+                                                </Text>
+                                            )}
+                                            {!isService && item.product?.batchNumber && (
+                                                <Text style={{
+                                                    fontSize: 8,
+                                                    color: "#666",
+                                                    fontStyle: 'italic',
+                                                    fontWeight: 'normal',
+                                                    lineHeight: 1.1,
+                                                    marginTop: 1
+                                                }}>
+                                                    Batch: {item.product.batchNumber}
+                                                </Text>
+                                            )}
+                                        </View>
                                     </View>
+                                    <Text style={{
+                                        fontSize: 10,
+                                        color: "#333",
+                                        textAlign: "center",
+                                        flex: 1
+                                    }}>
+                                        {isService ? 'SVC' : 'GOOD'}
+                                    </Text>
+                                    <Text style={{
+                                        fontSize: 10,
+                                        color: "#333",
+                                        textAlign: "center",
+                                        flex: 1
+                                    }}>
+                                        {item.quantity}
+                                    </Text>
+                                    <Text style={{
+                                        fontSize: 10,
+                                        color: "#333",
+                                        textAlign: "right",
+                                        flex: 1
+                                    }}>
+                                        {formatCurrency(item.unitPrice)}
+                                    </Text>
+                                    <Text style={{
+                                        fontSize: 10,
+                                        color: "#333",
+                                        textAlign: "right",
+                                        flex: 1
+                                    }}>
+                                        {formatCurrency(item.totalPrice)}
+                                    </Text>
                                 </View>
-                                <Text style={{
-                                    fontSize: 10,
-                                    color: "#333",
-                                    textAlign: "center",
-                                    flex: 1
-                                }}>
-                                    {item.quantity}
-                                </Text>
-                                <Text style={{
-                                    fontSize: 10,
-                                    color: "#333",
-                                    textAlign: "right",
-                                    flex: 1
-                                }}>
-                                    {formatCurrency(item.unitPrice)}
-                                </Text>
-                                <Text style={{
-                                    fontSize: 10,
-                                    color: "#333",
-                                    textAlign: "right",
-                                    flex: 1
-                                }}>
-                                    {formatCurrency(item.totalPrice)}
-                                </Text>
-                            </View>
-                        ))}
+                            );
+                        })}
                     </View>
                 </View>
 

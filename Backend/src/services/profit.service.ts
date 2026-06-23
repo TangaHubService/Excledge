@@ -35,7 +35,7 @@ export async function calculateProfit(params: CalculateProfitParams): Promise<{
       },
     });
 
-    if (saleItem) {
+    if (saleItem && saleItem.productId) {
       // Try to get average cost from batches
       const batches = await prisma.batch.findMany({
         where: {
@@ -224,9 +224,10 @@ export async function getProfitReport(
     0
   );
 
-  // Group by product
+  // Group by product (skip service items which have no productId)
   const byProduct = saleItems.reduce((acc, item) => {
     const productId = item.productId;
+    if (productId === null) return acc;
     if (!acc[productId]) {
       acc[productId] = {
         product: item.product,
