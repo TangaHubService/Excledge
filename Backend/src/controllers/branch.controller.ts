@@ -95,6 +95,7 @@ export const getUserPrimaryBranchController = async (req: AuthRequest, res: Resp
 export const createBranchController = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
+    const userId = parseInt(req.user?.userId as string);
     const { name, code, location, address, phone, metadata } = req.body;
 
     if (!name || !code) {
@@ -110,6 +111,9 @@ export const createBranchController = async (req: AuthRequest, res: Response) =>
       phone,
       metadata,
     });
+
+    // Auto-assign the creator to the new branch so they can see it immediately
+    await assignUserToBranch(userId, branch.id, false);
 
     await auditLogger.system(req, {
       type: 'BRANCH_CREATE',
