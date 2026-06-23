@@ -7,7 +7,6 @@ import Login from "./pages/auth/login";
 import Signup from "./pages/auth/SignUp";
 import CreateOrganization from "./pages/CreateOrganization";
 import { InventoryManagement } from "./pages/dashboard/InventoryManagement";
-import AddProduct from "./pages/dashboard/inventory/AddProduct";
 import { ThemeProvider } from "./context/ThemeContext";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { OrganizationProvider } from "./context/OrganizationContext";
@@ -116,7 +115,6 @@ function App() {
                     <Route path="dashboard" element={<DashboardLayout />}>
                       <Route index element={<Dashboard />} />
                       <Route path="customers" element={<CustomerManagement />} />
-                      <Route path="inventory-all/add" element={<AddProduct />} />
                       <Route path="inventory-all" element={<InventoryManagement />} />
                       <Route path="low-stock" element={<LowStock />} />
                       <Route path="expiring-products" element={<ExpiringProducts />} />

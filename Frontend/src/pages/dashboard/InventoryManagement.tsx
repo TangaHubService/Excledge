@@ -10,7 +10,6 @@ import {
   CardContent
 } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
 import { useTheme } from "../../context/ThemeContext";
 import { useBranch } from "../../context/BranchContext";
@@ -44,71 +43,28 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
-  DrawerTrigger,
 } from "../../components/ui/drawer";
 import { ScrollArea, ScrollBar } from "../../components/ui/scroll-area";
 
 import { Label } from "../../components/ui/label";
-import { Textarea } from "../../components/ui/textarea";
 import { toast } from "react-toastify";
-import CreatableSelect from "react-select/creatable";
 import { apiClient } from "../../lib/api-client";
 import { parseInventoryGetProductsResponse } from "../../lib/inventory-response";
 import { useDebounce } from "use-debounce";
 import { type Product } from "../../types";
+import AddProduct from "./inventory/AddProduct";
 import ViewProductDialog from "./inventory/ViewProductDialog";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import InventoryHistoryDialog from "./inventory/InventoryHistoryDialog";
 import StockAdjustmentDialog from "./inventory/StockAdjustmentDialog";
-import { RraTaxCodeSelect } from "../../components/RraTaxCodeSelect";
-import { MeasurementUnitSelect } from "../../components/MeasurementUnitSelect";
 import { RraTaxCode, MeasurementUnit } from "../../types/ebm";
 import { History, Edit, Pencil } from "lucide-react";
-
-type ProductNameItem = {
-  value: string | number;
-  label: string;
-  id: number;
-  name: string;
-  expiryDate: string;
-  batchNumber: string;
-  category: string;
-  unitPrice: number;
-  minStock: number;
-  description: string;
-};
-
 
 function getDaysRemaining(expiryDate: string) {
   const now = new Date();
   const expiry = new Date(expiryDate);
   return Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
-
-const fetchProductNames = async (query: string) => {
-  if (!query.trim()) return [];
-  try {
-    const response = await apiClient.getProducts({
-      search: query,
-    });
-    const { items } = parseInventoryGetProductsResponse(response);
-    return items.map((item: any) => ({
-      value: item.id,
-      label: item.name,
-      id: item.id,
-      name: item.name,
-      category: item.category ?? "",
-      expiryDate: item.expiryDate ?? "",
-      batchNumber: item.batchNumber ?? "",
-      unitPrice: item.unitPrice ?? 0,
-      minStock: item.minStock ?? 0,
-      description: item.description ?? "",
-    })) as ProductNameItem[];
-  } catch (error) {
-    console.error("Error fetching product names:", error);
-    return [];
-  }
-};
 
 export const InventoryManagement = () => {
   const { t } = useTranslation();
@@ -122,40 +78,15 @@ export const InventoryManagement = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [viewProduct, setViewProduct] = useState<Product | null>(null);
-  const [categoryInput, setCategoryInput] = useState("");
-  const [formData, setFormData] = useState({
-    batchNumber: "",
-    name: "",
-    quantity: 0,
-    unitPrice: 0,
-    expiryDate: "",
-    minStock: 0,
-    description: "",
-    imageUrl: "",
-    taxCode: undefined as RraTaxCode | undefined,
-    measurementUnit: 'PCS' as MeasurementUnit,
-    exemptionReference: "",
-  });
-
   const [totalPages, setTotalPages] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
   const [previewItems, setPreviewItems] = useState<any[]>([]);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [uniqueProductNames, setUniqueProductNames] = useState<
-    ProductNameItem[]
-  >([]);
   const [loading, setLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<{
-    value: string;
-    label: string;
-  } | null>(null);
   const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
-  const [productSearch, setProductSearch] = useState("");
-  const [debouncedProductSearch] = useDebounce(productSearch, 400);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<{
     id: string;
@@ -176,43 +107,6 @@ export const InventoryManagement = () => {
   const [expiringProducts, setExpiringProducts] = useState(0);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isErrorsModalOpen, setIsErrorsModalOpen] = useState(false);
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string>("");
-  const [imageRemoved, setImageRemoved] = useState(false);
-
-
-  const validateForm = (data: typeof formData) => {
-    const errors: Record<string, string> = {};
-
-    if (!data.name.trim()) {
-      errors.name = "Product name is required";
-    }
-
-    if (!categoryInput.trim()) {
-      errors.category = "Category is required";
-    }
-
-    if (data.unitPrice <= 0) {
-      errors.unitPrice = "Unit price must be greater than 0";
-    }
-
-    if (data.quantity < 0) {
-      errors.quantity = "Quantity cannot be negative";
-    }
-
-    if (data.minStock < 0) {
-      errors.minStock = "Minimum stock cannot be negative";
-    }
-
-    if ((data as any).taxCode === 'C' && !(data as any).exemptionReference?.trim()) {
-      errors.exemptionReference = "Exemption reference is required for tax code C (Exempt)";
-    }
-
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
 
   useEffect(() => {
     getProducts({
@@ -295,156 +189,6 @@ export const InventoryManagement = () => {
     setUniqueCategories(categories);
   }, [products]);
 
-  useEffect(() => {
-    // Generate product names from existing products
-    const productNames: ProductNameItem[] = products.map((p) => ({
-      value: p.id,
-      label: p.name,
-      id: typeof p.id === "number" ? p.id : Number(p.id),
-      name: p.name,
-      category: p.category || "",
-      expiryDate: p.expiryDate || "",
-      batchNumber: p.batchNumber || "",
-      unitPrice: p.unitPrice,
-      minStock: p.minStock,
-      description: p.description || "",
-    }));
-    setUniqueProductNames(productNames);
-  }, [products]);
-
-  useEffect(() => {
-    const loadProductNames = async () => {
-      if (debouncedProductSearch) {
-        const results = await fetchProductNames(debouncedProductSearch);
-        setUniqueProductNames(results);
-      }
-    };
-    loadProductNames();
-  }, [debouncedProductSearch]);
-
-  // Reset form when drawer closes
-  useEffect(() => {
-    if (!isDialogOpen) {
-      setEditingProduct(null);
-    }
-  }, [isDialogOpen]);
-
-  const handleSaveProduct = async () => {
-    // Validate form before submission
-    if (!validateForm(formData)) {
-      return;
-    }
-
-    // Require a specific branch to be selected for product creation
-    if (!selectedBranchId) {
-      toast.error(t('messages.selectBranchForProduct') || 'Please select a specific branch to create a product');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      let imageUrl = formData.imageUrl;
-
-      // Upload image if a file is selected
-      if (imageFile) {
-        const formDataImage = new FormData();
-        formDataImage.append('image', imageFile);
-
-        try {
-          const response = await fetch(`${import.meta.env.VITE_PUBLIC_API_URL}/api/upload/image`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            },
-            body: formDataImage,
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            imageUrl = data.imageUrl;
-          } else {
-            throw new Error('Image upload failed');
-          }
-        } catch (error) {
-          console.error('Error uploading image:', error);
-          toast.warn('Failed to upload image, saving product without image');
-        } finally {
-          // Image upload complete
-        }
-      }
-
-      const productData: Record<string, any> = {
-        name: formData.name,
-        category: categoryInput,
-        branchId: selectedBranchId,
-        batchNumber: formData.batchNumber,
-        quantity: formData.quantity,
-        unitPrice: formData.unitPrice,
-        expiryDate: formData.expiryDate,
-        minStock: formData.minStock,
-        description: formData.description,
-        taxCode: (formData as any).taxCode,
-        measurementUnit: (formData as any).measurementUnit,
-        exemptionReference: (formData as any).taxCode === 'C' ? (formData as any).exemptionReference : undefined,
-      };
-
-      if (imageUrl) {
-        productData.imageUrl = imageUrl;
-      } else if (imageRemoved) {
-        productData.imageUrl = "";
-      }
-
-      if (editingProduct) {
-        // Update existing product
-        await apiClient.updateProduct(String(editingProduct.id), productData);
-        toast.success(t('messages.productUpdated'));
-      } else {
-        // Add new product
-        await apiClient.createProduct(productData);
-        toast.success(t('messages.productAdded'));
-      }
-
-
-      // Refresh products list
-      await getProducts({
-        search: debouncedSearchTerm,
-        category,
-        expiryStatus,
-        page: currentPage,
-        limit: itemsPerPage,
-        branchId: selectedBranchId,
-      });
-
-      // Reset form
-      setIsDialogOpen(false);
-      setEditingProduct(null);
-      setCategoryInput("");
-      setFormData({
-        batchNumber: "",
-        name: "",
-        quantity: 0,
-        unitPrice: 0,
-        expiryDate: "",
-        minStock: 0,
-        description: "",
-        imageUrl: "",
-        taxCode: undefined as any,
-        measurementUnit: 'PCS' as any,
-        exemptionReference: "",
-      });
-      setImageFile(null);
-      setImagePreview("");
-      setImageRemoved(false);
-      setFormErrors({}); // Clear any previous errors
-    } catch (error) {
-      console.error("Failed to save product:", error);
-      toast.error(t('messages.saveError'));
-
-    } finally {
-      setLoading(false);
-    }
-  };
 
 
   const confirmDelete = async () => {
@@ -742,484 +486,27 @@ export const InventoryManagement = () => {
             </Button>
 
             <Button
-              onClick={() => navigate('/dashboard/inventory-all/add')}
+              onClick={() => setIsDialogOpen(true)}
               className="bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200 h-10"
             >
               <Plus className="mr-2 h-4 w-4" />
               {t('inventory.addProduct')}
             </Button>
 
-            {/* Quick Add Product Modal (inline drawer) */}
+            {/* Add Product Drawer */}
             <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DrawerTrigger asChild>
-                <Button
-                  onClick={() => {
-                    setEditingProduct(null);
-                    setCategoryInput("");
-                    setImageFile(null);
-                    setImagePreview("");
-                    setImageRemoved(false);
-                    setFormErrors({});
-                    setFormData({
-                      batchNumber: "",
-                      name: "",
-                      quantity: 0,
-                      unitPrice: 0,
-                      expiryDate: "",
-                      minStock: 0,
-                      description: "",
-                      imageUrl: "",
-                      taxCode: undefined as any,
-                      measurementUnit: 'PCS' as any,
-                      exemptionReference: "",
-                    });
-                    setIsDialogOpen(true);
-                  }}
-                  variant="outline"
-                  className="text-gray-700 border-gray-300 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-800 h-10"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Quick Add
-                </Button>
-              </DrawerTrigger>
-              <DrawerContent
-                className={`sm:max-w-[600px] ${theme === "dark"
-                  ? "bg-gray-900 border-gray-700 text-gray-100"
-                  : "bg-white border-gray-200"
-                  } shadow-xl transition-all duration-200`}
-              >
+              <DrawerContent className="sm:max-w-[900px] max-h-[95vh] overflow-y-auto">
                 <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4">
-                  <DrawerTitle
-                    className={`text-lg font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"
-                      }`}
-                  >
-                    {editingProduct ? t('inventory.editProduct') : t('inventory.addNewProduct')}
-                  </DrawerTitle>
-
+                  <DrawerTitle className="text-lg font-semibold">Add New Product</DrawerTitle>
                 </DrawerHeader>
-                <div
-                  className={`space-y-6 py-2 px-1 ${theme === "dark" ? "bg-gray-900 t" : "bg-white"
-                    }`}
-                >
-                  {/* Product Name Input */}
-                  <div className="w-full">
-                    <div className="flex justify-between items-center">
-                      <label className="block mb-2">{t('inventory.productName')}</label>
-                      {formErrors.name && <span className="text-red-500 text-sm">{formErrors.name}</span>}
-                    </div>
-
-                    <CreatableSelect
-                      className="dark:text-white"
-                      isClearable
-                      placeholder={t('common.search')}
-
-                      onInputChange={(value) => setProductSearch(value)}
-                      onChange={(newValue: any) => {
-                        setSelectedProduct(newValue);
-                        if (newValue) {
-                          setFormData((prev) => ({
-                            ...prev,
-                            name: newValue.label,
-                            unitPrice: newValue.unitPrice || prev.unitPrice || 0,
-                            minStock: newValue.minStock || prev.minStock || 0,
-                            description: newValue.description || prev.description || "",
-                          }));
-                          if (newValue.category) {
-                            setCategoryInput(newValue.category);
-                          }
-                        } else {
-                          setFormData((prev) => ({
-                            ...prev,
-                            name: "",
-                            unitPrice: 0,
-                            minStock: 0,
-                            description: "",
-                          }));
-                          setCategoryInput("");
-                        }
-                      }}
-                      onCreateOption={(inputValue) => {
-                        const newProduct = {
-                          value: inputValue,
-                          label: inputValue,
-                        };
-                        setSelectedProduct(newProduct);
-                        setFormData((prev) => ({ ...prev, name: inputValue }));
-                      }}
-                      options={uniqueProductNames}
-                      value={selectedProduct}
-                      styles={{
-                        control: (base) => ({
-                          ...base,
-                          backgroundColor: theme === "dark" ? "#1f2937" : "white",
-                          borderColor: theme === "dark" ? "#374151" : "#d1d5db",
-                          color: theme === "dark" ? "white" : "black",
-                        }),
-                        singleValue: (base) => ({
-                          ...base,
-                          color: theme === "dark" ? "white" : "black",
-                        }),
-                        input: (base) => ({
-                          ...base,
-                          color: theme === "dark" ? "white" : "black",
-                        }),
-                        placeholder: (base) => ({
-                          ...base,
-                          color: theme === "dark" ? "#9ca3af" : "#6b7280", // gray tones
-                        }),
-                        menu: (base) => ({
-                          ...base,
-                          backgroundColor: theme === "dark" ? "#1f2937" : "white",
-                        }),
-                        option: (base, state) => ({
-                          ...base,
-                          backgroundColor: state.isFocused
-                            ? theme === "dark"
-                              ? "#374151"
-                              : "#f3f4f6"
-                            : theme === "dark"
-                              ? "#1f2937"
-                              : "white",
-                          color: theme === "dark" ? "white" : "black",
-                        }),
-                      }}
-                    />
-                  </div>
-
-                  {/* Category Input */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <Label>Category</Label>
-                      {formErrors.category && <span className="text-red-500 text-sm">{formErrors.category}</span>}
-                    </div>
-
-                    <CreatableSelect
-                      isClearable
-                      placeholder={t('common.search')}
-
-                      value={
-                        categoryInput
-                          ? { label: categoryInput, value: categoryInput }
-                          : null
-                      }
-                      onChange={(newValue: any) => {
-                        if (newValue) {
-                          setCategoryInput(newValue.value);
-                          if (!uniqueCategories.includes(newValue.value)) {
-                            setUniqueCategories((prev) => [
-                              ...prev,
-                              newValue.value,
-                            ]);
-                          }
-                        } else {
-                          setCategoryInput("");
-                        }
-                      }}
-                      options={uniqueCategories.map((cat) => ({
-                        label: cat,
-                        value: cat,
-                      }))}
-                      formatCreateLabel={(inputValue) => `➕ Add "${inputValue}"`}
-                      styles={{
-                        control: (base, state) => ({
-                          ...base,
-                          backgroundColor: theme === "dark" ? "#1f2937" : "white",
-                          borderColor: state.isFocused
-                            ? theme === "dark"
-                              ? "#4b5563"
-                              : "#9ca3af"
-                            : theme === "dark"
-                              ? "#374151"
-                              : "#d1d5db",
-                          boxShadow: state.isFocused
-                            ? theme === "dark"
-                              ? "0 0 0 1px #60a5fa"
-                              : "0 0 0 1px #3b82f6"
-                            : "none",
-                          color: theme === "dark" ? "white" : "black",
-                          transition: "all 0.2s ease-in-out",
-                        }),
-                        singleValue: (base) => ({
-                          ...base,
-                          color: theme === "dark" ? "white" : "black",
-                        }),
-                        input: (base) => ({
-                          ...base,
-                          color: theme === "dark" ? "white" : "black",
-                        }),
-                        placeholder: (base) => ({
-                          ...base,
-                          color: theme === "dark" ? "#9ca3af" : "#6b7280", // subtle gray
-                        }),
-                        menu: (base) => ({
-                          ...base,
-                          backgroundColor: theme === "dark" ? "#1f2937" : "white",
-                          color: theme === "dark" ? "white" : "black",
-                        }),
-                        option: (base, state) => ({
-                          ...base,
-                          backgroundColor: state.isFocused
-                            ? theme === "dark"
-                              ? "#374151"
-                              : "#f3f4f6"
-                            : theme === "dark"
-                              ? "#1f2937"
-                              : "white",
-                          color: theme === "dark" ? "white" : "black",
-                          cursor: "pointer",
-                        }),
-                        dropdownIndicator: (base) => ({
-                          ...base,
-                          color: theme === "dark" ? "#9ca3af" : "#6b7280",
-                          "&:hover": {
-                            color: theme === "dark" ? "#d1d5db" : "#374151",
-                          },
-                        }),
-                        clearIndicator: (base) => ({
-                          ...base,
-                          color: theme === "dark" ? "#9ca3af" : "#6b7280",
-                          "&:hover": {
-                            color: theme === "dark" ? "#f87171" : "#ef4444",
-                          },
-                        }),
-                      }}
-                    />
-                  </div>
-
-                  {/* Image Upload Input */}
-                  <div className="space-y-2">
-                    <Label>{t('inventory.productImage')} ({t('common.optional')})</Label>
-
-                    <div className="flex items-center gap-4">
-                      <div className="flex-1">
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              setImageFile(file);
-                              setImageRemoved(false);
-                              // Create preview
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setImagePreview(reader.result as string);
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                          className="dark:bg-gray-800 dark:text-white"
-                        />
-                      </div>
-                      {(imagePreview || formData.imageUrl) && (
-                        <div className="flex items-center gap-2">
-                          <div className="w-20 h-20 border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
-                            <img
-                              src={imagePreview || formData.imageUrl}
-                              alt="Product preview"
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                              }}
-                            />
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setImageFile(null);
-                              setImagePreview("");
-                              setImageRemoved(true);
-                              setFormData({ ...formData, imageUrl: "" });
-                            }}
-                            className="text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border-red-200 dark:bg-red-900/20 dark:hover:bg-red-900/30 dark:border-red-800"
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Upload an image for this product (JPG, PNG, max 5MB)
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <Label>{t('inventory.batchNumber')}</Label>
-
-                      </div>
-                      <Input
-                        placeholder="e.g., A2301"
-                        value={formData.batchNumber}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            batchNumber: e.target.value,
-                          })
-                        }
-                      />
-                      {formErrors.batchNumber && <span className="text-red-500 text-sm">{formErrors.batchNumber}</span>}
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <Label>{t('inventory.expiryDate')}</Label>
-
-                      </div>
-                      <Input
-                        type="date"
-                        className="text-gray-900 dark:text-white"
-                        value={formData.expiryDate}
-                        onChange={(e) =>
-                          setFormData({ ...formData, expiryDate: e.target.value })
-                        }
-                      />
-                      {formErrors.expiryDate && <span className="text-red-500 text-sm">{formErrors.expiryDate}</span>}
-                    </div>
-                  </div>
-
-                  {/* RRA Tax Code & Measurement Unit */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <Label>RRA Tax Code</Label>
-                      </div>
-                      <RraTaxCodeSelect
-                        value={(formData as any).taxCode}
-                        onChange={(v) => setFormData({ ...formData, taxCode: v } as any)}
-                        error={formErrors.taxCode}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <Label>Measurement Unit</Label>
-                      </div>
-                      <MeasurementUnitSelect
-                        value={(formData as any).measurementUnit}
-                        onChange={(v) => setFormData({ ...formData, measurementUnit: v } as any)}
-                        error={formErrors.measurementUnit}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Exemption Reference (conditional) */}
-                  {(formData as any).taxCode === 'C' && (
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <Label>Exemption Reference <span className="text-red-500">*</span></Label>
-                        {formErrors.exemptionReference && <span className="text-red-500 text-sm">{formErrors.exemptionReference}</span>}
-                      </div>
-                      <Input
-                        placeholder="e.g., RRA exemption certificate no."
-                        value={(formData as any).exemptionReference}
-                        onChange={(e) =>
-                          setFormData({ ...formData, exemptionReference: e.target.value } as any)
-                        }
-                        className={formErrors.exemptionReference ? 'border-red-500' : ''}
-                      />
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <Label>{t('inventory.unitPrice')}</Label>
-
-                      </div>
-                      <Input
-                        placeholder="0.00"
-                        step="0.01"
-                        value={formData.unitPrice}
-                        onChange={(e) => {
-                          const value = parseFloat(e.target.value) || 0;
-                          setFormData({
-                            ...formData,
-                            unitPrice: value
-                          });
-                          if (formErrors.unitPrice) {
-                            setFormErrors(prev => ({ ...prev, unitPrice: '' }));
-                          }
-                        }}
-                        className={formErrors.unitPrice ? 'border-red-500' : ''}
-                      />
-                      {formErrors.unitPrice && <span className="text-red-500 text-sm">{formErrors.unitPrice}</span>}
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <Label>{t('inventory.quantity')}</Label>
-
-                      </div>
-                      <Input
-                        placeholder="0"
-                        value={formData.quantity}
-                        onChange={(e) => {
-                          const value = parseInt(e.target.value) || 0;
-                          setFormData({
-                            ...formData,
-                            quantity: value
-                          });
-                          if (formErrors.quantity) {
-                            setFormErrors(prev => ({ ...prev, quantity: '' }));
-                          }
-                        }}
-                        className={formErrors.quantity ? 'border-red-500' : ''}
-                      />
-                      {formErrors.quantity && <span className="text-red-500 text-sm">{formErrors.quantity}</span>}
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <Label>{t('inventory.minStock')}</Label>
-
-                      </div>
-                      <Input
-                        placeholder="0"
-                        value={formData.minStock}
-                        onChange={(e) => {
-                          const value = parseInt(e.target.value) || 0;
-                          setFormData({
-                            ...formData,
-                            minStock: value
-                          });
-                          if (formErrors.minStock) {
-                            setFormErrors(prev => ({ ...prev, minStock: '' }));
-                          }
-                        }}
-                        className={formErrors.minStock ? 'border-red-500' : ''}
-                      />
-                      {formErrors.minStock && <span className="text-red-500 text-sm">{formErrors.minStock}</span>}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{t('inventory.description')}</Label>
-
-                    <Textarea
-                      placeholder={t('inventory.description')}
-
-                      value={formData.description}
-                      onChange={(e) =>
-                        setFormData({ ...formData, description: e.target.value })
-                      }
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    className="w-full bg-blue-600 hover:bg-blue-700"
-                    onClick={handleSaveProduct}
-                    disabled={loading}
-                  >
-                    {loading
-                      ? "Saving..."
-                      : editingProduct
-                        ? "Update Product"
-                        : "Add Product"}
-                  </Button>
+                <div className="p-4">
+                  <AddProduct onSuccess={() => setIsDialogOpen(false)} />
                 </div>
               </DrawerContent>
             </Drawer>
           </div>
         </div>
+
 
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">

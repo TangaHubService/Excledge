@@ -35,7 +35,11 @@ interface TaxCodeOption {
     category: string
 }
 
-export default function AddProduct() {
+interface AddProductProps {
+    onSuccess?: () => void
+}
+
+export default function AddProduct({ onSuccess }: AddProductProps) {
     const navigate = useNavigate()
     const { selectedBranchId } = useBranch()
 
@@ -164,7 +168,8 @@ export default function AddProduct() {
 
             await apiClient.createProduct(payload)
             toast.success(data.itemType === 'SERVICE' ? 'Service added successfully' : 'Product added successfully')
-            navigate('/dashboard/inventory-all')
+            if (onSuccess) onSuccess()
+            else navigate('/dashboard/inventory-all')
         } catch (error: any) {
             toast.error(error.message || 'Failed to save product')
         } finally {
@@ -194,7 +199,7 @@ export default function AddProduct() {
                 </div>
                 <div className="flex gap-3">
                     <button
-                        onClick={() => navigate('/dashboard/inventory-all')}
+                        onClick={() => onSuccess ? onSuccess() : navigate('/dashboard/inventory-all')}
                         className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
                     >
                         Cancel
