@@ -741,7 +741,15 @@ export const InventoryManagement = () => {
               {t('inventory.downloadTemplate')}
             </Button>
 
-            {/* Add Product Modal */}
+            <Button
+              onClick={() => navigate('/dashboard/inventory-all/add')}
+              className="bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200 h-10"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {t('inventory.addProduct')}
+            </Button>
+
+            {/* Quick Add Product Modal (inline drawer) */}
             <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DrawerTrigger asChild>
                 <Button
@@ -767,10 +775,11 @@ export const InventoryManagement = () => {
                     });
                     setIsDialogOpen(true);
                   }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200 h-10"
+                  variant="outline"
+                  className="text-gray-700 border-gray-300 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-800 h-10"
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  {t('inventory.addProduct')}
+                  Quick Add
                 </Button>
               </DrawerTrigger>
               <DrawerContent
