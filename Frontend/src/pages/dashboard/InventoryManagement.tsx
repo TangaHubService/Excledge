@@ -10,6 +10,7 @@ import {
   CardContent
 } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
 import { useTheme } from "../../context/ThemeContext";
 import { useBranch } from "../../context/BranchContext";
@@ -57,8 +58,7 @@ import ViewProductDialog from "./inventory/ViewProductDialog";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import InventoryHistoryDialog from "./inventory/InventoryHistoryDialog";
 import StockAdjustmentDialog from "./inventory/StockAdjustmentDialog";
-import { RraTaxCode, MeasurementUnit } from "../../types/ebm";
-import { History, Edit, Pencil } from "lucide-react";
+import { History, Edit } from "lucide-react";
 
 function getDaysRemaining(expiryDate: string) {
   const now = new Date();
@@ -835,35 +835,6 @@ export const InventoryManagement = () => {
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setEditingProduct(item);
-                                      setFormData({
-                                        batchNumber: item.batchNumber || "",
-                                        name: item.name,
-                                        quantity: item.quantity,
-                                        unitPrice: item.unitPrice,
-                                        expiryDate: item.expiryDate || "",
-                                        minStock: item.minStock,
-                                        description: item.description || "",
-                                        imageUrl: item.imageUrl || "",
-                                        taxCode: (item as any).taxCode as RraTaxCode | undefined,
-                                        measurementUnit: ((item as any).measurementUnit || 'PCS') as MeasurementUnit,
-                                        exemptionReference: (item as any).exemptionReference || "",
-                                      });
-                                      setCategoryInput(item.category || "");
-                                      setImageFile(null);
-                                      setImagePreview(item.imageUrl || "");
-                                      setImageRemoved(false);
-                                      setIsDialogOpen(true);
-                                    }}
-                                    className="h-8 px-2"
-                                    title={t('common.edit') || 'Edit'}
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
                                   <Button
                                     variant="ghost"
                                     size="sm"
