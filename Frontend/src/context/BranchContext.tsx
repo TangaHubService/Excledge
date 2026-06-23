@@ -67,10 +67,15 @@ export const BranchProvider: React.FC<BranchProviderProps> = ({ children }) => {
                     const user = JSON.parse(storedUser);
                     userRole = user.role;
                 }
-                const storedOrg = localStorage.getItem('organization');
-                if (storedOrg) {
-                    const org = JSON.parse(storedOrg);
-                    isOwner = org.isOwner === true;
+                // Use organization context if available, fall back to localStorage
+                if (organization?.isOwner !== undefined) {
+                    isOwner = organization.isOwner === true;
+                } else {
+                    const storedOrg = localStorage.getItem('organization');
+                    if (storedOrg) {
+                        const org = JSON.parse(storedOrg);
+                        isOwner = org.isOwner === true;
+                    }
                 }
             } catch (e) {
                 console.error('Failed to parse user/organization from localStorage:', e);
