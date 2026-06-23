@@ -199,7 +199,11 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
       const response = await apiClient.switchOrganization({ organizationId: Number(selectedOrgId) });
       if (response.organization && response.token && response.user) {
         localStorage.setItem('current_organization_id', String(selectedOrgId));
-        localStorage.setItem('organization', JSON.stringify(response.organization));
+        localStorage.setItem('organization', JSON.stringify({
+            ...response.organization,
+            role: selectedOrg.role,
+            isOwner: selectedOrg.isOwner,
+        }));
         setOrganization({
           id: response.organization.id,
           name: response.organization.name,

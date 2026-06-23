@@ -62,7 +62,11 @@ export const OrganizationSwitcher: React.FC<{ toolbar?: boolean }> = ({ toolbar 
 
             if (response.organization && response.token && response.user) {
                 localStorage.setItem('current_organization_id', String(selectedOrg.id));
-                localStorage.setItem('organization', JSON.stringify(response.organization));
+                localStorage.setItem('organization', JSON.stringify({
+                    ...response.organization,
+                    role: selectedOrg.role,
+                    isOwner: selectedOrg.isOwner,
+                }));
 
                 setOrganization({
                     id: response.organization.id,

@@ -4,6 +4,7 @@ import { apiClient } from '../../lib/api-client';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useOrganization } from '../../context/OrganizationContext';
 
 export default function SelectOrganization() {
     const [isClient, setIsClient] = useState(false);
@@ -58,6 +59,7 @@ export default function SelectOrganization() {
     };
 
     const { login } = useAuth();
+    const { setOrganization } = useOrganization();
 
     const handleContinue = async () => {
         if (!selectedOrganizationId) return;
@@ -78,7 +80,15 @@ export default function SelectOrganization() {
                 });
             }
 
+            const selectedOrg = organizations.find((o: any) => String(o.id) === String(selectedOrganizationId));
+            const orgData = {
+                ...response.organization,
+                role: selectedOrg?.role,
+                isOwner: selectedOrg?.isOwner,
+            };
             localStorage.setItem('current_organization_id', selectedOrganizationId || '');
+            localStorage.setItem('organization', JSON.stringify(orgData));
+            setOrganization(orgData);
             showToast('Organization switched successfully!', 'success');
             navigate('/dashboard');
         } catch (err: any) {

@@ -107,7 +107,9 @@ export const getOrganizationById = async (req: Request, res: Response) => {
         ...organization,
         hasActiveSubscription,
         subscriptionStatus,
-        subscriptionEndDate
+        subscriptionEndDate,
+        role: userOrganization.role,
+        isOwner: userOrganization.isOwner,
       },
       users: organizationUsers
     });
