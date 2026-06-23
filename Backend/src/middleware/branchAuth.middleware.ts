@@ -20,7 +20,7 @@ export interface BranchAuthRequest extends AuthRequest {
 async function resolveOrgRole(req: AuthRequest): Promise<{ role: string; orgId: number | null; isOwner: boolean }> {
     const orgAccessReq = req as OrganizationAccessRequest;
     if (orgAccessReq.organizationRole) {
-        return { role: orgAccessReq.organizationRole, orgId: parseInt(String(req.params.organizationId ?? req.params.id), 10) || null, isOwner: false };
+        return { role: orgAccessReq.organizationRole, orgId: parseInt(String(req.params.organizationId ?? req.params.id), 10) || null, isOwner: orgAccessReq.organizationMembership?.isOwner ?? false };
     }
 
     const jwtRole = req.user?.role;
