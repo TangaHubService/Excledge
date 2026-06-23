@@ -1547,6 +1547,29 @@ class ApiClient {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";
     return this.request(`/supplier-payments/${this.getOrganizationId()}${query}`);
   }
+
+  // ==================== Tax Codes ====================
+
+  async getTaxCodes(): Promise<Array<{ code: string; label: string; rate: number; category: string }>> {
+    return this.request('/inventory/tax-codes');
+  }
+
+  // ==================== Image Upload ====================
+
+  async uploadProductImage(file: File): Promise<{ imageUrl: string }> {
+    const formData = new FormData();
+    formData.append('image', file);
+    const token = this.getToken();
+    const response = await fetch(`${API_URL}/upload/image`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!response.ok) {
+      throw new Error('Image upload failed');
+    }
+    return response.json();
+  }
 }
 
 export const apiClient = new ApiClient();

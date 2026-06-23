@@ -12,6 +12,7 @@ import {
   adjustStock,
   markAsDamage,
   processExpiredStock,
+  getTaxCodes,
 } from "../controllers/inventory.controller";
 import {
   addStockToInventory,
@@ -31,6 +32,7 @@ const router = Router();
 
 const orgAccess = requireOrganizationAccess();
 
+router.get("/tax-codes", getTaxCodes);
 router.get("/products/:organizationId", authenticate, orgAccess, branchAuth, getProducts);
 router.get("/products/:organizationId/expiring", authenticate, orgAccess, branchAuth, getExpiringProducts);
 router.get("/products/:organizationId/expired", authenticate, orgAccess, branchAuth, getExpiredProducts);
