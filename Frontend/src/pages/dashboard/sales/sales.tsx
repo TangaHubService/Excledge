@@ -687,7 +687,7 @@ export default function SalesPage() {
                                     <TableBody>
                                         {saleToRefund?.saleItems.map((item) => (
                                             <TableRow key={item.id} className="hover:bg-transparent">
-                                                <TableCell className="font-medium">{item.product.name}</TableCell>
+                                                <TableCell className="font-medium">{item.serviceName || item.product?.name || 'Service'}</TableCell>
                                                 <TableCell className="text-right">{formatCurrency(item.unitPrice)}</TableCell>
                                                 <TableCell className="text-right">{item.quantity}</TableCell>
                                                 <TableCell className="text-right font-semibold">{formatCurrency(item.totalPrice)}</TableCell>
@@ -803,7 +803,7 @@ export default function SalesPage() {
                                                 <TableBody>
                                                     {selectedSale.saleItems.map((item) => (
                                                         <TableRow key={item.id}>
-                                                            <TableCell className="text-sm font-medium">{item.product.name}</TableCell>
+                                                            <TableCell className="text-sm font-medium">{item.serviceName || item.product?.name || 'Service'}</TableCell>
                                                             <TableCell className="text-sm text-right">{item.quantity}</TableCell>
                                                             <TableCell className="text-sm text-right">{formatCurrency(item.unitPrice)}</TableCell>
                                                             <TableCell className="text-sm text-right font-semibold">{formatCurrency(item.totalPrice)}</TableCell>
