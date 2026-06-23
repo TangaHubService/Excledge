@@ -74,23 +74,25 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
       }
     });
 
-    // Map transactions with all IDs and apply filters
+    // Map transactions with all IDs and apply filters (skip service items)
     let transactions = sales.flatMap(sale =>
-      sale.saleItems.map(item => ({
-        id: item.id, // Sale Item ID
-        saleId: sale.id, // Sale/Transaction ID
-        productId: item.product.id, // Product ID
-        sellerId: sale.user.id, // Seller/User ID
-        date: sale.createdAt.toISOString().split('T')[0],
-        product: item.product.name,
-        category: item.product.category || 'Uncategorized',
-        quantity: item.quantity,
-        unitPrice: item.unitPrice.toNumber(),
-        total: (item.quantity * item.unitPrice.toNumber()),
-        status: sale.status,
-        seller: sale.user.name,
-        sellerEmail: sale.user.email,
-      }))
+      sale.saleItems
+        .filter(item => item.product)
+        .map(item => ({
+          id: item.id,
+          saleId: sale.id,
+          productId: item.product!.id,
+          sellerId: sale.user.id,
+          date: sale.createdAt.toISOString().split('T')[0],
+          product: item.product!.name,
+          category: item.product!.category || 'Uncategorized',
+          quantity: item.quantity,
+          unitPrice: item.unitPrice.toNumber(),
+          total: (item.quantity * item.unitPrice.toNumber()),
+          status: sale.status,
+          seller: sale.user.name,
+          sellerEmail: sale.user.email,
+        }))
     );
 
     // Apply client-side filters (category, product search, maxAmount)
@@ -471,17 +473,19 @@ export const exportReport = async (req: BranchAuthRequest, res: Response) => {
         })
         // Transform sales data for Excel
         data = sales.flatMap((sale) =>
-          sale.saleItems.map((item) => ({
-            Date:
-              new Date(sale.createdAt).toLocaleDateString("en-CA") +
-              "  " +
-              new Date(sale.createdAt).toLocaleTimeString("en-GB", { hour12: false }),
-            Product: item.product.name,
-            Quantity: item.quantity,
-            PricePerUnity: item.unitPrice.toString(),
-            TotalPrice: item.totalPrice.toString(),
-            Customer: sale.customer?.name || "Walk-in",
-          })),
+          sale.saleItems
+            .filter((item) => item.product)
+            .map((item) => ({
+              Date:
+                new Date(sale.createdAt).toLocaleDateString("en-CA") +
+                "  " +
+                new Date(sale.createdAt).toLocaleTimeString("en-GB", { hour12: false }),
+              Product: item.product!.name,
+              Quantity: item.quantity,
+              PricePerUnity: item.unitPrice.toString(),
+              TotalPrice: item.totalPrice.toString(),
+              Customer: sale.customer?.name || "Walk-in",
+            })),
         )
         filename = `sales-report-${new Date().toISOString().split("T")[0]}.xlsx`
         break

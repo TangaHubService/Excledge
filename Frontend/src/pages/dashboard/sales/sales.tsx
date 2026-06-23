@@ -80,15 +80,18 @@ type Sale = {
     status: string;
     saleItems: Array<{
         id: string;
-        product: {
+        product?: {
             name: string;
-            batchNumber: string;
-        };
+            batchNumber?: string;
+        } | null;
         quantity: number;
         unitPrice: string;
         totalPrice: string;
         costPrice?: string;
         profit?: string;
+        itemType?: string;
+        serviceName?: string | null;
+        serviceDescription?: string | null;
     }>;
     ebmTransactions?: SaleEbmTransaction[];
 };

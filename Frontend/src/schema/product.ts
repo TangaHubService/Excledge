@@ -46,6 +46,12 @@ export const productSchema = yup.object({
   barcode: yup
     .string(),
 
+  /* ── Item Type ─────────────────────────────── */
+  itemType: yup
+    .string()
+    .oneOf(['PRODUCT', 'SERVICE'], 'Must be either PRODUCT or SERVICE')
+    .default('PRODUCT'),
+
   /* ── Stock Settings ────────────────────────── */
   minStock: yup
     .number()
@@ -84,7 +90,7 @@ export const sections = [
   {
     id: 'basic',
     label: 'Basic Information',
-    fields: ['name', 'description', 'category', 'brand'] as const,
+    fields: ['name', 'description', 'category', 'brand', 'itemType'] as const,
   },
   {
     id: 'pricing',

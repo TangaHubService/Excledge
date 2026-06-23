@@ -377,7 +377,7 @@ export const topSellingProducts = async (req: BranchAuthRequest, res: Response) 
     if (!salesData.length) {
       return res.status(404).json({ message: "No sales data found." });
     }
-    const productIds = salesData.map((s) => s.productId);
+    const productIds = salesData.map((s) => s.productId).filter((id): id is number => id !== null);
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
       select: { id: true, name: true },
