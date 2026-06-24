@@ -5,8 +5,22 @@ import { yupResolver } from '@hookform/resolvers/yup'
 import * as yup from 'yup'
 import {
     ArrowLeft, Package, Wrench, Upload, X, Info, DollarSign,
-    Barcode, Layers, FileText, Save
+    Barcode, Layers, FileText, Save, Check, ChevronsUpDown
 } from 'lucide-react'
+import { cn } from '../../../lib/utils'
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from '../../../components/ui/command'
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '../../../components/ui/popover'
 import { toast } from 'react-toastify'
 import { apiClient } from '../../../lib/api-client'
 import { useBranch } from '../../../context/BranchContext'
@@ -50,6 +64,8 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [taxCodes, setTaxCodes] = useState<TaxCodeOption[]>([])
     const [uploadedImageUrl, setUploadedImageUrl] = useState<string>('')
+    const [existingCategories, setExistingCategories] = useState<string[]>([])
+    const [categoryPopoverOpen, setCategoryPopoverOpen] = useState(false)
 
     const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
         resolver: yupResolver(addProductSchema) as any,
@@ -88,6 +104,19 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
             ])
         })
     }, [])
+
+    useEffect(() => {
+        if (!selectedBranchId) return
+        apiClient.getProducts({ page: 1, limit: 200, branchId: selectedBranchId })
+            .then((res: any) => {
+                const items = res?.items || res?.data || []
+                const cats = Array.from(new Set(
+                    items.filter((p: any) => p.category).map((p: any) => p.category)
+                )) as string[]
+                setExistingCategories(cats.sort())
+            })
+            .catch(() => {})
+    }, [selectedBranchId])
 
     const selectedTaxRate = taxCodes.find(tc => tc.code === watchTaxCode)?.rate ?? 0
 
@@ -311,13 +340,69 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Category <span className="text-red-500">*</span>
                             </label>
-                            <input
-                                {...register('category')}
-                                placeholder={itemType === 'SERVICE' ? 'e.g. Consultation' : 'e.g. Medicine'}
-                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                    errors.category ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
-                                }`}
-                            />
+                            <Popover open={categoryPopoverOpen} onOpenChange={setCategoryPopoverOpen}>
+                                <PopoverTrigger asChild>
+                                    <button
+                                        type="button"
+                                        role="combobox"
+                                        aria-expanded={categoryPopoverOpen}
+                                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                            errors.category ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                        }`}
+                                    >
+                                        <span className={watch('category') ? '' : 'text-gray-400'}>
+                                            {watch('category') || (itemType === 'SERVICE' ? 'Select or type category...' : 'Select or type category...')}
+                                        </span>
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                    <Command>
+                                        <CommandInput
+                                            placeholder="Search or type new..."
+                                            value={watch('category')}
+                                            onValueChange={(v) => {
+                                                setValue('category', v, { shouldValidate: true })
+                                            }}
+                                        />
+                                        <CommandList>
+                                            {existingCategories.length > 0 && (
+                                                <CommandGroup heading="Existing categories">
+                                                    {existingCategories.map((cat) => (
+                                                        <CommandItem
+                                                            key={cat}
+                                                            value={cat}
+                                                            onSelect={() => {
+                                                                setValue('category', cat, { shouldValidate: true })
+                                                                setCategoryPopoverOpen(false)
+                                                            }}
+                                                        >
+                                                            <Check
+                                                                className={cn(
+                                                                    'mr-2 h-4 w-4',
+                                                                    watch('category') === cat ? 'opacity-100' : 'opacity-0'
+                                                                )}
+                                                            />
+                                                            {cat}
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            )}
+                                            {watch('category') && !existingCategories.includes(watch('category')) && (
+                                                <CommandEmpty className="py-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setCategoryPopoverOpen(false)}
+                                                        className="w-full text-left px-2 py-1.5 text-sm text-blue-600 hover:bg-accent rounded-sm"
+                                                    >
+                                                        Use "{watch('category')}"
+                                                    </button>
+                                                </CommandEmpty>
+                                            )}
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                             {errors.category && <p className="text-xs text-red-500 mt-1">{errors.category.message}</p>}
                         </div>
                         <div className="space-y-1.5 md:col-span-2">
@@ -347,7 +432,7 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                             </label>
                             <div className="relative">
                                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 dark:text-gray-400">
-                                    ₹
+                                    RWF
                                 </span>
                                 <input
                                     {...register('unitPrice')}
@@ -355,7 +440,7 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                                     step="0.01"
                                     min="0"
                                     placeholder="0.00"
-                                    className={`w-full pl-8 pr-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                    className={`w-full pl-14 pr-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
                                         errors.unitPrice ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
                                     }`}
                                 />
@@ -502,7 +587,7 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                         </div>
                         <div className="flex justify-between text-sm py-1.5">
                             <span className="text-gray-500 dark:text-gray-400">Unit Price</span>
-                            <span className="font-medium text-gray-900 dark:text-white">₹ {Number(watchUnitPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="font-medium text-gray-900 dark:text-white">{Number(watchUnitPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF</span>
                         </div>
                         {itemType === 'PRODUCT' && (
                             <div className="flex justify-between text-sm py-1.5">
@@ -514,7 +599,7 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                         <div className="flex justify-between text-sm py-1.5">
                             <span className="text-gray-500 dark:text-gray-400">Subtotal</span>
                             <span className="font-medium text-gray-900 dark:text-white">
-                                ₹ {((watchUnitPrice || 0) * (itemType === 'PRODUCT' ? (watchQuantity || 1) : 1)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {((watchUnitPrice || 0) * (itemType === 'PRODUCT' ? (watchQuantity || 1) : 1)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF
                             </span>
                         </div>
                         <div className="flex justify-between text-sm py-1.5">
@@ -522,14 +607,14 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                                 Tax ({selectedTaxRate}%)
                             </span>
                             <span className="font-medium text-gray-900 dark:text-white">
-                                ₹ {((watchUnitPrice || 0) * (itemType === 'PRODUCT' ? (watchQuantity || 1) : 1) * selectedTaxRate / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {((watchUnitPrice || 0) * (itemType === 'PRODUCT' ? (watchQuantity || 1) : 1) * selectedTaxRate / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF
                             </span>
                         </div>
                         <div className="border-t border-gray-100 dark:border-gray-700 my-2" />
                         <div className="flex justify-between text-sm py-1.5">
                             <span className="text-base font-semibold text-gray-900 dark:text-white">Total</span>
                             <span className="text-base font-bold text-blue-600 dark:text-blue-400">
-                                ₹ {((watchUnitPrice || 0) * (itemType === 'PRODUCT' ? (watchQuantity || 1) : 1) * (1 + selectedTaxRate / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {((watchUnitPrice || 0) * (itemType === 'PRODUCT' ? (watchQuantity || 1) : 1) * (1 + selectedTaxRate / 100)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF
                             </span>
                         </div>
                     </div>
