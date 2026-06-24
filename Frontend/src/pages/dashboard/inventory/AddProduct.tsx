@@ -5,7 +5,7 @@ import { yupResolver } from '@hookform/resolvers/yup'
 import * as yup from 'yup'
 import {
     ArrowLeft, Package, Wrench, Upload, X, Info, DollarSign,
-    Barcode, Layers, FileText, Save, Check, ChevronsUpDown
+    Barcode, Layers, Save, Check, ChevronsUpDown
 } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import {
@@ -89,8 +89,6 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
     })
 
     const watchItemType = watch('itemType')
-    const watchUnitPrice = watch('unitPrice')
-    const watchQuantity = watch('quantity')
     const watchTaxCode = watch('taxCode')
 
     useEffect(() => {
@@ -124,8 +122,6 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
             })
             .catch(() => {})
     }, [selectedBranchId])
-
-    const selectedTaxRate = taxCodes.find(tc => tc.code === watchTaxCode)?.rate ?? 0
 
     const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -214,30 +210,9 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
     }
 
     return (
-        <div className="max-w-6xl mx-auto px-4 py-6">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => navigate('/dashboard/inventory-all')}
-                        className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                    >
-                        <ArrowLeft className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                    </button>
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
-                            Add New {itemType === 'SERVICE' ? 'Service' : 'Product'}
-                        </h1>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                            Fill in the details below to add a new item to your inventory.
-                        </p>
-                    </div>
-                </div>
-            </div>
-
+        <div className="max-w-4xl mx-auto px-4 py-6">
             <form onSubmit={handleSubmit(onSubmit)}>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2 space-y-6">
+                <div className="space-y-6">
                 {/* Item Type Toggle */}
                 <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
                     <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">
@@ -620,78 +595,30 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                 </div>
                     </div>
 
-                    <div className="lg:col-span-1 space-y-6">
-                {/* Summary */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 sticky top-6">
-                    <div className="flex items-center gap-2 mb-5">
-                        <div className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-900/20">
-                            <FileText className="h-4 w-4 text-rose-600" />
-                        </div>
-                        <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Summary</h2>
-                    </div>
-                    <div className="space-y-2">
-                        <div className="flex justify-between text-sm py-1.5">
-                            <span className="text-gray-500 dark:text-gray-400">Item Type</span>
-                            <span className="font-medium text-gray-900 dark:text-white capitalize">{itemType.toLowerCase()}</span>
-                        </div>
-                        <div className="flex justify-between text-sm py-1.5">
-                            <span className="text-gray-500 dark:text-gray-400">Unit Price</span>
-                            <span className="font-medium text-gray-900 dark:text-white">{Number(watchUnitPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF</span>
-                        </div>
-                        {itemType === 'PRODUCT' && (
-                            <div className="flex justify-between text-sm py-1.5">
-                                <span className="text-gray-500 dark:text-gray-400">Quantity</span>
-                                <span className="font-medium text-gray-900 dark:text-white">{watchQuantity || 0}</span>
-                            </div>
-                        )}
-                        <div className="border-t border-gray-100 dark:border-gray-700 my-2" />
-                        <div className="flex justify-between text-sm py-1.5">
-                            <span className="text-gray-500 dark:text-gray-400">Subtotal</span>
-                            <span className="font-medium text-gray-900 dark:text-white">
-                                {((watchUnitPrice || 0) * (itemType === 'PRODUCT' ? (watchQuantity || 1) : 1)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF
-                            </span>
-                        </div>
-                        <div className="flex justify-between text-sm py-1.5">
-                            <span className="text-gray-500 dark:text-gray-400">
-                                Tax ({selectedTaxRate}%)
-                            </span>
-                            <span className="font-medium text-gray-900 dark:text-white">
-                                {((watchUnitPrice || 0) * (itemType === 'PRODUCT' ? (watchQuantity || 1) : 1) * selectedTaxRate / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF
-                            </span>
-                        </div>
-                        <div className="border-t border-gray-100 dark:border-gray-700 my-2" />
-                        <div className="flex justify-between text-sm py-1.5">
-                            <span className="text-base font-semibold text-gray-900 dark:text-white">Total</span>
-                            <span className="text-base font-bold text-blue-600 dark:text-blue-400">
-                                {((watchUnitPrice || 0) * (itemType === 'PRODUCT' ? (watchQuantity || 1) : 1) * (1 + selectedTaxRate / 100)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RWF
-                            </span>
-                        </div>
-                    </div>
-                    </div>
+                </div>
 
-                    {/* Form Actions */}
-                    <div className="flex flex-col gap-3">
-                        <button
-                            type="submit"
-                            disabled={isSubmitting || isUploadingImage}
-                            className="w-full px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"
-                        >
-                            {isSubmitting ? (
-                                <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                                <Save className="h-4 w-4" />
-                            )}
-                            Save {itemType === 'SERVICE' ? 'Service' : 'Product'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => onSuccess ? onSuccess() : navigate('/dashboard/inventory-all')}
-                            className="w-full px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
-                        >
-                            Cancel
-                        </button>
-                    </div>
-                    </div>
+                {/* Form Actions */}
+                <div className="flex items-center justify-end gap-3 pt-6 pb-2 border-t border-gray-100 dark:border-gray-700">
+                    <button
+                        type="button"
+                        onClick={() => onSuccess ? onSuccess() : navigate('/dashboard/inventory-all')}
+                        className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={isSubmitting || isUploadingImage}
+                        className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-blue-500/20"
+                    >
+                        {isSubmitting ? (
+                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <Save className="h-4 w-4" />
+                        )}
+                        Save {itemType === 'SERVICE' ? 'Service' : 'Product'}
+                    </button>
+                </div>
 
                 </div>
             </form>
