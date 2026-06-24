@@ -149,7 +149,8 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
 
     // Helper: destructure register() so we can inject composeRefs without overriding the built-in ref
     const bindField = (field: string, nextField: string) => {
-        const { ref, ...rest } = register(field)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { ref, ...rest } = register(field as any)
         return { ...rest, ref: composeRefs(ref, field), onKeyDown: advanceOnEnter(nextField) }
     }
 
