@@ -65,7 +65,9 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
     const [taxCodes, setTaxCodes] = useState<TaxCodeOption[]>([])
     const [uploadedImageUrl, setUploadedImageUrl] = useState<string>('')
     const [existingCategories, setExistingCategories] = useState<string[]>([])
+    const [existingNames, setExistingNames] = useState<string[]>([])
     const [categoryPopoverOpen, setCategoryPopoverOpen] = useState(false)
+    const [namePopoverOpen, setNamePopoverOpen] = useState(false)
 
     const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
         resolver: yupResolver(addProductSchema) as any,
@@ -115,6 +117,10 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                     items.filter((p: any) => p.category).map((p: any) => p.category)
                 )) as string[]
                 setExistingCategories(cats.sort())
+                const names = Array.from(new Set(
+                    items.filter((p: any) => p.name).map((p: any) => p.name)
+                )) as string[]
+                setExistingNames(names.sort())
             })
             .catch(() => {})
     }, [selectedBranchId])
@@ -227,26 +233,6 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                         </p>
                     </div>
                 </div>
-                <div className="flex gap-3">
-                    <button
-                        onClick={() => onSuccess ? onSuccess() : navigate('/dashboard/inventory-all')}
-                        className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleSubmit(onSubmit)}
-                        disabled={isSubmitting || isUploadingImage}
-                        className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-blue-500/20"
-                    >
-                        {isSubmitting ? (
-                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                            <Save className="h-4 w-4" />
-                        )}
-                        Save {itemType === 'SERVICE' ? 'Service' : 'Product'}
-                    </button>
-                </div>
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -328,13 +314,69 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                 {itemType === 'SERVICE' ? 'Service Name' : 'Product Name'} <span className="text-red-500">*</span>
                             </label>
-                            <input
-                                {...register('name')}
-                                placeholder={itemType === 'SERVICE' ? 'e.g. Consultation, Installation' : 'e.g. Paracetamol 500mg'}
-                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                    errors.name ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
-                                }`}
-                            />
+                            <Popover open={namePopoverOpen} onOpenChange={setNamePopoverOpen}>
+                                <PopoverTrigger asChild>
+                                    <button
+                                        type="button"
+                                        role="combobox"
+                                        aria-expanded={namePopoverOpen}
+                                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                            errors.name ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                        }`}
+                                    >
+                                        <span className={watch('name') ? 'truncate' : 'text-gray-400 truncate'}>
+                                            {watch('name') || (itemType === 'SERVICE' ? 'Select or type service name...' : 'Select or type product name...')}
+                                        </span>
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                    <Command>
+                                        <CommandInput
+                                            placeholder="Search or type new..."
+                                            value={watch('name')}
+                                            onValueChange={(v) => {
+                                                setValue('name', v, { shouldValidate: true })
+                                            }}
+                                        />
+                                        <CommandList>
+                                            {existingNames.length > 0 && (
+                                                <CommandGroup heading="Existing names">
+                                                    {existingNames.map((n) => (
+                                                        <CommandItem
+                                                            key={n}
+                                                            value={n}
+                                                            onSelect={() => {
+                                                                setValue('name', n, { shouldValidate: true })
+                                                                setNamePopoverOpen(false)
+                                                            }}
+                                                        >
+                                                            <Check
+                                                                className={cn(
+                                                                    'mr-2 h-4 w-4 shrink-0',
+                                                                    watch('name') === n ? 'opacity-100' : 'opacity-0'
+                                                                )}
+                                                            />
+                                                            {n}
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            )}
+                                            {watch('name') && !existingNames.includes(watch('name')) && (
+                                                <CommandEmpty className="py-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setNamePopoverOpen(false)}
+                                                        className="w-full text-left px-2 py-1.5 text-sm text-blue-600 hover:bg-accent rounded-sm"
+                                                    >
+                                                        Use "{watch('name')}"
+                                                    </button>
+                                                </CommandEmpty>
+                                            )}
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                             {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
                         </div>
                         <div className="space-y-1.5">
@@ -619,6 +661,29 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                             </span>
                         </div>
                     </div>
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex items-center justify-end gap-3 pt-2 pb-4">
+                    <button
+                        type="button"
+                        onClick={() => onSuccess ? onSuccess() : navigate('/dashboard/inventory-all')}
+                        className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={isSubmitting || isUploadingImage}
+                        className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-blue-500/20"
+                    >
+                        {isSubmitting ? (
+                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <Save className="h-4 w-4" />
+                        )}
+                        Save {itemType === 'SERVICE' ? 'Service' : 'Product'}
+                    </button>
                 </div>
             </form>
         </div>
