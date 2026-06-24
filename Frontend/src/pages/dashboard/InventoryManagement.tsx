@@ -496,7 +496,7 @@ export const InventoryManagement = () => {
             {/* Add Product Drawer */}
             <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DrawerContent className="sm:max-w-[900px] max-h-[95vh] overflow-y-auto bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm">
-                <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4 bg-white dark:bg-gray-800 sticky top-0 z-10 rounded-tl-2xl rounded-tr-2xl">
+                <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4 bg-white dark:bg-gray-800 rounded-tl-2xl rounded-tr-2xl">
                   <DrawerTitle className="text-lg font-semibold">Add New Product</DrawerTitle>
                 </DrawerHeader>
                 <div className="p-4">
