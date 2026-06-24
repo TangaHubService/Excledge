@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { yupResolver } from '@hookform/resolvers/yup'
 import * as yup from 'yup'
 import {
-    ArrowLeft, Package, Wrench, Upload, X, Info, DollarSign,
+    Package, Wrench, Upload, X, Info, DollarSign,
     Barcode, Layers, Save, Check, ChevronsUpDown
 } from 'lucide-react'
 import { cn } from '../../../lib/utils'
@@ -89,7 +89,6 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
     })
 
     const watchItemType = watch('itemType')
-    const watchTaxCode = watch('taxCode')
 
     useEffect(() => {
         setItemType(watchItemType as 'PRODUCT' | 'SERVICE')
@@ -593,7 +592,6 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                         </div>
                     </div>
                 </div>
-                    </div>
 
                 </div>
 
@@ -620,7 +618,6 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                     </button>
                 </div>
 
-                </div>
             </form>
         </div>
     )
