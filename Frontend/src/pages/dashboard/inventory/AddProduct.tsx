@@ -330,10 +330,11 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                    <Command>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg" align="start">
+                                    <Command className="bg-transparent">
                                         <CommandInput
                                             placeholder="Search or type new..."
+                                            className="bg-white dark:bg-gray-800"
                                             value={watch('name')}
                                             onValueChange={(v) => {
                                                 setValue('name', v, { shouldValidate: true })
@@ -399,10 +400,11 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                    <Command>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg" align="start">
+                                    <Command className="bg-transparent">
                                         <CommandInput
                                             placeholder="Search or type new..."
+                                            className="bg-white dark:bg-gray-800"
                                             value={watch('category')}
                                             onValueChange={(v) => {
                                                 setValue('category', v, { shouldValidate: true })
