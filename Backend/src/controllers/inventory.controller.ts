@@ -349,7 +349,8 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       return res.status(409).json(apiError(`A product with this ${field} already exists`))
     }
     if (error.code === 'P2021' || error.message?.includes('does not exist') || error.code === '42704') {
-      return res.status(500).json(apiError('Database schema is out of date. Please run database migrations.'))
+      console.error('[Schema Error]', error.message)
+      return res.status(500).json(apiError('Temporary system error. Please try again.'))
     }
     console.error("[Create Product Error]:", error)
     const message = process.env.NODE_ENV === 'development'
