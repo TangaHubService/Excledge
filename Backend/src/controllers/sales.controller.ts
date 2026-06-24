@@ -319,7 +319,11 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       return res.status(404).json(apiError(error.message || "Resource not found"))
     }
 
-    res.status(500).json(apiError(error.message || "Failed to create sale"))
+    if (error.code === 'P2002' && error.message?.includes('invoice_number')) {
+      return res.status(500).json(apiError("Invoice number conflict. Please try again."))
+    }
+
+    res.status(500).json(apiError("Failed to create sale"))
   }
 }
 
