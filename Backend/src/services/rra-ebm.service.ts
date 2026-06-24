@@ -97,11 +97,27 @@ export function parseGatewayResponse(raw: unknown): NormalizedEbmResponse {
     return {};
   }
   const o = raw as Record<string, unknown>;
+
+  // Handle RRA canonical structure: { RESPONSE: { MESSAGE: { ... }, QR_CODE, ... } }
+  const responseBlock =
+    o.RESPONSE && typeof o.RESPONSE === 'object'
+      ? (o.RESPONSE as Record<string, unknown>)
+      : null;
+  const messageBlock =
+    responseBlock?.MESSAGE && typeof responseBlock.MESSAGE === 'object'
+      ? (responseBlock.MESSAGE as Record<string, unknown>)
+      : null;
+
+  // Also support existing gateway format: o.data
   const data = (o.data && typeof o.data === 'object' ? o.data : {}) as Record<string, unknown>;
 
   const pick = (...keys: string[]): string | undefined => {
     for (const k of keys) {
-      const v = o[k] ?? data[k];
+      const v =
+        o[k] ??
+        data[k] ??
+        (messageBlock ? messageBlock[k] : undefined) ??
+        (responseBlock ? responseBlock[k] : undefined);
       if (v !== undefined && v !== null && String(v).length > 0) {
         return String(v);
       }
@@ -110,18 +126,23 @@ export function parseGatewayResponse(raw: unknown): NormalizedEbmResponse {
   };
 
   return {
+    // RRA field: "num" in MESSAGE block holds the invoice number
     ebmInvoiceNumber: pick(
       'ebmInvoiceNumber',
       'ebm_invoice_number',
+      'num',
       'receiptNumber',
       'receipt_number',
       'invoiceNumber',
       'fiscalInvoiceNumber',
       'sdcInvoiceNo'
     ),
-    receiptQrPayload: pick('qrCode', 'qr_code', 'qrPayload', 'qr_payload', 'qrData', 'receiptQr'),
-    verificationCode: pick('verificationCode', 'verification_code', 'internalData', 'rcptSign'),
-    sdcDateTime: pick('sdcDateTime', 'sdc_date_time', 'issuedAt', 'timestamp'),
+    // RRA field: "QR_CODE" in RESPONSE block holds the encrypted QR payload
+    receiptQrPayload: pick('QR_CODE', 'qrCode', 'qr_code', 'qrPayload', 'qr_payload', 'qrData', 'receiptQr'),
+    // RRA field: "ysdcregsig" in MESSAGE block holds the fiscal signature
+    verificationCode: pick('ysdcregsig', 'verificationCode', 'verification_code', 'ysdcintdata', 'internalData', 'rcptSign'),
+    // RRA fields: "ysdcmrctim" or "ysdctime" in MESSAGE block hold the SDC timestamp
+    sdcDateTime: pick('ysdcmrctim', 'ysdctime', 'sdcDateTime', 'sdc_date_time', 'issuedAt', 'timestamp'),
   };
 }
 
@@ -227,6 +248,9 @@ export async function postToGateway(
     const auth = authHeader();
     if (auth) {
       headers.Authorization = auth;
+    }
+    if (config.ebm.securityKey) {
+      headers['security_key'] = config.ebm.securityKey;
     }
 
     const res = await fetch(url, {
@@ -409,6 +433,32 @@ export async function submitInvoiceToEbm(params: {
     return { success: true, ebmInvoiceNumber: already.ebmInvoiceNumber };
   }
 
+  // Pre-validate totalAmount vs line-item breakdown (RRA compliance)
+  const computedTotal = sale.saleItems.reduce(
+    (sum, item) => sum + Number(item.totalPrice),
+    0,
+  );
+  const submittedTotal = Number(sale.totalAmount);
+  if (Math.abs(computedTotal - submittedTotal) > 0.01) {
+    return {
+      success: false,
+      error: `Total amount mismatch: submitted ${submittedTotal}, computed from lines ${computedTotal}`,
+    };
+  }
+
+  // Pre-validate totalVat vs line-item VAT (RRA compliance)
+  const computedVat = sale.saleItems.reduce(
+    (sum, item) => sum + Number(item.taxAmount),
+    0,
+  );
+  const submittedVat = Number(sale.vatAmount);
+  if (Math.abs(computedVat - submittedVat) > 0.01) {
+    return {
+      success: false,
+      error: `VAT amount mismatch: submitted ${submittedVat}, computed from lines ${computedVat}`,
+    };
+  }
+
   const org = await prisma.organization.findUnique({
     where: { id: params.organizationId },
     select: { TIN: true, ebmDeviceId: true, ebmSerialNo: true, name: true },
@@ -580,17 +630,17 @@ export async function submitRefundToEbm(params: {
   });
 
   if (!origTx?.ebmInvoiceNumber) {
-    return { success: true };
+    return { success: false, error: 'Original invoice not fiscalized — cannot process refund' };
   }
 
   const [originalSale, refundSale, org] = await Promise.all([
     prisma.sale.findFirst({
       where: { id: params.originalSaleId, organizationId: params.organizationId },
-      select: { invoiceNumber: true, saleNumber: true, totalAmount: true },
+      select: { invoiceNumber: true, saleNumber: true, totalAmount: true, vatAmount: true },
     }),
     prisma.sale.findFirst({
       where: { id: params.refundSaleId, organizationId: params.organizationId },
-      select: { saleNumber: true, totalAmount: true },
+      select: { saleNumber: true, totalAmount: true, vatAmount: true },
     }),
     prisma.organization.findUnique({
       where: { id: params.organizationId },
@@ -600,6 +650,16 @@ export async function submitRefundToEbm(params: {
 
   if (!originalSale || !refundSale || !org) {
     return { success: false, error: 'Refund EBM: missing sale or organization' };
+  }
+
+  // RRA requires refund total ≤ original total
+  const refundTotal = Number(refundSale.totalAmount);
+  const originalTotal = Number(originalSale.totalAmount);
+  if (refundTotal > originalTotal) {
+    return {
+      success: false,
+      error: `Refund total ${refundTotal} exceeds original invoice total ${originalTotal}`,
+    };
   }
 
   const refundRow = await prisma.ebmTransaction.create({

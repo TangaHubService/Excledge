@@ -53,5 +53,6 @@ export const config = {
     useMock: process.env.EBM_USE_MOCK === "true",
     maxQueueRetries: Number.parseInt(process.env.EBM_MAX_QUEUE_RETRIES || "10", 10),
     statusCheckPath: process.env.EBM_STATUS_CHECK_PATH || "/status",
+    securityKey: process.env.EBM_SECURITY_KEY || "",
   },
 }

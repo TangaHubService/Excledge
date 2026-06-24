@@ -159,6 +159,8 @@ model PurchaseOrderItem {
   quantity        Int
   unitPrice       Decimal       @db.Decimal(10, 2)
   totalPrice      Decimal       @db.Decimal(10, 2)
+  taxCode         RraTaxCode?   @default(A)
+  taxRate         Decimal?      @db.Decimal(5, 2)
   id              Int           @id @default(autoincrement())
   purchaseOrderId Int
   productId       Int?
@@ -1151,6 +1153,7 @@ enum TaxCategory {
   STANDARD
   ZERO_RATED
   EXEMPT
+  NON_TAXABLE
 }
 
 enum StockTransferStatus {

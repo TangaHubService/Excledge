@@ -1,6 +1,9 @@
 import { prisma } from '../lib/prisma';
 import { config } from '../config';
 
+/** RRA EBM API may require a security_key header for authentication. */
+const RRA_SECURITY_KEY: string = config.ebm.securityKey || '';
+
 // ──────────────────────────────────────────────
 // Types
 // ──────────────────────────────────────────────
@@ -111,6 +114,9 @@ async function postToEndpoint(
     if (auth) {
       headers.Authorization = auth;
     }
+    if (RRA_SECURITY_KEY) {
+      headers['security_key'] = RRA_SECURITY_KEY;
+    }
 
     const res = await fetch(url, {
       method: 'POST',
@@ -163,11 +169,28 @@ export function parseVsdcResponse(raw: unknown): VsdcResponse {
   }
 
   const o = raw as Record<string, unknown>;
+
+  // Handle RRA canonical response structure:
+  // { RESPONSE: { MESSAGE: { num, ysdcregsig, ysdcrecnum, ysdcintdata, ... }, QR_CODE, STATUS, DISTRIBUTOR_TIN } }
+  const responseBlock =
+    o.RESPONSE && typeof o.RESPONSE === 'object'
+      ? (o.RESPONSE as Record<string, unknown>)
+      : null;
+  const messageBlock =
+    responseBlock?.MESSAGE && typeof responseBlock.MESSAGE === 'object'
+      ? (responseBlock.MESSAGE as Record<string, unknown>)
+      : null;
+
+  // Also support existing gateway format: o.data
   const data = (o.data && typeof o.data === 'object' ? o.data : {}) as Record<string, unknown>;
 
   const pick = (...keys: string[]): string => {
     for (const k of keys) {
-      const v = o[k] ?? data[k];
+      const v =
+        o[k] ??
+        data[k] ??
+        (messageBlock ? messageBlock[k] : undefined) ??
+        (responseBlock ? responseBlock[k] : undefined);
       if (v !== undefined && v !== null && String(v).length > 0) {
         return String(v);
       }
@@ -176,11 +199,16 @@ export function parseVsdcResponse(raw: unknown): VsdcResponse {
   };
 
   return {
-    rcptNo: pick('rcptNo', 'rcpt_no', 'receiptNo', 'receipt_number', 'ebmInvoiceNumber', 'invoiceNumber', 'fiscalInvoiceNumber'),
-    intrlData: pick('intrlData', 'intrl_data', 'internalData', 'verificationCode', 'verification_code'),
-    vsdcSignature: pick('vsdcSignature', 'vsdc_signature', 'rcptSign', 'receiptSignature', 'fiscalSignature'),
-    qrPayload: pick('qrPayload', 'qr_payload', 'qrCode', 'qr_code', 'qrData'),
-    sdcDateTime: pick('sdcDateTime', 'sdc_date_time', 'issuedAt', 'timestamp', 'submittedAt'),
+    // RRA field: "num" holds the invoice/receipt number
+    rcptNo: pick('rcptNo', 'num', 'receiptNo', 'receipt_number', 'ebmInvoiceNumber', 'invoiceNumber', 'fiscalInvoiceNumber'),
+    // RRA field: "ysdcintdata" holds the internal data / verification code
+    intrlData: pick('intrlData', 'ysdcintdata', 'internalData', 'verificationCode', 'verification_code'),
+    // RRA field: "ysdcregsig" holds the fiscal signature
+    vsdcSignature: pick('vsdcSignature', 'ysdcregsig', 'rcptSign', 'receiptSignature', 'fiscalSignature'),
+    // RRA field: "QR_CODE" holds the encrypted QR payload
+    qrPayload: pick('qrPayload', 'QR_CODE', 'qr_code', 'qrCode', 'qrData'),
+    // RRA fields: "ysdcmrctim" or "ysdctime" hold the SDC timestamp
+    sdcDateTime: pick('sdcDateTime', 'ysdcmrctim', 'ysdctime', 'issuedAt', 'timestamp', 'submittedAt'),
   };
 }
 

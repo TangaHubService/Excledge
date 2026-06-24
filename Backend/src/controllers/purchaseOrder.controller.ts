@@ -82,12 +82,34 @@ export const createPurchaseOrder = async (req: AuthRequest, res: Response) => {
                 notes,
                 expectedDate: expectedDate ? new Date(expectedDate) : null,
                 items: {
-                    create: items.map((item: any) => ({
-                        productId: item.productId, // Now included
-                        productName: item.productName,
-                        quantity: item.quantity,
-                        unitPrice: item.unitPrice,
-                        totalPrice: item.quantity * item.unitPrice,
+                    create: await Promise.all(items.map(async (item: any) => {
+                        // Look up product tax information for RRA compliance
+                        let taxCode: string | undefined;
+                        let taxRate: number | undefined;
+                        if (item.productId) {
+                            const product = await prisma.product.findUnique({
+                                where: { id: item.productId },
+                                select: { taxCode: true, taxCategory: true },
+                            });
+                            if (product) {
+                                taxCode = product.taxCode ?? (
+                                    product.taxCategory === 'STANDARD' ? 'B' :
+                                    product.taxCategory === 'ZERO_RATED' ? 'C' :
+                                    product.taxCategory === 'EXEMPT' ? 'A' :
+                                    product.taxCategory === 'NON_TAXABLE' ? 'D' : 'A'
+                                );
+                                taxRate = taxCode === 'B' ? 18 : 0;
+                            }
+                        }
+                        return {
+                            productId: item.productId,
+                            productName: item.productName,
+                            quantity: item.quantity,
+                            unitPrice: item.unitPrice,
+                            totalPrice: item.quantity * item.unitPrice,
+                            taxCode: item.taxCode ?? taxCode ?? 'A',
+                            taxRate: item.taxRate ?? taxRate ?? 0,
+                        };
                     })),
                 },
             },
