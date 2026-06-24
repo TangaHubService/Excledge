@@ -413,9 +413,10 @@ export function ProductForm({
                       <SelectValue placeholder="Select tax code" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="A">Standard (18%)</SelectItem>
-                      <SelectItem value="B">Reduced (0%)</SelectItem>
-                      <SelectItem value="C">Exempt</SelectItem>
+                      <SelectItem value="A">Exempted (0%)</SelectItem>
+                      <SelectItem value="B">Standard (18%)</SelectItem>
+                      <SelectItem value="C">Zero-rated (0%)</SelectItem>
+                      <SelectItem value="D">Exempted Entity (0%)</SelectItem>
                     </SelectContent>
                   </Select>
                 </FieldGroup>

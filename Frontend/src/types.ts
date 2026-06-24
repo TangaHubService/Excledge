@@ -24,6 +24,8 @@ export interface Product {
     organizationId: number;
     supplierId?: number;
     imageUrl?: string;
+    taxCode?: string;
+    taxCategory?: string;
     createdAt: string;
     updatedAt: string;
 }

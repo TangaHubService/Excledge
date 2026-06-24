@@ -98,9 +98,10 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
     useEffect(() => {
         apiClient.getTaxCodes().then(setTaxCodes).catch(() => {
             setTaxCodes([
-                { code: 'A', label: 'Standard Rate (18% VAT)', rate: 18, category: 'STANDARD' },
-                { code: 'B', label: 'Zero Rated (0%)', rate: 0, category: 'ZERO_RATED' },
-                { code: 'C', label: 'Exempt', rate: 0, category: 'EXEMPT' },
+                { code: 'A', label: 'Exempted (0%)', rate: 0, category: 'EXEMPT' },
+                { code: 'B', label: 'Standard (18%)', rate: 18, category: 'STANDARD' },
+                { code: 'C', label: 'Zero-rated (0%)', rate: 0, category: 'ZERO_RATED' },
+                { code: 'D', label: 'Exempted Entity (0%)', rate: 0, category: 'EXEMPT' },
             ])
         })
     }, [])
