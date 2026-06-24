@@ -31,9 +31,34 @@ export class TaxService {
                 return RraTaxCode.C;
             case 'EXEMPT':
                 return RraTaxCode.A;
+            case 'NON_TAXABLE':
+                return RraTaxCode.D;
             default:
                 return RraTaxCode.A;
         }
+    }
+
+    /** RRA spec: TAX_A=0%, TAX_B=18%, TAX_C=0%, TAX_D=0% */
+    static getExpectedTaxRate(taxCode: RraTaxCode): number {
+        switch (taxCode) {
+            case RraTaxCode.B:
+                return 18;
+            case RraTaxCode.A:
+            case RraTaxCode.C:
+            case RraTaxCode.D:
+            default:
+                return 0;
+        }
+    }
+
+    /** Allowed tax codes for line items */
+    static readonly ALLOWED_TAX_CODES: ReadonlySet<RraTaxCode> = new Set([
+        RraTaxCode.A, RraTaxCode.B, RraTaxCode.C, RraTaxCode.D,
+    ]);
+
+    static validateTaxRate(taxCode: RraTaxCode, taxRate: number): { valid: boolean; expectedRate: number } {
+        const expectedRate = this.getExpectedTaxRate(taxCode);
+        return { valid: taxRate === expectedRate, expectedRate };
     }
 
     static resolveTaxCode(category: TaxCategory, productTaxCode?: RraTaxCode | null): RraTaxCode {
@@ -68,7 +93,7 @@ export class TaxService {
         const total = price.mul(qty);
         const code = overrideTaxCode ?? this.getTaxCode(category);
 
-        const isTaxable = code === RraTaxCode.B;
+        const isTaxable = code === RraTaxCode.B; // Only TAX_B (18%) is taxable
         const rate = isTaxable ? standardVatRate : new Decimal(0);
 
         if (isTaxable) {

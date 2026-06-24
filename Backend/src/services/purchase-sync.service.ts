@@ -1,6 +1,8 @@
 import { prisma } from '../lib/prisma';
+import { RraTaxCode } from '@prisma/client';
 import { isEbmEnabled } from './rra-ebm.service';
 import { buildVsdcEnvelope, savePurc } from './vsdc-api.service';
+import { TaxService } from './tax.service';
 
 /**
  * Submit a B2B purchase order to the RRA VSDC gateway via /savePurc.
@@ -24,6 +26,25 @@ export async function submitPurchaseToEbm(purchaseOrderId: number): Promise<{ su
 
   const supplierTin = po.supplier?.email ?? '';
 
+  // Validate line-item tax codes and rates (RRA compliance)
+  for (const item of po.items) {
+    const taxCode: RraTaxCode = (item.taxCode as RraTaxCode) ?? RraTaxCode.A;
+    if (!TaxService.ALLOWED_TAX_CODES.has(taxCode)) {
+      return {
+        success: false,
+        error: `Invalid tax code "${taxCode}" on item "${item.productName}"`,
+      };
+    }
+    const itemTaxRate = Number(item.taxRate ?? 0);
+    const { valid, expectedRate } = TaxService.validateTaxRate(taxCode, itemTaxRate);
+    if (!valid) {
+      return {
+        success: false,
+        error: `Line item "${item.productName}" tax rate ${itemTaxRate} is not allowed for code ${taxCode}. Expected ${expectedRate}%.`,
+      };
+    }
+  }
+
   try {
     const envelope = await buildVsdcEnvelope(po.organizationId);
 
@@ -40,6 +61,8 @@ export async function submitPurchaseToEbm(purchaseOrderId: number): Promise<{ su
         quantity: item.quantity,
         unitPrice: Number(item.unitPrice),
         totalPrice: Number(item.totalPrice),
+        taxCode: item.taxCode ?? 'A',
+        taxRate: Number(item.taxRate ?? 0),
       })),
     };
 

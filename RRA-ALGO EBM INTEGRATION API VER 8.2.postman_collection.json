@@ -1,0 +1,1199 @@
+{
+  "info": {
+    "_postman_id": "2a90ed06-c9b2-4b7b-8b00-35be0be81eea",
+    "name": "RRA-ALGO EBM INTEGRATION API VER 8.2",
+    "description": "ALGORITHM EBM INTEGRATION API Documentation VER 8.2, API for RRA INTEGRATION DOCUMENTATION VCIS/VSDC\n\nThis document describes the API specification to integrate with Electronic Invoicing Systems (EBM)\n\nOverview  \nThe following specific requirements are for the systems to communicate with EBM VCIS, the Certified Invoicing System to be used together with a Virtual Sales Data Controller (VSDC).\n\n[DATAFLOW DIAGRAM](https://gra.evatgra.com/DataFlow.php)\n\nThis Api have an Authentication\n\n**security_key: Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg=**\n\nE-VAT API Receive data in two ways\n\n1.XML FORMAT  \n2.JSON FORMAT.\n\nTAX CODE Mapping to TAX RATE:\n\n- \\* **TAX_A : 0 % \\[Exempted\\]**  \n    \\* **TAX_B : 18 % \\[Taxable\\]**  \n    \\* **TAX_C : 0 % \\[Export\\]**  \n    \\* **TAX_D : 0 % \\[Non Taxable\\]**\n    \n\nVAT Calculation Template: [https://docs.google.com/spreadsheets/d/1s1nWalN8aWtl19X0VnJYwxIpHbsufF0J/edit#gid=733547670](https://docs.google.com/spreadsheets/d/1s1nWalN8aWtl19X0VnJYwxIpHbsufF0J/edit#gid=733547670)\n\nTAG DESCRIPTION:[https://docs.google.com/spreadsheets/d/1K4ho8xq8UKbehpaFTM77TZspReov7lTp/edit?gid=562461827#gid=562461827](https://docs.google.com/spreadsheets/d/1K4ho8xq8UKbehpaFTM77TZspReov7lTp/edit?gid=562461827#gid=562461827)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "19174614"
+  },
+  "item": [
+    {
+      "name": "INVOICE",
+      "item": [
+        {
+          "name": "Send Invoice request(JSON)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "security_key",
+                "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{   \"companyTin\":\"999000025\",\r\n    \"ComputationType\": \"INCLUSIVE\",\r\n    \"fileName\": \"\",\r\n    \"flag\": \"INVOICE\",\r\n    \"saleType\": \"NORMAL\",\r\n    \"voucherAmount\": \"\",\r\n    \"discountAmount\": \"\",\r\n    \"businessPartnerName\": \"Elissa\",\r\n    \"invoiceDate\": \"2023-04-19\",\r\n    \"userName\": \"sapUser\",\r\n    \"itemsCount\": \"1\",\r\n    \"clientTin\": \"100000002 \",\r\n    \"totalAmount\": \"118\",\r\n    \"totalVat\": \"18\",\r\n    \"clientTinPin\": \"\",\r\n    \"exchangeRate\": \"1\",\r\n    \"invoiceNumber\": \"SAP12320t001\",\r\n    \"callback\": \"\",\r\n    \"currency\": \"RWF\",\r\n    \"discountType\": \"\",\r\n    \"items\": [{\r\n            \"unitPrice\": \"118\",\r\n            \"quantity\": \"1\",\r\n            \"itemCategory\": \"\",\r\n            \"itemCode\": \"000020\",\r\n            \"batch\": \"\",\r\n            \"description\": \"MANGODB\",\r\n            \"discount\": \"0\",\r\n            \"taxCode\": \"B\",\r\n            \"taxRate\": \"18\",\r\n            \"expire\": \"\"\r\n        }]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://ishyiga.com/vsdc/post_receipt_vsdc_rite_convert_Json",
+              "protocol": "https",
+              "host": [
+                "ishyiga",
+                "com"
+              ],
+              "path": [
+                "vsdc",
+                "post_receipt_vsdc_rite_convert_Json"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "SUCCESS RESPONSE",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "security_key",
+                    "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{   \"companyTin\":\"999000025\",\r\n    \"ComputationType\": \"INCLUSIVE\",\r\n    \"fileName\": \"\",\r\n    \"flag\": \"INVOICE\",\r\n    \"saleType\": \"NORMAL\",\r\n    \"voucherAmount\": \"\",\r\n    \"discountAmount\": \"\",\r\n    \"businessPartnerName\": \"Client\",\r\n    \"invoiceDate\": \"2023-04-19\",\r\n    \"userName\": \"sapUser\",\r\n    \"itemsCount\": \"1\",\r\n    \"clientTin\": \"100000002 \",\r\n    \"totalAmount\": \"118\",\r\n    \"totalVat\": \"18\",\r\n    \"clientTinPin\": \"\",\r\n    \"exchangeRate\": \"1\",\r\n    \"invoiceNumber\": \"SAP12320t01\",\r\n    \"callback\": \"\",\r\n    \"currency\": \"RWF\",\r\n    \"discountType\": \"\",\r\n    \"items\": [{\r\n            \"unitPrice\": \"118\",\r\n            \"quantity\": \"1\",\r\n            \"itemCategory\": \"\",\r\n            \"itemCode\": \"000020\",\r\n            \"batch\": \"\",\r\n            \"description\": \"MANGODB\",\r\n            \"discount\": \"0\",\r\n            \"taxCode\": \"B\",\r\n            \"taxRate\": \"18\",\r\n            \"expire\": \"\"\r\n        }]\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://ishyiga.com/vsdc/post_receipt_vsdc_rite_convert_Json",
+                  "protocol": "https",
+                  "host": [
+                    "ishyiga",
+                    "com"
+                  ],
+                  "path": [
+                    "vsdc",
+                    "post_receipt_vsdc_rite_convert_Json"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json;charset=UTF-8"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "661"
+                },
+                {
+                  "key": "Date",
+                  "value": "Thu, 21 Mar 2024 14:22:34 GMT"
+                },
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=20"
+                },
+                {
+                  "key": "Connection",
+                  "value": "keep-alive"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"RESPONSE\": {\n        \"DISTRIBUTOR_TIN\": 999000025,\n        \"MESSAGE\": {\n            \"flag\": \"INVOICE\",\n            \"ysdcrecnum\": \"2/2 NS ISH:2\",\n            \"num\": \"SAP12320t01\",\n            \"ysdcid\": \"SDC009000057\",\n            \"ysdcintdata\": \"S5AU-274J-FLNW-I4E5-6QG5-7DVE-EQ\",\n            \"ysdcmrc\": \"VALG01VNA08\",\n            \"ysdcitems\": 1,\n            \"ysdcmrctim\": \"2024-03-21 16:21:36.944\",\n            \"ysdcregsig\": \"HLTC-GCDF-PJEI-U7F4\",\n            \"ysdctime\": \"2024-03-21 16:21:36.944\"\n        },\n        \"STATUS\": \"SUCCESS\",\n        \"QR_CODE\": \"?DATA=S5QjrxaYnotNVt20BTA91QkNtMc6BieExFBNChbniZy1zDq7GXV+go2mJ1Krd5LtFwD7XIn+uwcqX4Lg9YADIen8U04X5iA+8ewNbSdakIsdnr/ETW9VQdtw4+rK2ejA2XQo3fJrmOW/DUGQRv9qwex31yxUAme4+DD83qOoGEZ08DTEenNAT0/+z0XtAgjLOhwW2UdG976cTfUmHP2IsEdKZ33D7PfO9gECcCqxmE4C5hV2rA4OjeDoZlbp+mCZXhfzdSAQG3VhjShLXJOArA==\"\n    }\n}"
+            },
+            {
+              "name": "ERROR RESPONSE",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "security_key",
+                    "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"companyTin\": \"999000025\",\r\n    \"ComputationType\": \"INCLUSIVE\",\r\n    \"fileName\": \"\",\r\n    \"flag\": \"INVOICE\",\r\n    \"saleType\": \"NORMAL\",\r\n    \"voucherAmount\": \"\",\r\n    \"discountAmount\": \"\",\r\n    \"businessPartnerName\": \"Client\",\r\n    \"invoiceDate\": \"2023-04-19\",\r\n    \"userName\": \"sapUser\",\r\n    \"itemsCount\": \"1\",\r\n    \"clientTin\": \"100000002 \",\r\n    \"totalAmount\": \"1219\",\r\n    \"totalVat\": \"155\",\r\n    \"totalLevy\": \"60\",\r\n    \"clientTinPin\": \"\",\r\n    \"exchangeRate\": \"1\",\r\n    \"invoiceNumber\": \"SAP12320t002\",\r\n    \"callback\": \"\",\r\n    \"currency\": \"RWF\",\r\n    \"discountType\": \"\",\r\n    \"items\": [\r\n        {\r\n            \"unitPrice\": \"118\",\r\n            \"quantity\": \"1\",\r\n            \"itemCategory\": \"\",\r\n            \"itemCode\": \"000020\",\r\n            \"batch\": \"\",\r\n            \"description\": \"MANGODB\",\r\n            \"discount\": \"0\",\r\n            \"taxCode\": \"B\",\r\n            \"taxRate\": \"18\",\r\n            \"expire\": \"\"\r\n        }\r\n    ]\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://ishyiga.com/vsdc/post_receipt_vsdc_rite_convert_Json",
+                  "protocol": "https",
+                  "host": [
+                    "ishyiga",
+                    "com"
+                  ],
+                  "path": [
+                    "vsdc",
+                    "post_receipt_vsdc_rite_convert_Json"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json;charset=UTF-8"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "164"
+                },
+                {
+                  "key": "Date",
+                  "value": "Thu, 21 Mar 2024 14:25:06 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"num\": \"SAP12320t002\",\n    \"errors\": [\n        \"Total amount  is different 1,219.00 # 118.00\",\n        \"invalid_total_vat  155.00 #18.00\"\n    ],\n    \"timestamp\": \"2024-03-21 16:25:06\",\n    \"status\": 400\n}"
+            }
+          ]
+        },
+        {
+          "name": "Send Invoice request(XML)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "security_key",
+                "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\r\n<root>\r\n  <companyTin>999000025</companyTin>\r\n  <ComputationType>INCLUSIVE</ComputationType>\r\n  <fileName></fileName>\r\n  <flag>INVOICE</flag>\r\n  <saleType>NORMAL</saleType>\r\n  <voucherAmount></voucherAmount>\r\n  <discountAmount></discountAmount>\r\n  <businessPartnerName>Client</businessPartnerName>\r\n  <invoiceDate>2023-04-19</invoiceDate>\r\n  <userName>sapUser</userName>\r\n  <itemsCount>1</itemsCount>\r\n  <clientTin>100000002 </clientTin>\r\n  <totalAmount>118</totalAmount>\r\n  <totalVat>18</totalVat>\r\n  <clientTinPin></clientTinPin>\r\n  <exchangeRate>1</exchangeRate>\r\n  <invoiceNumber>SAP12320t003</invoiceNumber>\r\n  <callback></callback>\r\n  <currency>RWF</currency>\r\n  <discountType></discountType>\r\n  <items>\r\n    <unitPrice>118</unitPrice>\r\n    <quantity>1</quantity>\r\n    <itemCategory></itemCategory>\r\n    <itemCode>000020</itemCode>\r\n    <batch></batch>\r\n    <description>MANGODB</description>\r\n    <discount>0</discount>\r\n    <taxCode>B</taxCode>\r\n    <taxRate>18</taxRate>\r\n    <expire></expire>\r\n  </items>\r\n</root>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://ishyiga.com/vsdc/post_receipt_vsdc_rite_convert_Json",
+              "protocol": "https",
+              "host": [
+                "ishyiga",
+                "com"
+              ],
+              "path": [
+                "vsdc",
+                "post_receipt_vsdc_rite_convert_Json"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Invoice Existing",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\r\n<root>\r\n  <companyTin>999000025</companyTin>\r\n  <ComputationType>INCLUSIVE</ComputationType>\r\n  <fileName></fileName>\r\n  <flag>INVOICE</flag>\r\n  <saleType>NORMAL</saleType>\r\n  <voucherAmount></voucherAmount>\r\n  <discountAmount></discountAmount>\r\n  <businessPartnerName>Client</businessPartnerName>\r\n  <invoiceDate>2023-04-19</invoiceDate>\r\n  <userName>sapUser</userName>\r\n  <itemsCount>1</itemsCount>\r\n  <clientTin>100000002 </clientTin>\r\n  <totalAmount>118</totalAmount>\r\n  <totalVat>18</totalVat>\r\n  <clientTinPin></clientTinPin>\r\n  <exchangeRate>1</exchangeRate>\r\n  <invoiceNumber>SAP12320t003</invoiceNumber>\r\n  <callback></callback>\r\n  <currency>RWF</currency>\r\n  <discountType></discountType>\r\n  <items>\r\n    <unitPrice>118</unitPrice>\r\n    <quantity>1</quantity>\r\n    <itemCategory></itemCategory>\r\n    <itemCode>000020</itemCode>\r\n    <batch></batch>\r\n    <description>MANGODB</description>\r\n    <discount>0</discount>\r\n    <taxCode>B</taxCode>\r\n    <taxRate>18</taxRate>\r\n    <expire></expire>\r\n  </items>\r\n</root>",
+                  "options": {
+                    "raw": {
+                      "language": "xml"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://ishyiga.com/vsdc/post_receipt_vsdc_rite_convert_Json",
+                  "protocol": "https",
+                  "host": [
+                    "ishyiga",
+                    "com"
+                  ],
+                  "path": [
+                    "vsdc",
+                    "post_receipt_vsdc_rite_convert_Json"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "html",
+              "header": [
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=20"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "text/html;charset=UTF-8"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "JSESSIONID=1599BDDA9ACD2D5D68913E5414E2D30C; Path=/evat_apiqa; HttpOnly"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "ARR/3.0"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "ASP.NET"
+                },
+                {
+                  "key": "Date",
+                  "value": "Thu, 13 Jul 2023 10:15:33 GMT"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "257"
+                }
+              ],
+              "cookie": [],
+              "body": "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n \r\n\r\n\r\n\r\n\r\n\r\n \r\n\r\n\r\n\r\n \n<RESPONSE>\n    <TAXPAYER_TIN>C00XXXXXXXX</TAXPAYER_TIN>\n    <STATUS>SUCCESS</STATUS>\n    <MESSAGE>NUM: SAP12320t01 TIN:C00XXXXXXXX FLAG: INVOICE  ALREADY EXISTS</MESSAGE>\n    <NUM>SAP12320t01</NUM>\n</RESPONSE>"
+            },
+            {
+              "name": "Send Invoice request(XML)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "security_key",
+                    "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\r\n<root>\r\n  <companyTin>999000025</companyTin>\r\n  <ComputationType>INCLUSIVE</ComputationType>\r\n  <fileName></fileName>\r\n  <flag>INVOICE</flag>\r\n  <saleType>NORMAL</saleType>\r\n  <voucherAmount></voucherAmount>\r\n  <discountAmount></discountAmount>\r\n  <businessPartnerName>Client</businessPartnerName>\r\n  <invoiceDate>2023-04-19</invoiceDate>\r\n  <userName>sapUser</userName>\r\n  <itemsCount>1</itemsCount>\r\n  <clientTin>100000002 </clientTin>\r\n  <totalAmount>118</totalAmount>\r\n  <totalVat>18</totalVat>\r\n  <clientTinPin></clientTinPin>\r\n  <exchangeRate>1</exchangeRate>\r\n  <invoiceNumber>SAP12320t003</invoiceNumber>\r\n  <callback></callback>\r\n  <currency>RWF</currency>\r\n  <discountType></discountType>\r\n  <items>\r\n    <unitPrice>118</unitPrice>\r\n    <quantity>1</quantity>\r\n    <itemCategory></itemCategory>\r\n    <itemCode>000020</itemCode>\r\n    <batch></batch>\r\n    <description>MANGODB</description>\r\n    <discount>0</discount>\r\n    <taxCode>B</taxCode>\r\n    <taxRate>18</taxRate>\r\n    <expire></expire>\r\n  </items>\r\n</root>",
+                  "options": {
+                    "raw": {
+                      "language": "xml"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://ishyiga.com/vsdc/post_receipt_vsdc_rite_convert_Json",
+                  "protocol": "https",
+                  "host": [
+                    "ishyiga",
+                    "com"
+                  ],
+                  "path": [
+                    "vsdc",
+                    "post_receipt_vsdc_rite_convert_Json"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "html",
+              "header": [
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=20"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "text/html;charset=UTF-8"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "JSESSIONID=C857DFF4BFCECC5745A438D8324AAD36; Path=/evat_apiqa; HttpOnly"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "ARR/3.0"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "ASP.NET"
+                },
+                {
+                  "key": "Date",
+                  "value": "Thu, 13 Jul 2023 10:17:04 GMT"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "357"
+                }
+              ],
+              "cookie": [],
+              "body": "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n \r\n\r\n\r\n\r\n\r\n\r\n \r\n\r\n\r\n\r\n \n<RESPONSE>\n    <DISTRIBUTOR_TIN>C00XXXXXXXX</DISTRIBUTOR_TIN>\n    <STATUS>SUCCESS</STATUS>\n    <MESSAGE>\n        <COMM>NUM IS WELL RECIEVED</COMM>\n        <NUM>SAP12320t019</NUM>\n        <FLAG>INVOICE</FLAG>\n        <CLIENT_NAME>Elissa</CLIENT_NAME>\n        <ITEM_COUNT>2 </ITEM_COUNT>\n        <TOTAL_AMOUNT>3438.0</TOTAL_AMOUNT>\n    </MESSAGE>\n</RESPONSE>"
+            },
+            {
+              "name": "Errored request(XML)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\r\n<root>\r\n  <companyTin>999000025</companyTin>\r\n  <calculationType>INCLUSIVE</calculationType>\r\n  <fileName></fileName>\r\n  <flag>INVOICE</flag>\r\n  <saleType>NORMAL</saleType>\r\n  <voucherAmount></voucherAmount>\r\n  <discountAmount></discountAmount>\r\n  <businessPartnerName>Client</businessPartnerName>\r\n  <invoiceDate>2023-04-19</invoiceDate>\r\n  <userName>sapUser</userName>\r\n  <itemsCount>1</itemsCount>\r\n  <clientTin>100000002 </clientTin>\r\n  <totalAmount>118</totalAmount>\r\n  <totalVat>18</totalVat>\r\n  <clientTinPin></clientTinPin>\r\n  <exchangeRate>1</exchangeRate>\r\n  <invoiceNumber>SAP12320t003</invoiceNumber>\r\n  <callback></callback>\r\n  <currency>RWF</currency>\r\n  <discountType></discountType>\r\n  <items>\r\n    <unitPrice>118</unitPrice>\r\n    <quantity>1</quantity>\r\n    <itemCategory></itemCategory>\r\n    <itemCode>000020</itemCode>\r\n    <batch></batch>\r\n    <description>MANGODB</description>\r\n    <discount>0</discount>\r\n    <taxCode>B</taxCode>\r\n    <taxRate>18</taxRate>\r\n    <expire></expire>\r\n  </items>\r\n</root>",
+                  "options": {
+                    "raw": {
+                      "language": "xml"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://ishyiga.com/vsdc/post_receipt_vsdc_rite_convert_Json",
+                  "protocol": "https",
+                  "host": [
+                    "ishyiga",
+                    "com"
+                  ],
+                  "path": [
+                    "vsdc",
+                    "post_receipt_vsdc_rite_convert_Json"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "html",
+              "header": [
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=20"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "text/html;charset=UTF-8"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "JSESSIONID=3E032696256E4787D215EAE335DD17FC; Path=/evat_apiqa; HttpOnly"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "ARR/3.0"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "ASP.NET"
+                },
+                {
+                  "key": "Date",
+                  "value": "Thu, 13 Jul 2023 10:20:56 GMT"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "248"
+                }
+              ],
+              "cookie": [],
+              "body": "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n \r\n\r\n\r\n\r\n\r\n\r\n \r\n\r\n\r\n\r\n \n<RESPONSE>\n    <TAXPAYER_TIN>C00XXXXXXXX</TAXPAYER_TIN>\n    <STATUS>ERROR</STATUS>\n    <ERROR_CODE>A09</ERROR_CODE>\n    <MESSAGE>1000P1322 WRONG TAXRATE</MESSAGE>\n    <NUM>SAP12320t01970</NUM>\n</RESPONSE>"
+            }
+          ]
+        }
+      ],
+      "description": "  \nInvoice (Normal Sale) refers to a receipt that shall be produced and offered to the client. It is any receipt produced while the Electronic Billing Machine is in its normal registration mode, used to register sales of goods and/or services, including corrections and discounts.\n\nThe following is an example of how data to be sent should be structured."
+    },
+    {
+      "name": "REFUND",
+      "item": [
+        {
+          "name": "send Refund request(JSON)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "security_key",
+                "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{   \"companyTin\":\"999000025\",\r\n    \"ComputationType\": \"INCLUSIVE\",\r\n    \"fileName\": \"\",\r\n    \"flag\": \"REFUND\",\r\n    \"saleType\": \"NORMAL\",\r\n    \"voucherAmount\": \"\",\r\n    \"discountAmount\": \"\",\r\n    \"businessPartnerName\": \"Client\",\r\n    \"invoiceDate\": \"2023-04-19\",\r\n    \"userName\": \"sapUser\",\r\n    \"itemsCount\": \"1\",\r\n    \"clientTin\": \"100000002 \",\r\n    \"totalAmount\": \"118\",\r\n    \"totalVat\": \"18\",\r\n    \"clientTinPin\": \"\",\r\n    \"exchangeRate\": \"1\",\r\n    \"invoiceNumber\": \"SAP12320t001\",\r\n    \"callback\": \"\",\r\n    \"currency\": \"RWF\",\r\n    \"discountType\": \"\",\r\n    \"items\": [{\r\n            \"unitPrice\": \"118\",\r\n            \"quantity\": \"1\",\r\n            \"itemCategory\": \"\",\r\n            \"itemCode\": \"000020\",\r\n            \"batch\": \"\",\r\n            \"description\": \"MANGODB\",\r\n            \"discount\": \"0\",\r\n            \"taxCode\": \"B\",\r\n            \"taxRate\": \"18\",\r\n            \"expire\": \"\"\r\n        }]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://ishyiga.com/vsdc/post_receipt_vsdc_rite_convert_Json",
+              "protocol": "https",
+              "host": [
+                "ishyiga",
+                "com"
+              ],
+              "path": [
+                "vsdc",
+                "post_receipt_vsdc_rite_convert_Json"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "SUCCESSFUL RESPONSE",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "security_key",
+                    "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg=",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"ComputationType\": \"INCLUSIVE\",\r\n    \"fileName\": \"\",\r\n    \"flag\": \"REFUND\",\r\n    \"saleType\": \"NORMAL\",\r\n    \"voucherAmount\": \"\",\r\n    \"discountAmount\": \"\",\r\n    \"businessPartnerName\": \"Elissa\",\r\n    \"invoiceDate\": \"2023-04-19\",\r\n    \"userName\": \"sapUser\",\r\n    \"itemsCount\": \"1\",\r\n    \"clientTin\": \"100000002 \",\r\n    \"totalAmount\": \"118\",\r\n    \"totalVat\": \"18\",\r\n    \"totalLevy\": \"60\",\r\n    \"clientTinPin\": \"\",\r\n    \"exchangeRate\": \"1\",\r\n    \"invoiceNumber\": \"SAP12320t01\",\r\n    \"callback\": \"\",\r\n    \"currency\": \"RWF\",\r\n    \"discountType\": \"\",\r\n    \"items\": [{\r\n            \"unitPrice\": \"118\",\r\n            \"quantity\": \"1\",\r\n            \"itemCategory\": \"\",\r\n            \"itemCode\": \"000020\",\r\n            \"batch\": \"\",\r\n            \"description\": \"MANGODB\",\r\n            \"discount\": \"0\",\r\n            \"taxCode\": \"B\",\r\n            \"taxRate\": \"18\",\r\n            \"expire\": \"\"\r\n        }]\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://localhost/evat_api/post_receipt_vsdc_rite_convert_Json",
+                  "protocol": "https",
+                  "host": [
+                    "localhost"
+                  ],
+                  "path": [
+                    "evat_api",
+                    "post_receipt_vsdc_rite_convert_Json"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json;charset=UTF-8"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "730"
+                },
+                {
+                  "key": "Date",
+                  "value": "Fri, 03 Nov 2023 08:11:41 GMT"
+                },
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=20"
+                },
+                {
+                  "key": "Connection",
+                  "value": "keep-alive"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"RESPONSE\": {\n        \"DISTRIBUTOR_TIN\": \"C000652902X\",\n        \"MESSAGE\": {\n            \"flag\": \"REFUND\",\n            \"ysdcrecnum\": \"3307/3208 NR ISH:3208\",\n            \"num\": \"SAP12320t01\",\n            \"ysdcid\": \"VATES0000614\",\n            \"ysdcintdata\": \"3HW5-R74P-FY2H-J5YD-GZC6-B7BL-NE\",\n            \"ysdcmrc\": \"VALG01CAP01\",\n            \"ysdcitems\": 1,\n            \"ysdcmrctim\": \"2023-11-03 10:11:40\",\n            \"ysdcregsig\": \"VSWE-XNBG-JXPR-EJ7I\",\n            \"ysdctime\": \"2023-11-03 10:11:40\"\n        },\n        \"STATUS\": \"SUCCESS\",\n        \"QR_CODE\": \"https://myghanatest.ebmgh.com/verification/searchBySignature.jsp??DATA=8yVjeYqrGprwBNvSYz4RVdR+AzP9FJ1NgHStSsZds23YZNIgUP2Z/TJJjeZrHcbmQ2ssE1RwY+D3CuJwMwhkjSiFVAitahXeCZf/AZVC1ERBPixQcyk1fBQykVPB/0lOKnVYMAsYJUL+Kdn2zi9hEFwka6Wvx29IoUFRXn+ZEe55330ODSyMzNQ51wZSq/9+0WijoBqx8stHS2B4jFVkDGH4bdDF6F4DryemPQQXIcHVIkZaOtVVBihEmOT1LHYu4bx6M0wxC7zLCuV90dJ2lg==\"\n    }\n}"
+            },
+            {
+              "name": "ERROR RESPONSE",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "security_key",
+                    "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg=",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"calculationType\": \"INCLUSIVE\",\r\n    \"fileName\": \"\",\r\n    \"flag\": \"REFUND\",\r\n    \"saleType\": \"NORMAL\",\r\n    \"voucherAmount\": \"\",\r\n    \"discountAmount\": \"\",\r\n    \"businessPartnerName\": \"Elissa\",\r\n    \"invoiceDate\": \"2023-04-19\",\r\n    \"userName\": \"sapUser\",\r\n    \"itemsCount\": \"1\",\r\n    \"clientTin\": \"100000002 \",\r\n    \"totalAmount\": \"1219\",\r\n    \"totalVat\": \"159.0\",\r\n    \"totalLevy\": \"60\",\r\n    \"clientTinPin\": \"\",\r\n    \"exchangeRate\": \"1\",\r\n    \"invoiceNumber\": \"SAP12320t001\",\r\n    \"callback\": \"\",\r\n    \"currency\": \"EUR\",\r\n    \"discountType\": \"\",\r\n    \"items\": [{\r\n            \"unitPrice\": \"1219\",\r\n            \"quantity\": \"1\",\r\n            \"levyAmountD\": \"10\",\r\n            \"itemCategory\": \"\",\r\n            \"itemCode\": \"000020\",\r\n            \"batch\": \"\",\r\n            \"description\": \"MANGODB\",\r\n            \"discount\": \"0\",\r\n            \"taxCode\": \"B\",\r\n            \"taxRate\": \"15\",\r\n            \"expire\": \"\",\r\n            \"levyAmountB\": \"25\",\r\n            \"levyAmountC\": \"10\",\r\n            \"levyAmountA\": \"25\"\r\n        }]\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://localhost/evat_api/post_receipt_vsdc_rite_convert_Json",
+                  "protocol": "https",
+                  "host": [
+                    "localhost"
+                  ],
+                  "path": [
+                    "evat_api",
+                    "post_receipt_vsdc_rite_convert_Json"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json;charset=UTF-8"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "296"
+                },
+                {
+                  "key": "Date",
+                  "value": "Fri, 03 Nov 2023 08:13:52 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"errors\": [\n        \"missing original invoice\",\n        \"invalid_total_vat  159.00 #157.70\",\n        \"Refund total amount difference to original invoice amount\",\n        \"invalid_total_vat  159.00 #157.70\",\n        \"Refund total amount difference to original invoice amount\",\n        \"\",\n        \"1219.0#0.0\"\n    ],\n    \"timestamp\": \"2023-11-03 10:13:52\",\n    \"status\": 400\n}"
+            }
+          ]
+        },
+        {
+          "name": "send Refund request(xml)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "security_key",
+                "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\r\n<root>\r\n  <companyTin>999000025</companyTin>\r\n  <ComputationType>INCLUSIVE</ComputationType>\r\n  <fileName></fileName>\r\n  <flag>REFUND</flag>\r\n  <saleType>NORMAL</saleType>\r\n  <voucherAmount></voucherAmount>\r\n  <discountAmount></discountAmount>\r\n  <businessPartnerName>Client</businessPartnerName>\r\n  <invoiceDate>2023-04-19</invoiceDate>\r\n  <userName>sapUser</userName>\r\n  <itemsCount>1</itemsCount>\r\n  <clientTin>100000002 </clientTin>\r\n  <totalAmount>118</totalAmount>\r\n  <totalVat>18</totalVat>\r\n  <clientTinPin></clientTinPin>\r\n  <exchangeRate>1</exchangeRate>\r\n  <invoiceNumber>SAP12320t001</invoiceNumber>\r\n  <callback></callback>\r\n  <currency>RWF</currency>\r\n  <discountType></discountType>\r\n  <items>\r\n    <unitPrice>118</unitPrice>\r\n    <quantity>1</quantity>\r\n    <itemCategory></itemCategory>\r\n    <itemCode>000020</itemCode>\r\n    <batch></batch>\r\n    <description>MANGODB</description>\r\n    <discount>0</discount>\r\n    <taxCode>B</taxCode>\r\n    <taxRate>18</taxRate>\r\n    <expire></expire>\r\n  </items>\r\n</root>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://ishyiga.com/vsdc/post_receipt_vsdc_rite_convert_Json",
+              "protocol": "https",
+              "host": [
+                "ishyiga",
+                "com"
+              ],
+              "path": [
+                "vsdc",
+                "post_receipt_vsdc_rite_convert_Json"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Refund  \nRefund (Normal Refund) refers to a receipt that shall be produced as a reverse of orginal normal sale. It is any receipt produced while the Electronic Billing Machine is in its normal registration mode, used to register different types of credit notes refered to original normal sale and can be either full or partial refund.\n\nThe following is an example of how data to be sent should be structured."
+    },
+    {
+      "name": "PURCHASE",
+      "item": [
+        {
+          "name": "Send Purchase(JSON)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "security_key",
+                "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"companyTin\": \"999000025\",\r\n    \"currency\": \"RWF\",\r\n    \"exchangeRate\": 1.0,\r\n    \"purchaseNumber\": \"1225299-ZR00134\",\r\n    \"userName\": \"Kofi Ghana\",\r\n    \"flag\": \"PURCHASE\",\r\n    \"totalVat\": 159.0000,\r\n    \"transactionDate\": \"2023-07-17T00:00:00Z\",\r\n    \"totalAmount\": 4219.0000,\r\n    \"voucherAmount\": 0.0,\r\n    \"businessPartnerName\": \"China Mall\",\r\n    \"businessPartnerTin\": \"100000001\",\r\n    \"saleType\": \"NORMAL\",\r\n    \"discountType\": null,\r\n    \"discountAmount\": 0.0,\r\n    \"sdcreference\": \"sdc/1234\",\r\n    \"groupReferenceId\": \"\",\r\n    \"items\": [\r\n        {\r\n            \"itemCode\": \"CODE00WER3455\",\r\n            \"itemCategory\": \"\",\r\n            \"expireDate\": \"\",\r\n            \"description\": \"JACK DANIELS\",\r\n            \"quantity\": 10.0,\r\n            \"discountAmount\": 0.0,\r\n            \"taxCode\": \"B\",\r\n            \"batchCode\": \"\",\r\n            \"unitPrice\": 121.9000,\r\n            \"taxRate\": 18.00\r\n        },\r\n        {\r\n            \"itemCode\": \"CHANDRA8091\",\r\n            \"itemCategory\": \"\",\r\n            \"expireDate\": \"\",\r\n            \"description\": \"ROD-CONN, STABIRIO RH1\",\r\n            \"quantity\": 10.0,\r\n            \"taxCode\": \"A\",\r\n            \"batchCode\": \"\",\r\n            \"unitPrice\": 200,\r\n            \"taxRate\": 0.00\r\n        },\r\n        {\r\n            \"itemCode\": \"CHai098i01\",\r\n            \"itemCategory\": \"\",\r\n            \"expireDate\": \"\",\r\n            \"description\": \"ROD-CONN, STAB RH\",\r\n            \"quantity\": 10.0,\r\n            \"taxCode\": \"B\",\r\n            \"batchCode\": \"\",\r\n            \"unitPrice\": 100,\r\n            \"taxRate\": 18.00\r\n        }\r\n    ]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://ishyiga.com/vsdc/Send_Vsdc_Purchase_lite_json",
+              "protocol": "https",
+              "host": [
+                "ishyiga",
+                "com"
+              ],
+              "path": [
+                "vsdc",
+                "Send_Vsdc_Purchase_lite_json"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "ERROR RESPONSE",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "security_key",
+                    "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"currency\": \"GHS\",\r\n    \"exchangeRate\": 1.0,\r\n    \"purchaseNumber\": \"1225299-ZR00134\",\r\n    \"userName\": \"Kofi Ghana\",\r\n    \"flag\": \"PURCHASE\",\r\n    \"totalVat\": 159.0000,\r\n    \"transactionDate\": \"2023-07-17T00:00:00Z\",\r\n    \"totalAmount\": 4219.0000,\r\n    \"voucherAmount\": 0.0,\r\n    \"businessPartnerName\": \"China Mall\",\r\n    \"businessPartnerTin\": \"100000001\",\r\n    \"saleType\": \"NORMAL\",\r\n    \"discountType\": null,\r\n    \"discountAmount\": 0.0,\r\n    \"sdcreference\": \"sdc/1234\",\r\n    \"groupReferenceId\": \"\",\r\n    \"items\": [\r\n        {\r\n            \"itemCode\": \"CODE00WER3455\",\r\n            \"itemCategory\": \"\",\r\n            \"expireDate\": \"\",\r\n            \"description\": \"JACK DANIELS\",\r\n            \"quantity\": 10.0,\r\n            \"discountAmount\": 0.0,\r\n            \"taxCode\": \"B\",\r\n            \"batchCode\": \"\",\r\n            \"unitPrice\": 121.9000,\r\n            \"taxRate\": 18.00\r\n        },\r\n        {\r\n            \"itemCode\": \"CHANDRA8091\",\r\n            \"itemCategory\": \"\",\r\n            \"expireDate\": \"\",\r\n            \"description\": \"ROD-CONN, STABIRIO RH1\",\r\n            \"quantity\": 10.0,\r\n            \"taxCode\": \"A\",\r\n            \"batchCode\": \"\",\r\n            \"unitPrice\": 200,\r\n            \"taxRate\": 0.00\r\n        },\r\n        {\r\n            \"itemCode\": \"CHai098i01\",\r\n            \"itemCategory\": \"\",\r\n            \"expireDate\": \"\",\r\n            \"description\": \"ROD-CONN, STAB RH\",\r\n            \"quantity\": 10.0,\r\n            \"taxCode\": \"B\",\r\n            \"batchCode\": \"\",\r\n            \"unitPrice\": 100,\r\n            \"taxRate\": 18.00\r\n        }\r\n    ]\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://ishyiga.com/vsdc/Send_Vsdc_Purchase_lite_json",
+                  "protocol": "https",
+                  "host": [
+                    "ishyiga",
+                    "com"
+                  ],
+                  "path": [
+                    "vsdc",
+                    "Send_Vsdc_Purchase_lite_json"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json;charset=UTF-8"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "134"
+                },
+                {
+                  "key": "Date",
+                  "value": "Fri, 03 Nov 2023 08:15:59 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"errors\": [\n        \"Line 1 Tax rate is not allowed.\",\n        \" Line 3 Tax rate is not allowed.\",\n        \" \"\n    ],\n    \"timestamp\": \"2023-11-03 10:15:59\",\n    \"status\": 400\n}"
+            },
+            {
+              "name": "Send Purchase(JSON)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "security_key",
+                    "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"currency\": \"RWF\",\r\n    \"exchangeRate\": 1.0,\r\n    \"purchaseNumber\": \"1225299-ZR00134\",\r\n    \"userName\": \"Kofi Ghana\",\r\n    \"flag\": \"PURCHASE\",\r\n    \"totalVat\": 159.0000,\r\n    \"transactionDate\": \"2023-07-17T00:00:00Z\",\r\n    \"totalAmount\": 4219.0000,\r\n    \"voucherAmount\": 0.0,\r\n    \"businessPartnerName\": \"China Mall\",\r\n    \"businessPartnerTin\": \"100000001\",\r\n    \"saleType\": \"NORMAL\",\r\n    \"discountType\": null,\r\n    \"discountAmount\": 0.0,\r\n    \"sdcreference\": \"sdc/1234\",\r\n    \"groupReferenceId\": \"\",\r\n    \"items\": [\r\n        {\r\n            \"itemCode\": \"CODE00WER3455\",\r\n            \"itemCategory\": \"\",\r\n            \"expireDate\": \"\",\r\n            \"description\": \"JACK DANIELS\",\r\n            \"quantity\": 10.0,\r\n            \"discountAmount\": 0.0,\r\n            \"taxCode\": \"B\",\r\n            \"batchCode\": \"\",\r\n            \"unitPrice\": 121.9000,\r\n            \"taxRate\": 15.00\r\n        },\r\n        {\r\n            \"itemCode\": \"CHANDRA8091\",\r\n            \"itemCategory\": \"\",\r\n            \"expireDate\": \"\",\r\n            \"description\": \"ROD-CONN, STABIRIO RH1\",\r\n            \"quantity\": 10.0,\r\n            \"taxCode\": \"A\",\r\n            \"batchCode\": \"\",\r\n            \"unitPrice\": 200,\r\n            \"taxRate\": 0.00\r\n        },\r\n        {\r\n            \"itemCode\": \"CHai098i01\",\r\n            \"itemCategory\": \"\",\r\n            \"expireDate\": \"\",\r\n            \"description\": \"ROD-CONN, STAB RH\",\r\n            \"quantity\": 10.0,\r\n            \"taxCode\": \"B\",\r\n            \"batchCode\": \"\",\r\n            \"unitPrice\": 100,\r\n            \"taxRate\": 15.00\r\n        }\r\n    ]\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://ishyiga.com/vsdc/Send_Vsdc_Purchase_lite_json",
+                  "protocol": "https",
+                  "host": [
+                    "ishyiga",
+                    "com"
+                  ],
+                  "path": [
+                    "vsdc",
+                    "Send_Vsdc_Purchase_lite_json"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json;charset=UTF-8"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "311"
+                },
+                {
+                  "key": "Date",
+                  "value": "Fri, 03 Nov 2023 08:17:57 GMT"
+                },
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=20"
+                },
+                {
+                  "key": "Connection",
+                  "value": "keep-alive"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"RESPONSE\": {\n        \"DISTRIBUTOR_TIN\": \"C000652902X\",\n        \"MESSAGE\": {\n            \"flag\": \"PURCHASE\",\n            \"ysdcrecnum\": \"\",\n            \"num\": \"1225299-ZR00134\",\n            \"ysdcid\": \"VATES0000614\",\n            \"ysdcintdata\": \"\",\n            \"ysdcmrc\": \"VALG01CAP01\",\n            \"ysdcitems\": 1,\n            \"ysdcmrctim\": \"2023-11-03 10:17:57\",\n            \"ysdcregsig\": \"\",\n            \"ysdctime\": \"2023-11-03 10:17:57\"\n        },\n        \"STATUS\": \"SUCCESS\",\n        \"QR_CODE\": \"\"\n    }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Send Purchase (XML)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "security_key",
+                "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\r\n<root>\r\n  <companyTin>999000025</companyTin>\r\n  <currency>GHS</currency>\r\n  <exchangeRate>1</exchangeRate>\r\n  <purchaseNumber>1225299-ZR00134</purchaseNumber>\r\n  <userName>Kofi Ghana</userName>\r\n  <flag>PURCHASE</flag>\r\n  <totalVat>159</totalVat>\r\n  <transactionDate>2023-07-17T00:00:00Z</transactionDate>\r\n  <totalAmount>4219</totalAmount>\r\n  <voucherAmount>0</voucherAmount>\r\n  <businessPartnerName>China Mall</businessPartnerName>\r\n  <businessPartnerTin>100000001</businessPartnerTin>\r\n  <saleType>NORMAL</saleType>\r\n  <discountType/>\r\n  <discountAmount>0</discountAmount>\r\n  <sdcreference>sdc/1234</sdcreference>\r\n  <groupReferenceId></groupReferenceId>\r\n  <items>\r\n    <itemCode>CODE00WER3455</itemCode>\r\n    <itemCategory></itemCategory>\r\n    <expireDate></expireDate>\r\n    <description>JACK DANIELS</description>\r\n    <quantity>10</quantity>\r\n    <discountAmount>0</discountAmount>\r\n    <taxCode>B</taxCode>\r\n    <batchCode></batchCode>\r\n    <unitPrice>121.9</unitPrice>\r\n    <taxRate>18</taxRate>\r\n  </items>\r\n  <items>\r\n    <itemCode>CHANDRA8091</itemCode>\r\n    <itemCategory></itemCategory>\r\n    <expireDate></expireDate>\r\n    <description>ROD-CONN, STABIRIO RH1</description>\r\n    <quantity>10</quantity>\r\n    <taxCode>A</taxCode>\r\n    <batchCode></batchCode>\r\n    <unitPrice>200</unitPrice>\r\n    <taxRate>0</taxRate>\r\n  </items>\r\n  <items>\r\n    <itemCode>CHai098i01</itemCode>\r\n    <itemCategory></itemCategory>\r\n    <expireDate></expireDate>\r\n    <description>ROD-CONN, STAB RH</description>\r\n    <quantity>10</quantity>\r\n    <taxCode>B</taxCode>\r\n    <batchCode></batchCode>\r\n    <unitPrice>100</unitPrice>\r\n    <taxRate>18</taxRate>\r\n  </items>\r\n</root>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://ishyiga.com/vsdc/Send_Vsdc_Purchase_lite",
+              "protocol": "https",
+              "host": [
+                "ishyiga",
+                "com"
+              ],
+              "path": [
+                "vsdc",
+                "Send_Vsdc_Purchase_lite"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "INVENTORY",
+      "item": [
+        {
+          "name": "Send Inventory(JSON)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "security_key",
+                "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"companyTin\": \"999000025\",\r\n    \"reference\": \"INV0004\",\r\n    \"userName\": \"Iyanya OKOBI\",\r\n    \"inventoryDate\": \"2025-01-15\",\r\n    \"items\": [\r\n        {\r\n            \"itemCd\": \"TEA0098\",\r\n            \"description\": \"GREEN TEA\",\r\n            \"qty\": \"258\",\r\n            \"avg_price\": \"12\",\r\n            \"batch\": \"WA00134\",\r\n            \"expire\": \"2023-08-24\"\r\n        },\r\n        {\r\n            \"itemCd\": \"1000P1R221\",\r\n            \"description\": \"COFFE 150 KG\",\r\n            \"qty\": \"1000\",\r\n            \"avg_price\": \"30.5\",\r\n            \"batch\": \"WA00135\",\r\n            \"expire\": \"2023-08-24\"\r\n        },\r\n        {\r\n            \"itemCd\": \"TEA00981\",\r\n            \"description\": \"GREEN TEA2023 \",\r\n            \"qty\": \"258\",\r\n            \"avg_price\": \"12\",\r\n            \"batch\": \"WA00134\",\r\n            \"expire\": \"2023-08-24\"\r\n        },\r\n        {\r\n            \"itemCd\": \"1000P1R221z12\",\r\n            \"description\": \"AMIN TR 150 KG\",\r\n            \"qty\": \"1000\",\r\n            \"avg_price\": \"30.5\",\r\n            \"batch\": \"WA00135\",\r\n            \"expire\": \"2023-08-24\"\r\n        }\r\n    ]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://ishyiga.com/vsdc/Send_Vsdc_Inventory_lite_json",
+              "protocol": "https",
+              "host": [
+                "ishyiga",
+                "com"
+              ],
+              "path": [
+                "vsdc",
+                "Send_Vsdc_Inventory_lite_json"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "SUCCESSFUL RESPONSE",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "security_key",
+                    "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"companyTin\": \"999000025\",\r\n    \"reference\": \"INV0001\",\r\n    \"userName\": \"Iyanya OKOBI\",\r\n    \"inventoryDate\": \"2023-08-24\",\r\n    \"items\": [\r\n        {\r\n            \"itemCd\": \"TEA0098\",\r\n            \"description\": \"GREEN TEA\",\r\n            \"qty\": \"258\",\r\n            \"avg_price\": \"12\",\r\n            \"batch\": \"WA00134\",\r\n            \"expire\": \"2023-08-24\"\r\n        },\r\n        {\r\n            \"itemCd\": \"1000P1R221\",\r\n            \"description\": \"COFFE 150 KG\",\r\n            \"qty\": \"1000\",\r\n            \"avg_price\": \"30.5\",\r\n            \"batch\": \"WA00135\",\r\n            \"expire\": \"2023-08-24\"\r\n        },\r\n        {\r\n            \"itemCd\": \"TEA00981\",\r\n            \"description\": \"GREEN TEA2023 \",\r\n            \"qty\": \"258\",\r\n            \"avg_price\": \"12\",\r\n            \"batch\": \"WA00134\",\r\n            \"expire\": \"2023-08-24\"\r\n        },\r\n        {\r\n            \"itemCd\": \"1000P1R221z12\",\r\n            \"description\": \"AMIN TR 150 KG\",\r\n            \"qty\": \"1000\",\r\n            \"avg_price\": \"30.5\",\r\n            \"batch\": \"WA00135\",\r\n            \"expire\": \"2023-08-24\"\r\n        }\r\n    ]\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://ishyiga.com/vsdc/Send_Vsdc_Inventory_lite_json",
+                  "protocol": "https",
+                  "host": [
+                    "ishyiga",
+                    "com"
+                  ],
+                  "path": [
+                    "vsdc",
+                    "Send_Vsdc_Inventory_lite_json"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json;charset=UTF-8"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "304"
+                },
+                {
+                  "key": "Date",
+                  "value": "Fri, 03 Nov 2023 08:23:22 GMT"
+                },
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=20"
+                },
+                {
+                  "key": "Connection",
+                  "value": "keep-alive"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"RESPONSE\": {\n        \"DISTRIBUTOR_TIN\": \"C000652902X\",\n        \"MESSAGE\": {\n            \"flag\": \"INVENTORY\",\n            \"ysdcrecnum\": \"\",\n            \"num\": \"INV0001\",\n            \"ysdcid\": \"VATES0000614\",\n            \"ysdcintdata\": \"\",\n            \"ysdcmrc\": \"VALG01CAP01\",\n            \"ysdcitems\": 1,\n            \"ysdcmrctim\": \"2023-11-03 10:23:22\",\n            \"ysdcregsig\": \"\",\n            \"ysdctime\": \"2023-11-03 10:23:22\"\n        },\n        \"STATUS\": \"SUCCESS\",\n        \"QR_CODE\": \"\"\n    }\n}"
+            },
+            {
+              "name": "ERROR RESPONSE",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "security_key",
+                    "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg="
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "\r\n{ \"reference\": \"\",\r\n    \"userName\": \"Iyanya OKOBI\",\r\n    \"inventoryDate\": \"2023-08-24\",\r\n    \"items\": [\r\n        {\r\n            \"itemCd\": \"TEA0098\",\r\n            \"description\":\"GREEN TEA\",\r\n            \"qty\": \"258\",\r\n            \"avg_price\": \"12\",\r\n            \"batch\": \"WA00134\",\r\n            \"expire\": \"2023-08-24\"\r\n           \r\n        },\r\n        {\r\n            \"itemCd\": \"1000P1R221\",\r\n            \"description\":\"COFFE 150 KG\",\r\n            \"qty\": \"1000\",\r\n            \"avg_price\": \"30.5\",\r\n            \"batch\": \"WA00135\",\r\n            \"expire\": \"2023-08-24\"\r\n        },\r\n        {\r\n            \"itemCd\": \"TEA00981\",\r\n            \"description\":\"GREEN TEA2023 \",\r\n            \"qty\": \"258\",\r\n            \"avg_price\": \"12\",\r\n            \"batch\": \"WA00134\",\r\n            \"expire\": \"2023-08-24\"\r\n           \r\n        },\r\n        {\r\n            \"itemCd\": \"1000P1R221z12\",\r\n            \"description\":\"AMIN TR 150 KG\",\r\n            \"qty\": \"1000\",\r\n            \"avg_price\": \"30.5\",\r\n            \"batch\": \"WA00135\",\r\n            \"expire\": \"2023-08-24\"\r\n        }\r\n    ]\r\n}\r\n",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://ishyiga.com/vsdc/Send_Vsdc_Inventory_lite_json",
+                  "protocol": "https",
+                  "host": [
+                    "ishyiga",
+                    "com"
+                  ],
+                  "path": [
+                    "vsdc",
+                    "Send_Vsdc_Inventory_lite_json"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json;charset=UTF-8"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "100"
+                },
+                {
+                  "key": "Date",
+                  "value": "Fri, 03 Nov 2023 08:24:24 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"errors\": [\n        \"Please provide inventory document Id\"\n    ],\n    \"timestamp\": \"2023-11-03 10:24:24\",\n    \"status\": 400\n}"
+            }
+          ]
+        },
+        {
+          "name": "Send Inventory (XML)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\r\n<root>\r\n  <companyTin>999000025</companyTin>\r\n  <reference>INV0001</reference>\r\n  <userName>Iyanya OKOBI</userName>\r\n  <inventoryDate>2023-08-24</inventoryDate>\r\n  <items>\r\n    <itemCd>TEA0098</itemCd>\r\n    <description>GREEN TEA</description>\r\n    <qty>258</qty>\r\n    <avg_price>12</avg_price>\r\n    <batch>WA00134</batch>\r\n    <expire>2023-08-24</expire>\r\n  </items>\r\n  <items>\r\n    <itemCd>1000P1R221</itemCd>\r\n    <description>COFFE 150 KG</description>\r\n    <qty>1000</qty>\r\n    <avg_price>30.5</avg_price>\r\n    <batch>WA00135</batch>\r\n    <expire>2023-08-24</expire>\r\n  </items>\r\n  <items>\r\n    <itemCd>TEA00981</itemCd>\r\n    <description>GREEN TEA2023 </description>\r\n    <qty>258</qty>\r\n    <avg_price>12</avg_price>\r\n    <batch>WA00134</batch>\r\n    <expire>2023-08-24</expire>\r\n  </items>\r\n  <items>\r\n    <itemCd>1000P1R221z12</itemCd>\r\n    <description>AMIN TR 150 KG</description>\r\n    <qty>1000</qty>\r\n    <avg_price>30.5</avg_price>\r\n    <batch>WA00135</batch>\r\n    <expire>2023-08-24</expire>\r\n  </items>\r\n</root>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://ishyiga.com/vsdc/Send_Vsdc_Inventory_lite",
+              "protocol": "https",
+              "host": [
+                "ishyiga",
+                "com"
+              ],
+              "path": [
+                "vsdc",
+                "Send_Vsdc_Inventory_lite"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "ITEMS",
+      "item": [
+        {
+          "name": "Send Items",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "security_key",
+                "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg=",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"companyTin\": \"999000025\",\r\n    \"reference\": \"INV0004\",\r\n    \"userName\": \"OKOBI\",\r\n    \"requestDate\": \"2022-09-26\",\r\n    \"items\": [\r\n        {\r\n            \"description\": \"FANTA 75Cl\",\r\n            \"itemClsCd\": \"41278976\",\r\n            \"itemCd\": \"FANT003\",\r\n            \"taxCode\": \"B\"\r\n        }\r\n    ]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://ishyiga.com/vsdc/Send_Vsdc_item_lite_json",
+              "protocol": "https",
+              "host": [
+                "ishyiga",
+                "com"
+              ],
+              "path": [
+                "vsdc",
+                "Send_Vsdc_item_lite_json"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Send Items",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "security_key",
+                    "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg=",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"companyTin\": \"999000025\",\r\n    \"reference\": \"INV0002\",\r\n    \"userName\": \"OKOBI\",\r\n    \"requestDate\": \"2022-09-26\",\r\n    \"items\": [\r\n        {\r\n            \"description\": \"FANTA 33Cl\",\r\n            \"itemClsCd\": \"41278976\",\r\n            \"itemCd\": \"FANT001\",\r\n            \"taxCode\": \"B\"\r\n        }\r\n    ]\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://ishyiga.com/vsdc/Send_Vsdc_item_lite_json",
+                  "protocol": "https",
+                  "host": [
+                    "ishyiga",
+                    "com"
+                  ],
+                  "path": [
+                    "vsdc",
+                    "Send_Vsdc_item_lite_json"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=20"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "295"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json;charset=UTF-8"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "ARR/3.0"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "ASP.NET"
+                },
+                {
+                  "key": "Date",
+                  "value": "Wed, 22 Jan 2025 13:05:54 GMT"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"RESPONSE\": {\n        \"DISTRIBUTOR_TIN\": 999000025,\n        \"MESSAGE\": {\n            \"flag\": \"ITEM\",\n            \"ysdcrecnum\": \"\",\n            \"num\": \"INV0002\",\n            \"ysdcid\": \"SDC009000057\",\n            \"ysdcintdata\": \"\",\n            \"ysdcmrc\": \"VALG01VNA08\",\n            \"ysdcitems\": 1,\n            \"ysdcmrctim\": \"2025-01-22 15:05:54\",\n            \"ysdcregsig\": \"\",\n            \"ysdctime\": \"2025-01-22 15:05:54\"\n        },\n        \"STATUS\": \"SUCCESS\",\n        \"QR_CODE\": \"\"\n    }\n}"
+            },
+            {
+              "name": "Update Items",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "security_key",
+                    "value": "Z60gftKe9sei3xOZhvvDa0StkVILKR3j5MBM9ygi1zg=",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"companyTin\": \"999000025\",\r\n    \"reference\": \"INV0002\",\r\n    \"userName\": \"OKOBI\",\r\n    \"requestDate\": \"2022-09-26\",\r\n    \"items\": [\r\n        {\r\n            \"description\": \"FANTA 33Cl\",\r\n            \"itemClsCd\": \"41278976\",\r\n            \"itemCd\": \"FANT001\",\r\n            \"taxCode\": \"B\"\r\n        }\r\n    ]\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://ishyiga.com/vsdc/Send_Vsdc_item_lite_json",
+                  "protocol": "https",
+                  "host": [
+                    "ishyiga",
+                    "com"
+                  ],
+                  "path": [
+                    "vsdc",
+                    "Send_Vsdc_item_lite_json"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=20"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "295"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json;charset=UTF-8"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "ARR/3.0"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "ASP.NET"
+                },
+                {
+                  "key": "Date",
+                  "value": "Wed, 22 Jan 2025 13:05:54 GMT"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"RESPONSE\": {\n        \"DISTRIBUTOR_TIN\": 999000025,\n        \"MESSAGE\": {\n            \"flag\": \"ITEM\",\n            \"ysdcrecnum\": \"\",\n            \"num\": \"INV0002\",\n            \"ysdcid\": \"SDC009000057\",\n            \"ysdcintdata\": \"\",\n            \"ysdcmrc\": \"VALG01VNA08\",\n            \"ysdcitems\": 1,\n            \"ysdcmrctim\": \"2025-01-22 15:05:54\",\n            \"ysdcregsig\": \"\",\n            \"ysdctime\": \"2025-01-22 15:05:54\"\n        },\n        \"STATUS\": \"SUCCESS\",\n        \"QR_CODE\": \"\"\n    }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "New Request",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "url",
+      "value": "http://localhost:8080/WSIntegration/webresources"
+    },
+    {
+      "key": "sdcresponse",
+      "value": "wsintegration.sdcresponse"
+    },
+    {
+      "key": "sdcproforma",
+      "value": "wsintegration.sdcproforma"
+    },
+    {
+      "key": "get_url",
+      "value": "http://localhost:8080/WSIntegration/webresources/wsintegration.sdcresponse"
+    },
+    {
+      "key": "invoice_id",
+      "value": "ID_INVOICE"
+    },
+    {
+      "key": "xml_url",
+      "value": "http://localhost:8080/WSIntegration/webresources/wsintegration.sdcresponse/xml/sdc1"
+    },
+    {
+      "key": "json_url",
+      "value": "http://localhost:8080/WSIntegration/webresources/wsintegration.sdcresponse/json/sdc1"
+    },
+    {
+      "key": "get_proforma",
+      "value": "http://localhost:8080/WSIntegration/webresources/wsintegration.sdcproforma"
+    }
+  ]
+}

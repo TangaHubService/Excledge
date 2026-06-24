@@ -22,6 +22,11 @@ export async function submitStockMovementToEbm(movementId: number): Promise<{ su
     return { success: false, error: 'Stock movement not found' };
   }
 
+  // RRA requires a non-empty reference (document ID) for inventory transactions
+  if (!movement.reference || movement.reference.trim() === '') {
+    return { success: false, error: 'Please provide inventory document Id' };
+  }
+
   try {
     const envelope = await buildVsdcEnvelope(movement.organizationId, movement.branchId);
 
