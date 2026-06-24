@@ -972,11 +972,10 @@ export const processExpiredStock = async (req: BranchAuthRequest, res: Response)
 
 export const getTaxCodes = async (_req: Request, res: Response) => {
   const codes = [
-    { code: 'A', label: 'Standard Rate (18% VAT)', rate: 18, category: 'STANDARD' },
-    { code: 'B', label: 'Zero Rated (0%)', rate: 0, category: 'ZERO_RATED' },
-    { code: 'C', label: 'Exempt', rate: 0, category: 'EXEMPT' },
-    { code: 'D', label: 'Other', rate: 0, category: 'STANDARD' },
-    { code: 'E', label: 'Other', rate: 0, category: 'STANDARD' },
+    { code: 'A', label: 'Exempted (0%)', rate: 0, category: 'EXEMPT' },
+    { code: 'B', label: 'Standard (18%)', rate: 18, category: 'STANDARD' },
+    { code: 'C', label: 'Zero-rated (0%)', rate: 0, category: 'ZERO_RATED' },
+    { code: 'D', label: 'Exempted Entity (0%)', rate: 0, category: 'EXEMPT' },
   ];
   res.json(codes);
 };

@@ -26,11 +26,11 @@ export class TaxService {
     static getTaxCode(category: TaxCategory): RraTaxCode {
         switch (category) {
             case 'STANDARD':
-                return RraTaxCode.A;
-            case 'ZERO_RATED':
                 return RraTaxCode.B;
-            case 'EXEMPT':
+            case 'ZERO_RATED':
                 return RraTaxCode.C;
+            case 'EXEMPT':
+                return RraTaxCode.A;
             default:
                 return RraTaxCode.A;
         }
@@ -68,15 +68,19 @@ export class TaxService {
         const total = price.mul(qty);
         const code = overrideTaxCode ?? this.getTaxCode(category);
 
-        const rate = category === 'STANDARD' ? standardVatRate : new Decimal(0);
+        const isTaxable = code === RraTaxCode.B;
+        const rate = isTaxable ? standardVatRate : new Decimal(0);
 
-        const divisor = new Decimal(1).plus(rate.div(100));
-        const taxableAmount = total.div(divisor);
-        const taxAmount = total.minus(taxableAmount);
+        if (isTaxable) {
+            const divisor = new Decimal(1).plus(rate.div(100));
+            const taxableAmount = total.div(divisor);
+            const taxAmount = total.minus(taxableAmount);
+            return { taxableAmount, taxAmount, totalAmount: total, taxRate: rate, taxCode: code };
+        }
 
         return {
-            taxableAmount,
-            taxAmount,
+            taxableAmount: total,
+            taxAmount: new Decimal(0),
             totalAmount: total,
             taxRate: rate,
             taxCode: code,

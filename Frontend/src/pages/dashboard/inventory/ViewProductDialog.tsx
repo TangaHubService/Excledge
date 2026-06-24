@@ -102,6 +102,23 @@ export default function ViewProductDialog({
                 </p>
                 <p className="mt-1">{viewProduct.unitPrice} Frw</p>
               </div>
+              {viewProduct.taxCode && (
+                <div>
+                  <p
+                    className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                      }`}
+                  >
+                    RRA Tax Code
+                  </p>
+                  <p className="mt-1">
+                    {viewProduct.taxCode === 'A' ? 'Exempted (0%)' :
+                     viewProduct.taxCode === 'B' ? 'Standard (18%)' :
+                     viewProduct.taxCode === 'C' ? 'Zero-rated (0%)' :
+                     viewProduct.taxCode === 'D' ? 'Exempted Entity (0%)' :
+                     viewProduct.taxCode}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
