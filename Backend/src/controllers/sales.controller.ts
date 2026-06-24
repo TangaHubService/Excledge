@@ -33,22 +33,33 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       return res.status(400).json(apiError("Sale must have at least one item"))
     }
 
-    // Calculate total
-    let totalAmount = 0
-    for (const item of items) {
-      totalAmount += item.quantity * item.unitPrice
-    }
-
     // Separate product items from service items
     const productItems = items.filter((i: any) => i.itemType !== 'SERVICE')
     const serviceItems = items.filter((i: any) => i.itemType === 'SERVICE')
 
-    // Validate payment amounts
-    // Note: MOBILE_MONEY and CREDIT_CARD are treated as cashAmount in the frontend
-    const calculatedDebt = totalAmount - (cashAmount || 0) - (insuranceAmount || 0)
+    // ── Server-side mathematical gatekeeper (Module 2.2) ──
+    // Re-compute totals server-side; reject if client delta > 0.01 RWF
+    const clientTotal = items.reduce((s: number, i: any) => s + Number(i.quantity) * Number(i.unitPrice), 0)
+
+    // Pre-validate payment amounts using client total (rough check; precise check uses Decimal inside txn)
+    const calculatedDebt = clientTotal - (cashAmount || 0) - (insuranceAmount || 0)
     if (Math.abs(calculatedDebt - (debtAmount || 0)) > 0.01) {
       return res.status(400).json(apiError("Payment amounts do not match total. Total must equal cashAmount + insuranceAmount + debtAmount"))
     }
+
+    // Fetch all products once up-front for tax calculation
+    const productIds = productItems
+      .map((i: any) => parseInt(i.productId))
+      .filter((id: number) => !isNaN(id))
+
+    const products = productIds.length > 0
+      ? await prisma.product.findMany({
+          where: { id: { in: productIds }, organizationId },
+          select: { id: true, unitPrice: true, taxCategory: true, taxCode: true, name: true },
+        })
+      : []
+
+    const productMap = new Map(products.map(p => [p.id, p]))
 
     // Automatically determine paymentType if multiple payment methods are used
     let finalPaymentType = paymentType
@@ -85,22 +96,16 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
     const saleNumber = `SALE-${Date.now()}`
     const invoiceNumber = await generateInvoiceNumber(organizationId!)
 
-    // Wrap everything in a transaction for atomicity
+    // ── Atomic transaction ──
     const sale = await prisma.$transaction(async (tx) => {
       // 1. Validate stock availability for PRODUCT items only
       for (const item of productItems) {
-        const product = await tx.product.findFirst({
-          where: {
-            id: parseInt(item.productId),
-            organizationId: organizationId!,
-          },
-        });
+        const product = productMap.get(parseInt(item.productId))
 
         if (!product) {
           throw new Error(`Product with ID ${item.productId} not found`);
         }
 
-        // Calculate current stock from ledger (source of truth)
         const stockAggregates = await tx.inventoryLedger.groupBy({
           by: ['direction'],
           where: {
@@ -108,9 +113,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
             organizationId: organizationId!,
             branchId: { equals: branchId as number },
           },
-          _sum: {
-            quantity: true,
-          },
+          _sum: { quantity: true },
         });
 
         const inQty = stockAggregates.find(a => a.direction === 'IN')?._sum.quantity || 0;
@@ -124,7 +127,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         }
       }
 
-      // Calculate tax summary (product items only for RRA EBM; service items pass through)
+      // 2. Server-side tax computation with Decimal arithmetic
       const allItemsForTax = items.map((i: any) => ({
         productId: i.productId ? parseInt(i.productId) : undefined,
         quantity: i.quantity,
@@ -133,9 +136,29 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       }));
       const taxSummary = await TaxService.calculateSaleTax(organizationId!, allItemsForTax);
 
-      // 2. Select batches and calculate costs for PRODUCT items only
+      // ── MODULE 2.2: Reconcile server-computed total vs client total ──
+      const computedTotal = taxSummary.items.reduce(
+        (sum, ti) => sum + Number(ti.taxableAmount) + Number(ti.taxAmount),
+        0,
+      )
+      if (Math.abs(computedTotal - clientTotal) > 0.01) {
+        throw new Error(
+          `Total amount mismatch: server computed ${computedTotal.toFixed(2)}, client submitted ${clientTotal.toFixed(2)}`
+        )
+      }
+
+      // Reconcile server-computed VAT vs what TaxService returned
+      const computedVat = Number(taxSummary.vatAmount)
+      const clientVat = items.reduce((s: number, i: any) => s + Number(i.taxAmount || 0), 0)
+      if (Math.abs(computedVat - clientVat) > 0.01) {
+        throw new Error(
+          `VAT amount mismatch: server computed ${computedVat.toFixed(2)}, client submitted ${clientVat.toFixed(2)}`
+        )
+      }
+
+      // 3. Select batches and calculate costs for PRODUCT items only
       const inventoryMethod = (req.body.inventoryMethod as 'FIFO' | 'LIFO' | 'AVERAGE') || 'FIFO';
-      const saleItemsData = [];
+      const saleItemsData: any[] = [];
 
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
@@ -145,7 +168,6 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         const itemTax = taxSummary.items[i];
 
         if (isService) {
-          // Service item — no stock tracking, no batch, no cost
           saleItemsData.push({
             quantity,
             unitPrice,
@@ -162,7 +184,6 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
           continue;
         }
 
-        // PRODUCT item — existing logic
         const productId = parseInt(item.productId);
         let batchId: number | null = null;
         let costPrice = 0;
@@ -194,7 +215,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
 
         const profit = (unitPrice - costPrice) * quantity;
 
-        const saleItemData: any = {
+        saleItemsData.push({
           quantity,
           unitPrice,
           totalPrice: quantity * unitPrice,
@@ -205,16 +226,11 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
           taxCode: itemTax.taxCode,
           itemType: 'PRODUCT',
           product: { connect: { id: productId } },
-        };
-
-        if (batchId !== null) {
-          saleItemData.batch = { connect: { id: batchId } };
-        }
-
-        saleItemsData.push(saleItemData);
+          ...(batchId !== null ? { batch: { connect: { id: batchId } } } : {}),
+        });
       }
 
-      // 3. Create sale with items
+      // 4. Create sale with server-computed values
       const newSale = await tx.sale.create({
         data: {
           saleNumber,
@@ -227,13 +243,11 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
           cashAmount: cashAmount || 0,
           insuranceAmount: insuranceAmount || 0,
           debtAmount: debtAmount || 0,
-          totalAmount,
+          totalAmount: computedTotal,
           vatAmount: taxSummary.vatAmount,
           taxableAmount: taxSummary.taxableAmount,
           status: 'COMPLETED',
-          saleItems: {
-            create: saleItemsData,
-          },
+          saleItems: { create: saleItemsData },
         },
         include: {
           saleItems: { include: { product: true, batch: true } },
@@ -241,9 +255,12 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         },
       } as any);
 
-      // 4. Record stock movements for PRODUCT items only
+      // 5. Record stock movements for PRODUCT items only (MODULE 2.4: guard reference)
       for (const item of productItems) {
         const saleItem = (newSale as any).saleItems?.find((si: any) => si.productId === parseInt(item.productId));
+        if (!saleNumber || saleNumber.trim().length === 0) {
+          throw new Error('Stock movement reference cannot be empty');
+        }
         await removeStock({
           organizationId: organizationId!,
           productId: parseInt(item.productId),
@@ -259,18 +276,16 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         });
       }
 
-      // 5. Update customer balance if debt (atomic with sale)
-      const remainingDebt = totalAmount - (cashAmount || 0) - (insuranceAmount || 0)
+      // 6. Update customer balance if debt (atomic with sale)
+      const remainingDebt = computedTotal - (cashAmount || 0) - (insuranceAmount || 0)
       if (remainingDebt > 0) {
         await tx.customer.update({
           where: { id: parseInt(customerId) },
-          data: {
-            balance: { increment: remainingDebt },
-          },
+          data: { balance: { increment: remainingDebt } },
         });
       }
 
-      // 6. Write transactional outbox entry (atomic with the sale)
+      // 7. Write transactional outbox entry (atomic with the sale)
       if (isEbmEnabled()) {
         const operation: EbmOperation = 'SALE';
         const idempotencyKey = `ebm-${operation}-${organizationId}-${newSale.id}`;
@@ -610,6 +625,15 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
 
         // Calculate total refund amount
         const totalRefundAmount = itemsToRefund.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
+
+        // ── MODULE 2.3: Reject if refund exceeds original total (defense-in-depth) ──
+        const originalTotal = Number((sale as any).totalAmount);
+        if (totalRefundAmount > originalTotal + 0.01) {
+          throw {
+            status: 400,
+            message: `Refund total ${totalRefundAmount.toFixed(2)} exceeds original invoice total ${originalTotal.toFixed(2)}`,
+          };
+        }
 
         // Update original sale status
         await prisma.sale.update({
