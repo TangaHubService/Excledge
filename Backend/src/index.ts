@@ -66,7 +66,7 @@ const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:3000")
   .filter(Boolean);
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: "https://erp.exceledgecpa.com",
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
