@@ -5,6 +5,7 @@ import {
   getNotifications,
   topSellingProducts,
   getDetailedInventory,
+  getBranchDashboardStats,
 } from "../controllers/dashboard.controller";
 import { authenticate } from "../middleware/auth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
@@ -19,5 +20,6 @@ router.get("/sales-trend/:organizationId", authenticate, orgAccess, branchAuth, 
 router.get("/notifications/:organizationId", authenticate, orgAccess, branchAuth, getNotifications);
 router.get("/:organizationId/top-selling-products", authenticate, orgAccess, branchAuth, topSellingProducts);
 router.get("/:organizationId/detailed-inventory", authenticate, orgAccess, branchAuth, getDetailedInventory);
+router.get("/branch-stats/:organizationId", authenticate, orgAccess, branchAuth, getBranchDashboardStats);
 
 export default router;

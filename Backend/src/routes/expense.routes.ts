@@ -7,6 +7,7 @@ import {
     deleteExpense
 } from "../controllers/expense.controller";
 import { authenticate } from "../middleware/auth.middleware";
+import { branchAuth } from "../middleware/branchAuth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
 
 const router = Router();
@@ -14,6 +15,7 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 router.use(requireOrganizationAccess());
+router.use(branchAuth);
 
 /**
  * @route POST /api/expenses/:organizationId

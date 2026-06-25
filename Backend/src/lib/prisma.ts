@@ -1,5 +1,65 @@
-// In /server/src/lib/prisma.ts
 import { PrismaClient } from '@prisma/client'
+import { AsyncLocalStorage } from 'async_hooks'
+
+// ── AsyncLocalStorage for branch context ──────────────────────────────────
+export interface BranchContext {
+  branchId?: number
+}
+
+export const branchStorage = new AsyncLocalStorage<BranchContext>()
+
+/**
+ * Run a callback inside a branch-scoped context.
+ * Every Prisma query within the callback will automatically be filtered
+ * to the given branchId on models that support it.
+ */
+export function withBranchScope<T>(branchId: number | undefined, fn: () => T): T {
+  return branchStorage.run({ branchId }, fn)
+}
+
+/**
+ * Get the current branch ID from AsyncLocalStorage (or undefined).
+ */
+export function getCurrentBranchId(): number | undefined {
+  return branchStorage.getStore()?.branchId
+}
+
+// ── Models that have a `branchId` field ──────────────────────────────────
+const BRANCH_AWARE_MODELS = new Set([
+  'Sale',
+  'Batch',
+  'StockMovement',
+  'Expense',
+  'CashBalance',
+  'InventoryLedger',
+  'ActivityLog',
+  'PurchaseOrder',
+  'Notification',
+])
+
+// Prisma operations where we can inject `branchId` into the `where` clause.
+const BRANCH_FILTERABLE_OPS = new Set([
+  'findMany',
+  'findFirst',
+  'findFirstOrThrow',
+  'findUnique',
+  'findUniqueOrThrow',
+  'count',
+  'aggregate',
+  'groupBy',
+  'update',
+  'updateMany',
+  'delete',
+  'deleteMany',
+  'upsert',       // upsert → where clause
+  'updateMany',
+])
+
+// Operations that create a record – inject branchId into `data`
+const BRANCH_CREATE_OPS = new Set([
+  'create',
+  'createMany',
+])
 
 // Add global prisma client to prevent multiple instances in development
 declare global {
@@ -12,6 +72,58 @@ const prisma = global.prisma || new PrismaClient({
         maxWait: 30000,    // Increased to 30 seconds
         timeout: 60000,    // Increased to 60 seconds
     },
+})
+
+// ── Prisma middleware: auto-inject branchId ──────────────────────────────
+prisma.$use(async (params, next) => {
+  const ctx = branchStorage.getStore()
+  const branchId = ctx?.branchId
+
+  // ── Set PostgreSQL session variable for RLS ──
+  if (branchId !== undefined) {
+    await prisma.$executeRawUnsafe(`SET app.current_branch_id = '${branchId}'`)
+  } else {
+    await prisma.$executeRawUnsafe(`SET app.current_branch_id = ''`)
+  }
+
+  if (branchId === undefined) {
+    return next(params)
+  }
+
+  const model = params.model
+  if (!model || !BRANCH_AWARE_MODELS.has(model)) {
+    return next(params)
+  }
+
+  // ── FILTER operations (findMany, findFirst, update, delete, etc.) ──
+  if (BRANCH_FILTERABLE_OPS.has(params.action)) {
+    const args = params.args as Record<string, any> | undefined
+    if (!args) {
+      params.args = { where: { branchId } }
+    } else {
+      const existingWhere = args.where ?? {}
+      // Only inject if branchId is not already specified (avoid override)
+      if (existingWhere.branchId === undefined) {
+        args.where = { ...existingWhere, branchId }
+      }
+    }
+  }
+
+  // ── CREATE operations – inject branchId into data ──
+  if (BRANCH_CREATE_OPS.has(params.action)) {
+    const args = params.args as Record<string, any> | undefined
+    if (args?.data) {
+      if (Array.isArray(args.data)) {
+        // createMany
+        args.data = args.data.map((d: any) => ({ ...d, branchId }))
+      } else {
+        // create
+        args.data = { ...args.data, branchId }
+      }
+    }
+  }
+
+  return next(params)
 })
 
 // In development, store the Prisma client in the global object to prevent hot-reloading issues

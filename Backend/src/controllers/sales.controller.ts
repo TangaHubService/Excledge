@@ -1,6 +1,5 @@
 import { prisma } from "../lib/prisma"
 import type { Response } from "express"
-import type { AuthRequest } from "../middleware/auth.middleware"
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 import { Decimal } from "@prisma/client/runtime/library"
 import { EbmOperation } from "@prisma/client"

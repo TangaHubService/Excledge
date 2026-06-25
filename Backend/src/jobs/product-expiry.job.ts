@@ -12,6 +12,10 @@ export const productExpiryAlertJob = cron.schedule("0 8 * * *", async () => {
   const organizations = await prisma.organization.findMany({
     where: { isActive: true },
     include: {
+      branches: {
+        where: { status: 'ACTIVE' },
+        select: { id: true, name: true },
+      },
       userOrganizations: {
         where: {
           OR: [{ role: "ADMIN" }, { role: "ACCOUNTANT" }, { role: "SELLER" }],
@@ -24,38 +28,51 @@ export const productExpiryAlertJob = cron.schedule("0 8 * * *", async () => {
   let totalAlertsSent = 0;
 
   for (const organization of organizations) {
-    const expiringProducts = await prisma.product.findMany({
-      where: {
-        organizationId: organization.id,
-        expiryDate: {
-          not: null,
-          lte: thirtyDaysFromNow,
-        },
-      },
-      orderBy: {
-        expiryDate: "asc",
-      },
-    });
+    // ── Per-branch expiry products ──────────────────────────────────
+    const branchExpiryMap: Record<number, { branchName: string; products: any[] }> = {};
 
-    if (expiringProducts.length > 0) {
-      const productsWithDays = expiringProducts.map((product) => {
-        const daysRemaining = Math.ceil(
-          (product.expiryDate!.getTime() - today.getTime()) /
-          (1000 * 60 * 60 * 24)
-        );
-        return {
-          ...product,
-          daysRemaining,
-        };
+    for (const branch of organization.branches) {
+      const expiringBatches = await prisma.batch.findMany({
+        where: {
+          organizationId: organization.id,
+          branchId: branch.id,
+          isActive: true,
+          expiryDate: {
+            not: null,
+            lte: thirtyDaysFromNow,
+          },
+        },
+        include: {
+          product: { select: { name: true, sku: true } },
+        },
+        orderBy: { expiryDate: "asc" },
       });
 
-      // Send email to all admins and managers
+      if (expiringBatches.length > 0) {
+        branchExpiryMap[branch.id] = {
+          branchName: branch.name,
+          products: expiringBatches.map((b) => ({
+            productName: b.product.name,
+            sku: b.product.sku,
+            batchNumber: b.batchNumber,
+            quantity: b.quantity,
+            expiryDate: b.expiryDate,
+            daysRemaining: Math.ceil(
+              (b.expiryDate!.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            ),
+          })),
+        };
+      }
+    }
+
+    if (Object.keys(branchExpiryMap).length > 0) {
+      const allExpiringProducts = Object.values(branchExpiryMap).flatMap(b => b.products);
       for (const userOrg of organization.userOrganizations) {
         try {
           await emailService.sendExpiryAlert(
             userOrg.user.email,
             organization.name,
-            productsWithDays
+            allExpiringProducts
           );
           totalAlertsSent++;
         } catch (error) {
@@ -93,6 +110,10 @@ export const dailyReportJob = cron.schedule("0 22 * * *", async () => {
       }
     },
     include: {
+      branches: {
+        where: { status: 'ACTIVE' },
+        select: { id: true, name: true, code: true },
+      },
       userOrganizations: {
         where: {
           role: "ADMIN",
@@ -105,78 +126,74 @@ export const dailyReportJob = cron.schedule("0 22 * * *", async () => {
   let totalReportsSent = 0;
 
   for (const organization of organizations) {
-    // Find the owner (first admin typically, or we can look for specific role if available)
     const owner = organization.userOrganizations[0]?.user;
     if (!owner) continue;
 
-    // Get today's sales
+    // ── Per-branch aggregation ──────────────────────────────────────
+    const branchReports: Array<{ name: string; code: string; data: any }> = [];
+
+    for (const branch of organization.branches) {
+      const branchSales = await prisma.sale.findMany({
+        where: {
+          organizationId: organization.id,
+          branchId: branch.id,
+          createdAt: { gte: today, lt: tomorrow },
+        },
+      });
+
+      branchReports.push({
+        name: branch.name,
+        code: branch.code,
+        data: {
+          totalSales: branchSales.reduce((s, r) => s + Number(r.totalAmount), 0),
+          transactionCount: branchSales.length,
+          cashSales: branchSales.reduce((s, r) => s + Number(r.cashAmount), 0),
+          insuranceSales: branchSales.reduce((s, r) => s + Number(r.insuranceAmount), 0),
+        },
+      });
+    }
+
+    // ── Organization totals (sum of all branches) ───────────────────
     const sales = await prisma.sale.findMany({
       where: {
         organizationId: organization.id,
-        createdAt: {
-          gte: today,
-          lt: tomorrow,
-        },
+        createdAt: { gte: today, lt: tomorrow },
       },
     });
 
-    const totalSales = sales.reduce(
-      (sum, sale) => sum + Number(sale.totalAmount),
-      0
-    );
-    const cashSales = sales.reduce(
-      (sum, sale) => sum + Number(sale.cashAmount),
-      0
-    );
-    const insuranceSales = sales.reduce(
-      (sum, sale) => sum + Number(sale.insuranceAmount),
-      0
-    );
+    const totalSales = sales.reduce((sum, sale) => sum + Number(sale.totalAmount), 0);
+    const cashSales = sales.reduce((sum, sale) => sum + Number(sale.cashAmount), 0);
+    const insuranceSales = sales.reduce((sum, sale) => sum + Number(sale.insuranceAmount), 0);
 
     const lowStockProducts = await prisma.product.count({
       where: {
         organizationId: organization.id,
-        quantity: {
-          lte: 10,
-        },
+        quantity: { lte: 10 },
       },
     });
 
     const expiringSoonProducts = await prisma.product.count({
       where: {
         organizationId: organization.id,
-        expiryDate: {
-          not: null,
-          gte: new Date(),
-          lte: thirtyDaysFromNow,
-        },
+        expiryDate: { not: null, gte: new Date(), lte: thirtyDaysFromNow },
       },
     });
 
     const expiredProducts = await prisma.product.count({
       where: {
         organizationId: organization.id,
-        expiryDate: {
-          not: null,
-          lt: new Date(),
-        },
+        expiryDate: { not: null, lt: new Date() },
       },
     });
 
-    // Get customer debts
     const customers = await prisma.customer.findMany({
       where: {
         organizationId: organization.id,
-        balance: {
-          gt: 0,
-        },
+        balance: { gt: 0 },
       },
     });
 
-    const totalDebt = customers.reduce(
-      (sum, customer) => sum + Number(customer.balance),
-      0
-    );
+    const totalDebt = customers.reduce((sum, c) => sum + Number(c.balance), 0);
 
     const reportData = {
       totalSales,
@@ -188,20 +205,14 @@ export const dailyReportJob = cron.schedule("0 22 * * *", async () => {
       expiredCount: expiredProducts,
       totalDebt,
       debtorCount: customers.length,
+      branches: branchReports,
     };
 
     try {
-      await emailService.sendDailyReport(
-        owner.email,
-        organization.name,
-        reportData
-      );
+      await emailService.sendDailyReport(owner.email, organization.name, reportData);
       totalReportsSent++;
     } catch (error) {
-      console.error(
-        `Failed to send daily report to ${owner.email}:`,
-        error
-      );
+      console.error(`Failed to send daily report to ${owner.email}:`, error);
     }
   }
 

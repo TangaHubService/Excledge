@@ -9,6 +9,7 @@ import {
   reprintSaleReceipt
 } from "../controllers/sales.controller";
 import { authenticate, authorize } from "../middleware/auth.middleware";
+import { branchAuth } from "../middleware/branchAuth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
 import { validate } from "../middleware/validate.middleware";
 import { createSaleSchema, cancelSaleSchema } from "../validations/sales.validation";
@@ -22,6 +23,7 @@ router.post(
   "/:organizationId",
   authenticate,
   orgAccess,
+  branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   validate(createSaleSchema),
   createSale
@@ -32,6 +34,7 @@ router.get(
   "/:organizationId",
   authenticate,
   orgAccess,
+  branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   getSales
 );
@@ -41,6 +44,7 @@ router.get(
   "/:organizationId/:id",
   authenticate,
   orgAccess,
+  branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   getSaleById
 );
@@ -50,6 +54,7 @@ router.put(
   "/:id/pay-debt/:organizationId",
   authenticate,
   orgAccess,
+  branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   payDebt
 );
@@ -59,6 +64,7 @@ router.post(
   "/:id/refund/:organizationId",
   authenticate,
   orgAccess,
+  branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   refundSale
 );
@@ -68,6 +74,7 @@ router.post(
   "/:organizationId/:saleId/cancel",
   authenticate,
   orgAccess,
+  branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   validate(cancelSaleSchema),
   cancelSale
@@ -78,6 +85,7 @@ router.post(
   "/:organizationId/:saleId/reprint",
   authenticate,
   orgAccess,
+  branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   reprintSaleReceipt
 );

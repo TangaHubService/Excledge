@@ -139,16 +139,19 @@ model PurchaseOrder {
   id               Int                 @id @default(autoincrement())
   supplierId       Int
   organizationId   Int
+  branchId         Int                 // NEW Branch-scoped PO
   userId           Int
   isActive         Boolean             @default(true)
   items            PurchaseOrderItem[]
   organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   supplier         Supplier            @relation(fields: [supplierId], references: [id])
+  branch           Branch              @relation(fields: [branchId], references: [id])
   user             User                @relation(fields: [userId], references: [id])
   supplierPayments SupplierPayment[]
   User             User[]              @relation("CreatedOrders")
 
   @@index([organizationId])
+  @@index([branchId])
   @@index([supplierId])
   @@index([userId])
   @@map("purchase_orders")

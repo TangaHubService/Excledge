@@ -4,17 +4,19 @@ import { emailService } from "../services/email.service"
 import { auditLogger } from "../utils/auditLogger"
 import { addStock } from "../services/inventory-ledger.service"
 import NotificationService from "../services/notification.service"
-import type { AuthRequest } from "../middleware/auth.middleware"
+import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
+import { buildBranchFilter, getBranchIdForOperation } from "../middleware/branchAuth.middleware"
 
 const notificationService = new NotificationService(prisma)
 
 // Get all purchase orders for an organization
-export const getPurchaseOrders = async (req: AuthRequest, res: Response) => {
+export const getPurchaseOrders = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
+        const branchFilter = buildBranchFilter(req)
 
         const orders = await prisma.purchaseOrder.findMany({
-            where: { organizationId, isActive: true },
+            where: { organizationId, isActive: true, ...branchFilter },
             include: {
                 supplier: true,
                 user: { select: { name: true, email: true } },
@@ -31,13 +33,14 @@ export const getPurchaseOrders = async (req: AuthRequest, res: Response) => {
 }
 
 // Get single purchase order
-export const getPurchaseOrder = async (req: AuthRequest, res: Response) => {
+export const getPurchaseOrder = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
         const id = parseInt(req.params.id)
+        const branchFilter = buildBranchFilter(req)
 
         const order = await prisma.purchaseOrder.findFirst({
-            where: { id, organizationId },
+            where: { id, organizationId, ...branchFilter },
             include: {
                 supplier: true,
                 user: { select: { name: true, email: true } },
@@ -57,11 +60,12 @@ export const getPurchaseOrder = async (req: AuthRequest, res: Response) => {
 }
 
 // Create purchase order
-export const createPurchaseOrder = async (req: AuthRequest, res: Response) => {
+export const createPurchaseOrder = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
         const userId = (req as any).user.userId
         const { supplierId, items, notes, expectedDate } = req.body
+        const branchId = getBranchIdForOperation(req)
 
         // Calculate total amount
         const totalAmount = items.reduce((sum: number, item: any) => sum + item.quantity * item.unitPrice, 0)
@@ -77,13 +81,13 @@ export const createPurchaseOrder = async (req: AuthRequest, res: Response) => {
                 orderNumber,
                 supplierId,
                 organizationId,
+                branchId: branchId as any,
                 userId,
                 totalAmount,
                 notes,
                 expectedDate: expectedDate ? new Date(expectedDate) : null,
                 items: {
                     create: await Promise.all(items.map(async (item: any) => {
-                        // Look up product tax information for RRA compliance
                         let taxCode: string | undefined;
                         let taxRate: number | undefined;
                         if (item.productId) {
@@ -112,7 +116,7 @@ export const createPurchaseOrder = async (req: AuthRequest, res: Response) => {
                         };
                     })),
                 },
-            },
+            } as any,
             include: {
                 supplier: true,
                 items: true,
@@ -121,15 +125,16 @@ export const createPurchaseOrder = async (req: AuthRequest, res: Response) => {
         })
 
         try {
+            const orderAny = order as any;
             await emailService.sendPurchaseOrderToSupplier(
-                order.supplier.email,
-                order.supplier.name,
-                order.organization.name,
-                order.orderNumber,
-                order.items,
-                Number(order.totalAmount),
-                order.notes || undefined,
-                order.expectedDate || undefined,
+                orderAny.supplier.email,
+                orderAny.supplier.name,
+                orderAny.organization.name,
+                orderAny.orderNumber,
+                orderAny.items,
+                Number(orderAny.totalAmount),
+                orderAny.notes || undefined,
+                orderAny.expectedDate || undefined,
             )
         } catch (emailError) {
             console.error("Failed to send email to supplier:", emailError)
@@ -137,7 +142,7 @@ export const createPurchaseOrder = async (req: AuthRequest, res: Response) => {
 
         await auditLogger.purchaseOrders(req, {
             type: 'PURCHASE_ORDER_CREATE',
-            description: `Purchase Order ${order.orderNumber} created for supplier ${order.supplier.name}`,
+            description: `Purchase Order ${order.orderNumber} created for supplier ${(order as any).supplier.name}`,
             entityType: 'PurchaseOrder',
             entityId: order.id,
             metadata: {
@@ -155,9 +160,10 @@ export const createPurchaseOrder = async (req: AuthRequest, res: Response) => {
 }
 
 // Update purchase order status
-export const updatePurchaseOrderStatus = async (req: AuthRequest, res: Response) => {
+export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Response) => {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
+    const branchFilter = buildBranchFilter(req)
     const { status, branchId, receivedItems } = req.body
 
     // Define valid status values
@@ -181,7 +187,7 @@ export const updatePurchaseOrderStatus = async (req: AuthRequest, res: Response)
     try {
         // Check if purchase order exists
         const order = await prisma.purchaseOrder.findFirst({
-            where: { id, organizationId },
+            where: { id, organizationId, ...branchFilter },
             include: {
                 supplier: true,
                 user: true,
@@ -328,13 +334,14 @@ export const updatePurchaseOrderStatus = async (req: AuthRequest, res: Response)
 }
 
 // Delete purchase order
-export const deletePurchaseOrder = async (req: AuthRequest, res: Response) => {
+export const deletePurchaseOrder = async (req: BranchAuthRequest, res: Response) => {
     try {
         const { id } = req.params
         const organizationId = parseInt(req.params.organizationId)
+        const branchFilter = buildBranchFilter(req)
 
         const order = await prisma.purchaseOrder.findFirst({
-            where: { id: parseInt(id), organizationId },
+            where: { id: parseInt(id), organizationId, ...branchFilter },
         })
 
         if (!order) {

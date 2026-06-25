@@ -1,6 +1,7 @@
 import { Router } from "express"
 import multer from "multer"
 import { authenticate, authorize } from "../middleware/auth.middleware"
+import { branchAuth } from "../middleware/branchAuth.middleware"
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware"
 import {
     getSuppliers,
@@ -24,27 +25,27 @@ router.use(authenticate)
 const orgAccess = requireOrganizationAccess()
 
 // Get all suppliers
-router.get("/:organizationId", orgAccess, getSuppliers)
+router.get("/:organizationId", orgAccess, branchAuth, getSuppliers)
 
 // Get single supplier
-router.get("/:organizationId/:id", orgAccess, getSupplier)
+router.get("/:organizationId/:id", orgAccess, branchAuth, getSupplier)
 
 // Create supplier (Admin/Manager only)
-router.post("/:organizationId", orgAccess, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), createSupplier)
+router.post("/:organizationId", orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), createSupplier)
 
 // Update supplier (Admin/Manager only)
-router.put("/:organizationId/:id", orgAccess, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), updateSupplier)
+router.put("/:organizationId/:id", orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), updateSupplier)
 
 // Delete supplier (Admin only)
-router.delete("/:organizationId/:id", orgAccess, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), deleteSupplier)
+router.delete("/:organizationId/:id", orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), deleteSupplier)
 
 // Import routes (legacy - kept for backward compatibility)
-router.post("/:organizationId/import", orgAccess, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), upload.single("file"), bulkImportSuppliers)
-router.get("/:organizationId/import/template", orgAccess, downloadSupplierTemplate)
+router.post("/:organizationId/import", orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), upload.single("file"), bulkImportSuppliers)
+router.get("/:organizationId/import/template", orgAccess, branchAuth, downloadSupplierTemplate)
 
 // New preview/confirm import routes
-router.post("/:organizationId/import/preview", orgAccess, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), upload.single("file"), previewImportSuppliers)
-router.post("/:organizationId/import/confirm", orgAccess, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), confirmImportSuppliers)
-router.get("/:organizationId/import/errors/:importId", orgAccess, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), downloadSupplierErrorFile)
+router.post("/:organizationId/import/preview", orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), upload.single("file"), previewImportSuppliers)
+router.post("/:organizationId/import/confirm", orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), confirmImportSuppliers)
+router.get("/:organizationId/import/errors/:importId", orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), downloadSupplierErrorFile)
 
 export default router

@@ -1,7 +1,7 @@
 import type { Response, NextFunction } from 'express';
 import type { AuthRequest } from './auth.middleware';
 import type { OrganizationAccessRequest } from './organizationAccess.middleware';
-import { prisma } from '../lib/prisma';
+import { prisma, withBranchScope } from '../lib/prisma';
 import { UserRole } from '@prisma/client';
 
 export interface BranchAuthRequest extends AuthRequest {
@@ -99,7 +99,8 @@ export const branchAuth = async (
         // If no branchId specified, allow (returns all data for admins, or org-level data)
         if (branchId === null) {
             req.selectedBranchId = null;
-            return next();
+            // Run without branch scope – all data visible
+            return withBranchScope(undefined, next);
         }
 
         // If branchId specified, validate access
@@ -110,7 +111,8 @@ export const branchAuth = async (
         }
 
         req.selectedBranchId = branchId;
-        next();
+        // Run entire request in branch-scoped AsyncLocalStorage context
+        withBranchScope(branchId, next);
     } catch (error: any) {
         console.error('[Branch Auth Error]:', error);
         res.status(500).json({ error: 'Failed to authorize branch access' });
