@@ -4,11 +4,10 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import {
   TrendingUp, DollarSign, Calendar,
-  ArrowUpRight, ArrowDownRight, Shield, Users,
-  ShoppingCart, Building, Store, RefreshCw,
+  Shield, Users,
+  Building, Store, RefreshCw,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { useBranch } from '../context/BranchContext'
 import { apiClient } from '../lib/api-client'
 import { DashboardSkeleton } from '../components/ui/DashboardSkeleton'
 import { DateFilterBar, type DateFilterValue, type DatePreset } from '../components/dashboard/DateFilterBar'
@@ -36,7 +35,6 @@ function getErrorMessage(error: unknown): string {
 export const Dashboard = () => {
   const { t } = useTranslation()
   const { isSystemOwner } = useAuth()
-  const { selectedBranchId, canAccessAllBranches } = useBranch()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
 
@@ -58,7 +56,7 @@ export const Dashboard = () => {
   const branchStatsQuery = useQuery({
     queryKey: ['branch-dashboard-stats', dateFilter.preset, dateFilter.startDate, dateFilter.endDate],
     queryFn: () => apiClient.getBranchDashboardStats({
-      preset: dateFilter.preset !== 'custom' ? dateFilter.preset as DatePreset : undefined,
+      preset: dateFilter.preset !== 'custom' ? dateFilter.preset as 'today' | 'weekly' | 'monthly' : undefined,
       startDate: dateFilter.startDate,
       endDate: dateFilter.endDate,
     }),
