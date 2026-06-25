@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test:unit": "vitest run",
     "test:jest": "jest --config jest.config.ts",
+    "postinstall": "prisma generate",
     "smoke-test": "bash scripts/smoke-test.sh",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
