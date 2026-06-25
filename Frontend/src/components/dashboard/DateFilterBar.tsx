@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { DayPicker } from 'react-day-picker'
+import { DayPicker, type DateRange } from 'react-day-picker'
 import { format, parseISO } from 'date-fns'
 import { Calendar, ChevronDown, Loader2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
@@ -47,14 +47,14 @@ export function DateFilterBar({ value, onChange, disabled = false, className }: 
   const [open, setOpen] = useState(false)
   const popoverRef = useRef<HTMLDivElement>(null)
 
-  const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>(() => {
+  const [customRange, setCustomRange] = useState<DateRange | undefined>(() => {
     if (value.preset === 'custom') {
       return {
         from: parseDateOrUndefined(value.startDate),
         to: parseDateOrUndefined(value.endDate),
       }
     }
-    return {}
+    return undefined
   })
 
   useEffect(() => {
@@ -82,22 +82,21 @@ export function DateFilterBar({ value, onChange, disabled = false, className }: 
       setOpen(false)
     } else {
       setCustomRange(prev => {
-        if (prev.from && prev.to) return prev
-        return {}
+        if (prev?.from && prev?.to) return prev
+        return undefined
       })
     }
   }, [onChange])
 
   const handleCustomApply = useCallback(() => {
-    if (customRange.from && customRange.to) {
-      onChange({
-        preset: 'custom',
-        startDate: format(customRange.from, 'yyyy-MM-dd'),
-        endDate: format(customRange.to, 'yyyy-MM-dd'),
-        label: `${format(customRange.from, 'MMM d')} – ${format(customRange.to, 'MMM d')}`,
-      })
-      setOpen(false)
-    }
+    if (!customRange?.from || !customRange?.to) return
+    onChange({
+      preset: 'custom',
+      startDate: format(customRange.from, 'yyyy-MM-dd'),
+      endDate: format(customRange.to, 'yyyy-MM-dd'),
+      label: `${format(customRange.from, 'MMM d')} – ${format(customRange.to, 'MMM d')}`,
+    })
+    setOpen(false)
   }, [customRange, onChange])
 
   return (
@@ -161,25 +160,25 @@ export function DateFilterBar({ value, onChange, disabled = false, className }: 
               <div className="flex gap-2 text-xs text-gray-500 dark:text-gray-400 px-1">
                 <div className={cn(
                   'flex-1 truncate px-2 py-1 rounded border',
-                  customRange.from
+                  customRange?.from
                     ? 'border-blue-200 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-900/20'
                     : 'border-gray-200 dark:border-gray-600',
                 )}>
-                  {customRange.from ? format(customRange.from, 'MMM d, yyyy') : 'Start date'}
+                  {customRange?.from ? format(customRange.from, 'MMM d, yyyy') : 'Start date'}
                 </div>
                 <span className="self-center">→</span>
                 <div className={cn(
                   'flex-1 truncate px-2 py-1 rounded border',
-                  customRange.to
+                  customRange?.to
                     ? 'border-blue-200 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-900/20'
                     : 'border-gray-200 dark:border-gray-600',
                 )}>
-                  {customRange.to ? format(customRange.to, 'MMM d, yyyy') : 'End date'}
+                  {customRange?.to ? format(customRange.to, 'MMM d, yyyy') : 'End date'}
                 </div>
               </div>
               <button
                 type="button"
-                disabled={!customRange.from || !customRange.to}
+                disabled={!customRange?.from || !customRange?.to}
                 onClick={handleCustomApply}
                 className={cn(
                   'w-full py-2 text-sm font-semibold rounded-lg transition-colors',
