@@ -4,6 +4,188 @@ import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 import { buildBranchFilter } from "../middleware/branchAuth.middleware"
 import { prisma } from "../lib/prisma"
 
+// ── Date range helpers ────────────────────────────────────────────────────
+interface DateRange {
+  startDate: Date
+  endDate: Date
+}
+
+function parseDateRange(query: Record<string, any>): DateRange {
+  const now = new Date()
+  const endDate = new Date(now)
+  endDate.setHours(23, 59, 59, 999)
+  let startDate: Date
+
+  const preset = query.preset as string | undefined
+  const qStart = query.startDate as string | undefined
+  const qEnd = query.endDate as string | undefined
+
+  if (qStart && qEnd) {
+    startDate = new Date(qStart)
+    startDate.setHours(0, 0, 0, 0)
+    const ed = new Date(qEnd)
+    ed.setHours(23, 59, 59, 999)
+    return { startDate, endDate: ed }
+  }
+
+  switch (preset) {
+    case 'today':
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      break
+    case 'weekly': {
+      const dayOfWeek = now.getDay()
+      const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1 // Monday start
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff)
+      break
+    }
+    case 'monthly':
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+      break
+    default:
+      // Fallback: last 30 days
+      startDate = new Date(now)
+      startDate.setDate(startDate.getDate() - 30)
+      startDate.setHours(0, 0, 0, 0)
+  }
+
+  return { startDate, endDate }
+}
+
+// ── Per-branch dashboard stats ────────────────────────────────────────────
+export const getBranchDashboardStats = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId)
+    const { startDate, endDate } = parseDateRange(req.query)
+    const branchFilter = buildBranchFilter(req)
+    const branchId = typeof branchFilter.branchId === 'number' ? branchFilter.branchId : null
+
+    // ── Fetch active branches ──────────────────────────────────────
+    const branches = await prisma.branch.findMany({
+      where: {
+        organizationId,
+        status: 'ACTIVE',
+        ...(branchId ? { id: branchId } : {}),
+      },
+      select: { id: true, name: true, code: true, location: true },
+      orderBy: { name: 'asc' },
+    })
+
+    // ── Aggregate per-branch in a single pass ──────────────────────
+    const branchIds = branches.map(b => b.id)
+
+    // 1. Sales aggregation per branch
+    const salesRows = branchIds.length > 0
+      ? await prisma.sale.groupBy({
+          by: ['branchId'],
+          where: {
+            organizationId,
+            branchId: { in: branchIds },
+            createdAt: { gte: startDate, lte: endDate },
+            status: { not: 'CANCELLED' },
+          },
+          _sum: { totalAmount: true, cashAmount: true, debtAmount: true, insuranceAmount: true },
+          _count: { id: true },
+        })
+      : []
+    const salesAgg = new Map(salesRows.map(r => [r.branchId, r]))
+
+    // 2. Low stock per branch (via inventory_ledger balance)
+    const ledgerBalances = branchIds.length > 0
+      ? (await prisma.$queryRaw<Array<{ branchId: number; productId: number; bal: bigint }>>`
+          SELECT il."branchId", il."productId",
+            COALESCE(SUM(CASE WHEN il.direction = 'IN' THEN il.quantity ELSE 0 END), 0) -
+            COALESCE(SUM(CASE WHEN il.direction = 'OUT' THEN il.quantity ELSE 0 END), 0) AS bal
+          FROM inventory_ledger il
+          WHERE il."organizationId" = ${organizationId}
+            AND il."branchId" = ANY(${branchIds})
+          GROUP BY il."branchId", il."productId"
+        `)
+      : []
+
+    // Build per-product stock map per branch
+    const stockByBranch = new Map<number, Map<number, number>>()
+    for (const row of ledgerBalances) {
+      if (!stockByBranch.has(row.branchId)) stockByBranch.set(row.branchId, new Map())
+      stockByBranch.get(row.branchId)!.set(row.productId, Number(row.bal))
+    }
+
+    const products = await prisma.product.findMany({
+      where: { organizationId, deletedAt: null, isActive: true },
+      select: { id: true, name: true, minStock: true },
+    })
+
+    // 3. Expiring batches per branch
+    const expiringBatches = branchIds.length > 0
+      ? await prisma.batch.groupBy({
+          by: ['branchId'],
+          where: {
+            organizationId,
+            branchId: { in: branchIds },
+            isActive: true,
+            expiryDate: { not: null, lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), gte: new Date() },
+          },
+          _count: { id: true },
+        }).then(rows => new Map(rows.map(r => [r.branchId, r._count.id])))
+      : new Map()
+
+    // 4. Expenses per branch
+    const expenseRows = branchIds.length > 0
+      ? await prisma.expense.groupBy({
+          by: ['branchId'],
+          where: {
+            organizationId,
+            branchId: { in: branchIds },
+            expenseDate: { gte: startDate, lte: endDate },
+          },
+          _sum: { amount: true },
+        })
+      : []
+    const expenseAgg = new Map(expenseRows.map(r => [r.branchId, r]))
+
+    // ── Build response ──────────────────────────────────────────────
+    const branchStats = branches.map(branch => {
+      const saleRow = salesAgg.get(branch.id)
+      const expenseRow = expenseAgg.get(branch.id)
+      const branchStock = stockByBranch.get(branch.id) ?? new Map()
+
+      const lowStockCount = products.filter(p => {
+        const q = branchStock.get(p.id) ?? 0
+        return p.minStock > 0 && q <= p.minStock
+      }).length
+
+      return {
+        branchId: branch.id,
+        branchName: branch.name,
+        branchCode: branch.code,
+        location: branch.location,
+        metrics: {
+          totalSales: Number(saleRow?._sum.totalAmount ?? 0),
+          transactionCount: saleRow?._count.id ?? 0,
+          cashAmount: Number(saleRow?._sum.cashAmount ?? 0),
+          debtAmount: Number(saleRow?._sum.debtAmount ?? 0),
+          insuranceAmount: Number(saleRow?._sum.insuranceAmount ?? 0),
+          totalExpenses: Number(expenseRow?._sum.amount ?? 0),
+          lowStockCount,
+          expiringSoonCount: expiringBatches.get(branch.id) ?? 0,
+        },
+      }
+    })
+
+    res.json({
+      dateRange: {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        preset: req.query.preset ?? 'custom',
+      },
+      branches: branchStats,
+      totalBranches: branches.length,
+    })
+  } catch (error: any) {
+    console.error('[Branch Dashboard Stats Error]:', error)
+    res.status(500).json({ error: 'Failed to fetch branch dashboard stats' })
+  }
+}
+
 /** Ledger net quantity per product for org, optionally scoped to one branch */
 async function ledgerBalanceByProduct(
   organizationId: number,

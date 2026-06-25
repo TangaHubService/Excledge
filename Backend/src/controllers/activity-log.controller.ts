@@ -1,11 +1,13 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { ActivityType, LogModule, LogStatus } from '@prisma/client';
+import type { BranchAuthRequest } from '../middleware/branchAuth.middleware';
+import { buildBranchFilter } from '../middleware/branchAuth.middleware';
 import ActivityLogService from '../services/activity-log.service';
 import { prisma } from '../lib/prisma';
 const activityLogService = new ActivityLogService(prisma);
 
 class ActivityLogController {
-  async getActivityLogs(req: Request, res: Response) {
+  async getActivityLogs(req: BranchAuthRequest, res: Response) {
     try {
       const {
         userId,
@@ -26,6 +28,8 @@ class ActivityLogController {
         return res.status(400).json({ error: 'Organization ID is required' });
       }
 
+      const branchFilter = buildBranchFilter(req);
+
       const filters = {
         userId: userId ? parseInt(userId as string) : undefined,
         module: module as LogModule | undefined,
@@ -35,6 +39,7 @@ class ActivityLogController {
         entityId: entityId ? parseInt(entityId as string) : undefined,
         startDate: startDate ? new Date(startDate as string) : undefined,
         endDate: endDate ? new Date(endDate as string) : undefined,
+        branchId: branchFilter.branchId as number | undefined,
       };
 
       const pagination = {
@@ -55,7 +60,7 @@ class ActivityLogController {
     }
   }
 
-  async getActivityLogById(req: Request, res: Response) {
+  async getActivityLogById(req: BranchAuthRequest, res: Response) {
     try {
       const id = parseInt(req.params.id);
       const organizationId = parseInt(req.params.organizationId);
@@ -64,10 +69,13 @@ class ActivityLogController {
         return res.status(400).json({ error: 'Organization ID is required' });
       }
 
+      const branchFilter = buildBranchFilter(req);
+
       const activityLog = await prisma.activityLog.findFirst({
         where: {
           id,
           organizationId,
+          ...branchFilter,
         },
         include: {
           user: {

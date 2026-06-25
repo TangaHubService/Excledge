@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
+import { branchAuth } from '../middleware/branchAuth.middleware';
 import { requireOrganizationAccess } from '../middleware/organizationAccess.middleware';
 import {
     recordDebtPayment,
@@ -18,6 +19,7 @@ payDebtRouter.post(
     '/:saleId/:organizationId',
     authenticate,
     orgAccess,
+    branchAuth,
     recordDebtPayment
 );
 
@@ -26,6 +28,7 @@ payDebtRouter.get(
     '/sale/:saleId/:organizationId',
     authenticate,
     orgAccess,
+    branchAuth,
     getSalePayments
 );
 
@@ -34,6 +37,7 @@ payDebtRouter.get(
     '/customer/:customerId/:organizationId',
     authenticate,
     orgAccess,
+    branchAuth,
     getCustomerDebtPayments
 );
 
@@ -42,12 +46,14 @@ payDebtRouter.get(
     '/outstanding/:organizationId',
     authenticate,
     orgAccess,
+    branchAuth,
     getOutstandingDebts
 );
 payDebtRouter.get(
     '/all/:organizationId',
     authenticate,
     orgAccess,
+    branchAuth,
     getAllPaymentHistory
 );
 export default payDebtRouter;

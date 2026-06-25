@@ -97,15 +97,17 @@ class ActivityLogService {
       entityId?: number;
       startDate?: Date;
       endDate?: Date;
+      branchId?: number;
     },
     pagination: { page: number; pageSize: number } = { page: 1, pageSize: 20 }
   ) {
-    const { userId, module, type, status, entityType, entityId, startDate, endDate } = filters;
+    const { userId, module, type, status, entityType, entityId, startDate, endDate, branchId } = filters;
     const { page, pageSize } = pagination;
     const skip = (page - 1) * pageSize;
 
     const where: Prisma.ActivityLogWhereInput = {
       organizationId,
+      ...(branchId !== undefined && { branchId }),
       ...(userId && { userId }),
       ...(module && { module }),
       ...(type && { type }),

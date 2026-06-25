@@ -1,12 +1,13 @@
 import type { Response } from "express"
-import type { AuthRequest } from "../middleware/auth.middleware"
+import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
+import { buildBranchFilter } from "../middleware/branchAuth.middleware"
 import { auditLogger } from "../utils/auditLogger"
 import * as XLSX from "xlsx"
 import { validateCustomerRow } from "../services/import-validation.service"
 import { createPreviewSession, getPreviewSession, deletePreviewSession } from "../services/preview-session.service"
 import { prisma } from "../lib/prisma"
 
-export const getCustomers = async (req: AuthRequest, res: Response) => {
+export const getCustomers = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params?.organizationId)
     const { search, hasDebt, showInactive } = req.query
@@ -16,6 +17,8 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
     const limitNum = Math.min(Math.max(Number.parseInt(limit as string) || 50, 1), 500)
     const pageNum = Math.max(Number.parseInt(page as string) || 1, 1)
     const skip = (pageNum - 1) * limitNum
+
+    const branchFilter = buildBranchFilter(req)
 
     const where: any = { organizationId, deletedAt: null }
 
@@ -33,6 +36,15 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
 
     if (hasDebt === "true") {
       where.balance = { gt: 0 }
+    }
+
+    // When a branch is selected, scope customers to those with sales in that branch
+    if (branchFilter.branchId !== undefined) {
+      where.sales = {
+        some: {
+          branchId: branchFilter.branchId,
+        },
+      }
     }
 
     const customers = await prisma.customer.findMany({
@@ -74,7 +86,7 @@ export const getCustomers = async (req: AuthRequest, res: Response) => {
   }
 }
 
-export const getCustomerById = async (req: AuthRequest, res: Response) => {
+export const getCustomerById = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
@@ -83,8 +95,17 @@ export const getCustomerById = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: "Organization ID is required" })
     }
 
+    const branchFilter = buildBranchFilter(req)
+
     const customer = await prisma.customer.findFirst({
-      where: { id, organizationId, deletedAt: null },
+      where: {
+        id,
+        organizationId,
+        deletedAt: null,
+        ...(branchFilter.branchId !== undefined
+          ? { sales: { some: { branchId: branchFilter.branchId } } }
+          : {}),
+      },
       select: {
         id: true,
         name: true,
@@ -124,7 +145,7 @@ export const getCustomerById = async (req: AuthRequest, res: Response) => {
   }
 }
 
-export const createCustomer = async (req: AuthRequest, res: Response) => {
+export const createCustomer = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params?.organizationId)
     const { name, phone, email, type, balance } = req.body
@@ -161,7 +182,7 @@ export const createCustomer = async (req: AuthRequest, res: Response) => {
   }
 }
 
-export const updateCustomer = async (req: AuthRequest, res: Response) => {
+export const updateCustomer = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
@@ -198,7 +219,7 @@ export const updateCustomer = async (req: AuthRequest, res: Response) => {
   }
 }
 
-export const deleteCustomer = async (req: AuthRequest, res: Response) => {
+export const deleteCustomer = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params?.organizationId)
@@ -231,7 +252,7 @@ export const deleteCustomer = async (req: AuthRequest, res: Response) => {
   }
 }
 
-export const bulkImportCustomers = async (req: AuthRequest, res: Response) => {
+export const bulkImportCustomers = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params?.organizationId)
     const workbook = XLSX.read(req.file!.buffer, { type: "buffer" })
@@ -338,7 +359,7 @@ export const bulkImportCustomers = async (req: AuthRequest, res: Response) => {
   }
 }
 
-export const previewImportCustomers = async (req: AuthRequest, res: Response) => {
+export const previewImportCustomers = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params?.organizationId)
     const workbook = XLSX.read(req.file!.buffer, { type: "buffer" })
@@ -381,7 +402,7 @@ export const previewImportCustomers = async (req: AuthRequest, res: Response) =>
   }
 }
 
-export const confirmImportCustomers = async (req: AuthRequest, res: Response) => {
+export const confirmImportCustomers = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params?.organizationId)
     const { importId } = req.body
@@ -447,7 +468,7 @@ export const confirmImportCustomers = async (req: AuthRequest, res: Response) =>
   }
 }
 
-export const downloadCustomerErrorFile = async (req: AuthRequest, res: Response) => {
+export const downloadCustomerErrorFile = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params?.organizationId)
     const { importId } = req.params
@@ -477,7 +498,7 @@ export const downloadCustomerErrorFile = async (req: AuthRequest, res: Response)
   }
 }
 
-export const downloadCustomerTemplate = async (req: AuthRequest, res: Response) => {
+export const downloadCustomerTemplate = async (req: BranchAuthRequest, res: Response) => {
   try {
     const templateData = [{ name: "John Doe", phone: "+250788123456", email: "john@example.com", type: "INDIVIDUAL", address: "Kigali, Rwanda", balance: "0" }]
     const worksheet = XLSX.utils.json_to_sheet(templateData)

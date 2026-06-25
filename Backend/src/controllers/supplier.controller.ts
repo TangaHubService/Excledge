@@ -4,17 +4,28 @@ import { auditLogger } from "../utils/auditLogger"
 import * as XLSX from "xlsx"
 import { validateSupplierRow } from "../services/import-validation.service"
 import { createPreviewSession, getPreviewSession, deletePreviewSession } from "../services/preview-session.service"
-import type { AuthRequest } from "../middleware/auth.middleware"
+import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
+import { buildBranchFilter } from "../middleware/branchAuth.middleware"
 
 // Get all suppliers for an organization
-export const getSuppliers = async (req: AuthRequest, res: Response) => {
+export const getSuppliers = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
         const { showInactive } = req.query
+        const branchFilter = buildBranchFilter(req)
 
         const where: any = { organizationId }
         if (showInactive !== 'true') {
             where.isActive = true
+        }
+
+        // When a branch is selected, scope suppliers to those with purchase orders in that branch
+        if (branchFilter.branchId !== undefined) {
+            (where as any).purchaseOrders = {
+                some: {
+                    branchId: branchFilter.branchId,
+                } as any,
+            }
         }
 
         const suppliers = await prisma.supplier.findMany({
@@ -30,13 +41,20 @@ export const getSuppliers = async (req: AuthRequest, res: Response) => {
 }
 
 // Get single supplier
-export const getSupplier = async (req: AuthRequest, res: Response) => {
+export const getSupplier = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
         const id = parseInt(req.params.id)
+        const branchFilter = buildBranchFilter(req)
 
         const supplier = await prisma.supplier.findFirst({
-            where: { id, organizationId },
+            where: {
+                id,
+                organizationId,
+                ...(branchFilter.branchId !== undefined
+                  ? { purchaseOrders: { some: { branchId: branchFilter.branchId } as any } }
+                  : {}),
+            } as any,
         })
 
         if (!supplier) {
@@ -51,7 +69,7 @@ export const getSupplier = async (req: AuthRequest, res: Response) => {
 }
 
 // Create supplier
-export const createSupplier = async (req: AuthRequest, res: Response) => {
+export const createSupplier = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
         const { name, email, phone, address, contactPerson } = req.body
@@ -83,7 +101,7 @@ export const createSupplier = async (req: AuthRequest, res: Response) => {
 }
 
 // Update supplier
-export const updateSupplier = async (req: AuthRequest, res: Response) => {
+export const updateSupplier = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
         const id = parseInt(req.params.id)
@@ -120,7 +138,7 @@ export const updateSupplier = async (req: AuthRequest, res: Response) => {
     }
 }
 
-export const deleteSupplier = async (req: AuthRequest, res: Response) => {
+export const deleteSupplier = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
         const id = parseInt(req.params.id)
@@ -155,7 +173,7 @@ export const deleteSupplier = async (req: AuthRequest, res: Response) => {
 /**
  * Bulk import suppliers from Excel file
  */
-export const bulkImportSuppliers = async (req: AuthRequest, res: Response) => {
+export const bulkImportSuppliers = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
 
@@ -266,7 +284,7 @@ export const bulkImportSuppliers = async (req: AuthRequest, res: Response) => {
 /**
  * Preview supplier import - validates but does not save
  */
-export const previewImportSuppliers = async (req: AuthRequest, res: Response) => {
+export const previewImportSuppliers = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
         const workbook = XLSX.read(req.file!.buffer, { type: "buffer" })
@@ -312,7 +330,7 @@ export const previewImportSuppliers = async (req: AuthRequest, res: Response) =>
 /**
  * Confirm supplier import - saves valid records
  */
-export const confirmImportSuppliers = async (req: AuthRequest, res: Response) => {
+export const confirmImportSuppliers = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
         const { importId } = req.body
@@ -377,7 +395,7 @@ export const confirmImportSuppliers = async (req: AuthRequest, res: Response) =>
     }
 }
 
-export const downloadSupplierErrorFile = async (req: AuthRequest, res: Response) => {
+export const downloadSupplierErrorFile = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
         const { importId } = req.params
@@ -407,7 +425,7 @@ export const downloadSupplierErrorFile = async (req: AuthRequest, res: Response)
     }
 }
 
-export const downloadSupplierTemplate = async (req: AuthRequest, res: Response) => {
+export const downloadSupplierTemplate = async (req: BranchAuthRequest, res: Response) => {
     try {
         const templateData = [{ name: "ABC Suppliers Ltd", email: "contact@abcsuppliers.com", phone: "+250788123456", address: "Kigali, Rwanda", contactPerson: "John Smith" }]
         const worksheet = XLSX.utils.json_to_sheet(templateData)

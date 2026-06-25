@@ -124,6 +124,16 @@ class ApiClient {
     });
   }
 
+  /** Read the currently selected branch from localStorage, if any. */
+  private getBranchQueryParam(): string {
+    if (typeof window === 'undefined') return '';
+    const saved = localStorage.getItem('selected_branch_id');
+    if (saved && saved !== 'all' && saved !== 'undefined' && saved !== 'null') {
+      return `branchId=${saved}`;
+    }
+    return '';
+  }
+
   async request(
     endpoint: string,
     options: RequestInit & { _authRetried?: boolean } = {}
@@ -143,7 +153,12 @@ class ApiClient {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_URL}${endpoint}`, {
+    // ── Auto-inject branchId into query string ──────────────────────
+    const branchParam = this.getBranchQueryParam();
+    const separator = endpoint.includes('?') ? '&' : '?';
+    const url = branchParam ? `${API_URL}${endpoint}${separator}${branchParam}` : `${API_URL}${endpoint}`;
+
+    const response = await fetch(url, {
       ...fetchOptions,
       headers,
     });
@@ -388,6 +403,19 @@ class ApiClient {
   // Dashboard endpoints
   async getDashboardStats(days = "7") {
     return this.request(`/dashboard/stats/${this.getOrganizationId()}?days=${days}`);
+  }
+
+  async getBranchDashboardStats(params: {
+    preset?: 'today' | 'weekly' | 'monthly'
+    startDate?: string
+    endDate?: string
+  }) {
+    const query = new URLSearchParams()
+    if (params.preset) query.set('preset', params.preset)
+    if (params.startDate) query.set('startDate', params.startDate)
+    if (params.endDate) query.set('endDate', params.endDate)
+    const qs = query.toString()
+    return this.request(`/dashboard/branch-stats/${this.getOrganizationId()}${qs ? '?' + qs : ''}`)
   }
 
   async getSalesTrend(days = "7") {
