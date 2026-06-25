@@ -82,6 +82,7 @@ model Branch {
   inventoryLedgers  InventoryLedger[]
   transfersFrom     StockTransfer[]     @relation("TransferFrom")
   transfersTo       StockTransfer[]     @relation("TransferTo")
+  purchaseOrders    PurchaseOrder[]
   
   @@unique([organizationId, code])
   @@index([organizationId])
