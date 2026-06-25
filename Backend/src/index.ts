@@ -73,7 +73,7 @@ const corsOptions: any = {
 };
 
 // CORS middleware
-app.use(cors(corsOptions));
+app.use(cors());
 app.options("*", cors(corsOptions));
 
 
