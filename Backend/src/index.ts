@@ -60,21 +60,8 @@ const PORT = process.env.PORT || 5000;
    🔐 FIXED CORS CONFIG
 ------------------------------------- */
 
-const corsOptions: any = {
-  origin: [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "https://tap2serve.netlify.app",
-    ...(process.env.FRONTEND_URL?.split(",").map(s => s.trim()).filter(Boolean) ?? []),
-  ],
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "x-branch-scope", "x-branch-ids"],
-};
-
 // CORS middleware
 app.use(cors());
-app.options("*", cors(corsOptions));
 
 
 /* ----------------------------------
