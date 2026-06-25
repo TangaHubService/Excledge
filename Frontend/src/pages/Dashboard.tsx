@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import {
-  TrendingUp, DollarSign, Package, AlertTriangle, Calendar,
-  ArrowUpRight, ArrowDownRight, Shield, Users, ExternalLink,
-  ShoppingCart, Building, Store,
+  TrendingUp, DollarSign, Calendar,
+  ArrowUpRight, ArrowDownRight, Shield, Users,
+  ShoppingCart, Building, Store, RefreshCw,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useBranch } from '../context/BranchContext'
@@ -28,11 +28,17 @@ function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return 'An unexpected error occurred'
+}
+
 export const Dashboard = () => {
   const { t } = useTranslation()
   const { isSystemOwner } = useAuth()
   const { selectedBranchId, canAccessAllBranches } = useBranch()
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
 
   // ── Date filter state (synced to URL search params) ──────────────
   const [dateFilter, setDateFilter] = useState<DateFilterValue>(() => {
@@ -58,9 +64,12 @@ export const Dashboard = () => {
     }),
     staleTime: 30_000,
     placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10_000),
+    refetchInterval: false,
   })
 
-  // ── Query: system owner stats (separate, not on dashboard) ──────
+  // ── Query: system owner stats ───────────────────────────────────
   const systemOwnerQuery = useQuery({
     queryKey: ['system-owner-dashboard-stats'],
     queryFn: () => apiClient.getSystemOwnerDashboardStats(),
@@ -80,20 +89,43 @@ export const Dashboard = () => {
     setSearchParams(next, { replace: true })
   }, [setSearchParams])
 
+  const handleBranchClick = useCallback((branchId: number) => {
+    const orgId = localStorage.getItem('current_organization_id')
+    if (orgId) {
+      navigate(`/dashboard/branches/${branchId}`)
+    }
+  }, [navigate])
+
   // ── Loading / error states ──────────────────────────────────────
   const isLoading = branchStatsQuery.isLoading && !branchStatsQuery.data
   const isFetching = branchStatsQuery.isFetching
   const error = branchStatsQuery.error
+  const queryError = branchStatsQuery.isError
 
   const branchStats: BranchData[] = branchStatsQuery.data?.branches ?? []
   const dateLabel = branchStatsQuery.data?.dateRange?.preset ?? dateFilter.label
 
   if (isLoading) return <DashboardSkeleton />
 
-  if (error) {
+  if (queryError) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-red-500 text-lg">Failed to load dashboard data</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50/50 dark:bg-gray-900">
+        <div className="flex flex-col items-center gap-4 text-center max-w-md">
+          <div className="h-16 w-16 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
+            <RefreshCw className="h-8 w-8 text-red-500" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Failed to load dashboard</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{getErrorMessage(error)}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => branchStatsQuery.refetch()}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Try again
+          </button>
+        </div>
       </div>
     )
   }
@@ -116,8 +148,11 @@ export const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Date filter */}
-            <DateFilterBar value={dateFilter} onChange={handleDateFilterChange} />
+            <DateFilterBar
+              value={dateFilter}
+              onChange={handleDateFilterChange}
+              disabled={isFetching}
+            />
 
             {isSystemOwner() && (
               <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200/50 dark:border-blue-700/50">
@@ -170,16 +205,22 @@ export const Dashboard = () => {
         {/* ── Branch KPI Cards Grid ───────────────────────────────── */}
         {!branchStatsQuery.isPlaceholderData && branchStats.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-gray-400 dark:text-gray-500">
-            <Store className="h-12 w-12 mb-3" />
+            <div className="h-16 w-16 rounded-full bg-gray-50 dark:bg-gray-800 flex items-center justify-center mb-4">
+              <Store className="h-8 w-8" />
+            </div>
             <p className="text-lg font-medium">No active branches found</p>
-            <p className="text-sm mt-1">Create a branch to get started with operational tracking</p>
+            <p className="text-sm mt-1">Create a branch or adjust your date filter to see operational data</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {branchStatsQuery.isPlaceholderData
               ? Array.from({ length: 3 }).map((_, i) => <BranchCardSkeleton key={i} />)
               : branchStats.map(branch => (
-                  <BranchKPICard key={branch.branchId} branch={branch} />
+                  <BranchKPICard
+                    key={branch.branchId}
+                    branch={branch}
+                    onClick={() => handleBranchClick(branch.branchId)}
+                  />
                 ))
             }
           </div>
@@ -211,10 +252,6 @@ export const Dashboard = () => {
             </div>
           </div>
         )}
-
-        {/* ── Existing charts / recent activity (unchanged) ───────── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{/* Sales trend, top products stay */}</div>
-        <div>{/* Recent transactions table stays */}</div>
       </div>
     </div>
   )
@@ -232,7 +269,7 @@ function StatCard({ icon: Icon, label, value, color }: {
     purple: 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
   }
   return (
-    <div className="relative overflow-hidden bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 group">
+    <div className="relative overflow-hidden bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 group hover:shadow-md transition-shadow duration-200">
       <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
         <Icon size={52} />
       </div>
