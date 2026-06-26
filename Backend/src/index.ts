@@ -60,10 +60,13 @@ const PORT = process.env.PORT || 5000;
    🔐 FIXED CORS CONFIG
 ------------------------------------- */
 
-const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:3000")
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
+const allowedOrigins = [
+  ...(process.env.FRONTEND_URL || "http://localhost:3000")
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean),
+  "https://erp.exceledgecpa.com", // always allow production origin
+];
 
 app.use(cors({
   origin: (origin, callback) => {
