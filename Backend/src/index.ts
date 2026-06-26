@@ -66,7 +66,15 @@ const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:3000")
   .filter(Boolean);
 
 app.use(cors({
-  origin: "https://erp.exceledgecpa.com",
+  origin: (origin, callback) => {
+    // Allow requests with no origin (server-to-server, mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, origin);
+    }
+    console.warn(`[CORS] Blocked origin: ${origin}`);
+    return callback(null, false);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
