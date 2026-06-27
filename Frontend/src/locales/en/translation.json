@@ -153,6 +153,8 @@
         "salesHeader": "SALES",
         "inventoryHeader": "INVENTORY",
         "ordersHeader": "ORDERS",
+        "financeHeader": "FINANCE",
+        "expenses": "Expenses",
         "reportsHeader": "REPORTS",
         "ledgerHistory": "Stock Movement History",
         "stockMovementHistory": "Stock Movement History",

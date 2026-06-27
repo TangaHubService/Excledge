@@ -25,6 +25,8 @@ import {
   LogOut,
   Wifi,
   Loader2,
+  Wallet,
+  LineChart,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -67,6 +69,7 @@ interface SidebarProps {
 
 const baseNavigation: NavItem[] = [
   { id: "dashboard", name: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { id: "executive", name: "Executive Dashboard", href: "executive", icon: LineChart },
 
   { id: "sales-header", name: "nav.salesHeader", href: "", type: "header" },
   { id: "pos", name: "nav.pos", href: "pos", icon: ShoppingCart },
@@ -86,6 +89,9 @@ const baseNavigation: NavItem[] = [
   { id: "orders-header", name: "nav.ordersHeader", href: "", type: "header" },
   { id: "orders", name: "nav.orders", href: "orders", icon: ShoppingCart },
   { id: "suppliers", name: "nav.suppliers", href: "suppliers", icon: Users },
+
+  { id: "finance-header", name: "nav.financeHeader", href: "", type: "header" },
+  { id: "expenses", name: "nav.expenses", href: "expenses", icon: Wallet },
 ];
 
 const adminNav: NavItem[] = [

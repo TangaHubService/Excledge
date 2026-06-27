@@ -54,6 +54,8 @@ import SubscriptionManagementPage from "./pages/billing/SubscriptionManagementPa
 import BillingHistoryPage from "./pages/billing/BillingHistoryPage";
 import OrganizationsPage from "./pages/dashboard/organizations/OrganizationsPage";
 import { PesapalCallback } from "./pages/PesapalCallback";
+import ExpensesPage from "./pages/dashboard/expenses/ExpensesPage";
+import { ExecutiveDashboard } from "./pages/dashboard/executive/ExecutiveDashboard";
 
 // Protected Route for System Owners
 const ProtectedSystemOwnerRoute = ({ children }: { children: React.ReactNode }) => {
@@ -147,6 +149,8 @@ function App() {
                         <Route path="new" element={<CreateOrderPage />} />
                       </Route>
                       <Route path="debt" element={<DebtManagement />} />
+                      <Route path="expenses" element={<ExpensesPage />} />
+                      <Route path="executive" element={<ExecutiveDashboard />} />
                       <Route path="organizations" element={<OrganizationsPage />} />
 
                       <Route path="subscription" element={<SubscriptionManagementPage />} />
