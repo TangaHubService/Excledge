@@ -586,6 +586,252 @@ export const topSellingProducts = async (req: BranchAuthRequest, res: Response) 
   }
 };
 
+export const getExecutiveDashboard = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId)
+    const { startDate, endDate } = parseDateRange(req.query)
+
+    const branchFilter = buildBranchFilter(req)
+    const singleBranchId = typeof branchFilter.branchId === 'number' ? branchFilter.branchId : null
+
+    // Previous period: same duration immediately before current period
+    const periodMs = endDate.getTime() - startDate.getTime()
+    const prevEnd = new Date(startDate.getTime() - 1)
+    const prevStart = new Date(prevEnd.getTime() - periodMs)
+
+    // Active branches (optionally scoped to one branch)
+    const branches = await prisma.branch.findMany({
+      where: {
+        organizationId,
+        status: 'ACTIVE',
+        ...(singleBranchId ? { id: singleBranchId } : {}),
+      },
+      select: { id: true, name: true, code: true, location: true },
+      orderBy: { name: 'asc' },
+    })
+    const branchIds = branches.map(b => b.id)
+
+    if (branchIds.length === 0) {
+      return res.json({
+        dateRange: { startDate: startDate.toISOString(), endDate: endDate.toISOString(), preset: req.query.preset ?? 'custom' },
+        kpis: {
+          totalRevenue: { value: 0, prevValue: 0, change: null, sparkline: [] },
+          totalOrders: { value: 0, prevValue: 0, change: null, sparkline: [] },
+          avgOrderValue: { value: 0, prevValue: 0, change: null, sparkline: [] },
+          topBranch: null,
+        },
+        branchTable: [],
+        branchTrends: [],
+        recentTransactions: [],
+        alerts: [],
+      })
+    }
+
+    const saleBase = (s: Date, e: Date) => ({
+      organizationId,
+      status: { not: 'CANCELLED' as const },
+      createdAt: { gte: s, lte: e },
+      branchId: { in: branchIds },
+    })
+
+    // Date array covering the selected range (for chart x-axis)
+    const allDates: string[] = []
+    const dateCursor = new Date(startDate)
+    dateCursor.setHours(0, 0, 0, 0)
+    while (dateCursor <= endDate) {
+      allDates.push(dateCursor.toISOString().split('T')[0])
+      dateCursor.setDate(dateCursor.getDate() + 1)
+    }
+
+    // Fixed windows for sparklines and alert thresholds
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const sparkEnd = new Date(now)
+    sparkEnd.setHours(23, 59, 59, 999)
+    const sparkStart = new Date(now)
+    sparkStart.setDate(sparkStart.getDate() - 6)
+    sparkStart.setHours(0, 0, 0, 0)
+    const thirtyDaysAgo = new Date(now)
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    thirtyDaysAgo.setHours(0, 0, 0, 0)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
+
+    // Run all heavy queries in parallel
+    const [
+      currentAgg, prevAgg,
+      branchCurrRows, branchPrevRows,
+      sparkSales, trendSales, recentSales,
+      histRows, todayRows, recentHourRows, lastSaleRows,
+    ] = await Promise.all([
+      prisma.sale.aggregate({ where: saleBase(startDate, endDate), _sum: { totalAmount: true }, _count: { id: true } }),
+      prisma.sale.aggregate({ where: saleBase(prevStart, prevEnd), _sum: { totalAmount: true }, _count: { id: true } }),
+      prisma.sale.groupBy({ by: ['branchId'], where: saleBase(startDate, endDate), _sum: { totalAmount: true }, _count: { id: true } }),
+      prisma.sale.groupBy({ by: ['branchId'], where: saleBase(prevStart, prevEnd), _sum: { totalAmount: true }, _count: { id: true } }),
+      prisma.sale.findMany({ where: saleBase(sparkStart, sparkEnd), select: { createdAt: true, totalAmount: true } }),
+      prisma.sale.findMany({ where: saleBase(startDate, endDate), select: { createdAt: true, totalAmount: true, branchId: true } }),
+      prisma.sale.findMany({
+        where: { organizationId, branchId: { in: branchIds } },
+        select: { id: true, saleNumber: true, totalAmount: true, status: true, createdAt: true, branchId: true, branch: { select: { name: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      prisma.sale.groupBy({ by: ['branchId'], where: { organizationId, status: { not: 'CANCELLED' }, createdAt: { gte: thirtyDaysAgo }, branchId: { in: branchIds } }, _sum: { totalAmount: true }, _count: { id: true } }),
+      prisma.sale.groupBy({ by: ['branchId'], where: { organizationId, status: { not: 'CANCELLED' }, createdAt: { gte: todayStart }, branchId: { in: branchIds } }, _sum: { totalAmount: true }, _count: { id: true } }),
+      prisma.sale.groupBy({ by: ['branchId'], where: { organizationId, status: { not: 'CANCELLED' }, createdAt: { gte: twoHoursAgo }, branchId: { in: branchIds } }, _count: { id: true } }),
+      prisma.$queryRaw<Array<{ branchId: number; lastAt: Date }>>`
+        SELECT DISTINCT ON ("branchId") "branchId", "createdAt" AS "lastAt"
+        FROM sales
+        WHERE "organizationId" = ${organizationId}
+          AND "branchId" = ANY(${branchIds}::int[])
+          AND status != 'CANCELLED'
+        ORDER BY "branchId", "createdAt" DESC
+      `,
+    ])
+
+    // ── Index maps ──────────────────────────────────────────────────
+    const branchCurrMap = new Map(branchCurrRows.map(r => [r.branchId, r]))
+    const branchPrevMap = new Map(branchPrevRows.map(r => [r.branchId, r]))
+    const histMap = new Map(histRows.map(r => [r.branchId, r]))
+    const todayMap = new Map(todayRows.map(r => [r.branchId, r]))
+    const recentHourMap = new Map(recentHourRows.map(r => [r.branchId, r._count.id]))
+    const lastSaleMap = new Map(lastSaleRows.map(r => [Number(r.branchId), r.lastAt]))
+
+    // ── Sparklines (7 days, one value per day) ──────────────────────
+    const sparkRevMap = new Map<string, number>()
+    const sparkOrdMap = new Map<string, number>()
+    for (const s of sparkSales) {
+      const d = s.createdAt.toISOString().split('T')[0]
+      sparkRevMap.set(d, (sparkRevMap.get(d) ?? 0) + Number(s.totalAmount))
+      sparkOrdMap.set(d, (sparkOrdMap.get(d) ?? 0) + 1)
+    }
+    const revSparkline: number[] = []
+    const ordSparkline: number[] = []
+    const avgSparkline: number[] = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now)
+      d.setDate(d.getDate() - i)
+      const ds = d.toISOString().split('T')[0]
+      const rev = sparkRevMap.get(ds) ?? 0
+      const ord = sparkOrdMap.get(ds) ?? 0
+      revSparkline.push(rev)
+      ordSparkline.push(ord)
+      avgSparkline.push(ord > 0 ? Math.round(rev / ord) : 0)
+    }
+
+    // ── Per-branch trend data for line chart ────────────────────────
+    const trendByBranch = new Map<number, Map<string, number>>()
+    for (const s of trendSales) {
+      const d = s.createdAt.toISOString().split('T')[0]
+      if (!trendByBranch.has(s.branchId)) trendByBranch.set(s.branchId, new Map())
+      const m = trendByBranch.get(s.branchId)!
+      m.set(d, (m.get(d) ?? 0) + Number(s.totalAmount))
+    }
+    const branchTrends = branches.map(b => ({
+      branchId: b.id,
+      branchName: b.name,
+      data: allDates.map(d => ({ date: d, amount: trendByBranch.get(b.id)?.get(d) ?? 0 })),
+    }))
+
+    // ── KPIs ────────────────────────────────────────────────────────
+    const totalRevenue = Number(currentAgg._sum.totalAmount ?? 0)
+    const prevRevenue = Number(prevAgg._sum.totalAmount ?? 0)
+    const totalOrders = currentAgg._count.id ?? 0
+    const prevOrders = prevAgg._count.id ?? 0
+    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0
+    const prevAvgOrderValue = prevOrders > 0 ? prevRevenue / prevOrders : 0
+
+    const pctChange = (curr: number, prev: number): number | null => {
+      if (prev === 0) return null
+      return Math.round(((curr - prev) / prev) * 1000) / 10
+    }
+
+    let topBranch: { name: string; revenue: number } | null = null
+    for (const [bId, row] of branchCurrMap.entries()) {
+      const rev = Number(row._sum.totalAmount ?? 0)
+      const b = branches.find(x => x.id === bId)
+      if (b && (!topBranch || rev > topBranch.revenue)) topBranch = { name: b.name, revenue: rev }
+    }
+
+    // ── Branch comparison table ─────────────────────────────────────
+    const hoursElapsedToday = Math.min((Date.now() - todayStart.getTime()) / (1000 * 60 * 60), 24)
+    const branchTable = branches.map(b => {
+      const curr = branchCurrMap.get(b.id)
+      const prev = branchPrevMap.get(b.id)
+      const hist = histMap.get(b.id)
+      const today = todayMap.get(b.id)
+      const revenue = Number(curr?._sum.totalAmount ?? 0)
+      const orders = curr?._count.id ?? 0
+      const prevRev = Number(prev?._sum.totalAmount ?? 0)
+      const avgOrder = orders > 0 ? revenue / orders : 0
+      const avgDailyRevenue = hist ? Number(hist._sum.totalAmount ?? 0) / 30 : 0
+      const expectedByNow = avgDailyRevenue * (hoursElapsedToday / 24)
+      const todayRevenue = Number(today?._sum.totalAmount ?? 0)
+
+      let status: 'ACTIVE' | 'AT_RISK' | 'BELOW_TARGET' = 'ACTIVE'
+      if (expectedByNow > 0) {
+        if (todayRevenue < expectedByNow * 0.35) status = 'BELOW_TARGET'
+        else if (todayRevenue < expectedByNow * 0.70) status = 'AT_RISK'
+      }
+
+      return { branchId: b.id, branchName: b.name, location: b.location ?? '', orders, revenue, avgOrder, vsLastPeriod: pctChange(revenue, prevRev), status }
+    })
+
+    // ── Alerts (data-derived thresholds) ───────────────────────────
+    const alerts: Array<{ type: 'danger' | 'warning' | 'info'; message: string }> = []
+    for (const branch of branches) {
+      const hist = histMap.get(branch.id)
+      const todayData = todayMap.get(branch.id)
+      const avgDailyRevenue = hist ? Number(hist._sum.totalAmount ?? 0) / 30 : 0
+      const avgDailyOrders = hist ? (hist._count.id ?? 0) / 30 : 0
+      const todayRevenue = Number(todayData?._sum.totalAmount ?? 0)
+      const expectedByNow = avgDailyRevenue * (hoursElapsedToday / 24)
+
+      if (expectedByNow > 0 && todayRevenue < expectedByNow * 0.5) {
+        const pct = Math.round((1 - todayRevenue / expectedByNow) * 100)
+        alerts.push({ type: 'danger', message: `${branch.name} is ${pct}% below today's target` })
+      }
+
+      const avg2hOrders = avgDailyOrders / 12
+      const recent2h = recentHourMap.get(branch.id) ?? 0
+      if (avg2hOrders > 0 && recent2h >= avg2hOrders * 3) {
+        const multiple = Math.round(recent2h / avg2hOrders)
+        alerts.push({ type: 'info', message: `${branch.name}: ${multiple}x normal volume in last 2 hours` })
+      }
+
+      const lastAt = lastSaleMap.get(branch.id)
+      if (lastAt) {
+        const hoursAgo = Math.floor((Date.now() - new Date(lastAt).getTime()) / (1000 * 60 * 60))
+        if (hoursAgo >= 4) alerts.push({ type: 'warning', message: `${branch.name}: no orders in ${hoursAgo} hours` })
+      }
+    }
+
+    res.json({
+      dateRange: { startDate: startDate.toISOString(), endDate: endDate.toISOString(), preset: (req.query.preset as string) ?? 'custom' },
+      kpis: {
+        totalRevenue: { value: totalRevenue, prevValue: prevRevenue, change: pctChange(totalRevenue, prevRevenue), sparkline: revSparkline },
+        totalOrders: { value: totalOrders, prevValue: prevOrders, change: pctChange(totalOrders, prevOrders), sparkline: ordSparkline },
+        avgOrderValue: { value: avgOrderValue, prevValue: prevAvgOrderValue, change: pctChange(avgOrderValue, prevAvgOrderValue), sparkline: avgSparkline },
+        topBranch,
+      },
+      branchTable,
+      branchTrends,
+      recentTransactions: recentSales.map(s => ({
+        id: s.id,
+        saleNumber: s.saleNumber,
+        amount: Number(s.totalAmount),
+        status: s.status,
+        createdAt: s.createdAt.toISOString(),
+        branchName: s.branch.name,
+        branchId: s.branchId,
+      })),
+      alerts,
+    })
+  } catch (error: any) {
+    console.error('[Executive Dashboard Error]:', error)
+    res.status(500).json({ error: 'Failed to fetch executive dashboard' })
+  }
+}
+
 export const getDetailedInventory = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = Number(req.params.organizationId);

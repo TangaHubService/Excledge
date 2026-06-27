@@ -38,7 +38,7 @@ export class TaxService {
         }
     }
 
-    /** RRA spec: TAX_A=0%, TAX_B=18%, TAX_C=0%, TAX_D=0% */
+    /** RRA spec: TAX_A=0% (exempt), TAX_B=18% (standard VAT), TAX_C=0% (zero-rated), TAX_D=0% (non-taxable), TAX_E=0% (tourism/export) */
     static getExpectedTaxRate(taxCode: RraTaxCode): number {
         switch (taxCode) {
             case RraTaxCode.B:
@@ -46,6 +46,7 @@ export class TaxService {
             case RraTaxCode.A:
             case RraTaxCode.C:
             case RraTaxCode.D:
+            case RraTaxCode.E:
             default:
                 return 0;
         }
@@ -53,7 +54,7 @@ export class TaxService {
 
     /** Allowed tax codes for line items */
     static readonly ALLOWED_TAX_CODES: ReadonlySet<RraTaxCode> = new Set([
-        RraTaxCode.A, RraTaxCode.B, RraTaxCode.C, RraTaxCode.D,
+        RraTaxCode.A, RraTaxCode.B, RraTaxCode.C, RraTaxCode.D, RraTaxCode.E,
     ]);
 
     static validateTaxRate(taxCode: RraTaxCode, taxRate: number): { valid: boolean; expectedRate: number } {
