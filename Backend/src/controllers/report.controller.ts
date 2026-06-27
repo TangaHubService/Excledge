@@ -1287,3 +1287,120 @@ export const getProfitReportController = async (req: BranchAuthRequest, res: Res
     res.status(500).json({ error: error.message || 'Failed to generate profit report' });
   }
 };
+
+// ──────────────────────────────────────────────
+// C9: X / Z Daily Report (RRA CIS/VSDC spec §6)
+// X = interim totals since last Z-report (does NOT reset counters)
+// Z = end-of-day legal record (resets daily counters)
+// ──────────────────────────────────────────────
+
+const TAX_CODES = ['A', 'B', 'C', 'D', 'E'] as const;
+
+function fix2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+export const getDailyReport = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const reportType = (req.query.type as string ?? 'X').toUpperCase();
+    const { date, branchId: branchParam } = req.query;
+
+    if (reportType !== 'X' && reportType !== 'Z') {
+      return res.status(400).json(apiError('type must be X or Z'));
+    }
+
+    const reportDate = date ? new Date(date as string) : new Date();
+    const dayStart = new Date(reportDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(reportDate);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const branchFilter: any = {};
+    if (branchParam) {
+      branchFilter.branchId = parseInt(branchParam as string);
+    } else {
+      const bFilter = buildBranchFilter(req);
+      if (Object.keys(bFilter).length) Object.assign(branchFilter, bFilter);
+    }
+
+    // Fetch all completed/refunded sales for the day
+    const sales = await prisma.sale.findMany({
+      where: {
+        organizationId,
+        ...branchFilter,
+        createdAt: { gte: dayStart, lte: dayEnd },
+        status: { in: ['COMPLETED', 'REFUNDED'] },
+      },
+      include: {
+        saleItems: { select: { taxCode: true, taxAmount: true, totalPrice: true, quantity: true } },
+        ebmTransactions: {
+          where: { submissionStatus: 'SUCCESS' },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Split into NS/NR buckets
+    const normalSales   = sales.filter(s => s.status === 'COMPLETED' && s.rcptLabel !== 'TR' && s.rcptLabel !== 'TS');
+    const normalRefunds = sales.filter(s => s.status === 'REFUNDED'  && s.rcptLabel !== 'TR' && s.rcptLabel !== 'TS');
+
+    // Per-tax-band totals
+    const taxBands: Record<string, { taxableAmt: number; taxAmt: number; salesAmt: number }> = {};
+    for (const code of TAX_CODES) {
+      taxBands[code] = { taxableAmt: 0, taxAmt: 0, salesAmt: 0 };
+    }
+
+    for (const sale of normalSales) {
+      for (const si of sale.saleItems) {
+        const code = (si.taxCode ?? 'A').toUpperCase();
+        if (!taxBands[code]) taxBands[code] = { taxableAmt: 0, taxAmt: 0, salesAmt: 0 };
+        const total = Number(si.totalPrice);
+        const tax   = Number(si.taxAmount);
+        taxBands[code].taxAmt    = fix2(taxBands[code].taxAmt    + tax);
+        taxBands[code].taxableAmt= fix2(taxBands[code].taxableAmt+ (total - tax));
+        taxBands[code].salesAmt  = fix2(taxBands[code].salesAmt  + total);
+      }
+    }
+
+    // Payment breakdown
+    const paymentTotals: Record<string, number> = {};
+    for (const sale of normalSales) {
+      const pt = sale.paymentType;
+      paymentTotals[pt] = fix2((paymentTotals[pt] ?? 0) + Number(sale.totalAmount));
+    }
+
+    const grossSalesAmt  = fix2(normalSales.reduce((s, sale) => s + Number(sale.totalAmount), 0));
+    const grossRefundAmt = fix2(normalRefunds.reduce((s, sale) => s + Math.abs(Number(sale.totalAmount)), 0));
+    const netSalesAmt    = fix2(grossSalesAmt - grossRefundAmt);
+    const totalTaxAmt    = fix2(Object.values(taxBands).reduce((s, b) => s + b.taxAmt, 0));
+
+    const report = {
+      reportType,
+      reportDate: reportDate.toISOString().split('T')[0],
+      organizationId,
+      branchId: branchParam ? parseInt(branchParam as string) : null,
+      periodStart: dayStart.toISOString(),
+      periodEnd:   dayEnd.toISOString(),
+      generatedAt: new Date().toISOString(),
+      summary: {
+        normalSalesCount:   normalSales.length,
+        normalRefundsCount: normalRefunds.length,
+        grossSalesAmt,
+        grossRefundAmt,
+        netSalesAmt,
+        totalTaxAmt,
+      },
+      taxBands,
+      paymentBreakdown: paymentTotals,
+      fiscalizedCount: sales.filter(s => (s as any).ebmTransactions?.length > 0).length,
+    };
+
+    res.json(success(report));
+  } catch (error: any) {
+    console.error('[Daily Report Error]:', error);
+    res.status(500).json(apiError('Failed to generate daily report'));
+  }
+};

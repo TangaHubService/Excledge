@@ -6,11 +6,13 @@ import {
   payDebt,
   refundSale,
   cancelSale,
-  reprintSaleReceipt
+  reprintSaleReceipt,
+  getEbmReceipt,
 } from "../controllers/sales.controller";
 import { authenticate, authorize } from "../middleware/auth.middleware";
 import { branchAuth } from "../middleware/branchAuth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
+import { vsdcOnlineGuard } from "../middleware/vsdc-offline-guard.middleware";
 import { validate } from "../middleware/validate.middleware";
 import { createSaleSchema, cancelSaleSchema } from "../validations/sales.validation";
 
@@ -18,13 +20,14 @@ const router = Router();
 
 const orgAccess = requireOrganizationAccess();
 
-// Create a new sale
+// Create a new sale (vsdcOnlineGuard blocks if VSDC unreachable > 24h, per RRA requirement)
 router.post(
   "/:organizationId",
   authenticate,
   orgAccess,
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  vsdcOnlineGuard,
   validate(createSaleSchema),
   createSale
 );
@@ -88,6 +91,16 @@ router.post(
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   reprintSaleReceipt
+);
+
+// E3: Get EBM/SDC fiscal data for a sale (polls after outbox worker runs)
+router.get(
+  "/:organizationId/:saleId/ebm-receipt",
+  authenticate,
+  orgAccess,
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  getEbmReceipt
 );
 
 export default router;

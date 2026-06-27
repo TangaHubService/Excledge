@@ -7,6 +7,7 @@ export type SaleWithRelations = {
   id: number;
   saleNumber: string;
   invoiceNumber: string | null;
+  rcptLabel: string | null;
   createdAt: Date;
   status?: string;
   paymentType: string;
@@ -17,7 +18,7 @@ export type SaleWithRelations = {
   taxableAmount: Decimal;
   vatAmount: Decimal;
   branchId: number;
-  branch: { id: number; name: string; code: string } | null;
+  branch: { id: number; name: string; code: string; bhfId: string | null; ebmDeviceId: string | null; ebmSerialNo: string | null } | null;
   customer: {
     name: string;
     phone: string;
@@ -26,14 +27,16 @@ export type SaleWithRelations = {
     email: string | null;
   };
   saleItems: Array<{
-    productId: number;
+    productId: number | null;
     quantity: number;
     unitPrice: Decimal;
     totalPrice: Decimal;
     taxRate: Decimal;
     taxAmount: Decimal;
     taxCode: string | null;
-    product: { name: string };
+    dcRate: Decimal;
+    dcAmt: Decimal;
+    product: { name: string; itemCd: string | null; itemClsCd: string | null; pkgUnitCd: string | null; qtyUnitCd: string | null } | null;
   }>;
 };
 
@@ -169,11 +172,11 @@ function isMissingDatabaseObjectError(error: unknown, objectName: string): boole
   );
 }
 
-async function nextInvoiceSequenceFromCounterTable(organizationId: number): Promise<number> {
+async function nextInvoiceSequenceFromCounterTable(organizationId: number, branchId: number): Promise<number> {
   const rows = await prisma.$queryRaw<Array<{ nextSequence: number }>>`
-    INSERT INTO "organization_invoice_counters" ("organizationId", "nextSequence", "updatedAt")
-    VALUES (${organizationId}, 1, NOW())
-    ON CONFLICT ("organizationId") DO UPDATE
+    INSERT INTO "organization_invoice_counters" ("organizationId", "branchId", "nextSequence", "updatedAt")
+    VALUES (${organizationId}, ${branchId}, 1, NOW())
+    ON CONFLICT ("organizationId", "branchId") DO UPDATE
     SET "nextSequence" = "organization_invoice_counters"."nextSequence" + 1,
         "updatedAt" = NOW()
     RETURNING "nextSequence"
@@ -190,9 +193,9 @@ async function nextInvoiceSequenceFromLegacySequence(): Promise<number> {
   return Number(rows[0]?.nextSequence ?? 0);
 }
 
-async function allocateNextInvoiceSequence(organizationId: number): Promise<number> {
+async function allocateNextInvoiceSequence(organizationId: number, branchId: number): Promise<number> {
   if (invoiceSequenceMode === 'per_org') {
-    return nextInvoiceSequenceFromCounterTable(organizationId);
+    return nextInvoiceSequenceFromCounterTable(organizationId, branchId);
   }
 
   if (invoiceSequenceMode === 'legacy_sequence') {
@@ -200,7 +203,7 @@ async function allocateNextInvoiceSequence(organizationId: number): Promise<numb
   }
 
   try {
-    const sequence = await nextInvoiceSequenceFromCounterTable(organizationId);
+    const sequence = await nextInvoiceSequenceFromCounterTable(organizationId, branchId);
     invoiceSequenceMode = 'per_org';
     return sequence;
   } catch (error) {
@@ -216,7 +219,7 @@ async function allocateNextInvoiceSequence(organizationId: number): Promise<numb
     if (!loggedLegacyInvoiceFallback) {
       loggedLegacyInvoiceFallback = true;
       console.warn(
-        '[EBM] Falling back to legacy invoice_seq because organization_invoice_counters is missing. Apply the latest Prisma migrations to enable per-organization invoice counters.'
+        '[EBM] Falling back to legacy invoice_seq because organization_invoice_counters is missing. Apply the latest Prisma migrations to enable per-branch invoice counters.'
       );
     }
 
@@ -274,78 +277,136 @@ export async function postToGateway(
   }
 }
 
-export function buildSaleGatewayPayload(sale: SaleWithRelations, org: { TIN: string | null; ebmDeviceId: string | null; ebmSerialNo: string | null; name: string }) {
-  return <{
-    environment: string;
-    operation: string;
-    idempotencyKey?: string;
-    seller: { tin: string | null; deviceId: string | null; serialNo: string | null; name: string };
-    branch: { id: number; code: string; name: string } | null;
-    invoice: {
-      internalNumber: string | null;
-      saleId: number;
-      saleNumber: string;
-      issuedAt: string;
-      customer: { name: string; phone: string; email: string | null; tin: string | null; customerType: string };
-      payment: { type: string; cashAmount: number; debtAmount: number; insuranceAmount: number };
-      totals: { totalAmount: number; taxableAmount: number; vatAmount: number };
-      lines: Array<{
-        productName: string; productId: number; quantity: number;
-        unitPrice: number; totalPrice: number; taxCode: string | null;
-        taxRate: number; taxAmount: number;
-      }>;
+// ──────────────────────────────────────────────
+// C4: RRA-canonical date/amount helpers (CIS/VSDC spec §3.2)
+// ──────────────────────────────────────────────
+
+export function toRraDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}${m}${day}`;
+}
+
+export function toRraTime(d: Date): string {
+  return [
+    String(d.getHours()).padStart(2, '0'),
+    String(d.getMinutes()).padStart(2, '0'),
+    String(d.getSeconds()).padStart(2, '0'),
+  ].join('');
+}
+
+export function toRraDateTime(d: Date): string {
+  return `${toRraDate(d)}${toRraTime(d)}`;
+}
+
+export function fix2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function rcptLabelToRra(label: string | null): { rcptTyCd: string } {
+  switch (label) {
+    case 'NR': return { rcptTyCd: 'R' };
+    case 'CS': return { rcptTyCd: 'CS' };
+    case 'CR': return { rcptTyCd: 'CR' };
+    case 'TS': return { rcptTyCd: 'TS' };
+    case 'TR': return { rcptTyCd: 'TR' };
+    case 'PS': return { rcptTyCd: 'P' };
+    default:   return { rcptTyCd: 'S' }; // NS = Normal Sale
+  }
+}
+
+function pmtTypeCd(paymentType: string): string {
+  switch (paymentType) {
+    case 'CASH':         return '01';
+    case 'CREDIT_CARD':  return '02';
+    case 'MOBILE_MONEY': return '04';
+    case 'INSURANCE':    return '05';
+    default:             return '03'; // bank / other
+  }
+}
+
+/**
+ * C4: Build the RRA ALGO EBM API v8.2 /saveInvc payload.
+ * Replaces the old buildSaleGatewayPayload which used wrong field names, ISO dates, and no tax slots.
+ */
+export function buildRraSendReceiptPayload(
+  sale: SaleWithRelations,
+  _org: { TIN: string | null; ebmDeviceId: string | null; ebmSerialNo: string | null; name: string },
+): Record<string, unknown> {
+  const { rcptTyCd } = rcptLabelToRra(sale.rcptLabel);
+
+  // Per-tax-code accumulators: slot 1=A(exempt), 2=B(VAT18%), 3=C(zero-rated), 4=D(non-taxable)
+  const taxblAmt: [number, number, number, number] = [0, 0, 0, 0];
+  const taxAmt:   [number, number, number, number] = [0, 0, 0, 0];
+  const codeToSlot: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
+
+  const itemList = sale.saleItems.map((si, idx) => {
+    const slot = codeToSlot[(si.taxCode ?? 'A').toUpperCase()] ?? 0;
+    const tAmt = fix2(si.taxAmount.toNumber());
+    const tbAmt = fix2(si.totalPrice.toNumber() - tAmt);
+    taxblAmt[slot] = fix2(taxblAmt[slot] + tbAmt);
+    taxAmt[slot]   = fix2(taxAmt[slot] + tAmt);
+
+    return {
+      itemSeq:    idx + 1,
+      itemCd:     si.product?.itemCd ?? `P${si.productId ?? idx + 1}`,
+      itemClsCd:  si.product?.itemClsCd ?? '5020230302',
+      itemNm:     si.product?.name ?? 'Item',
+      orgnNatCd:  'RW',
+      pkg:        si.quantity,
+      pkgUnitCd:  si.product?.pkgUnitCd ?? 'CT',
+      qty:        si.quantity,
+      qtyUnitCd:  si.product?.qtyUnitCd ?? 'U',
+      prc:        fix2(si.unitPrice.toNumber()),
+      splyAmt:    fix2(tbAmt),
+      dcRt:       fix2(si.dcRate.toNumber()),
+      dcAmt:      fix2(si.dcAmt.toNumber()),
+      taxTyCd:    (si.taxCode ?? 'A').toUpperCase(),
+      taxblAmt:   fix2(tbAmt),
+      taxAmt:     fix2(tAmt),
+      totAmt:     fix2(si.totalPrice.toNumber()),
     };
-  }>{
-    environment: config.ebm.environment,
-    operation: 'SALE',
-    seller: {
-      tin: org.TIN ?? null,
-      deviceId: org.ebmDeviceId ?? null,
-      serialNo: org.ebmSerialNo ?? null,
-      name: org.name,
-    },
-    branch: sale.branch
-      ? {
-          id: sale.branch.id,
-          code: sale.branch.code,
-          name: sale.branch.name,
-        }
-      : null,
-    invoice: {
-      internalNumber: sale.invoiceNumber,
-      saleId: sale.id,
-      saleNumber: sale.saleNumber,
-      issuedAt: sale.createdAt.toISOString(),
-      customer: {
-        name: sale.customer.name,
-        phone: sale.customer.phone,
-        email: sale.customer.email ?? null,
-        tin: sale.customer.TIN ?? null,
-        customerType: sale.customer.customerType,
-      },
-      payment: {
-        type: sale.paymentType,
-        cashAmount: sale.cashAmount.toNumber(),
-        debtAmount: sale.debtAmount.toNumber(),
-        insuranceAmount: sale.insuranceAmount.toNumber(),
-      },
-      totals: {
-        totalAmount: sale.totalAmount.toNumber(),
-        taxableAmount: sale.taxableAmount.toNumber(),
-        vatAmount: sale.vatAmount.toNumber(),
-      },
-      lines: sale.saleItems.map((si) => ({
-        productName: si.product.name,
-        productId: si.productId,
-        quantity: si.quantity,
-        unitPrice: si.unitPrice.toNumber(),
-        totalPrice: si.totalPrice.toNumber(),
-        taxCode: si.taxCode,
-        taxRate: si.taxRate.toNumber(),
-        taxAmount: si.taxAmount.toNumber(),
-      })),
-    },
+  });
+
+  const totTaxAmt   = fix2(taxAmt.reduce((s, v) => s + v, 0));
+  const totTaxblAmt = fix2(taxblAmt.reduce((s, v) => s + v, 0));
+  const totAmt      = fix2(sale.totalAmount.toNumber());
+  const now         = sale.createdAt;
+
+  return {
+    invcNo:      sale.invoiceNumber ?? sale.saleNumber,
+    orgInvcNo:   0,
+    custTin:     sale.customer.TIN ?? '',
+    custMblNo:   sale.customer.phone ?? '',
+    remark:      '',
+    rcptTyCd,
+    pmtTyCd:     pmtTypeCd(sale.paymentType),
+    salesDt:     toRraDate(now),
+    stockRlsDt:  toRraDateTime(now),
+    totItemCnt:  itemList.length,
+    taxblAmt1:   taxblAmt[0],
+    taxblAmt2:   taxblAmt[1],
+    taxblAmt3:   taxblAmt[2],
+    taxblAmt4:   taxblAmt[3],
+    taxAmt1:     taxAmt[0],
+    taxAmt2:     taxAmt[1],
+    taxAmt3:     taxAmt[2],
+    taxAmt4:     taxAmt[3],
+    totTaxblAmt,
+    totTaxAmt,
+    totAmt,
+    prchrAcptcYn: 'N',
+    itemList,
   };
+}
+
+/** @deprecated Use buildRraSendReceiptPayload instead. */
+export function buildSaleGatewayPayload(
+  sale: SaleWithRelations,
+  org: { TIN: string | null; ebmDeviceId: string | null; ebmSerialNo: string | null; name: string },
+): Record<string, unknown> {
+  return buildRraSendReceiptPayload(sale, org);
 }
 
 async function enqueueSaleRetry(params: {
@@ -374,10 +435,11 @@ async function enqueueSaleRetry(params: {
 }
 
 /**
- * Atomically allocate next invoice sequence for an organization (PostgreSQL upsert).
+ * Atomically allocate next invoice sequence for a branch (PostgreSQL upsert).
+ * RRA requires per-branch (per-device) sequences, not per-organization.
  */
-export async function generateInvoiceNumber(organizationId: number): Promise<string> {
-  const sequence = (await allocateNextInvoiceSequence(organizationId))
+export async function generateInvoiceNumber(organizationId: number, branchId: number): Promise<string> {
+  const sequence = (await allocateNextInvoiceSequence(organizationId, branchId))
     .toString()
     .padStart(6, '0');
 
@@ -410,7 +472,11 @@ export async function submitInvoiceToEbm(params: {
   const sale = (await prisma.sale.findFirst({
     where: { id: params.saleId, organizationId: params.organizationId },
     include: {
-      saleItems: { include: { product: true } },
+      saleItems: {
+        include: {
+          product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true } },
+        },
+      },
       customer: true,
       branch: true,
     },
@@ -468,7 +534,7 @@ export async function submitInvoiceToEbm(params: {
     return { success: false, error: 'Organization not found' };
   }
 
-  const payload = buildSaleGatewayPayload(sale, org);
+  const payload = buildRraSendReceiptPayload(sale, org);
 
   let txRow = await prisma.ebmTransaction.findFirst({
     where: {

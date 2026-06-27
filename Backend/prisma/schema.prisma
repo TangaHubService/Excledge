@@ -10,10 +10,11 @@ datasource db {
 model Organization {
   name              String
   businessType      BusinessType             @default(PHARMACY)
-  TIN               String?
+  TIN               String?      // 9-digit RRA Tax Identification Number
+  VRN               String?      // VAT Registration Number (for VAT-registered orgs)
   currency          String?
-  ebmDeviceId       String?
-  ebmSerialNo       String?
+  ebmDeviceId       String?      // Legacy: org-level fallback (use Branch.ebmDeviceId per branch)
+  ebmSerialNo       String?      // Legacy: org-level fallback (use Branch.ebmSerialNo per branch)
   avatar            String?
   address           String?
   phone             String?
@@ -48,7 +49,7 @@ model Organization {
   branches          Branch[]                 // NEW: Branch management
   taxConfigurations TaxConfiguration[]
   stockTransfers    StockTransfer[]
-  invoiceCounter              OrganizationInvoiceCounter?
+  invoiceCounters             OrganizationInvoiceCounter[]
   lastSyncCursor              DateTime?                   @map("last_sync_cursor")
   lastSuccessfulVdsContact    DateTime?                   @map("last_successful_vds_contact")
 
@@ -60,15 +61,21 @@ model Branch {
   id             Int          @id @default(autoincrement())
   organizationId Int
   name           String
-  code           String       // e.g., "NYC-001", "MAIN", "KIGALI-01"
+  code           String       // internal code e.g., "KIGALI-01"
+  // RRA/EBM per-branch device credentials (each branch has its own VSDC device)
+  bhfId          String?      // RRA-assigned branch code, e.g. "00", "01"
+  ebmDeviceId    String?      // VSDC device ID issued per branch by RRA
+  ebmSerialNo    String?      // VSDC device serial number issued per branch by RRA
+  vsdcUrl        String?      // Per-branch VSDC endpoint URL (B3)
   location       String?
   address        String?
+  addressLine2   String?      // Second address line (B3)
   phone          String?
   status         BranchStatus @default(ACTIVE)
   metadata       Json?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
-  
+
   // Relations
   organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userBranches      UserBranch[]
@@ -80,10 +87,13 @@ model Branch {
   activityLogs      ActivityLog[]
   batches           Batch[]
   inventoryLedgers  InventoryLedger[]
-  transfersFrom     StockTransfer[]     @relation("TransferFrom")
-  transfersTo       StockTransfer[]     @relation("TransferTo")
-  purchaseOrders    PurchaseOrder[]
-  
+  transfersFrom       StockTransfer[]          @relation("TransferFrom")
+  transfersTo         StockTransfer[]          @relation("TransferTo")
+  purchaseOrders      PurchaseOrder[]
+  invoiceCounters     OrganizationInvoiceCounter[]
+  receiptCounters     BranchReceiptCounter[]
+
+  @@unique([organizationId, bhfId])
   @@unique([organizationId, code])
   @@index([organizationId])
   @@index([status])
@@ -373,6 +383,11 @@ model Product {
   organizationId     Int
   supplierId         Int?
   isActive           Boolean              @default(true)
+  // RRA item classification fields (B2)
+  itemClsCd          String?              // RRA item classification code (e.g. "5020230302")
+  itemCd             String?              // Unique item code registered with RRA
+  pkgUnitCd          String?              // Packaging unit code (e.g. "CT", "BT")
+  qtyUnitCd          String?              // Quantity unit code (e.g. "U", "KG")
   batches            Batch[]
   inventoryLedgers   InventoryLedger[]
   organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -468,6 +483,7 @@ model Sale {
   invoiceNumber      String?          @unique @map("invoice_number")
   vatAmount          Decimal          @default(0)   @db.Decimal(10, 2)
   taxableAmount      Decimal          @default(0)   @db.Decimal(10, 2)
+  rcptLabel          RcptLabel?       // RRA receipt type label (B4): NS/NR/CS/CR/TS/TR/PS
   debtPayments       DebtPayment[]
   ebmQueueItems      EbmQueue[]       @relation("SaleEbmQueue")
   ebmTransactions    EbmTransaction[] @relation("SaleEbmTransactions")
@@ -530,6 +546,8 @@ model SaleItem {
   taxCode            RraTaxCode?
   measurementUnit    MeasurementUnit   @default(PCS)
   exemptionReference String?
+  dcRate             Decimal           @default(0) @db.Decimal(5, 2)  // Discount rate % (B5)
+  dcAmt              Decimal           @default(0) @db.Decimal(10, 2) // Discount amount (B5)
   itemType           ItemType          @default(PRODUCT)
   serviceName        String?
   serviceDescription String?
@@ -744,13 +762,28 @@ model StockTransferItem {
   @@map("stock_transfer_items")
 }
 
-/// Per-organization atomic sequence for internal invoice numbers (EBM/VSDC readiness).
+/// Per-branch, per-receipt-type atomic counter (RRA spec §3.2 — each label has its own sequence).
+model BranchReceiptCounter {
+  branchId   Int
+  rcptLabel  RcptLabel
+  nextSeq    Int       @default(0)
+  updatedAt  DateTime  @updatedAt
+  branch     Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@id([branchId, rcptLabel])
+  @@map("branch_receipt_counters")
+}
+
+/// Per-branch atomic sequence for internal invoice numbers (RRA requires per-device sequences).
 model OrganizationInvoiceCounter {
-  organizationId Int          @id
+  organizationId Int
+  branchId       Int
   nextSequence   Int          @default(0)
   updatedAt      DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
+  @@id([organizationId, branchId])
   @@map("organization_invoice_counters")
 }
 
@@ -771,6 +804,14 @@ model EbmTransaction {
   retryCount               Int                 @default(0)
   createdAt                DateTime            @default(now())
   updatedAt                DateTime            @updatedAt
+  // RRA SDC response fields (B1)
+  sdcRcptNo                Int?
+  internalData             String?
+  receiptSignature         String?
+  qrPayload                String?
+  rcptLabel                RcptLabel?
+  ejSent                   Boolean             @default(false)
+  journalText              String?
   organization             Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   sale                     Sale?               @relation("SaleEbmTransactions", fields: [saleId], references: [id])
 
@@ -1193,6 +1234,17 @@ enum EbmOutboxStatus {
   SUCCEEDED
   FAILED
   DEAD_LETTER
+}
+
+// RRA receipt type labels (CIS/VSDC spec §3.2)
+enum RcptLabel {
+  NS  // Normal Sale
+  NR  // Normal Refund
+  CS  // Copy Sale
+  CR  // Copy Refund
+  TS  // Training Sale
+  TR  // Training Refund
+  PS  // Proforma Sale
 }
 
 enum ItemType {

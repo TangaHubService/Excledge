@@ -15,9 +15,15 @@ export interface UpdateBranchParams {
   name?: string;
   location?: string;
   address?: string;
+  addressLine2?: string;
   phone?: string;
   status?: BranchStatus;
   metadata?: any;
+  // C10: RRA EBM device credentials
+  bhfId?: string;
+  ebmDeviceId?: string;
+  ebmSerialNo?: string;
+  vsdcUrl?: string;
 }
 
 /**
