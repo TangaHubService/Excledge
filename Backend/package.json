@@ -23,7 +23,7 @@
     "prisma:seed": "npx prisma db seed"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "node --max-old-space-size=4096 node_modules/.bin/tsx prisma/seed.ts"
   },
   "dependencies": {
     "@kazion/dpopay-sdk": "^4.0.20",
