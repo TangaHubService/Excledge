@@ -160,7 +160,7 @@ export function SalesTrendChart({ trends, currency = 'RWF' }: Props) {
             )
           })}
           {/* Peak dots rendered after lines so they appear on top */}
-          {peakPoints.map((peak, i) => {
+          {peakPoints.map((peak, _i) => {
             if (hidden.has(peak.branchId)) return null
             const tIdx = trends.findIndex(t => t.branchId === peak.branchId)
             const color = COLORS[tIdx % COLORS.length]

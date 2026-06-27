@@ -1,5 +1,5 @@
 -- Add branchId to purchase_orders table
-ALTER TABLE "purchase_orders" ADD COLUMN "branchId" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "branchId" INTEGER NOT NULL DEFAULT 1;
 
 -- Add foreign key constraint
 ALTER TABLE "purchase_orders" ADD CONSTRAINT "purchase_orders_branchId_fkey"
@@ -12,6 +12,9 @@ CREATE INDEX IF NOT EXISTS "purchase_orders_branchId_idx" ON "purchase_orders"("
 -- PostgreSQL Row-Level Security (RLS) Policies
 -- Provides database-level branch data isolation as defense-in-depth.
 -- ────────────────────────────────────────────────────────────────────────────
+
+-- Ensure the app schema exists (required for custom session-variable helpers)
+CREATE SCHEMA IF NOT EXISTS app;
 
 -- Helper function to get the current branch ID from a custom session variable.
 -- The application sets `app.current_branch_id` at the start of each request.

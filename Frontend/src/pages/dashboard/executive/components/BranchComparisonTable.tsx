@@ -34,7 +34,7 @@ function VsLastPeriod({ value }: { value: number | null }) {
   )
 }
 
-function SortIcon({ col, active, dir }: { col: string; active: boolean; dir: SortDir }) {
+function SortIcon({ col: _col, active, dir }: { col: string; active: boolean; dir: SortDir }) {
   if (!active) return <ChevronsUpDown className="h-3 w-3 text-gray-300" />
   return dir === 'asc' ? <ChevronUp className="h-3 w-3 text-[#2563EB]" /> : <ChevronDown className="h-3 w-3 text-[#2563EB]" />
 }
