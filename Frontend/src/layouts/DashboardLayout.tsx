@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { Sidebar } from "../components/Sidebar";
 import { Header } from "../components/Header";
 import { SubscriptionAlert } from "../components/SubscriptionAlert";
@@ -91,6 +92,7 @@ export function DashboardLayout() {
           id="dashboard-main-content"
         >
           <div className="dashboard-main-padding min-h-full">
+            <Breadcrumbs />
             <Outlet />
           </div>
         </main>

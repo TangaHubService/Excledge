@@ -418,6 +418,19 @@ class ApiClient {
     return this.request(`/dashboard/branch-stats/${this.getOrganizationId()}${qs ? '?' + qs : ''}`)
   }
 
+  async getExecutiveDashboard(params: {
+    preset?: 'today' | 'weekly' | 'monthly'
+    startDate?: string
+    endDate?: string
+  }) {
+    const query = new URLSearchParams()
+    if (params.preset) query.set('preset', params.preset)
+    if (params.startDate) query.set('startDate', params.startDate)
+    if (params.endDate) query.set('endDate', params.endDate)
+    const qs = query.toString()
+    return this.request(`/dashboard/executive/${this.getOrganizationId()}${qs ? '?' + qs : ''}`)
+  }
+
   async getSalesTrend(days = "7") {
     return this.request(
       `/dashboard/sales-trend/${this.getOrganizationId()}?days=${days}`
@@ -1554,6 +1567,13 @@ class ApiClient {
   async getExpenses(params?: any) {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";
     return this.request(`/expenses/${this.getOrganizationId()}${query}`);
+  }
+
+  async updateExpense(id: string | number, data: any) {
+    return this.request(`/expenses/${this.getOrganizationId()}/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   async deleteExpense(id: string | number) {

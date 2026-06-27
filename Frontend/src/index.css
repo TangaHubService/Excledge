@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --accent: #2563eb;
+  --accent-50: #eff6ff;
+  --accent-100: #dbeafe;
+  --chrome-950: #0a1628;
+  --chrome-900: #0f2744;
+  --chrome-800: #1a365d;
+  --surface: #ffffff;
+  --surface-muted: #f8fafc;
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+}
+
 @layer base {
   html {
     @apply antialiased;
