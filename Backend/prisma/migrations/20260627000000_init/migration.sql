@@ -65,7 +65,7 @@ CREATE TYPE "ExpenseCategory" AS ENUM ('SALARIES_WAGES', 'RENT', 'UTILITIES', 'T
 CREATE TYPE "BranchStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED');
 
 -- CreateEnum
-CREATE TYPE "TaxCategory" AS ENUM ('STANDARD', 'ZERO_RATED', 'EXEMPT');
+CREATE TYPE "TaxCategory" AS ENUM ('STANDARD', 'ZERO_RATED', 'EXEMPT', 'NON_TAXABLE');
 
 -- CreateEnum
 CREATE TYPE "StockTransferStatus" AS ENUM ('PENDING', 'APPROVED', 'COMPLETED', 'REJECTED');
@@ -74,10 +74,19 @@ CREATE TYPE "StockTransferStatus" AS ENUM ('PENDING', 'APPROVED', 'COMPLETED', '
 CREATE TYPE "RraTaxCode" AS ENUM ('A', 'B', 'C', 'D', 'E');
 
 -- CreateEnum
+CREATE TYPE "EbmSyncStatus" AS ENUM ('PENDING', 'SYNCED', 'FAILED');
+
+-- CreateEnum
 CREATE TYPE "EbmOperation" AS ENUM ('SALE', 'REFUND', 'VOID');
 
 -- CreateEnum
 CREATE TYPE "EbmOutboxStatus" AS ENUM ('PENDING', 'PROCESSING', 'SUCCEEDED', 'FAILED', 'DEAD_LETTER');
+
+-- CreateEnum
+CREATE TYPE "RcptLabel" AS ENUM ('NS', 'NR', 'CS', 'CR', 'TS', 'TR', 'PS');
+
+-- CreateEnum
+CREATE TYPE "ItemType" AS ENUM ('PRODUCT', 'SERVICE');
 
 -- CreateEnum
 CREATE TYPE "MeasurementUnit" AS ENUM ('PCS', 'KG', 'LTR', 'MTR', 'BOX', 'PAIR', 'DOZEN', 'GRAM', 'ML', 'OTHER');
@@ -87,6 +96,7 @@ CREATE TABLE "organizations" (
     "name" TEXT NOT NULL,
     "businessType" "BusinessType" NOT NULL DEFAULT 'PHARMACY',
     "TIN" TEXT,
+    "VRN" TEXT,
     "currency" TEXT,
     "ebmDeviceId" TEXT,
     "ebmSerialNo" TEXT,
@@ -95,6 +105,7 @@ CREATE TABLE "organizations" (
     "phone" TEXT,
     "email" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "trainingMode" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "stripeCustomerId" TEXT,
@@ -111,8 +122,13 @@ CREATE TABLE "branches" (
     "organizationId" INTEGER NOT NULL,
     "name" TEXT NOT NULL,
     "code" TEXT NOT NULL,
+    "bhfId" TEXT,
+    "ebmDeviceId" TEXT,
+    "ebmSerialNo" TEXT,
+    "vsdcUrl" TEXT,
     "location" TEXT,
     "address" TEXT,
+    "addressLine2" TEXT,
     "phone" TEXT,
     "status" "BranchStatus" NOT NULL DEFAULT 'ACTIVE',
     "metadata" JSONB,
@@ -163,6 +179,7 @@ CREATE TABLE "purchase_orders" (
     "id" SERIAL NOT NULL,
     "supplierId" INTEGER NOT NULL,
     "organizationId" INTEGER NOT NULL,
+    "branchId" INTEGER NOT NULL,
     "userId" INTEGER NOT NULL,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
 
@@ -175,6 +192,8 @@ CREATE TABLE "purchase_order_items" (
     "quantity" INTEGER NOT NULL,
     "unitPrice" DECIMAL(10,2) NOT NULL,
     "totalPrice" DECIMAL(10,2) NOT NULL,
+    "taxCode" "RraTaxCode" DEFAULT 'A',
+    "taxRate" DECIMAL(5,2),
     "id" SERIAL NOT NULL,
     "purchaseOrderId" INTEGER NOT NULL,
     "productId" INTEGER,
@@ -233,6 +252,7 @@ CREATE TABLE "organization_invitations" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "id" SERIAL NOT NULL,
     "organizationId" INTEGER NOT NULL,
+    "branchId" INTEGER,
     "invitedBy" INTEGER NOT NULL,
     "invitedUserId" INTEGER,
 
@@ -320,7 +340,7 @@ CREATE TABLE "products" (
     "name" TEXT NOT NULL,
     "sku" TEXT,
     "batchNumber" TEXT,
-    "quantity" INTEGER NOT NULL,
+    "quantity" INTEGER NOT NULL DEFAULT 0,
     "unitPrice" DECIMAL(10,2) NOT NULL,
     "expiryDate" TIMESTAMP(3),
     "category" TEXT,
@@ -329,6 +349,9 @@ CREATE TABLE "products" (
     "taxCategory" "TaxCategory" NOT NULL DEFAULT 'STANDARD',
     "taxCode" "RraTaxCode",
     "measurementUnit" "MeasurementUnit" NOT NULL DEFAULT 'PCS',
+    "itemType" "ItemType" NOT NULL DEFAULT 'PRODUCT',
+    "ebmSyncStatus" "EbmSyncStatus" NOT NULL DEFAULT 'PENDING',
+    "ebmSyncedAt" TIMESTAMP(3),
     "barcode" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -338,6 +361,10 @@ CREATE TABLE "products" (
     "organizationId" INTEGER NOT NULL,
     "supplierId" INTEGER,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "itemClsCd" TEXT,
+    "itemCd" TEXT,
+    "pkgUnitCd" TEXT,
+    "qtyUnitCd" TEXT,
 
     CONSTRAINT "products_pkey" PRIMARY KEY ("id")
 );
@@ -405,6 +432,7 @@ CREATE TABLE "sales" (
     "invoice_number" TEXT,
     "vatAmount" DECIMAL(10,2) NOT NULL DEFAULT 0,
     "taxableAmount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+    "rcptLabel" "RcptLabel",
 
     CONSTRAINT "sales_pkey" PRIMARY KEY ("id")
 );
@@ -434,7 +462,7 @@ CREATE TABLE "activity_logs" (
 CREATE TABLE "sale_items" (
     "id" SERIAL NOT NULL,
     "saleId" INTEGER NOT NULL,
-    "productId" INTEGER NOT NULL,
+    "productId" INTEGER,
     "batchId" INTEGER,
     "quantity" INTEGER NOT NULL,
     "unitPrice" DECIMAL(10,2) NOT NULL,
@@ -446,6 +474,11 @@ CREATE TABLE "sale_items" (
     "taxCode" "RraTaxCode",
     "measurementUnit" "MeasurementUnit" NOT NULL DEFAULT 'PCS',
     "exemptionReference" TEXT,
+    "dcRate" DECIMAL(5,2) NOT NULL DEFAULT 0,
+    "dcAmt" DECIMAL(10,2) NOT NULL DEFAULT 0,
+    "itemType" "ItemType" NOT NULL DEFAULT 'PRODUCT',
+    "serviceName" TEXT,
+    "serviceDescription" TEXT,
 
     CONSTRAINT "sale_items_pkey" PRIMARY KEY ("id")
 );
@@ -596,12 +629,23 @@ CREATE TABLE "stock_transfer_items" (
 );
 
 -- CreateTable
+CREATE TABLE "branch_receipt_counters" (
+    "branchId" INTEGER NOT NULL,
+    "rcptLabel" "RcptLabel" NOT NULL,
+    "nextSeq" INTEGER NOT NULL DEFAULT 0,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "branch_receipt_counters_pkey" PRIMARY KEY ("branchId","rcptLabel")
+);
+
+-- CreateTable
 CREATE TABLE "organization_invoice_counters" (
     "organizationId" INTEGER NOT NULL,
+    "branchId" INTEGER NOT NULL,
     "nextSequence" INTEGER NOT NULL DEFAULT 0,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "organization_invoice_counters_pkey" PRIMARY KEY ("organizationId")
+    CONSTRAINT "organization_invoice_counters_pkey" PRIMARY KEY ("organizationId","branchId")
 );
 
 -- CreateTable
@@ -622,6 +666,13 @@ CREATE TABLE "ebm_transactions" (
     "retryCount" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "sdcRcptNo" INTEGER,
+    "internalData" TEXT,
+    "receiptSignature" TEXT,
+    "qrPayload" TEXT,
+    "rcptLabel" "RcptLabel",
+    "ejSent" BOOLEAN NOT NULL DEFAULT false,
+    "journalText" TEXT,
 
     CONSTRAINT "ebm_transactions_pkey" PRIMARY KEY ("id")
 );
@@ -730,6 +781,9 @@ CREATE INDEX "branches_status_idx" ON "branches"("status");
 CREATE INDEX "branches_organizationId_status_idx" ON "branches"("organizationId", "status");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "branches_organizationId_bhfId_key" ON "branches"("organizationId", "bhfId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "branches_organizationId_code_key" ON "branches"("organizationId", "code");
 
 -- CreateIndex
@@ -742,7 +796,28 @@ CREATE INDEX "user_branches_branchId_idx" ON "user_branches"("branchId");
 CREATE UNIQUE INDEX "user_branches_userId_branchId_key" ON "user_branches"("userId", "branchId");
 
 -- CreateIndex
+CREATE INDEX "suppliers_organizationId_idx" ON "suppliers"("organizationId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "purchase_orders_orderNumber_key" ON "purchase_orders"("orderNumber");
+
+-- CreateIndex
+CREATE INDEX "purchase_orders_organizationId_idx" ON "purchase_orders"("organizationId");
+
+-- CreateIndex
+CREATE INDEX "purchase_orders_branchId_idx" ON "purchase_orders"("branchId");
+
+-- CreateIndex
+CREATE INDEX "purchase_orders_supplierId_idx" ON "purchase_orders"("supplierId");
+
+-- CreateIndex
+CREATE INDEX "purchase_orders_userId_idx" ON "purchase_orders"("userId");
+
+-- CreateIndex
+CREATE INDEX "purchase_order_items_purchaseOrderId_idx" ON "purchase_order_items"("purchaseOrderId");
+
+-- CreateIndex
+CREATE INDEX "purchase_order_items_productId_idx" ON "purchase_order_items"("productId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
@@ -757,10 +832,25 @@ CREATE INDEX "users_passwordResetToken_idx" ON "users"("passwordResetToken");
 CREATE INDEX "users_refreshToken_idx" ON "users"("refreshToken");
 
 -- CreateIndex
+CREATE INDEX "user_organizations_organizationId_idx" ON "user_organizations"("organizationId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "user_organizations_userId_organizationId_key" ON "user_organizations"("userId", "organizationId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "organization_invitations_token_key" ON "organization_invitations"("token");
+
+-- CreateIndex
+CREATE INDEX "organization_invitations_organizationId_idx" ON "organization_invitations"("organizationId");
+
+-- CreateIndex
+CREATE INDEX "organization_invitations_invitedBy_idx" ON "organization_invitations"("invitedBy");
+
+-- CreateIndex
+CREATE INDEX "organization_invitations_email_idx" ON "organization_invitations"("email");
+
+-- CreateIndex
+CREATE INDEX "organization_invitations_branchId_idx" ON "organization_invitations"("branchId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "subscription_plans_name_key" ON "subscription_plans"("name");
@@ -796,13 +886,28 @@ CREATE INDEX "payments_status_idx" ON "payments"("status");
 CREATE INDEX "products_name_idx" ON "products"("name");
 
 -- CreateIndex
+CREATE INDEX "products_sku_idx" ON "products"("sku");
+
+-- CreateIndex
+CREATE INDEX "products_barcode_idx" ON "products"("barcode");
+
+-- CreateIndex
 CREATE INDEX "products_category_idx" ON "products"("category");
+
+-- CreateIndex
+CREATE INDEX "products_organizationId_category_idx" ON "products"("organizationId", "category");
 
 -- CreateIndex
 CREATE INDEX "products_organizationId_isActive_idx" ON "products"("organizationId", "isActive");
 
 -- CreateIndex
+CREATE INDEX "products_organizationId_itemType_idx" ON "products"("organizationId", "itemType");
+
+-- CreateIndex
 CREATE INDEX "products_deletedAt_idx" ON "products"("deletedAt");
+
+-- CreateIndex
+CREATE INDEX "customers_organizationId_idx" ON "customers"("organizationId");
 
 -- CreateIndex
 CREATE INDEX "customers_phone_idx" ON "customers"("phone");
@@ -857,6 +962,15 @@ CREATE INDEX "activity_logs_entityType_entityId_idx" ON "activity_logs"("entityT
 
 -- CreateIndex
 CREATE INDEX "activity_logs_branchId_idx" ON "activity_logs"("branchId");
+
+-- CreateIndex
+CREATE INDEX "sale_items_saleId_idx" ON "sale_items"("saleId");
+
+-- CreateIndex
+CREATE INDEX "sale_items_productId_idx" ON "sale_items"("productId");
+
+-- CreateIndex
+CREATE INDEX "sale_items_batchId_idx" ON "sale_items"("batchId");
 
 -- CreateIndex
 CREATE INDEX "notifications_organizationId_idx" ON "notifications"("organizationId");
@@ -916,6 +1030,9 @@ CREATE INDEX "batches_branchId_idx" ON "batches"("branchId");
 CREATE INDEX "batches_branchId_productId_idx" ON "batches"("branchId", "productId");
 
 -- CreateIndex
+CREATE INDEX "batches_productId_branchId_idx" ON "batches"("productId", "branchId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "batches_productId_batchNumber_branchId_key" ON "batches"("productId", "batchNumber", "branchId");
 
 -- CreateIndex
@@ -950,6 +1067,21 @@ CREATE INDEX "inventory_ledger_branchId_productId_idx" ON "inventory_ledger"("br
 
 -- CreateIndex
 CREATE INDEX "tax_configurations_organizationId_effectiveDate_idx" ON "tax_configurations"("organizationId", "effectiveDate");
+
+-- CreateIndex
+CREATE INDEX "stock_transfers_organizationId_idx" ON "stock_transfers"("organizationId");
+
+-- CreateIndex
+CREATE INDEX "stock_transfers_fromBranchId_idx" ON "stock_transfers"("fromBranchId");
+
+-- CreateIndex
+CREATE INDEX "stock_transfers_toBranchId_idx" ON "stock_transfers"("toBranchId");
+
+-- CreateIndex
+CREATE INDEX "stock_transfer_items_transferId_idx" ON "stock_transfer_items"("transferId");
+
+-- CreateIndex
+CREATE INDEX "stock_transfer_items_productId_idx" ON "stock_transfer_items"("productId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ebm_transactions_idempotencyKey_key" ON "ebm_transactions"("idempotencyKey");
@@ -1048,6 +1180,9 @@ ALTER TABLE "purchase_orders" ADD CONSTRAINT "purchase_orders_organizationId_fke
 ALTER TABLE "purchase_orders" ADD CONSTRAINT "purchase_orders_supplierId_fkey" FOREIGN KEY ("supplierId") REFERENCES "suppliers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "purchase_orders" ADD CONSTRAINT "purchase_orders_branchId_fkey" FOREIGN KEY ("branchId") REFERENCES "branches"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "purchase_orders" ADD CONSTRAINT "purchase_orders_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -1070,6 +1205,9 @@ ALTER TABLE "organization_invitations" ADD CONSTRAINT "organization_invitations_
 
 -- AddForeignKey
 ALTER TABLE "organization_invitations" ADD CONSTRAINT "organization_invitations_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "organization_invitations" ADD CONSTRAINT "organization_invitations_branchId_fkey" FOREIGN KEY ("branchId") REFERENCES "branches"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "plan_features" ADD CONSTRAINT "plan_features_featureId_fkey" FOREIGN KEY ("featureId") REFERENCES "features"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -1135,7 +1273,7 @@ ALTER TABLE "activity_logs" ADD CONSTRAINT "activity_logs_branchId_fkey" FOREIGN
 ALTER TABLE "sale_items" ADD CONSTRAINT "sale_items_batchId_fkey" FOREIGN KEY ("batchId") REFERENCES "batches"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "sale_items" ADD CONSTRAINT "sale_items_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "sale_items" ADD CONSTRAINT "sale_items_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "sale_items" ADD CONSTRAINT "sale_items_saleId_fkey" FOREIGN KEY ("saleId") REFERENCES "sales"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -1213,7 +1351,13 @@ ALTER TABLE "stock_transfer_items" ADD CONSTRAINT "stock_transfer_items_transfer
 ALTER TABLE "stock_transfer_items" ADD CONSTRAINT "stock_transfer_items_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "branch_receipt_counters" ADD CONSTRAINT "branch_receipt_counters_branchId_fkey" FOREIGN KEY ("branchId") REFERENCES "branches"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "organization_invoice_counters" ADD CONSTRAINT "organization_invoice_counters_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "organization_invoice_counters" ADD CONSTRAINT "organization_invoice_counters_branchId_fkey" FOREIGN KEY ("branchId") REFERENCES "branches"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ebm_transactions" ADD CONSTRAINT "ebm_transactions_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
