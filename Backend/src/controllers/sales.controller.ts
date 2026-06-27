@@ -8,8 +8,6 @@ import { removeStock, addStock } from "../services/inventory-ledger.service"
 import {
   generateInvoiceNumber,
   submitInvoiceToEbm,
-  submitRefundToEbm,
-  submitVoidToEbm,
   isEbmEnabled,
 } from "../services/rra-ebm.service"
 import { selectBatchesForSale, updateBatchQuantity } from "../services/batch.service"
@@ -21,7 +19,7 @@ import { TaxService } from "../services/tax.service"
 
 export const createSale = async (req: BranchAuthRequest, res: Response) => {
   try {
-    const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount } = req.body
+    const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma } = req.body
     // @ts-ignore
     const userId = parseInt(req.user?.userId as string)
     const organizationId = parseInt(req.params.organizationId)
@@ -91,9 +89,16 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       finalPaymentType = 'CASH'
     }
 
-    // Generate sale number and invoice number
+    // Generate sale number and invoice number (per-branch sequence per RRA requirement)
     const saleNumber = `SALE-${Date.now()}`
-    const invoiceNumber = await generateInvoiceNumber(organizationId!)
+    const invoiceNumber = await generateInvoiceNumber(organizationId!, branchId as number)
+
+    // C6: determine receipt type label (NS/TS/PS)
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId! },
+      select: { trainingMode: true },
+    });
+    const rcptLabel = isProforma ? 'PS' : (org?.trainingMode ? 'TS' : 'NS');
 
     // ── Atomic transaction ──
     const sale = await prisma.$transaction(async (tx) => {
@@ -179,6 +184,8 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
             itemType: 'SERVICE',
             serviceName: item.serviceName || null,
             serviceDescription: item.serviceDescription || null,
+            measurementUnit: item.measurementUnit || 'PCS',
+            exemptionReference: item.exemptionReference || null,
           });
           continue;
         }
@@ -224,6 +231,8 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
           taxAmount: itemTax.taxAmount,
           taxCode: itemTax.taxCode,
           itemType: 'PRODUCT',
+          measurementUnit: item.measurementUnit || 'PCS',
+          exemptionReference: item.exemptionReference || null,
           product: { connect: { id: productId } },
           ...(batchId !== null ? { batch: { connect: { id: batchId } } } : {}),
         });
@@ -246,6 +255,8 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
           vatAmount: taxSummary.vatAmount,
           taxableAmount: taxSummary.taxableAmount,
           status: 'COMPLETED',
+          isProforma: !!isProforma,
+          rcptLabel: rcptLabel as any,
           saleItems: { create: saleItemsData },
         },
         include: {
@@ -648,6 +659,13 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
         // Create a new REFUND sale record with negative amounts
         const refundSaleNumber = `REFUND-${sale.saleNumber}-${Date.now()}`;
 
+        // C6: determine NR vs TR based on training mode
+        const refundOrg = await prisma.organization.findUnique({
+          where: { id: organizationId! },
+          select: { trainingMode: true },
+        });
+        const refundRcptLabel = refundOrg?.trainingMode ? 'TR' : 'NR';
+
         const refundSale = await prisma.sale.create({
           data: {
             saleNumber: refundSaleNumber,
@@ -662,6 +680,7 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             totalAmount: -totalRefundAmount, // Negative total
             status: 'REFUNDED',
             refundReason: reason,
+            rcptLabel: refundRcptLabel as any,
             originalSaleId: id, // Link to original sale
             saleItems: {
               create: itemsToRefund.map((item: any) => ({
@@ -736,6 +755,29 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           }
         });
 
+        // Write EBM outbox entry for REFUND atomically with the transaction.
+        // This ensures the RRA is notified even if the process crashes after commit.
+        if (isEbmEnabled()) {
+          const refundIdempotencyKey = `ebm-REFUND-${organizationId}-${refundSale.id}`;
+          await prisma.ebmOutbox.create({
+            data: {
+              organizationId: organizationId!,
+              saleId: refundSale.id,
+              operation: 'REFUND',
+              idempotencyKey: refundIdempotencyKey,
+              payload: {
+                version: 1,
+                saleId: refundSale.id,
+                organizationId: organizationId!,
+                operation: 'REFUND',
+                originalSaleId: id,
+              } as any,
+              status: 'PENDING',
+              nextAttemptAt: new Date(),
+            },
+          });
+        }
+
         return {
           success: true,
           message: 'Refund transaction created successfully',
@@ -748,22 +790,6 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
         timeout: 60000,   // 60 seconds
       });
     });
-
-    if (isEbmEnabled() && result.refundSale?.id && result.success) {
-      try {
-        const ebmResult = await submitRefundToEbm({
-          organizationId: parseInt(req.params.organizationId),
-          originalSaleId: parseInt(req.params.id),
-          refundSaleId: result.refundSale.id,
-          reason: req.body?.reason,
-        });
-        if (!ebmResult.success) {
-          console.error("[EBM] Refund submit failed:", ebmResult.error);
-        }
-      } catch (err) {
-        console.error("[EBM] Refund submit error:", err);
-      }
-    }
 
     res.status(200).json(success(result));
   } catch (error: any) {
@@ -796,9 +822,17 @@ export const reprintSaleReceipt = async (req: BranchAuthRequest, res: Response) 
       return res.status(404).json(apiError("Sale not found"));
     }
 
+    // C6: CS = copy of a sale, CR = copy of a refund
+    const copyLabel = (sale.status === 'REFUNDED' || (sale as any).rcptLabel === 'NR' || (sale as any).rcptLabel === 'TR')
+      ? 'CR'
+      : 'CS';
+
     const updated = await prisma.sale.update({
       where: { id: saleId },
-      data: { reprintCount: { increment: 1 } },
+      data: {
+        reprintCount: { increment: 1 },
+        rcptLabel: copyLabel as any,
+      },
     });
 
     await auditLogger.sales(req, {
@@ -813,10 +847,78 @@ export const reprintSaleReceipt = async (req: BranchAuthRequest, res: Response) 
       ...sale,
       isCopy: updated.reprintCount > 1,
       reprintCount: updated.reprintCount,
+      rcptLabel: copyLabel,
     }));
   } catch (error: any) {
     console.error("[Reprint Sale Error]:", error);
     res.status(500).json(apiError("Failed to reprint receipt"));
+  }
+};
+
+/**
+ * E2/E3: GET /api/organizations/:orgId/sales/:saleId/ebm-receipt
+ * Returns the latest successful SDC fiscalization data for a sale.
+ * The frontend polls this after sale creation once the outbox worker has run.
+ */
+export const getEbmReceipt = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const saleId = parseInt(req.params.saleId);
+    const organizationId = parseInt(req.params.organizationId);
+
+    const tx = await prisma.ebmTransaction.findFirst({
+      where: {
+        saleId,
+        organizationId,
+        submissionStatus: 'SUCCESS',
+        operation: 'SALE',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!tx) {
+      return res.status(202).json({
+        status: 'pending',
+        message: 'Fiscal submission not yet complete',
+      });
+    }
+
+    const sale = await prisma.sale.findFirst({
+      where: { id: saleId, organizationId },
+      select: { rcptLabel: true, invoiceNumber: true, saleNumber: true },
+    });
+
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { TIN: true, ebmDeviceId: true, ebmSerialNo: true },
+    });
+
+    const branch = sale
+      ? await prisma.branch.findFirst({
+          where: { id: (sale as any).branchId },
+          select: { bhfId: true, ebmDeviceId: true, ebmSerialNo: true },
+        })
+      : null;
+
+    const mrcNo = branch?.ebmSerialNo ?? org?.ebmSerialNo ?? null;
+    const sdcId = branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null;
+
+    res.json({
+      status: 'success',
+      ebm: {
+        sdcId,
+        mrcNo,
+        sdcRcptNo:        tx.sdcRcptNo,
+        internalData:     tx.internalData,
+        receiptSignature: tx.receiptSignature,
+        qrPayload:        tx.qrPayload,
+        sdcDateTime:      tx.sdcDateTime,
+        rcptLabel:        tx.rcptLabel ?? sale?.rcptLabel,
+        ebmInvoiceNumber: tx.ebmInvoiceNumber,
+      },
+    });
+  } catch (error: any) {
+    console.error('[EBM Receipt Error]:', error);
+    res.status(500).json(apiError('Failed to get EBM receipt data'));
   }
 };
 
@@ -929,22 +1031,30 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
         entityId: saleId,
         metadata: { cancellationReason: reason }
       });
-    });
 
-    if (isEbmEnabled()) {
-      try {
-        const ebmResult = await submitVoidToEbm({
-          organizationId,
-          saleId,
-          reason,
+      // Write EBM outbox entry for VOID atomically with the transaction.
+      // The outbox worker will notify RRA; this survives process crashes.
+      if (isEbmEnabled()) {
+        const voidIdempotencyKey = `ebm-VOID-${organizationId}-${saleId}`;
+        await prisma.ebmOutbox.create({
+          data: {
+            organizationId,
+            saleId,
+            operation: 'VOID',
+            idempotencyKey: voidIdempotencyKey,
+            payload: {
+              version: 1,
+              saleId,
+              organizationId,
+              operation: 'VOID',
+              reason: reason ?? null,
+            } as any,
+            status: 'PENDING',
+            nextAttemptAt: new Date(),
+          },
         });
-        if (!ebmResult.success) {
-          console.error("[EBM] Void submit failed:", ebmResult.error);
-        }
-      } catch (err) {
-        console.error("[EBM] Void submit error:", err);
       }
-    }
+    });
 
     res.status(200).json(success({ message: "Sale cancelled successfully" }));
   } catch (error) {

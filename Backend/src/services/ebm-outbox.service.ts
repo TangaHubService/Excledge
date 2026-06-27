@@ -2,7 +2,7 @@ import { prisma } from '../lib/prisma';
 import { config } from '../config';
 import {
   type SaleWithRelations,
-  buildSaleGatewayPayload,
+  buildRraSendReceiptPayload,
   generateInvoiceNumber,
   isEbmEnabled,
   gatewayErrorMessage,
@@ -13,6 +13,7 @@ import {
   parseVsdcResponse,
   vsdcHeartbeat,
 } from './vsdc-api.service';
+import { buildElectronicJournal } from './electronic-journal.service';
 
 export { isEbmEnabled };
 import { TaxService } from './tax.service';
@@ -83,7 +84,7 @@ export async function createSaleWithOutbox(input: SaleOutboxInput) {
 
   const totalAmount = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
   const saleNumber = `SALE-${Date.now()}`;
-  const invoiceNumber = await generateInvoiceNumber(organizationId);
+  const invoiceNumber = await generateInvoiceNumber(organizationId, branchId);
 
   const operation: EbmOperation = 'SALE';
 
@@ -337,11 +338,15 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
     const sale = (await prisma.sale.findFirst({
       where: { id: row.saleId, organizationId: row.organizationId },
       include: {
-        saleItems: { include: { product: true } },
+        saleItems: {
+          include: {
+            product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true } },
+          },
+        },
         customer: true,
         branch: true,
       },
-    })) as SaleWithRelations | null;
+    })) as (SaleWithRelations & { originalSaleId?: number | null }) | null;
 
     if (!sale) {
       await prisma.ebmOutbox.update({
@@ -352,8 +357,9 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       continue;
     }
 
-    // Skip if the sale has been refunded or cancelled since enqueueing
-    if (sale.status === 'REFUNDED' || sale.status === 'CANCELLED') {
+    // For SALE operations only: skip if the sale was voided/refunded before we submitted it.
+    // For REFUND/VOID operations the sale status is *expected* to be REFUNDED/CANCELLED.
+    if (row.operation === 'SALE' && (sale.status === 'REFUNDED' || sale.status === 'CANCELLED')) {
       await prisma.ebmOutbox.update({
         where: { id: row.id },
         data: { status: 'DEAD_LETTER', lastError: `Sale ${sale.status.toLowerCase()} before VSDC processing` },
@@ -376,9 +382,79 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       continue;
     }
 
-    // Build gateway payload and inject idempotencyKey
-    const payload = buildSaleGatewayPayload(sale, org);
-    payload.idempotencyKey = row.idempotencyKey;
+    // Build gateway payload based on operation type
+    let payload: Record<string, unknown>;
+    if (row.operation === 'SALE') {
+      payload = buildRraSendReceiptPayload(sale, org);
+      payload['idempotencyKey'] = row.idempotencyKey;
+    } else if (row.operation === 'REFUND') {
+      // For REFUND: find the original SALE's EBM invoice number
+      const outboxPayload = row.payload as { originalSaleId?: number };
+      const originalSaleId = outboxPayload?.originalSaleId ?? sale.originalSaleId;
+      const origTx = originalSaleId
+        ? await prisma.ebmTransaction.findFirst({
+            where: { saleId: originalSaleId, operation: 'SALE', submissionStatus: 'SUCCESS', ebmInvoiceNumber: { not: null } },
+            orderBy: { createdAt: 'desc' },
+          })
+        : null;
+      if (!origTx?.ebmInvoiceNumber) {
+        // Original invoice not fiscalized yet — defer this refund to retry later
+        const nextRetry = scheduleNextRetry(row.retryCount);
+        const isDead = row.retryCount + 1 >= (config.ebm.maxQueueRetries ?? 10);
+        await prisma.ebmOutbox.update({
+          where: { id: row.id },
+          data: {
+            status: isDead ? 'DEAD_LETTER' : 'FAILED',
+            retryCount: { increment: 1 },
+            lastError: 'Original invoice not yet fiscalized — deferring refund',
+            nextAttemptAt: isDead ? null : (nextRetry as any),
+          },
+        });
+        if (isDead) failed += 1;
+        continue;
+      }
+      const originalSale = originalSaleId
+        ? await prisma.sale.findFirst({ where: { id: originalSaleId }, select: { invoiceNumber: true, totalAmount: true } })
+        : null;
+      payload = {
+        environment: config.ebm.environment,
+        operation: 'REFUND',
+        idempotencyKey: row.idempotencyKey,
+        seller: { tin: org.TIN ?? null, deviceId: org.ebmDeviceId ?? null, serialNo: org.ebmSerialNo ?? null, name: org.name },
+        originalInvoiceNumber: originalSale?.invoiceNumber ?? null,
+        originalEbmInvoiceNumber: origTx.ebmInvoiceNumber,
+        refundSaleId: sale.id,
+        refundSaleNumber: sale.saleNumber,
+        refundTotalAmount: Math.abs(Number(sale.totalAmount)),
+        reason: (row.payload as { reason?: string })?.reason ?? null,
+      };
+    } else {
+      // VOID: only fire if original was fiscalized
+      const origTx = await prisma.ebmTransaction.findFirst({
+        where: { saleId: row.saleId, operation: 'SALE', submissionStatus: 'SUCCESS', ebmInvoiceNumber: { not: null } },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!origTx?.ebmInvoiceNumber) {
+        // Sale was never fiscalized — nothing to void at RRA
+        await prisma.ebmOutbox.update({
+          where: { id: row.id },
+          data: { status: 'SUCCEEDED', lastError: 'Original invoice never fiscalized — void skipped' },
+        });
+        succeeded += 1;
+        continue;
+      }
+      payload = {
+        environment: config.ebm.environment,
+        operation: 'VOID',
+        idempotencyKey: row.idempotencyKey,
+        seller: { tin: org.TIN ?? null, deviceId: org.ebmDeviceId ?? null, serialNo: org.ebmSerialNo ?? null, name: org.name },
+        originalInvoiceNumber: sale.invoiceNumber,
+        originalEbmInvoiceNumber: origTx.ebmInvoiceNumber,
+        saleId: sale.id,
+        saleNumber: sale.saleNumber,
+        reason: (row.payload as { reason?: string })?.reason ?? null,
+      };
+    }
 
     // ── Mark in-flight ──
     await prisma.ebmOutbox.update({
@@ -399,17 +475,18 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
     });
 
     try {
-      // Check training mode — skip live network call
-      const org = await prisma.organization.findUnique({
+      // Check training mode — log but do not hit the live VSDC endpoint.
+      // Mark SUCCEEDED so the entry doesn't pile up as failures.
+      const orgCheck = await prisma.organization.findUnique({
         where: { id: row.organizationId },
         select: { trainingMode: true },
       });
-      if (org?.trainingMode) {
+      if (orgCheck?.trainingMode) {
         await prisma.ebmOutbox.update({
           where: { id: row.id },
-          data: { status: 'DEAD_LETTER', lastError: 'Training mode — VSDC submission skipped' },
+          data: { status: 'SUCCEEDED', lastError: 'Training mode — VSDC submission skipped' },
         });
-        failed += 1;
+        succeeded += 1;
         continue;
       }
 
@@ -440,6 +517,20 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       const { data: vsdc } = result;
       const sdcDateTime: Date | null = vsdc.sdcDateTime ? new Date(vsdc.sdcDateTime) : null;
 
+      // C8: build electronic journal text
+      const rcptLabel = (sale as any).rcptLabel ?? (row.operation === 'REFUND' ? 'NR' : 'NS');
+      const ejText = row.operation === 'SALE'
+        ? buildElectronicJournal(sale as SaleWithRelations, rcptLabel, {
+            sdcId: envelope.sdcId,
+            mrcNo: envelope.mrcNo,
+            sdcRcptNo: vsdc.rcptNo ? parseInt(vsdc.rcptNo, 10) || 0 : 0,
+            internalData: vsdc.intrlData,
+            receiptSignature: vsdc.vsdcSignature,
+            sdcDateTime: sdcDateTime ?? new Date(),
+          })
+        : null;
+
+      // C5: write SDC dedicated columns alongside the JSON blob
       await prisma.$transaction([
         prisma.ebmTransaction.update({
           where: { id: txRow.id },
@@ -448,6 +539,15 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
             ebmInvoiceNumber: vsdc.rcptNo,
             submittedAt: new Date(),
             sdcDateTime: sdcDateTime as any,
+            // B1 dedicated columns
+            sdcRcptNo: vsdc.rcptNo ? parseInt(vsdc.rcptNo, 10) || null : null,
+            internalData: vsdc.intrlData || null,
+            receiptSignature: vsdc.vsdcSignature || null,
+            qrPayload: vsdc.qrPayload || null,
+            rcptLabel: rcptLabel as any,
+            // C8 electronic journal
+            journalText: ejText,
+            ejSent: !!ejText,
             responseData: { raw: result.rawBody, normalized: vsdc, requestPayload: payload } as any,
           },
         }),

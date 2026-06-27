@@ -30,12 +30,21 @@ export interface SaleEbmTransaction {
     submissionStatus?: string;
     ebmInvoiceNumber?: string | null;
     errorMessage?: string | null;
+    // D3: dedicated SDC columns (B1)
+    sdcRcptNo?: number | null;
+    internalData?: string | null;
+    receiptSignature?: string | null;
+    qrPayload?: string | null;
+    rcptLabel?: string | null;
+    sdcDateTime?: string | null;
     responseData?: {
         normalized?: {
             ebmInvoiceNumber?: string;
             receiptQrPayload?: string;
             verificationCode?: string;
             sdcDateTime?: string;
+            intrlData?: string;
+            vsdcSignature?: string;
         };
     } | null;
 }
@@ -44,10 +53,13 @@ interface Sale {
     id: string;
     saleNumber: string;
     invoiceNumber?: string | null;
+    rcptLabel?: string | null;
+    reprintCount?: number;
     customer: {
         name: string;
         email?: string;
         phone?: string;
+        TIN?: string | null;
     };
     user: {
         name: string;
@@ -57,6 +69,8 @@ interface Sale {
     insuranceAmount: string;
     debtAmount: string;
     totalAmount: string;
+    vatAmount?: string;
+    taxableAmount?: string;
     createdAt: string;
     status: string;
     saleItems: SaleItem[];
@@ -214,27 +228,48 @@ interface SalesInvoicePDFProps {
     sale: Sale;
     organizationName?: string;
     organizationLogo?: string;
-    /** Seller TIN for RRA reference on the receipt */
     organizationTin?: string | null;
+    organizationAddress?: string | null;
+    organizationPhone?: string | null;
+    organizationEmail?: string | null;
+    organizationVrn?: string | null;
+    /** D3: pre-computed QR data URL (pass from parent after qrToDataUrl()) */
+    qrDataUrl?: string | null;
 }
+
+function dashEvery4(str: string): string {
+    return str.replace(/(.{4})(?!$)/g, '$1-');
+}
+
+const RCPT_LABEL_DISPLAY: Record<string, string> = {
+    NS: 'Normal Sale', NR: 'Normal Refund',
+    CS: 'Copy Sale',   CR: 'Copy Refund',
+    TS: 'Training',    TR: 'Training Refund',
+    PS: 'Proforma',
+};
 
 function fiscalBlockFromSale(sale: Sale) {
     const txs = sale.ebmTransactions ?? [];
-    const saleTxs = txs.filter((t) => !t.operation || t.operation === "SALE");
-    const success = saleTxs.find((t) => t.submissionStatus === "SUCCESS");
+    const saleTxs = txs.filter((t) => !t.operation || t.operation === 'SALE');
+    const success = saleTxs.find((t) => t.submissionStatus === 'SUCCESS');
     const pending = saleTxs.find((t) =>
-        ["PENDING", "SUBMITTED", "RETRYING"].includes(t.submissionStatus ?? "")
+        ['PENDING', 'SUBMITTED', 'RETRYING'].includes(t.submissionStatus ?? ''),
     );
-    const failed = saleTxs.find((t) => t.submissionStatus === "FAILED");
+    const failed = saleTxs.find((t) => t.submissionStatus === 'FAILED');
     const norm = success?.responseData?.normalized;
+
+    // Prefer dedicated columns (B1), fall back to responseData JSON blob
     return {
         success,
         pending,
         failed,
         ebmInvoiceNumber: success?.ebmInvoiceNumber ?? norm?.ebmInvoiceNumber,
-        verificationCode: norm?.verificationCode,
-        sdcDateTime: norm?.sdcDateTime,
-        receiptQrPayload: norm?.receiptQrPayload,
+        sdcRcptNo:        success?.sdcRcptNo ?? null,
+        internalData:     success?.internalData ?? norm?.intrlData ?? null,
+        receiptSignature: success?.receiptSignature ?? norm?.vsdcSignature ?? norm?.verificationCode ?? null,
+        qrPayload:        success?.qrPayload ?? norm?.receiptQrPayload ?? null,
+        sdcDateTime:      success?.sdcDateTime ?? norm?.sdcDateTime ?? null,
+        rcptLabel:        success?.rcptLabel ?? sale.rcptLabel ?? null,
     };
 }
 
@@ -243,6 +278,11 @@ const SalesInvoicePDF: React.FC<SalesInvoicePDFProps> = ({
     organizationName = "Your Organization",
     organizationLogo,
     organizationTin,
+    organizationAddress,
+    organizationPhone,
+    organizationEmail,
+    organizationVrn,
+    qrDataUrl,
 }) => {
     const formatCurrency = (amount: string) => {
         return new Intl.NumberFormat('en-RW', {
@@ -317,9 +357,11 @@ const SalesInvoicePDF: React.FC<SalesInvoicePDFProps> = ({
                         <Text style={{ fontSize: 14, fontWeight: "bold" }}>
                             {organizationName}
                         </Text>
-                        <Text>Kigali, Rwanda</Text>
-                        <Text>+250 788 701 837</Text>
-                        <Text>info@company.com</Text>
+                        {organizationAddress ? <Text>{organizationAddress}</Text> : null}
+                        {organizationPhone ? <Text>{organizationPhone}</Text> : null}
+                        {organizationEmail ? <Text>{organizationEmail}</Text> : null}
+                        {organizationTin ? <Text>TIN: {organizationTin}</Text> : null}
+                        {organizationVrn ? <Text>VRN: {organizationVrn}</Text> : null}
                     </View>
                 </View>
 
@@ -540,46 +582,81 @@ const SalesInvoicePDF: React.FC<SalesInvoicePDFProps> = ({
                     }
                     return (
                         <View style={styles.fiscalBox}>
-                            <Text style={styles.fiscalTitle}>RRA EBM / VSDC</Text>
+                            <Text style={styles.fiscalTitle}>RRA EBM FISCAL RECEIPT</Text>
+
+                            {/* Receipt type label (D3) */}
+                            {f.rcptLabel ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Receipt Type:</Text>
+                                    <Text style={styles.value}>
+                                        {f.rcptLabel} — {RCPT_LABEL_DISPLAY[f.rcptLabel] ?? f.rcptLabel}
+                                    </Text>
+                                </View>
+                            ) : null}
+
                             {organizationTin ? (
                                 <View style={styles.row}>
                                     <Text style={styles.label}>Seller TIN:</Text>
                                     <Text style={styles.value}>{organizationTin}</Text>
                                 </View>
                             ) : null}
+
                             {f.ebmInvoiceNumber ? (
                                 <View style={styles.row}>
-                                    <Text style={styles.label}>EBM invoice #:</Text>
+                                    <Text style={styles.label}>EBM Invoice #:</Text>
                                     <Text style={styles.value}>{f.ebmInvoiceNumber}</Text>
                                 </View>
                             ) : null}
-                            {f.verificationCode ? (
+
+                            {f.sdcRcptNo != null ? (
                                 <View style={styles.row}>
-                                    <Text style={styles.label}>Verification:</Text>
-                                    <Text style={styles.value}>{f.verificationCode}</Text>
+                                    <Text style={styles.label}>SDC Receipt No:</Text>
+                                    <Text style={styles.value}>{f.sdcRcptNo}</Text>
                                 </View>
                             ) : null}
+
                             {f.sdcDateTime ? (
                                 <View style={styles.row}>
-                                    <Text style={styles.label}>SDC time:</Text>
+                                    <Text style={styles.label}>SDC Date/Time:</Text>
                                     <Text style={styles.value}>{f.sdcDateTime}</Text>
                                 </View>
                             ) : null}
-                            {f.receiptQrPayload ? (
-                                <Text style={styles.fiscalMuted}>
-                                    QR / payload: {f.receiptQrPayload.length > 200 ? `${f.receiptQrPayload.slice(0, 200)}…` : f.receiptQrPayload}
+
+                            {f.internalData ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Internal Data:</Text>
+                                    <Text style={[styles.value, { fontSize: 7 }]}>{dashEvery4(f.internalData)}</Text>
+                                </View>
+                            ) : null}
+
+                            {f.receiptSignature ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Signature:</Text>
+                                    <Text style={[styles.value, { fontSize: 7 }]}>{dashEvery4(f.receiptSignature)}</Text>
+                                </View>
+                            ) : null}
+
+                            {/* QR code image if pre-computed, else QR string */}
+                            {qrDataUrl ? (
+                                <View style={{ alignItems: 'center', marginTop: 6 }}>
+                                    <Image src={qrDataUrl} style={{ width: 100, height: 100 }} />
+                                    <Text style={{ fontSize: 7, color: '#555', marginTop: 2 }}>
+                                        Scan to verify on RRA portal
+                                    </Text>
+                                </View>
+                            ) : f.qrPayload ? (
+                                <Text style={[styles.fiscalMuted, { fontSize: 6 }]}>
+                                    QR: {f.qrPayload.length > 120 ? `${f.qrPayload.slice(0, 120)}…` : f.qrPayload}
                                 </Text>
                             ) : null}
+
                             {f.pending && !f.success ? (
                                 <Text style={styles.fiscalMuted}>Fiscal submission pending or retrying.</Text>
                             ) : null}
                             {f.failed && !f.success ? (
                                 <Text style={styles.fiscalMuted}>
-                                    Last fiscal error: {f.failed.errorMessage ?? "Unknown"}
+                                    Last fiscal error: {f.failed.errorMessage ?? 'Unknown'}
                                 </Text>
-                            ) : null}
-                            {!f.success && !f.pending && !f.failed && sale.ebmTransactions?.length ? (
-                                <Text style={styles.fiscalMuted}>No fiscal data recorded for this sale.</Text>
                             ) : null}
                         </View>
                     );

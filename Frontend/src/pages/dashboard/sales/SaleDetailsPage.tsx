@@ -149,7 +149,11 @@ export default function SaleDetailsPage() {
                 sale={sale}
                 organizationName={organization?.name}
                 organizationLogo={organization?.avatar}
-                organizationTin={organization?.TIN ?? organization?.tin}
+                organizationTin={(organization as any)?.TIN ?? (organization as any)?.tin}
+                organizationAddress={(organization as any)?.address}
+                organizationPhone={(organization as any)?.phone}
+                organizationEmail={(organization as any)?.email}
+                organizationVrn={(organization as any)?.VRN}
             />).toBlob();
 
             saveAs(blob, `invoice-${sale.saleNumber}.pdf`);
@@ -171,7 +175,11 @@ export default function SaleDetailsPage() {
                 sale={sale}
                 organizationName={organization?.name}
                 organizationLogo={organization?.avatar}
-                organizationTin={organization?.TIN ?? organization?.tin}
+                organizationTin={(organization as any)?.TIN ?? (organization as any)?.tin}
+                organizationAddress={(organization as any)?.address}
+                organizationPhone={(organization as any)?.phone}
+                organizationEmail={(organization as any)?.email}
+                organizationVrn={(organization as any)?.VRN}
             />).toBlob();
 
             const url = URL.createObjectURL(blob);

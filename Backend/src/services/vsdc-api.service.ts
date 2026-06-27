@@ -5,6 +5,54 @@ import { config } from '../config';
 const RRA_SECURITY_KEY: string = config.ebm.securityKey || '';
 
 // ──────────────────────────────────────────────
+// C2: VSDC status-code tables (RRA ALGO EBM API v8.2 §4)
+// ──────────────────────────────────────────────
+
+/** HTTP-200 but STATUS != "0" means a business-level rejection. */
+const VSDC_ERRORS: Record<string, string> = {
+  '0': 'Success',
+  '1': 'General error',
+  '2': 'Invalid TIN',
+  '3': 'Device not registered',
+  '4': 'Duplicate invoice number',
+  '5': 'Invalid invoice date/time',
+  '6': 'Invalid tax amount',
+  '7': 'Invalid receipt type',
+  '8': 'Invalid MRC number',
+  '9': 'Tax period closed',
+  '10': 'Device disabled',
+  '11': 'Organization suspended',
+  '12': 'Invalid branch code',
+  '99': 'System maintenance',
+};
+
+/** STATUS codes that indicate warnings but should not block the sale. */
+const VSDC_WARNINGS = new Set(['98']);
+
+export function parseVsdcStatusCode(raw: unknown): {
+  code: string;
+  isError: boolean;
+  isWarning: boolean;
+  message: string;
+} {
+  if (!raw || typeof raw !== 'object') {
+    return { code: '?', isError: true, isWarning: false, message: 'No response body' };
+  }
+  const o = raw as Record<string, unknown>;
+  const resp = o.RESPONSE && typeof o.RESPONSE === 'object'
+    ? (o.RESPONSE as Record<string, unknown>)
+    : o;
+  const status = String(resp.STATUS ?? o.STATUS ?? resp.status ?? o.status ?? '?');
+  const message = VSDC_ERRORS[status] ?? `Unknown VSDC status ${status}`;
+  return {
+    code: status,
+    isError: status !== '0' && !VSDC_WARNINGS.has(status) && status !== '?',
+    isWarning: VSDC_WARNINGS.has(status),
+    message,
+  };
+}
+
+// ──────────────────────────────────────────────
 // Types
 // ──────────────────────────────────────────────
 
@@ -15,6 +63,8 @@ export interface VsdcEnvelope {
   mrcNo: string;
   dvcSrlNo: string;
   env: string;
+  /** C3: per-branch VSDC endpoint; falls back to config.ebm.apiUrl if absent */
+  vsdcUrl?: string;
 }
 
 export interface VsdcResponse {
@@ -55,24 +105,35 @@ export async function buildVsdcEnvelope(
     throw new Error(`Organization ${organizationId} not found`);
   }
 
-  let branchCode = 'BRN-000';
+  // Prefer per-branch credentials (RRA issues device per branch).
+  // Fall back to org-level credentials for single-branch setups not yet migrated.
+  let bhfId = '00';
+  let sdcId = org.ebmDeviceId ?? '';
+  let mrcNo = org.ebmSerialNo ?? '';
+
+  let vsdcUrl: string | undefined;
+
   if (branchId != null) {
     const branch = await prisma.branch.findUnique({
       where: { id: branchId },
-      select: { code: true },
+      select: { bhfId: true, ebmDeviceId: true, ebmSerialNo: true, vsdcUrl: true },
     });
     if (branch) {
-      branchCode = branch.code;
+      if (branch.bhfId) bhfId = branch.bhfId;
+      if (branch.ebmDeviceId) sdcId = branch.ebmDeviceId;
+      if (branch.ebmSerialNo) mrcNo = branch.ebmSerialNo;
+      if (branch.vsdcUrl) vsdcUrl = branch.vsdcUrl.replace(/\/$/, '');
     }
   }
 
   return {
     tin: org.TIN ?? '',
-    bhfId: branchCode,
-    sdcId: org.ebmDeviceId ?? '',
-    mrcNo: org.ebmSerialNo ?? '',
-    dvcSrlNo: org.ebmSerialNo ?? '',
+    bhfId,
+    sdcId,
+    mrcNo,
+    dvcSrlNo: mrcNo,
     env: config.ebm.environment,
+    vsdcUrl,
   };
 }
 
@@ -95,8 +156,10 @@ function authHeader(): string | undefined {
 async function postToEndpoint(
   path: string,
   body: Record<string, unknown>,
+  baseUrl?: string,
 ): Promise<VsdcApiResult> {
-  const base = config.ebm.apiUrl;
+  // C3: prefer per-branch URL, fall back to global config
+  const base = (baseUrl ?? config.ebm.apiUrl ?? '').replace(/\/$/, '');
   if (!base) {
     return { success: false, error: 'EBM_API_URL is not configured', rawStatus: 0, rawBody: null };
   }
@@ -135,6 +198,17 @@ async function postToEndpoint(
 
     if (!res.ok) {
       return { success: false, error: `Gateway HTTP ${res.status}`, rawStatus: res.status, rawBody: json };
+    }
+
+    // C2: check VSDC business-level status code (STATUS != "0" is a rejection even on HTTP 200)
+    const vsdcStatus = parseVsdcStatusCode(json);
+    if (vsdcStatus.isError) {
+      return {
+        success: false,
+        error: `VSDC error ${vsdcStatus.code}: ${vsdcStatus.message}`,
+        rawStatus: res.status,
+        rawBody: json,
+      };
     }
 
     const parsed = parseVsdcResponse(json);
@@ -227,13 +301,8 @@ export async function saveInvc(
   if (config.ebm.useMock) {
     return mockResult('INVC');
   }
-
-  const body = {
-    ...envelope,
-    ...payload,
-  };
-
-  return postToEndpoint(config.ebm.salePath || '/saveInvc', body);
+  const { vsdcUrl, ...envelopeFields } = envelope;
+  return postToEndpoint(config.ebm.salePath || '/saveInvc', { ...envelopeFields, ...payload }, vsdcUrl);
 }
 
 /**
@@ -246,13 +315,8 @@ export async function saveItem(
   if (config.ebm.useMock) {
     return mockResult('ITEM');
   }
-
-  const body = {
-    ...envelope,
-    ...payload,
-  };
-
-  return postToEndpoint('/saveItem', body);
+  const { vsdcUrl, ...envelopeFields } = envelope;
+  return postToEndpoint('/saveItem', { ...envelopeFields, ...payload }, vsdcUrl);
 }
 
 /**
@@ -265,13 +329,8 @@ export async function selectMvmt(
   if (config.ebm.useMock) {
     return mockResult('MVMT');
   }
-
-  const body = {
-    ...envelope,
-    ...payload,
-  };
-
-  return postToEndpoint('/selectMvmt', body);
+  const { vsdcUrl, ...envelopeFields } = envelope;
+  return postToEndpoint('/selectMvmt', { ...envelopeFields, ...payload }, vsdcUrl);
 }
 
 /**
@@ -284,13 +343,8 @@ export async function savePurc(
   if (config.ebm.useMock) {
     return mockResult('PURC');
   }
-
-  const body = {
-    ...envelope,
-    ...payload,
-  };
-
-  return postToEndpoint('/savePurc', body);
+  const { vsdcUrl, ...envelopeFields } = envelope;
+  return postToEndpoint('/savePurc', { ...envelopeFields, ...payload }, vsdcUrl);
 }
 
 /**
@@ -303,13 +357,8 @@ export async function selectImportInvc(
   if (config.ebm.useMock) {
     return mockResult('IMPORT');
   }
-
-  const body = {
-    ...envelope,
-    ...payload,
-  };
-
-  return postToEndpoint('/selectImportInvc', body);
+  const { vsdcUrl, ...envelopeFields } = envelope;
+  return postToEndpoint('/selectImportInvc', { ...envelopeFields, ...payload }, vsdcUrl);
 }
 
 /**
@@ -333,8 +382,8 @@ export async function vsdcHeartbeat(
       rawBody: null,
     };
   }
-
-  return postToEndpoint(statusPath, { ...envelope, operation: 'HEARTBEAT' });
+  const { vsdcUrl, ...envelopeFields } = envelope;
+  return postToEndpoint(statusPath, { ...envelopeFields, operation: 'HEARTBEAT' }, vsdcUrl);
 }
 
 // ──────────────────────────────────────────────

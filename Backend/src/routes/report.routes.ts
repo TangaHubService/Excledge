@@ -8,7 +8,8 @@ import {
     getCashFlowReport,
     getStockReport,
     getStockHistory,
-    getProfitReportController
+    getProfitReportController,
+    getDailyReport,
 } from "../controllers/report.controller"
 import { authenticate, authorize } from "../middleware/auth.middleware"
 import { branchAuth } from "../middleware/branchAuth.middleware"
@@ -27,6 +28,7 @@ router.get("/stock/:organizationId", authenticate, orgAccess, branchAuth, author
 router.get("/stock-history/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getStockHistory)
 router.get("/profit/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getProfitReportController)
 router.get("/export/:reportType/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), exportReport)
-
+// C9: X/Z daily fiscal reports (RRA CIS/VSDC spec §6)
+router.get("/daily/:organizationId", authenticate, orgAccess, branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getDailyReport)
 
 export default router

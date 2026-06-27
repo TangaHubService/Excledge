@@ -49,7 +49,7 @@ export const config = {
     movementPath: process.env.EBM_MOVEMENT_PATH || "/selectMvmt",
     purchasePath: process.env.EBM_PURCHASE_PATH || "/savePurc",
     importPath: process.env.EBM_IMPORT_PATH || "/selectImportInvc",
-    requestTimeoutMs: Number.parseInt(process.env.EBM_REQUEST_TIMEOUT_MS || "30000", 10),
+    requestTimeoutMs: Number.parseInt(process.env.EBM_REQUEST_TIMEOUT_MS || "1000", 10),
     useMock: process.env.EBM_USE_MOCK === "true",
     maxQueueRetries: Number.parseInt(process.env.EBM_MAX_QUEUE_RETRIES || "10", 10),
     statusCheckPath: process.env.EBM_STATUS_CHECK_PATH || "/status",

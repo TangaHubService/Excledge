@@ -140,15 +140,30 @@ export const updateBranchController = async (req: AuthRequest, res: Response) =>
   try {
     const organizationId = parseInt(req.params.organizationId);
     const branchId = parseInt(req.params.id);
-    const { name, location, address, phone, status, metadata } = req.body;
+    const { name, location, address, addressLine2, phone, status, metadata, bhfId, ebmDeviceId, ebmSerialNo, vsdcUrl } = req.body;
+
+    // C10: MRC number format validation (RRA spec §2.1: BBBCCNNNNNN, 11 chars)
+    if (ebmSerialNo !== undefined && ebmSerialNo !== null && ebmSerialNo !== '') {
+      const MRC_PATTERN = /^[A-Z0-9]{3}[A-Z0-9]{2}[0-9]{6}$/;
+      if (!MRC_PATTERN.test(String(ebmSerialNo).toUpperCase())) {
+        return res.status(400).json({
+          error: 'Invalid MRC number format. Must be BBBCCNNNNNN (3 developer + 2 certificate + 6 serial digits).',
+        });
+      }
+    }
 
     const branch = await updateBranch(branchId, organizationId, {
       name,
       location,
       address,
+      addressLine2,
       phone,
       status,
       metadata,
+      bhfId,
+      ebmDeviceId,
+      ebmSerialNo: ebmSerialNo ? String(ebmSerialNo).toUpperCase() : undefined,
+      vsdcUrl,
     });
 
     await auditLogger.system(req, {

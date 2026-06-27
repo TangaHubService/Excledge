@@ -239,7 +239,11 @@ export default function SalesPage() {
                 sale={sale}
                 organizationName={organization?.name}
                 organizationLogo={organization?.avatar}
-                organizationTin={organization?.TIN ?? organization?.tin}
+                organizationTin={(organization as any)?.TIN ?? (organization as any)?.tin}
+                organizationAddress={(organization as any)?.address}
+                organizationPhone={(organization as any)?.phone}
+                organizationEmail={(organization as any)?.email}
+                organizationVrn={(organization as any)?.VRN}
             />).toBlob();
 
             // Download the file
@@ -889,7 +893,11 @@ export default function SalesPage() {
                                                     sale={selectedSale}
                                                     organizationName={organization?.name}
                                                     organizationLogo={organization?.avatar}
-                                                    organizationTin={organization?.TIN ?? organization?.tin}
+                                                    organizationTin={(organization as any)?.TIN ?? (organization as any)?.tin}
+                                                    organizationAddress={(organization as any)?.address}
+                                                    organizationPhone={(organization as any)?.phone}
+                                                    organizationEmail={(organization as any)?.email}
+                                                    organizationVrn={(organization as any)?.VRN}
                                                 />).toBlob();
                                                 saveAs(blob, `invoice-${selectedSale.saleNumber}.pdf`);
                                                 toast.success(t('sales.invoiceDownloadSuccess'));

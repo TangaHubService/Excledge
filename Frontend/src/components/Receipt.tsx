@@ -1,98 +1,217 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CartItem } from '../pages/dashboard/sales/pos';
 import { useOrganization } from '../context/OrganizationContext';
+import { buildRraQrString, dashEvery4, qrToDataUrl } from '../utils/qrCode';
 
-
-interface ReceiptProps {
-    cart: CartItem[];
-    total: number;
-    subtotal: number;
-    paymentMethod: string;
-    receiptNumber: string;
-    date: string;
-    cashierName: string;
-    customer: { name: string, phone: string };
-    payed: number;
-    unpaid: number;
+// D2: extended EBM data returned from the sale API after VSDC fiscalization
+export interface EbmReceiptData {
+  sdcId?: string;
+  mrcNo?: string;
+  sdcRcptNo?: number;
+  internalData?: string;
+  receiptSignature?: string;
+  sdcDateTime?: string;
+  qrPayload?: string;
+  rcptLabel?: string; // NS/NR/CS/CR/TS/TR/PS
 }
 
+interface TaxBandTotal {
+  code: string;
+  taxable: number;
+  tax: number;
+  total: number;
+}
+
+interface ReceiptProps {
+  cart: CartItem[];
+  total: number;
+  subtotal: number;
+  paymentMethod: string;
+  receiptNumber: string;
+  date: string;
+  cashierName: string;
+  customer: { name: string; phone: string; tin?: string };
+  payed: number;
+  unpaid: number;
+  ebm?: EbmReceiptData;
+}
+
+const RCPT_LABEL_DISPLAY: Record<string, string> = {
+  NS: 'Normal Sale',
+  NR: 'Normal Refund',
+  CS: 'Copy Sale',
+  CR: 'Copy Refund',
+  TS: 'Training Sale',
+  TR: 'Training Refund',
+  PS: 'Proforma Sale',
+};
+
 export const Receipt: React.FC<ReceiptProps> = ({
-    cart,
-    total,
-    subtotal,
-    paymentMethod,
-    receiptNumber,
-    date,
-    cashierName,
-    customer,
-    payed,
-    unpaid
+  cart,
+  total,
+  subtotal,
+  paymentMethod,
+  receiptNumber,
+  date,
+  cashierName,
+  customer,
+  payed,
+  unpaid,
+  ebm,
 }) => {
-    const { t } = useTranslation();
-    const { organization } = useOrganization();
-    return (
-        <div className="p-4 max-w-xs mx-auto bg-white" id="receipt">
-            <div className="mb-4">
-                <h2 className="text-lg font-bold">{organization?.name || t('pos.yourBusinessName')}</h2>
-                {organization?.avatar && <img src={organization.avatar} alt={organization?.name} className="h-24 w-24 rounded-full object-contain" />}
-                {organization?.address && <p className="text-sm">{t('pos.receipt.address')} : {organization.address}</p>}
-                {(organization?.city || organization?.country) && (
-                    <p className="text-sm">
-                        {organization.city}
-                        {organization.city && organization.country ? ', ' : ''}
-                        {organization.country}
-                    </p>
-                )}
-                {organization?.phone && <p className="text-sm">{t('pos.receipt.tel')}: {organization.phone}</p>}
-                {organization?.email && <p className="text-sm">{t('pos.receipt.email')}: {organization.email}</p>}
-                {organization?.tin && <p className="text-sm">{t('pos.receipt.tin')}: {organization.tin}</p>}
-            </div>
+  const { t } = useTranslation();
+  const { organization } = useOrganization();
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
-            <div className="border-b-2 border-dashed border-gray-300 py-2 my-2">
-                <div className='flex flex-col text-xs'>
-                    <span className='text-xs'><span className='font-bold'>{t('pos.receipt.receiptNumber')} :</span> #{receiptNumber}</span>
-                    <span className='text-xs'><span className='font-bold'>{t('pos.receipt.date')} :</span> {date}</span>
-                    <span className='text-xs'><span className='font-bold'> {t('pos.receipt.customer')} :</span> {customer.name}</span>
-                    <span className='text-xs'><span className='font-bold'> {t('pos.receipt.phone')} :</span> {customer.phone}</span>
-                </div>
-                <div className="text-sm"><span className='font-bold'>{t('pos.receipt.cashier')} :</span> {cashierName}</div>
-            </div>
+  useEffect(() => {
+    if (!ebm?.sdcId || !ebm.sdcRcptNo || !ebm.internalData || !ebm.receiptSignature) return;
+    const qrStr = ebm.qrPayload ?? buildRraQrString({
+      sdcDateTime: ebm.sdcDateTime ?? new Date().toISOString(),
+      sdcId: ebm.sdcId,
+      sdcRcptNo: ebm.sdcRcptNo,
+      internalData: ebm.internalData,
+      receiptSignature: ebm.receiptSignature,
+    });
+    qrToDataUrl(qrStr).then(setQrDataUrl).catch(() => {});
+  }, [ebm]);
 
-            <div className="mb-4">
-                {cart.map((item, index) => (
-                    <div key={index} className="flex justify-between py-1 border-b-2 border-dashed border-gray-300 text-sm">
-                        <div>
-                            <span className="font-medium">{item.product.name}</span>
-                            <span className="text-gray-500 ml-2">x{item.quantity}</span>
-                            {item.product.batchNumber && (
-                                <div className="text-xs text-gray-500">{t('pos.receipt.batch')}: {item.product.batchNumber}</div>
-                            )}
-                        </div>
-                        <span>{(item.quantity * item.unitPrice).toFixed(2)} RWF</span>
-                    </div>
-                ))}
-            </div>
+  // Compute per-tax-band totals from cart
+  const taxBands: Record<string, TaxBandTotal> = {};
+  for (const item of cart) {
+    const code = (item.product.taxCode ?? 'A').toUpperCase();
+    const itemTotal = item.quantity * item.unitPrice;
+    const taxAmt = (item as any).taxAmount ?? 0;
+    const taxable = itemTotal - taxAmt;
+    if (!taxBands[code]) taxBands[code] = { code, taxable: 0, tax: 0, total: 0 };
+    taxBands[code].taxable += taxable;
+    taxBands[code].tax     += taxAmt;
+    taxBands[code].total   += itemTotal;
+  }
 
-            <div className="border-t-2 border-dashed border-gray-300 pt-2">
-                <div className="flex justify-between text-sm mb-1">
-                    <span className='text-xs'><span className='font-bold'>{t('pos.receipt.subtotal')} :</span> {subtotal.toFixed(2)} RWF</span>
-                </div>
-                <div className="flex justify-between font-bold mt-2">
-                    <span className='text-xs'><span className='font-bold'>{t('pos.receipt.total')} :</span> {total.toFixed(2)} RWF</span>
-                </div>
-                <div className="text-sm mt-2">
-                    <p className='text-xs'><span className='font-bold'>{t('pos.receipt.payed')} :</span> {payed.toFixed(2)} RWF</p>
-                    <p className='text-xs'><span className='font-bold'>{t('pos.receipt.unpaid')} :</span> {unpaid.toFixed(2)} RWF</p>
-                    <p className='text-xs'><span className='font-bold'>{t('pos.receipt.paymentType')} :</span> {t(`pos.paymentMethods.${paymentMethod}`)}</p>
-                </div>
-            </div>
+  const isCopy     = ebm?.rcptLabel === 'CS' || ebm?.rcptLabel === 'CR';
+  const isTraining = ebm?.rcptLabel === 'TS' || ebm?.rcptLabel === 'TR';
+  const isProforma = ebm?.rcptLabel === 'PS';
 
-            <div className="text-center mt-6 text-xs text-gray-500 border-t-2 border-dashed border-gray-300 pt-2">
-                <p>{t('pos.receipt.thankYou')}</p>
-                <p>{t('pos.receipt.comeAgain')}</p>
-            </div>
-            <p className="text-xs text-center bottom-0">{t('pos.receipt.poweredBy')}</p>
+  return (
+    <div className="p-4 max-w-xs mx-auto bg-white font-mono text-xs" id="receipt">
+      {/* Watermarks */}
+      {isCopy && (
+        <div className="text-center font-bold text-lg border-2 border-black mb-2 py-1">COPY</div>
+      )}
+      {isTraining && (
+        <div className="text-center font-bold text-lg border-2 border-red-500 text-red-500 mb-2 py-1">TRAINING — NOT FISCAL</div>
+      )}
+      {isProforma && (
+        <div className="text-center font-bold text-lg border-2 border-blue-500 text-blue-500 mb-2 py-1">PROFORMA</div>
+      )}
+
+      {/* Header */}
+      <div className="mb-3 text-center">
+        {organization?.avatar && (
+          <img src={organization.avatar} alt={organization?.name} className="h-16 w-16 mx-auto object-contain mb-1" />
+        )}
+        <p className="font-bold text-sm">{organization?.name || t('pos.yourBusinessName')}</p>
+        {(organization as any)?.address && <p>{(organization as any).address}</p>}
+        {(organization as any)?.phone  && <p>Tel: {(organization as any).phone}</p>}
+        {(organization as any)?.email  && <p>Email: {(organization as any).email}</p>}
+        {(organization as any)?.TIN    && <p>TIN: {(organization as any).TIN}</p>}
+        {(organization as any)?.VRN    && <p>VRN: {(organization as any).VRN}</p>}
+        {ebm?.mrcNo && <p className="text-xs">MRC: {ebm.mrcNo}</p>}
+      </div>
+
+      <div className="border-b border-dashed border-gray-400 my-2" />
+
+      {/* Receipt type label */}
+      {ebm?.rcptLabel && (
+        <div className="text-center font-bold mb-1">
+          {ebm.rcptLabel} — {RCPT_LABEL_DISPLAY[ebm.rcptLabel] ?? ebm.rcptLabel}
         </div>
-    );
+      )}
+
+      {/* Transaction info */}
+      <div className="mb-2">
+        <p><span className="font-bold">Receipt#:</span> {receiptNumber}</p>
+        <p><span className="font-bold">Date:</span> {date}</p>
+        <p><span className="font-bold">Cashier:</span> {cashierName}</p>
+        <p><span className="font-bold">Customer:</span> {customer.name}</p>
+        <p><span className="font-bold">Phone:</span> {customer.phone}</p>
+        {customer.tin && <p><span className="font-bold">TIN:</span> {customer.tin}</p>}
+      </div>
+
+      <div className="border-b border-dashed border-gray-400 my-2" />
+
+      {/* Items */}
+      <div className="mb-2">
+        {cart.map((item, index) => (
+          <div key={index} className="flex justify-between py-0.5 border-b border-dashed border-gray-200">
+            <div>
+              <span className="font-medium">{item.product.name}</span>
+              <span className="text-gray-500 ml-1">x{item.quantity}</span>
+              <span className="text-gray-400 ml-1">[{(item.product.taxCode ?? 'A').toUpperCase()}]</span>
+            </div>
+            <span>{(item.quantity * item.unitPrice).toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-right text-xs text-gray-500 mb-1">Items: {cart.length}</p>
+
+      <div className="border-b border-dashed border-gray-400 my-2" />
+
+      {/* Tax breakdown per band */}
+      {Object.values(taxBands).length > 0 && (
+        <div className="mb-2">
+          <p className="font-bold">Tax Summary:</p>
+          {Object.values(taxBands).map(b => (
+            <div key={b.code} className="flex justify-between">
+              <span>{b.code}: Taxable {b.taxable.toFixed(2)}</span>
+              <span>Tax {b.tax.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Totals */}
+      <div className="mb-2">
+        <div className="flex justify-between"><span>Subtotal:</span><span>{subtotal.toFixed(2)}</span></div>
+        <div className="flex justify-between"><span>Tax:</span><span>{(total - subtotal).toFixed(2)}</span></div>
+        <div className="flex justify-between font-bold"><span>TOTAL:</span><span>{total.toFixed(2)} RWF</span></div>
+        <div className="flex justify-between"><span>Paid:</span><span>{payed.toFixed(2)}</span></div>
+        {unpaid > 0 && <div className="flex justify-between"><span>Balance:</span><span>{unpaid.toFixed(2)}</span></div>}
+        <div className="flex justify-between"><span>Method:</span><span>{t(`pos.paymentMethods.${paymentMethod}`, { defaultValue: paymentMethod })}</span></div>
+      </div>
+
+      {/* SDC Block (only shown when fiscalized) */}
+      {ebm?.sdcId && (
+        <>
+          <div className="border-b border-dashed border-gray-400 my-2" />
+          <div className="mb-2">
+            <p className="font-bold text-center">--- RRA FISCAL DATA ---</p>
+            <p><span className="font-bold">SDC ID:</span> {ebm.sdcId}</p>
+            <p><span className="font-bold">Receipt No:</span> {ebm.sdcRcptNo}</p>
+            {ebm.sdcDateTime && <p><span className="font-bold">SDC Time:</span> {new Date(ebm.sdcDateTime).toLocaleString()}</p>}
+            {ebm.internalData && (
+              <p className="break-all"><span className="font-bold">Internal Data:</span> {dashEvery4(ebm.internalData)}</p>
+            )}
+            {ebm.receiptSignature && (
+              <p className="break-all"><span className="font-bold">Signature:</span> {dashEvery4(ebm.receiptSignature)}</p>
+            )}
+            {qrDataUrl && (
+              <div className="text-center mt-2">
+                <img src={qrDataUrl} alt="RRA Fiscal QR" className="w-32 h-32 mx-auto" />
+                <p className="text-xs text-gray-500">Scan to verify on RRA portal</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      <div className="text-center mt-4 border-t border-dashed border-gray-400 pt-2">
+        <p>{t('pos.receipt.thankYou')}</p>
+        <p>{t('pos.receipt.comeAgain')}</p>
+      </div>
+      <p className="text-xs text-center mt-1 text-gray-400">{t('pos.receipt.poweredBy')}</p>
+    </div>
+  );
 };

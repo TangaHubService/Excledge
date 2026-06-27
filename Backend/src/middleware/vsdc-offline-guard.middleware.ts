@@ -2,15 +2,18 @@ import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import { error as apiError } from '../utils/apiResponse';
 
-const TWENTY_TWO_HOURS_MS = 22 * 60 * 60 * 1000;
-const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+// C11: configurable offline block threshold (default 2h per RRA operational guidance)
+// Set VSDC_OFFLINE_BLOCK_MS in .env to override (e.g. "86400000" for legacy 24h behaviour)
+const VSDC_OFFLINE_BLOCK_MS  = Number(process.env.VSDC_OFFLINE_BLOCK_MS  ?? 2 * 60 * 60 * 1000);
+// Warn at 80% of the block threshold
+const VSDC_OFFLINE_WARN_MS   = Math.floor(VSDC_OFFLINE_BLOCK_MS * 0.8);
 
 /**
- * Check whether the VSDC has been reachable within the last 24 hours.
+ * Check whether the VSDC has been reachable within the configured window.
  *
  * - Returns `true` if contact was made within the allowed window.
- * - Logs a warning if > 22 hours since last contact.
- * - Throws a structured error if > 24 hours (hard block).
+ * - Logs a warning at 80% of the threshold.
+ * - Throws a structured error beyond the block threshold (default 2h).
  */
 export async function verifyVsdcOnlineStatus(organizationId: number): Promise<boolean> {
   const org = await prisma.organization.findUnique({
@@ -29,23 +32,24 @@ export async function verifyVsdcOnlineStatus(organizationId: number): Promise<bo
   }
 
   const elapsed = Date.now() - lastContact.getTime();
+  const blockHours = Math.round(VSDC_OFFLINE_BLOCK_MS / (60 * 60 * 1000));
 
-  if (elapsed >= TWENTY_FOUR_HOURS_MS) {
+  if (elapsed >= VSDC_OFFLINE_BLOCK_MS) {
     const hoursOffline = Math.floor(elapsed / (60 * 60 * 1000));
     throw Object.assign(
       new Error(
-        `VSDC unreachable for ${hoursOffline}h (>24h limit). ` +
+        `VSDC unreachable for ${hoursOffline}h (>${blockHours}h limit). ` +
         'Receipt generation is blocked. Contact system administrator to restore connectivity.',
       ),
       { statusCode: 503 },
     );
   }
 
-  if (elapsed >= TWENTY_TWO_HOURS_MS) {
-    const hoursOffline = Math.floor(elapsed / (60 * 60 * 1000));
+  if (elapsed >= VSDC_OFFLINE_WARN_MS) {
+    const minsOffline = Math.floor(elapsed / (60 * 1000));
     console.warn(
-      `[VSDC] Organization ${organizationId}: ${hoursOffline}h since last successful VSDC contact. ` +
-      `Approaching the 24-hour hard limit.`,
+      `[VSDC] Organization ${organizationId}: ${minsOffline}min since last successful VSDC contact. ` +
+      `Approaching the ${blockHours}h hard limit.`,
     );
   }
 
