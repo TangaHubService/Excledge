@@ -1,361 +1,297 @@
-import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Button } from '../../../components/ui/button';
-import { Input } from '../../../components/ui/input';
-import { Label } from '../../../components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
-import { ShoppingCart, Loader2, UserPlus, Search, X } from 'lucide-react';
-import PhoneInputWithCountryCode from '../../../components/PhoneInputWithCountryCode';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '../../../components/ui/drawer';
-import { toast } from "react-toastify";
-import { apiClient } from '../../../lib/api-client';
-import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response';
-import { offlineQueue } from '../../../utils/offlineQueue';
-import { WifiOff } from 'lucide-react';
+import {
+  useState, useEffect, useMemo, useCallback, memo, useRef,
+} from 'react'
+import { useTranslation } from 'react-i18next'
+import { Button } from '../../../components/ui/button'
+import { Input } from '../../../components/ui/input'
+import { Label } from '../../../components/ui/label'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '../../../components/ui/select'
+import {
+  ShoppingCart, Loader2, UserPlus, Search, X, WifiOff,
+  Package, Minus, Plus, Trash2,
+} from 'lucide-react'
+import PhoneInputWithCountryCode from '../../../components/PhoneInputWithCountryCode'
+import {
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle,
+} from '../../../components/ui/drawer'
+import { toast } from 'react-toastify'
+import { apiClient } from '../../../lib/api-client'
+import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response'
+import { offlineQueue } from '../../../utils/offlineQueue'
+import { PaymentModal } from '../../../components/pos/PaymentModal'
+import { useVsdcOnlineStatus } from '../../../hooks/useVsdcOnlineStatus'
+import { useBranch } from '../../../context/BranchContext'
+import { cn } from '../../../lib/utils'
 
+// ── Types ────────────────────────────────────────────────────────────────────
 
-
-import { PaymentModal } from '../../../components/pos/PaymentModal';
-import { useVsdcOnlineStatus } from '../../../hooks/useVsdcOnlineStatus';
-import { useTheme } from '../../../context/ThemeContext';
-import { useBranch } from '../../../context/BranchContext';
-
-// Types
 interface Product {
-  id: string;
-  name: string;
-  price: number;
-  stock: number;
-  quantity: number;
-  unitPrice?: number;
-  batchNumber: string;
-  expiryDate: string;
-  imageUrl?: string;
+  id: string
+  name: string
+  price: number
+  stock: number
+  quantity: number
+  unitPrice?: number
+  batchNumber: string
+  expiryDate: string
+  imageUrl?: string
+  category?: string
+  taxCode?: string
 }
 
 interface Customer {
-  id: string;
-  name: string;
-  email?: string;
-  phone?: string;
-  type: string;
+  id: string
+  name: string
+  email?: string
+  phone?: string
+  type: string
 }
 
 export interface CartItem {
-  product: Product;
-  quantity: number;
-  unitPrice: number;
+  product: Product
+  quantity: number
+  unitPrice: number
 }
 
 function productsFromInventoryResponse(res: unknown): Product[] {
-  return parseInventoryGetProductsResponse(res).items as Product[];
+  return parseInventoryGetProductsResponse(res).items as Product[]
 }
 
-// Product Card Component
-const ProductCard = memo(({ product, onAddToCart }: any) => {
-  const { t } = useTranslation();
-  const { theme } = useTheme();
-  const getProductInitial = (name: string) => {
-    return name.charAt(0).toUpperCase();
-  };
+// ── ProductCard ───────────────────────────────────────────────────────────────
+
+const ProductCard = memo(({ product, onAddToCart }: { product: Product; onAddToCart: (p: Product) => void }) => {
+  const isLowStock = product.quantity > 0 && product.quantity <= 5
 
   return (
-    <div
-      className={`rounded-lg border-2 flex flex-col items-center justify-between p-3 hover:shadow-lg transition-all cursor-pointer ${theme === 'dark'
-        ? 'bg-gray-800 border-gray-700 hover:border-blue-500'
-        : 'bg-white border-gray-200 hover:border-blue-400'
-        }`}
+    <button
+      type="button"
       onClick={() => onAddToCart(product)}
+      className={cn(
+        'relative flex flex-col rounded-lg border-2 p-3 text-left transition-all duration-150',
+        'bg-white dark:bg-gray-800',
+        'border-gray-200 dark:border-gray-700',
+        'hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500',
+        'active:scale-[0.98]',
+      )}
     >
-      <div className={`w-full h-24 rounded-lg flex items-center justify-center mb-2 overflow-hidden ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'
-        }`}>
+      {/* Product image / initial */}
+      <div className="w-full h-20 rounded-md flex items-center justify-center mb-2 overflow-hidden bg-gray-100 dark:bg-gray-700">
         {product.imageUrl ? (
-          <img
-            src={product.imageUrl}
-            alt={product.name}
-            className="w-full h-full object-cover"
-          />
+          <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
         ) : (
-          <span className={`text-4xl font-bold ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'
-            }`}>
-            {getProductInitial(product.name)}
+          <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+            {product.name.charAt(0).toUpperCase()}
           </span>
         )}
       </div>
-      <div className="w-full text-center">
-        <h3 className={`font-semibold text-sm mb-1 line-clamp-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'
-          }`}>
-          {product.name}
-        </h3>
-        <p className={`text-lg font-bold mb-1 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'
-          }`}>
-          {product.unitPrice} RWF
-        </p>
-        <p className={`text-xs font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-          }`}>
-          {t('pos.stock')}: {product.quantity}
-        </p>
-      </div>
-    </div>
-  );
-});
 
-// Order Item Component
-const OrderItem = memo(({ item, onRemove, onUpdateQuantity, onUpdatePrice }: any) => {
-  const { t } = useTranslation();
-  const { theme } = useTheme();
-  const [quantityInput, setQuantityInput] = useState(item.quantity.toString());
-  const [isEditingQuantity, setIsEditingQuantity] = useState(false);
+      {/* Name */}
+      <p className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2 leading-snug mb-1">
+        {product.name}
+      </p>
 
+      {/* Price */}
+      <p className="text-sm font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+        {(product.unitPrice ?? product.price ?? 0).toLocaleString()} RWF
+      </p>
 
-  const getProductInitial = (name: string) => {
-    return name.charAt(0).toUpperCase();
-  };
-  const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setQuantityInput(e.target.value);
-  };
+      {/* Stock */}
+      <p className={cn(
+        'text-[11px] mt-0.5 font-medium',
+        isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500',
+      )}>
+        {isLowStock ? `Low: ${product.quantity} left` : `${product.quantity} in stock`}
+      </p>
 
-  const handleQuantityBlur = () => {
-    const newQuantity = parseInt(quantityInput, 10);
-    if (!isNaN(newQuantity) && newQuantity > 0) {
-      onUpdateQuantity(item.product.id, newQuantity);
-    } else {
-      setQuantityInput(item.quantity.toString());
-    }
-    setIsEditingQuantity(false);
-  };
+      {/* Low stock warning dot */}
+      {isLowStock && (
+        <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+      )}
+    </button>
+  )
+})
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleQuantityBlur();
-    }
-  };
+// ── CartItemRow ───────────────────────────────────────────────────────────────
+
+const CartItemRow = memo(({
+  item, onRemove, onUpdateQuantity, onUpdatePrice,
+}: {
+  item: CartItem
+  onRemove: (id: string) => void
+  onUpdateQuantity: (id: string, qty: number) => void
+  onUpdatePrice: (id: string, price: number | string) => void
+}) => {
+  const [quantityInput, setQuantityInput] = useState(String(item.quantity))
+  const [editingQty, setEditingQty] = useState(false)
+
+  const commitQty = () => {
+    const n = parseInt(quantityInput, 10)
+    if (!isNaN(n) && n > 0) onUpdateQuantity(item.product.id, n)
+    else setQuantityInput(String(item.quantity))
+    setEditingQty(false)
+  }
+
+  const lineTotal = (item.unitPrice * item.quantity).toLocaleString()
 
   return (
-    <div className={`flex items-center gap-3 p-3 rounded-lg border ${theme === 'dark'
-      ? 'bg-gray-700 border-gray-600'
-      : 'bg-gray-50 border-gray-200'
-      }`}>
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden ${theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'
-        }`}>
+    <div className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700">
+      {/* Thumbnail */}
+      <div className="h-10 w-10 rounded-md flex-shrink-0 overflow-hidden flex items-center justify-center bg-gray-200 dark:bg-gray-600">
         {item.product.imageUrl ? (
-          <img
-            src={item.product.imageUrl}
-            alt={item.product.name}
-            className="w-full h-full object-cover"
-          />
+          <img src={item.product.imageUrl} alt={item.product.name} className="h-full w-full object-cover" />
         ) : (
-          <span className={`text-lg font-bold ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'
-            }`}>
-            {getProductInitial(item.product.name)}
+          <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
+            {item.product.name.charAt(0).toUpperCase()}
           </span>
         )}
       </div>
+
+      {/* Details */}
       <div className="flex-1 min-w-0">
-        <h4 className={`font-medium text-sm truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'
-          }`}>
-          {item.product.name}
-        </h4>
-        <div className="flex items-center gap-1 mt-1">
+        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.product.name}</p>
+
+        {/* Qty controls */}
+        <div className="flex items-center gap-1.5 mt-1.5">
           <button
+            type="button"
             onClick={() => onUpdateQuantity(item.product.id, Math.max(1, item.quantity - 1))}
-            className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold transition-colors ${theme === 'dark'
-              ? 'bg-gray-600 text-white hover:bg-gray-500'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
+            className="h-6 w-6 rounded flex items-center justify-center bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
           >
-            -
+            <Minus className="h-3 w-3" />
           </button>
-          {isEditingQuantity ? (
+
+          {editingQty ? (
             <input
-              min="1"
+              type="number"
+              min={1}
               max={item.product.quantity}
               value={quantityInput}
-              onChange={handleQuantityChange}
-              onBlur={handleQuantityBlur}
-              onKeyDown={handleKeyDown}
-              className={`w-12 px-1 py-0.5 text-xs border rounded text-center ${theme === 'dark'
-                ? 'bg-gray-800 border-gray-600 text-white'
-                : 'bg-white border-gray-300 text-gray-900'
-                }`}
+              onChange={e => setQuantityInput(e.target.value)}
+              onBlur={commitQty}
+              onKeyDown={e => e.key === 'Enter' && commitQty()}
+              className="w-12 px-1 py-0.5 text-xs border rounded text-center bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
               autoFocus
             />
           ) : (
-            <div
-              className={`w-12 px-1 py-0.5 text-xs border rounded text-center cursor-text ${theme === 'dark'
-                ? 'border-gray-600 text-white'
-                : 'border-gray-300 text-gray-900'
-                }`}
-              onClick={() => setIsEditingQuantity(true)}
+            <button
+              type="button"
+              onClick={() => setEditingQty(true)}
+              className="w-12 px-1 py-0.5 text-xs border rounded text-center border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white hover:border-blue-400 transition-colors"
             >
               {item.quantity}
-            </div>
+            </button>
           )}
+
           <button
+            type="button"
             onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
-            className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold transition-colors ${theme === 'dark'
-              ? 'bg-gray-600 text-white hover:bg-gray-500'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
+            className="h-6 w-6 rounded flex items-center justify-center bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
           >
-            +
+            <Plus className="h-3 w-3" />
           </button>
         </div>
       </div>
-      <div className="text-right">
+
+      {/* Price + remove */}
+      <div className="flex flex-col items-end gap-1 flex-shrink-0">
         <input
-          value={item.unitPrice === null ? "" : item.unitPrice}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (value === "") {
-              onUpdatePrice(item.product.id, "");
-              return;
-            }
-            const newPrice = parseFloat(value);
-            if (!isNaN(newPrice) && newPrice >= 0) {
-              onUpdatePrice(item.product.id, newPrice);
-            }
+          type="number"
+          min={0}
+          value={item.unitPrice === null ? '' : item.unitPrice}
+          onChange={e => {
+            const v = e.target.value
+            if (v === '') { onUpdatePrice(item.product.id, ''); return }
+            const n = parseFloat(v)
+            if (!isNaN(n) && n >= 0) onUpdatePrice(item.product.id, n)
           }}
-          className={`w-20 text-right text-xs border rounded px-1 py-0.5 ${theme === 'dark'
-            ? 'bg-gray-800 border-gray-600 text-white'
-            : 'bg-white border-gray-300 text-gray-900'
-            }`}
+          className="w-20 text-right text-xs border rounded px-1.5 py-0.5 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
-        <p className={`font-semibold text-sm mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'
-          }`}>
-          {(item.unitPrice * item.quantity).toFixed(2)} RWF
-        </p>
+        <p className="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{lineTotal} RWF</p>
         <button
+          type="button"
           onClick={() => onRemove(item.product.id)}
-          className={`text-xs mt-1 ${theme === 'dark' ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'
-            }`}
+          className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 transition-colors"
         >
-          {t('pos.remove')}
+          <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>
-  );
-});
+  )
+})
 
-// Add Customer Dialog
-const AddCustomerDialog = memo(({ onCustomerAdded, isOpen, onOpenChange }: any) => {
-  const { t } = useTranslation();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+// ── AddCustomerDrawer ─────────────────────────────────────────────────────────
+
+const AddCustomerDrawer = memo(({
+  onCustomerAdded, isOpen, onOpenChange,
+}: {
+  onCustomerAdded: (c: Customer) => void
+  isOpen: boolean
+  onOpenChange: (v: boolean) => void
+}) => {
+  const { t } = useTranslation()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    countryCode: '+250',
-    type: 'CASH'
-  });
+    name: '', email: '', phone: '', countryCode: '+250', type: 'CASH',
+  })
 
   const handlePhoneChange = (phone: string, countryCode: string) => {
-    setFormData(prev => ({
-      ...prev,
-      phone,
-      countryCode
-    }));
-  };
+    setFormData(prev => ({ ...prev, phone, countryCode }))
+  }
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
+  }
 
-    // Clear error when user starts typing
-    if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
-    }
-  };
-
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.name.trim()) {
-      newErrors.name = t('validation.required');
-    }
-
-    if (!formData.phone) {
-      newErrors.phone = t('validation.required');
-    } else if (formData.phone.length < 10) {
-      newErrors.phone = t('validation.invalidPhone');
-    }
-
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = t('validation.invalidEmail');
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  const validate = () => {
+    const errs: Record<string, string> = {}
+    if (!formData.name.trim()) errs.name = t('validation.required')
+    if (!formData.phone) errs.phone = t('validation.required')
+    else if (formData.phone.length < 10) errs.phone = t('validation.invalidPhone')
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errs.email = t('validation.invalidEmail')
+    setErrors(errs)
+    return Object.keys(errs).length === 0
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateForm()) {
-      return;
-    }
-
-    setIsSubmitting(true);
+    e.preventDefault()
+    if (!validate()) return
+    setIsSubmitting(true)
     try {
-      // Combine country code with phone number if not already included
-      const phoneNumber = formData.phone.startsWith('+')
-        ? formData.phone
-        : `${formData.countryCode}${formData.phone}`;
-
-      // Create a new object without countryCode and with the formatted phone number
-      const { countryCode, ...customerData } = {
-        ...formData,
-        phone: phoneNumber
-      };
-
-      const newCustomer = await apiClient.createCustomer(customerData);
-      toast.success(t('messages.customerCreated'));
-      onCustomerAdded(newCustomer);
-      onOpenChange(false);
-      // Reset form
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        countryCode: '+250',
-        type: 'CASH'
-      });
-      setErrors({});
-    } catch (error) {
-      console.error('Error adding customer:', error);
-      toast.error(t('messages.saveError'));
+      const phone = formData.phone.startsWith('+') ? formData.phone : `${formData.countryCode}${formData.phone}`
+      const { countryCode, ...rest } = { ...formData, phone }
+      const newCustomer = await apiClient.createCustomer(rest)
+      toast.success(t('messages.customerCreated'))
+      onCustomerAdded(newCustomer)
+      onOpenChange(false)
+      setFormData({ name: '', email: '', phone: '', countryCode: '+250', type: 'CASH' })
+      setErrors({})
+    } catch {
+      toast.error(t('messages.saveError'))
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
   return (
     <Drawer open={isOpen} onOpenChange={onOpenChange}>
-      <DrawerContent className="sm:max-w-md dark:bg-gray-800 dark:text-white bg-white dark:border-gray-700">
+      <DrawerContent className="sm:max-w-md">
         <DrawerHeader>
           <DrawerTitle>{t('pos.addNewCustomer')}</DrawerTitle>
         </DrawerHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">{t('pos.customerName')}</Label>
-            <Input
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleInputChange}
-              placeholder={t('pos.customerNamePlaceholder')}
-            />
-            {errors.name && <p className="text-sm text-red-500 mt-1">{errors.name}</p>}
+        <div className="space-y-4 px-4 pb-6">
+          <div className="space-y-1.5">
+            <Label>{t('pos.customerName')}</Label>
+            <Input name="name" value={formData.name} onChange={handleChange} placeholder={t('pos.customerNamePlaceholder')} />
+            {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="phone">{t('pos.phoneNumber')}</Label>
+          <div className="space-y-1.5">
+            <Label>{t('pos.phoneNumber')}</Label>
             <PhoneInputWithCountryCode
               value={formData.phone}
               countryCode={formData.countryCode}
@@ -364,870 +300,548 @@ const AddCustomerDialog = memo(({ onCustomerAdded, isOpen, onOpenChange }: any) 
               error={errors.phone || ''}
             />
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">{t('pos.emailOptional')}</Label>
-            <Input
-              id="email"
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              placeholder={t('pos.emailPlaceholder')}
-            />
+          <div className="space-y-1.5">
+            <Label>{t('pos.emailOptional')}</Label>
+            <Input type="email" name="email" value={formData.email} onChange={handleChange} placeholder={t('pos.emailPlaceholder')} />
+            {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
           </div>
-
-          <div className="space-y-2 dark:bg-gray-800 dark:text-white">
-            <Label htmlFor="type">{t('pos.customerType')}</Label>
-            <Select
-              value={formData.type}
-              onValueChange={(value) => setFormData(prev => ({ ...prev, type: value }))}
-            >
-              <SelectTrigger className="dark:bg-gray-800 dark:text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-white dark:bg-gray-800 dark:text-white">
+          <div className="space-y-1.5">
+            <Label>{t('pos.customerType')}</Label>
+            <Select value={formData.type} onValueChange={v => setFormData(p => ({ ...p, type: v }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
                 <SelectItem value="INSURANCE">{t('pos.insurance')}</SelectItem>
                 <SelectItem value="CORPORATE">{t('pos.corporate')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
-
-          <div className="flex gap-2 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              className="flex-1"
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
-            >
-              {isSubmitting ? t('pos.adding') : t('pos.addCustomer')}
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">{t('common.cancel')}</Button>
+            <Button onClick={handleSubmit} disabled={isSubmitting} className="flex-1 bg-blue-600 hover:bg-blue-700">
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : t('pos.addCustomer')}
             </Button>
           </div>
         </div>
       </DrawerContent>
     </Drawer>
-  );
-});
-// Main Component
+  )
+})
+
+// ── Main Component ────────────────────────────────────────────────────────────
+
 export default function SalesForm() {
-  const { t } = useTranslation();
-  const { theme } = useTheme();
-  const { selectedBranchId } = useBranch();
-  const vsdcStatus = useVsdcOnlineStatus();
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
-  const [selectedCustomer, setSelectedCustomer] = useState('');
-  const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
-  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const productsContainerRef = useRef<HTMLDivElement | null>(null);
-  const isLoadingMoreRef = useRef(false);
-  const [displayedProductsCount, setDisplayedProductsCount] = useState(30); // Show 30 products initially (10 rows of 3)
-  const ITEMS_PER_LOAD = 15; // Load 15 more items each time (5 rows of 3)
+  const { t } = useTranslation()
+  const { selectedBranchId } = useBranch()
+  useVsdcOnlineStatus() // keeps VSDC status alive in context
 
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [selectedCustomer, setSelectedCustomer] = useState('')
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [displayedCount, setDisplayedCount] = useState(30)
+  const LOAD_STEP = 15
+  const productsRef = useRef<HTMLDivElement | null>(null)
+  const isLoadingMoreRef = useRef(false)
+  const customerDropdownRef = useRef<HTMLDivElement | null>(null)
 
-  // Close dropdown when clicking outside
+  // Online / offline listeners
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (isCustomerDropdownOpen && !target.closest('.customer-dropdown-container')) {
-        setIsCustomerDropdownOpen(false);
-        setCustomerSearchTerm('');
+    const on = () => setIsOnline(true)
+    const off = () => setIsOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
+
+  // Close customer dropdown on outside click
+  useEffect(() => {
+    if (!showCustomerDropdown) return
+    const handle = (e: MouseEvent) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target as Node)) {
+        setShowCustomerDropdown(false)
+        setCustomerSearch('')
       }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isCustomerDropdownOpen]);
-
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [showCustomerDropdown])
 
   const fetchRecentSales = useCallback(async () => {
     try {
-      await apiClient.getSales({
-        page: 1,
-        limit: 10,
-        search: '',
-        branchId: selectedBranchId
-      });
-    } catch (error) {
-      console.error('Failed to fetch recent sales:', error);
-    }
-  }, [selectedBranchId]);
+      await apiClient.getSales({ page: 1, limit: 10, search: '', branchId: selectedBranchId })
+    } catch { /* silent */ }
+  }, [selectedBranchId])
 
   const fetchData = useCallback(async () => {
     try {
-      setIsLoading(true);
-
+      setIsLoading(true)
       if (!isOnline) {
-        setProducts(offlineQueue.getProducts());
-        setCustomers(offlineQueue.getCustomers());
-        return;
+        setProducts(offlineQueue.getProducts())
+        setCustomers(offlineQueue.getCustomers())
+        return
       }
-
       const [productsData, customersData] = await Promise.all([
         apiClient.getProducts({ page: 1, limit: 10000, search: '', branchId: selectedBranchId }),
-        apiClient.getCustomers({ page: 1, limit: 100, search: '' })
-      ]);
-
-      const allProducts = productsFromInventoryResponse(productsData);
-      const filteredProducts = allProducts.filter((p: Product) => p.quantity > 0);
-      setProducts(filteredProducts);
-      setDisplayedProductsCount(30);
-
-      const allCustomers = customersData.customers || [];
-      setCustomers(allCustomers);
-
-      // Cache data for offline use
-      offlineQueue.saveProducts(filteredProducts);
-      offlineQueue.saveCustomers(allCustomers);
-
-      // Set default customer if available
-      if (allCustomers.length > 0) {
-        setSelectedCustomer(allCustomers[0].id);
-      }
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
-      toast.error(t('pos.loadError'));
-      // Fallback to cache on error
-      setProducts(offlineQueue.getProducts());
-      setCustomers(offlineQueue.getCustomers());
+        apiClient.getCustomers({ page: 1, limit: 100, search: '' }),
+      ])
+      const all = productsFromInventoryResponse(productsData).filter((p: Product) => p.quantity > 0)
+      setProducts(all)
+      setDisplayedCount(30)
+      const allCustomers = customersData.customers || []
+      setCustomers(allCustomers)
+      offlineQueue.saveProducts(all)
+      offlineQueue.saveCustomers(allCustomers)
+      if (allCustomers.length > 0) setSelectedCustomer(allCustomers[0].id)
+    } catch {
+      toast.error(t('pos.loadError'))
+      setProducts(offlineQueue.getProducts())
+      setCustomers(offlineQueue.getCustomers())
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  }, [isOnline, selectedBranchId, t]);
+  }, [isOnline, selectedBranchId, t])
 
-  // Fetch products and customers on mount and when branch or online status changes
+  useEffect(() => { fetchData(); fetchRecentSales() }, [fetchData, fetchRecentSales])
+
+  // Offline sync
   useEffect(() => {
-    fetchData();
-    fetchRecentSales();
-  }, [fetchData, fetchRecentSales]);
-
-  // Handle online/offline status
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  // Synchronize offline sales
-  useEffect(() => {
-    if (isOnline && offlineQueue.hasItems() && !isSyncing) {
-      const syncSales = async () => {
-        setIsSyncing(true);
-        const queue = offlineQueue.getQueue();
-        toast.info(t('pos.syncingSales', { count: queue.length }) || `Syncing ${queue.length} offline sales...`);
-
-        for (const item of queue) {
-          try {
-            await apiClient.createSale(item.payload);
-            offlineQueue.dequeue(item.id);
-          } catch (error) {
-            console.error('Failed to sync sale:', error);
-          }
-        }
-
-        setIsSyncing(false);
-        if (!offlineQueue.hasItems()) {
-          toast.success(t('pos.syncComplete') || 'Offline sales synchronized.');
-          fetchRecentSales();
-        }
-      };
-
-      syncSales();
+    if (!isOnline || !offlineQueue.hasItems() || isSyncing) return
+    const sync = async () => {
+      setIsSyncing(true)
+      const queue = offlineQueue.getQueue()
+      toast.info(t('pos.syncingSales', { count: queue.length }) || `Syncing ${queue.length} offline sales…`)
+      for (const item of queue) {
+        try { await apiClient.createSale(item.payload); offlineQueue.dequeue(item.id) }
+        catch { /* keep item in queue */ }
+      }
+      setIsSyncing(false)
+      if (!offlineQueue.hasItems()) { toast.success(t('pos.syncComplete') || 'Offline sales synchronized.'); fetchRecentSales() }
     }
-  }, [isOnline, isSyncing, t, fetchRecentSales]);
+    sync()
+  }, [isOnline, isSyncing, t, fetchRecentSales])
 
-  // Search products with debouncing
+  // Product search with debounce
   useEffect(() => {
-    if (searchTerm) {
-      const timeoutId = setTimeout(async () => {
-        try {
-          setIsLoading(true);
-
-          if (!isOnline) {
-            const cached = offlineQueue.getProducts();
-            const filtered = cached.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
-            setProducts(filtered);
-            return;
-          }
-
-          const response = await apiClient.getProducts({
-            page: 1,
-            limit: 10000,
-            search: searchTerm,
-            branchId: selectedBranchId
-          });
-          const searchedProducts = productsFromInventoryResponse(response);
-          setProducts(searchedProducts.filter((p: Product) => p.quantity > 0));
-          setDisplayedProductsCount(30); // Reset count when searching
-        } catch (error) {
-          console.error('Failed to search products:', error);
-          toast.error(t('pos.searchError'));
-        } finally {
-          setIsLoading(false);
-        }
-      }, 500);
-
-      return () => clearTimeout(timeoutId);
-    } else {
-      // Reload all products when search is cleared
-      const fetchAllProducts = async () => {
-        try {
-          setIsLoading(true);
-          const response = await apiClient.getProducts({
-            page: 1,
-            limit: 10000,
-            search: '',
-            branchId: selectedBranchId
-          });
-          const reloadedProducts = productsFromInventoryResponse(response);
-          setProducts(reloadedProducts.filter((p: Product) => p.quantity > 0));
-          setDisplayedProductsCount(30); // Reset count when clearing search
-        } catch (error) {
-          console.error('Failed to fetch products:', error);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      fetchAllProducts();
+    if (!searchTerm) {
+      fetchData()
+      return
     }
-  }, [searchTerm, selectedBranchId]);
+    const id = setTimeout(async () => {
+      try {
+        setIsLoading(true)
+        if (!isOnline) {
+          const cached = offlineQueue.getProducts()
+          setProducts(cached.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())))
+          return
+        }
+        const res = await apiClient.getProducts({ page: 1, limit: 10000, search: searchTerm, branchId: selectedBranchId })
+        setProducts(productsFromInventoryResponse(res).filter((p: Product) => p.quantity > 0))
+        setDisplayedCount(30)
+      } catch { toast.error(t('pos.searchError')) }
+      finally { setIsLoading(false) }
+    }, 400)
+    return () => clearTimeout(id)
+  }, [searchTerm, selectedBranchId, isOnline])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Infinite scroll handler
+  // Infinite scroll
   useEffect(() => {
-    const productsContainer = productsContainerRef.current;
-    if (!productsContainer) return;
-
-    const filteredProducts = products.filter((p: Product) => p.quantity > 0);
-
-    const handleScroll = () => {
-      // If already loading or all products displayed, return early
-      if (isLoadingMoreRef.current || displayedProductsCount >= filteredProducts.length) {
-        return;
+    const el = productsRef.current
+    if (!el) return
+    const inStock = products.filter(p => p.quantity > 0)
+    const onScroll = () => {
+      if (isLoadingMoreRef.current || displayedCount >= inStock.length) return
+      const { scrollTop, scrollHeight, clientHeight } = el
+      if (scrollHeight - scrollTop - clientHeight < 300) {
+        isLoadingMoreRef.current = true
+        setDisplayedCount(prev => {
+          const next = Math.min(prev + LOAD_STEP, inStock.length)
+          setTimeout(() => { isLoadingMoreRef.current = false }, 300)
+          return next
+        })
       }
+    }
+    let ticking = false
+    const throttled = () => {
+      if (!ticking) { requestAnimationFrame(() => { onScroll(); ticking = false }); ticking = true }
+    }
+    el.addEventListener('scroll', throttled, { passive: true })
+    const check = setTimeout(onScroll, 100)
+    return () => { clearTimeout(check); el.removeEventListener('scroll', throttled) }
+  }, [products, displayedCount])
 
-      const { scrollTop, scrollHeight, clientHeight } = productsContainer;
-      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-
-      // Load more when user scrolls to within 300px of the bottom
-      if (distanceFromBottom < 300) {
-        isLoadingMoreRef.current = true;
-        setDisplayedProductsCount(prev => {
-          const newCount = Math.min(prev + ITEMS_PER_LOAD, filteredProducts.length);
-          // Reset loading flag after a short delay
-          setTimeout(() => {
-            isLoadingMoreRef.current = false;
-          }, 300);
-          return newCount;
-        });
-      }
-    };
-
-    // Throttle scroll events for better performance
-    let ticking = false;
-    const throttledHandleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          handleScroll();
-          ticking = false;
-        });
-        ticking = true;
-      }
-    };
-
-    productsContainer.addEventListener('scroll', throttledHandleScroll, { passive: true });
-
-    // Check on mount if we need to load more immediately (if content doesn't fill the container)
-    // Use a small delay to ensure DOM is fully rendered
-    const checkInitialLoad = setTimeout(() => {
-      handleScroll();
-    }, 100);
-
-    return () => {
-      clearTimeout(checkInitialLoad);
-      productsContainer.removeEventListener('scroll', throttledHandleScroll);
-    };
-  }, [products, displayedProductsCount]);
-
+  // Cart helpers
   const addToCart = useCallback((product: Product) => {
-    if (!product.quantity || product.quantity < 1) {
-      toast.error(t('pos.outOfStock'));
-      return;
-    }
-
+    if (!product.quantity || product.quantity < 1) { toast.error(t('pos.outOfStock')); return }
     setCart(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
-      if (existing) {
-        const newQuantity = existing.quantity + 1;
-        if (newQuantity > product.quantity) {
-          toast.error(t('pos.lowStockWarning', { count: product.quantity }));
-          return prev;
-        }
-        return prev.map(item =>
-          item.product.id === product.id
-            ? { ...item, quantity: newQuantity }
-            : item
-        );
+      const ex = prev.find(i => i.product.id === product.id)
+      if (ex) {
+        const nq = ex.quantity + 1
+        if (nq > product.quantity) { toast.error(t('pos.lowStockWarning', { count: product.quantity })); return prev }
+        return prev.map(i => i.product.id === product.id ? { ...i, quantity: nq } : i)
       }
-      return [...prev, {
-        product,
-        quantity: 1,
-        unitPrice: product.unitPrice || product.price || 0
-      }];
-    });
+      return [...prev, { product, quantity: 1, unitPrice: product.unitPrice ?? product.price ?? 0 }]
+    })
+    toast.success(t('messages.productAdded'))
+  }, [t])
 
-    toast.success(t('messages.productAdded'));
-  }, [t]);
+  const removeFromCart = useCallback((id: string) => {
+    setCart(prev => prev.filter(i => i.product.id !== id))
+  }, [])
 
-  const removeFromCart = useCallback((productId: string) => {
-    setCart(prev => prev.filter(item => item.product.id !== productId));
-    toast.info(t('pos.itemRemoved'));
-  }, [t]);
+  const updateQuantity = useCallback((id: string, qty: number) => {
+    if (qty < 1) return
+    setCart(prev => prev.map(i => {
+      if (i.product.id !== id) return i
+      if (qty > i.product.quantity) { toast.error(t('pos.lowStockWarning', { count: i.product.quantity })); return i }
+      return { ...i, quantity: qty }
+    }))
+  }, [t])
 
-  const updateQuantity = useCallback((productId: string, newQuantity: number) => {
-    if (newQuantity < 1) return;
+  const updatePrice = useCallback((id: string, price: number | string) => {
+    setCart(prev => prev.map(i => i.product.id === id ? { ...i, unitPrice: price as number } : i))
+  }, [])
 
-    setCart(prev =>
-      prev.map(item => {
-        if (item.product.id === productId) {
-          if (newQuantity > item.product.quantity) {
-            toast.error(t('pos.lowStockWarning', { count: item.product.quantity }));
-            return item;
-          }
-          return { ...item, quantity: newQuantity };
-        }
-        return item;
-      })
-    );
-  }, [t]);
+  const handleCustomerAdded = useCallback((c: Customer) => {
+    setCustomers(prev => [...prev, c])
+    setSelectedCustomer(c.id)
+  }, [])
 
-  const updatePrice = useCallback((productId: string, newPrice: number) => {
-    setCart(prev =>
-      prev.map(item =>
-        item.product.id === productId
-          ? { ...item, unitPrice: newPrice }
-          : item
-      )
-    );
-    toast.success(t('pos.priceUpdated'));
-  }, [t]);
+  const subtotal = useMemo(() => cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0), [cart])
+  const total = subtotal
 
-  const handleCustomerAdded = useCallback((newCustomer: Customer) => {
-    setCustomers(prev => [...prev, newCustomer]);
-    setSelectedCustomer(newCustomer.id);
-  }, []);
+  const selectedCustomerObj = useMemo(
+    () => customers.find(c => c.id === selectedCustomer),
+    [customers, selectedCustomer],
+  )
 
-  const subtotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  }, [cart]);
+  const filteredCustomers = useMemo(
+    () => customers.filter(c =>
+      customerSearch
+        ? c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+          c.phone?.includes(customerSearch)
+        : true
+    ),
+    [customers, customerSearch],
+  )
 
-  const serviceFees = 0;
-  const salesTax = 0;
-  const total = subtotal + serviceFees + salesTax;
+  const inStockProducts = useMemo(() => products.filter(p => p.quantity > 0), [products])
 
-  const handleOpenPaymentModal = useCallback(() => {
-    if (cart.length === 0) {
-      toast.error(t('pos.noItemsInCart'));
-      return;
-    }
+  const handleOpenPayment = useCallback(() => {
+    if (cart.length === 0) { toast.error(t('pos.noItemsInCart')); return }
+    if (!selectedCustomer) { toast.error(t('pos.selectCustomer')); return }
+    setIsPaymentModalOpen(true)
+  }, [cart, selectedCustomer, t])
 
-    if (!selectedCustomer) {
-      toast.error(t('pos.selectCustomer'));
-      return;
-    }
-
-    setIsPaymentModalOpen(true);
-  }, [cart, selectedCustomer, t]);
-
-  const handleProcessPayment = useCallback(async (paymentEntries: Array<{ id: string; method: string; amount: number; reference?: string }>) => {
+  const handleProcessPayment = useCallback(async (
+    entries: Array<{ id: string; method: string; amount: number; reference?: string }>,
+  ) => {
     try {
-      setIsSubmitting(true);
+      setIsSubmitting(true)
+      let cashAmount = 0, insuranceAmount = 0, debtAmount = 0
+      entries.forEach(p => {
+        if (p.method === 'CASH' || p.method === 'MOBILE_MONEY' || p.method === 'CREDIT_CARD') cashAmount += p.amount
+        else if (p.method === 'INSURANCE') insuranceAmount += p.amount
+        else if (p.method === 'DEBT') debtAmount += p.amount
+      })
+      const totalPaid = entries.reduce((s, p) => s + p.amount, 0)
+      const remainingDebt = Math.max(0, total - totalPaid)
+      if (remainingDebt > 0) debtAmount += remainingDebt
 
-      // Calculate totals by payment method
-      let cashAmount = 0;
-      let insuranceAmount = 0;
-      let debtAmount = 0;
-
-      paymentEntries.forEach((payment) => {
-        switch (payment.method) {
-          case 'CASH':
-            cashAmount += payment.amount;
-            break;
-          case 'INSURANCE':
-            insuranceAmount += payment.amount;
-            break;
-          case 'DEBT':
-            // Debt payments are recorded as debt
-            debtAmount += payment.amount;
-            break;
-          case 'MOBILE_MONEY':
-            // Mobile money is treated as cash payment
-            cashAmount += payment.amount;
-            break;
-          case 'CREDIT_CARD':
-            // Card payments are treated as cash payment
-            cashAmount += payment.amount;
-            break;
-        }
-      });
-
-      // Calculate total paid
-      const totalPaid = paymentEntries.reduce((sum, p) => sum + p.amount, 0);
-      const remainingDebt = Math.max(0, total - totalPaid);
-
-      // If there's remaining balance, add it to debtAmount (credit/debt)
-      if (remainingDebt > 0) {
-        debtAmount += remainingDebt;
-      }
-
-      // Determine payment type based on methods used and amounts
-      let paymentType: 'CASH' | 'DEBT' | 'MIXED' | 'INSURANCE' | 'CREDIT_CARD' | 'MOBILE_MONEY' = 'CASH';
-
-      // Get unique payment methods that have amounts > 0
-      const activeMethods = paymentEntries.filter(p => p.amount > 0).map(p => p.method);
-      const uniqueActiveMethods = [...new Set(activeMethods)];
-
-      // Count how many payment method types have amounts > 0
-      const hasCashAmount = cashAmount > 0;
-      const hasInsuranceAmount = insuranceAmount > 0;
-      const hasDebtAmount = debtAmount > 0;
-
-      // Determine payment type
-      if (uniqueActiveMethods.length > 1) {
-        // Multiple payment methods
-        paymentType = 'MIXED';
-      } else if (uniqueActiveMethods.length === 1) {
-        // Single payment method
-        const singleMethod = uniqueActiveMethods[0];
-
-        // If there's also debt (remaining balance), it's MIXED unless the method is DEBT
-        if (hasDebtAmount && singleMethod !== 'DEBT') {
-          paymentType = 'MIXED';
-        } else {
-          // Use the actual payment method type
-          paymentType = singleMethod as any;
-        }
-      } else if (hasDebtAmount && !hasCashAmount && !hasInsuranceAmount) {
-        // Only debt, no other payments
-        paymentType = 'DEBT';
-      } else if (hasCashAmount && !hasInsuranceAmount && !hasDebtAmount) {
-        // Only cash (could be from CASH, MOBILE_MONEY, or CREDIT_CARD)
-        // Check which method was actually used
-        const cashMethod = paymentEntries.find(p => p.amount > 0 && (p.method === 'CASH' || p.method === 'MOBILE_MONEY' || p.method === 'CREDIT_CARD'));
-        if (cashMethod) {
-          paymentType = cashMethod.method as any;
-        } else {
-          paymentType = 'CASH';
-        }
-      } else if (hasInsuranceAmount && !hasCashAmount && !hasDebtAmount) {
-        // Only insurance
-        paymentType = 'INSURANCE';
+      const activeMethods = [...new Set(entries.filter(p => p.amount > 0).map(p => p.method))]
+      let paymentType: string = 'CASH'
+      if (activeMethods.length > 1 || (activeMethods.length === 1 && remainingDebt > 0 && activeMethods[0] !== 'DEBT')) {
+        paymentType = 'MIXED'
+      } else if (activeMethods.length === 1) {
+        paymentType = activeMethods[0]
+      } else if (debtAmount > 0) {
+        paymentType = 'DEBT'
       }
 
       const payload = {
         customerId: selectedCustomer,
-        items: cart.map((item) => ({
-          productId: item.product.id,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice
-        })),
+        items: cart.map(i => ({ productId: i.product.id, quantity: i.quantity, unitPrice: i.unitPrice })),
         paymentType,
         cashAmount,
         insuranceAmount,
         debtAmount,
         branchId: selectedBranchId,
-        paymentStatus: remainingDebt > 0 ? 'MIXED' : 'PAID'
-      };
+      }
 
       if (!isOnline) {
-        offlineQueue.enqueue(payload);
-        toast.warning(t('pos.offlineQueued') || 'Offline: Sale has been queued and will sync when online.');
-        setCart([]);
-        setIsPaymentModalOpen(false);
-        return;
+        offlineQueue.enqueue(payload)
+        toast.warning(t('pos.offlineQueued') || 'Sale queued — will sync when online.')
+        setCart([])
+        setIsPaymentModalOpen(false)
+        return
       }
 
-      await apiClient.createSale(payload);
-      await fetchRecentSales();
+      await apiClient.createSale(payload)
+      await fetchRecentSales()
 
       if (remainingDebt > 0) {
-        toast.success(t('pos.paymentDebtSuccess', { paid: totalPaid, debt: remainingDebt }));
+        toast.success(t('pos.paymentDebtSuccess', { paid: totalPaid, debt: remainingDebt }))
       } else {
-        toast.success(t('pos.paymentSuccess'));
+        toast.success(t('pos.paymentSuccess'))
       }
 
-      setCart([]);
-      setIsPaymentModalOpen(false);
-      // Refresh products to get updated stock
-      const response = await apiClient.getProducts({
-        page: 1,
-        limit: 10000,
-        search: '',
-        branchId: selectedBranchId
-      });
-      const refreshedProducts = productsFromInventoryResponse(response);
-      setProducts(refreshedProducts.filter((p: Product) => p.quantity > 0));
+      setCart([])
+      setIsPaymentModalOpen(false)
+
+      const res = await apiClient.getProducts({ page: 1, limit: 10000, search: '', branchId: selectedBranchId })
+      setProducts(productsFromInventoryResponse(res).filter((p: Product) => p.quantity > 0))
     } catch (error: any) {
-      console.error('Failed to process payment:', error);
-      // Extract error message - handle both string and object errors
-      let errorMessage = t('pos.paymentError');
-      if (error?.response?.data?.error) {
-        errorMessage = error.response.data.error;
-      } else if (error?.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error?.message) {
-        errorMessage = error.message;
-      }
-      toast.error(errorMessage);
-
-      // If it's a stock error, refresh products to get updated stock
-      if (errorMessage.includes('Insufficient stock') || errorMessage.includes('stock')) {
+      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || t('pos.paymentError')
+      toast.error(msg)
+      if (msg.includes('stock')) {
         try {
-          const response = await apiClient.getProducts({
-            page: 1,
-            limit: 10000,
-            search: '',
-            branchId: selectedBranchId
-          });
-          const errorRefreshProducts = productsFromInventoryResponse(response);
-          setProducts(errorRefreshProducts.filter((p: Product) => p.quantity > 0));
-        } catch (refreshError) {
-          console.error('Failed to refresh products:', refreshError);
-        }
+          const res = await apiClient.getProducts({ page: 1, limit: 10000, search: '', branchId: selectedBranchId })
+          setProducts(productsFromInventoryResponse(res).filter((p: Product) => p.quantity > 0))
+        } catch { /* silent */ }
       }
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  }, [cart, selectedCustomer, total, t, fetchRecentSales]);
+  }, [cart, selectedCustomer, total, t, fetchRecentSales, isOnline, selectedBranchId])
 
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <>
-      <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'}`}>
-        {!isOnline && (
-          <div className="bg-amber-500 text-white px-6 py-2 flex items-center justify-center gap-2 animate-in slide-in-from-top duration-300">
-            <WifiOff className="h-4 w-4" />
-            <span className="text-sm font-medium">
-              {t('pos.offlineMode') || 'You are currently offline. Sales will be queued and synced when connection is restored.'}
+      {/* Offline banner */}
+      {!isOnline && (
+        <div className="fixed top-14 inset-x-0 z-40 flex items-center justify-center gap-2 bg-amber-500 px-4 py-2 text-sm font-medium text-white">
+          <WifiOff className="h-4 w-4 flex-shrink-0" />
+          {t('pos.offlineMode') || 'You are offline. Sales will be queued and synced when connection is restored.'}
+        </div>
+      )}
+
+      {/* Full-height POS shell — sits inside the DashboardLayout main scroll area */}
+      <div className="flex h-[calc(100vh-56px)] -mt-6 -mx-4 sm:-mx-6 lg:-mx-8 overflow-hidden bg-gray-50 dark:bg-gray-900">
+
+        {/* ── LEFT: product browser ───────────────────────────────────────── */}
+        <div className="flex flex-1 flex-col min-w-0 border-r border-gray-200 dark:border-gray-700">
+
+          {/* Search bar */}
+          <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder={t('pos.searchPlaceholder') || 'Search products…'}
+                className="pl-9 pr-8 h-9 bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums whitespace-nowrap">
+              {inStockProducts.length} items
             </span>
           </div>
-        )}
-        {/* Header */}
-        <div className={`border-b ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} px-6 py-4`}>
-          <div className="flex items-center justify-between">
-            <h1 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-              {t('pos.pointOfSale') || 'POS'}
-            </h1>
-            <div className="flex-1 max-w-3xl ml-6 group">
-              <div className="relative">
-                <Search className={`absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 transition-all duration-200 ${searchTerm ? 'text-blue-500 scale-110' : 'text-gray-400 group-focus-within:text-blue-500 group-focus-within:scale-110'
-                  }`} />
-                <Input
-                  type="text"
-                  placeholder={t('pos.searchPlaceholder')}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className={`pl-12 pr-12 h-12 text-base transition-all duration-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 rounded-2xl shadow-sm ${theme === 'dark'
-                    ? 'bg-gray-700/50 border-gray-600 text-white placeholder-gray-500 hover:bg-gray-700'
-                    : 'bg-gray-50 border-gray-200 hover:border-gray-300 hover:bg-white'
-                    }`}
-                />
-                {searchTerm && (
-                  <button
-                    onClick={() => setSearchTerm('')}
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors bg-gray-200/50 dark:bg-gray-600/50 p-1 rounded-full"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <div className="flex flex-col lg:flex-row h-[calc(100vh-80px)] overflow-hidden">
-          {/* Products Grid - Left Side */}
-          <div
-            ref={productsContainerRef}
-            className="flex-1 overflow-y-auto p-4 lg:p-6 lg:border-r"
-            style={{ borderColor: theme === 'dark' ? '#374151' : '#e5e7eb' }}
-          >
+          {/* Product grid */}
+          <div ref={productsRef} className="flex-1 overflow-y-auto p-4">
             {isLoading ? (
-              <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+              <div className="flex h-48 items-center justify-center">
+                <Loader2 className="h-7 w-7 animate-spin text-blue-500" />
               </div>
-            ) : products.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-                <p className="text-lg">{t('pos.noProductsFound')}</p>
-                <p className="text-sm mt-2">{t('pos.adjustSearch')}</p>
+            ) : inStockProducts.length === 0 ? (
+              <div className="flex flex-col h-48 items-center justify-center text-gray-400 dark:text-gray-500 gap-2">
+                <Package className="h-10 w-10" />
+                <p className="text-sm">{t('pos.noProductsFound')}</p>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-3 gap-3">
-                  {products
-                    .filter((product) => product.quantity > 0) // Filter out products with 0 stock
-                    .slice(0, displayedProductsCount)
-                    .map((product) => (
-                      <ProductCard
-                        key={product.id}
-                        product={product}
-                        onAddToCart={addToCart}
-                      />
-                    ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                  {inStockProducts.slice(0, displayedCount).map(p => (
+                    <ProductCard key={p.id} product={p} onAddToCart={addToCart} />
+                  ))}
                 </div>
-                {products.filter((p: Product) => p.quantity > 0).length > displayedProductsCount && (
-                  <div className="flex justify-center mt-4 pb-4">
-                    <div className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Showing {displayedProductsCount} of {products.filter((p: Product) => p.quantity > 0).length} products
-                    </div>
-                  </div>
+                {inStockProducts.length > displayedCount && (
+                  <p className="mt-4 text-center text-xs text-gray-400 dark:text-gray-500">
+                    Showing {displayedCount} of {inStockProducts.length} — scroll to load more
+                  </p>
                 )}
               </>
             )}
           </div>
+        </div>
 
-          {/* Order Summary Sidebar - Right Side */}
-          <div className={`w-full lg:w-96 border-t lg:border-t-0 lg:border-l flex flex-col overflow-hidden ${theme === 'dark'
-            ? 'bg-gray-800 border-gray-700'
-            : 'bg-white border-gray-200'
-            }`}>
-            <div className={`px-4 py-4 border-b flex-shrink-0 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-              <h2 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                {t('pos.currentOrder') || 'Current Order'}
+        {/* ── RIGHT: cart & checkout ──────────────────────────────────────── */}
+        <div className="w-[340px] xl:w-[380px] flex flex-col flex-shrink-0 bg-white dark:bg-gray-800">
+
+          {/* Cart header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
+                {t('pos.currentOrder') || 'Order'}
               </h2>
-
-              {/* Customer Selection */}
-              <div className="">
-                <div className="flex items-center justify-between mb-1">
-                  <Label className="text-sm">{t('pos.customer')}</Label>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsAddCustomerOpen(true)}
-                    className="text-xs dark:text-white border border-gray-200 dark:border-gray-700 rounded-md"
-                  >
-                    <UserPlus className="h-3 w-3 mr-1" />
-                    {t('pos.addNew')}
-                  </Button>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {/* Customer Search/Select Dropdown */}
-                  <div className="relative w-full customer-dropdown-container group">
-                    <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 z-10 pointer-events-none transition-all duration-200 ${customerSearchTerm ? 'text-blue-500 scale-110' : 'text-gray-400 group-focus-within:text-blue-500 group-focus-within:scale-110'
-                      }`} />
-                    <div
-                      onClick={() => setIsCustomerDropdownOpen(!isCustomerDropdownOpen)}
-                      className={`pl-10 pr-10 py-2.5 border rounded-xl cursor-pointer transition-all duration-300 shadow-sm ${theme === 'dark'
-                        ? 'bg-gray-800/50 border-gray-700 hover:border-gray-600 hover:bg-gray-800'
-                        : 'bg-gray-50 border-gray-200 hover:border-gray-300 hover:bg-white'
-                        } ${isCustomerDropdownOpen ? 'ring-4 ring-blue-500/10 border-blue-500 bg-white dark:bg-gray-800' : ''}`}
-                    >
-                      {isCustomerDropdownOpen ? (
-                        <div className="relative flex items-center w-full">
-                          <Input
-                            type="text"
-                            placeholder={t('pos.searchCustomer')}
-                            value={customerSearchTerm}
-                            onChange={(e) => setCustomerSearchTerm(e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            autoFocus
-                            className="border-0 p-0 h-auto bg-transparent focus:ring-0 dark:text-white w-full pr-5 text-sm font-medium placeholder:text-gray-400"
-                          />
-                          {customerSearchTerm && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCustomerSearchTerm('');
-                              }}
-                              className="absolute right-0 text-gray-400 hover:text-red-500 transition-colors bg-gray-200/50 dark:bg-gray-600/50 p-0.5 rounded-full"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-sm dark:text-white truncate font-medium">
-                          {selectedCustomer
-                            ? customers.find(c => c.id === selectedCustomer)?.name
-                            : t('pos.selectCustomer')}
-                        </div>
-                      )}
-                    </div>
-                    {/* Dropdown chevron icon */}
-                    {!customerSearchTerm && (
-                      <svg
-                        className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 transition-transform pointer-events-none ${isCustomerDropdownOpen ? 'rotate-180' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    )}
-                    {/* Dropdown List */}
-                    {isCustomerDropdownOpen && (
-                      <div className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                        {customers
-                          .filter(c =>
-                            !customerSearchTerm.trim() ||
-                            c.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-                            c.phone?.includes(customerSearchTerm) ||
-                            c.email?.toLowerCase().includes(customerSearchTerm.toLowerCase())
-                          )
-                          .map(customer => (
-                            <div
-                              key={customer.id}
-                              onClick={() => {
-                                setSelectedCustomer(customer.id);
-                                setCustomerSearchTerm('');
-                                setIsCustomerDropdownOpen(false);
-                              }}
-                              className={`px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${selectedCustomer === customer.id ? 'bg-blue-50 dark:bg-blue-900/30 border-l-2 border-blue-500' : ''
-                                }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-sm truncate">{customer.name}</div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                                    {customer.phone}
-                                    {customer.email && ` • ${customer.email}`}
-                                  </div>
-                                </div>
-                                {selectedCustomer === customer.id && (
-                                  <div className="ml-2 text-blue-600 dark:text-blue-400">
-                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                    </svg>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        {customers.filter(c =>
-                          !customerSearchTerm.trim() ||
-                          c.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-                          c.phone?.includes(customerSearchTerm) ||
-                          c.email?.toLowerCase().includes(customerSearchTerm.toLowerCase())
-                        ).length === 0 && (
-                            <div className="px-3 py-4 text-center text-gray-500 dark:text-gray-400 text-sm">
-                              {t('pos.noCustomersFound')}
-                            </div>
-                          )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Cart Items */}
-            <div className="flex-1 overflow-y-auto px-4 py-4">
-              {cart.length === 0 ? (
-                <div className={`flex flex-col items-center justify-center h-full ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'
-                  }`}>
-                  <ShoppingCart className="w-16 h-16 mb-2" />
-                  <p className="text-sm">{t('pos.noItemsInCart')}</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {cart.map((item) => (
-                    <OrderItem
-                      key={item.product.id}
-                      item={item}
-                      onRemove={removeFromCart}
-                      onUpdateQuantity={updateQuantity}
-                      onUpdatePrice={updatePrice}
-                    />
-                  ))}
-                </div>
+              {cart.length > 0 && (
+                <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                  {cart.length}
+                </span>
               )}
             </div>
-
-            {/* Totals */}
-            <div className={`p-3 border-t flex-shrink-0 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} space-y-2`}>
-              <div className={`flex justify-between text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                <span>{t('common.subtotal')}</span>
-                <span className="font-medium">{subtotal.toFixed(2)} RWF</span>
-              </div>
-              {serviceFees > 0 && (
-                <div className={`flex justify-between text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                  <span>{t('pos.serviceFees')}</span>
-                  <span className="font-medium">{serviceFees.toFixed(2)} RWF</span>
-                </div>
-              )}
-              {salesTax > 0 && (
-                <div className={`flex justify-between text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                  <span>{t('pos.totalSalesTax')}</span>
-                  <span className="font-medium">{salesTax.toFixed(2)} RWF</span>
-                </div>
-              )}
-              <div className={`flex justify-between text-xl font-bold pt-2 border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}>
-                <span className={theme === 'dark' ? 'text-white' : 'text-gray-900'}>{t('common.total')}</span>
-                <span className="text-blue-600 dark:text-blue-400">{total.toFixed(2)} RWF</span>
-              </div>
-
-              {vsdcStatus.status === 'blocked' && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded-lg px-3 py-2 mb-2">
-                  <p className="text-xs text-red-700 dark:text-red-300 font-medium">
-                    VSDC blocked — cannot process payments. Contact administrator.
-                  </p>
-                </div>
-              )}
-              <Button
-                onClick={handleOpenPaymentModal}
-                disabled={cart.length === 0 || isSubmitting || !selectedCustomer || vsdcStatus.status === 'blocked'}
-                className={`w-full bg-blue-600 hover:bg-blue-700 py-4 text-base text-white font-semibold mt-3 ${theme === 'dark' ? 'dark:bg-blue-700 dark:hover:bg-blue-600' : ''
-                  } ${cart.length === 0 || !selectedCustomer || vsdcStatus.status === 'blocked' ? 'opacity-50 cursor-not-allowed' : ''}`}
+            {cart.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setCart([])}
+                className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 transition-colors"
               >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t('pos.processing')}
-                  </>
-                ) : (
-                  t('pos.processPayment') || 'Process Payment'
-                )}
-              </Button>
+                Clear
+              </button>
+            )}
+          </div>
 
+          {/* Customer selector */}
+          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+            <div className="flex items-center justify-between mb-1.5">
+              <Label className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                {t('pos.customer')}
+              </Label>
+              <button
+                type="button"
+                onClick={() => setIsAddCustomerOpen(true)}
+                className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                <UserPlus className="h-3 w-3" />
+                {t('pos.addNew')}
+              </button>
             </div>
+
+            <div ref={customerDropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setShowCustomerDropdown(prev => !prev)}
+                className={cn(
+                  'w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-sm text-left transition-colors',
+                  'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600',
+                  'hover:border-blue-400 dark:hover:border-blue-500',
+                  showCustomerDropdown && 'border-blue-500 ring-1 ring-blue-500/30',
+                )}
+              >
+                <Search className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                <span className={cn('flex-1 truncate', selectedCustomerObj ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500')}>
+                  {selectedCustomerObj ? selectedCustomerObj.name : t('pos.selectCustomer') || 'Select customer…'}
+                </span>
+              </button>
+
+              {showCustomerDropdown && (
+                <div className="absolute top-full mt-1 inset-x-0 z-50 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-dropdown">
+                  <div className="p-2 border-b border-gray-100 dark:border-gray-700">
+                    <Input
+                      value={customerSearch}
+                      onChange={e => setCustomerSearch(e.target.value)}
+                      placeholder="Search by name or phone…"
+                      className="h-8 text-xs"
+                      autoFocus
+                    />
+                  </div>
+                  <ul className="max-h-48 overflow-y-auto py-1">
+                    {filteredCustomers.length === 0 ? (
+                      <li className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">No customers found</li>
+                    ) : filteredCustomers.map(c => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedCustomer(c.id); setShowCustomerDropdown(false); setCustomerSearch('') }}
+                          className={cn(
+                            'w-full px-3 py-2 text-xs text-left transition-colors',
+                            'hover:bg-gray-50 dark:hover:bg-gray-700',
+                            c.id === selectedCustomer && 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium',
+                          )}
+                        >
+                          <span className="block font-medium text-gray-900 dark:text-white">{c.name}</span>
+                          {c.phone && <span className="text-gray-500 dark:text-gray-400">{c.phone}</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Cart items */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+            {cart.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-32 text-gray-300 dark:text-gray-600 gap-2">
+                <ShoppingCart className="h-10 w-10" />
+                <p className="text-xs">Cart is empty — click a product to add</p>
+              </div>
+            ) : cart.map(item => (
+              <CartItemRow
+                key={item.product.id}
+                item={item}
+                onRemove={removeFromCart}
+                onUpdateQuantity={updateQuantity}
+                onUpdatePrice={updatePrice}
+              />
+            ))}
+          </div>
+
+          {/* Order totals + checkout */}
+          <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-4 space-y-3 flex-shrink-0 bg-white dark:bg-gray-800">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500 dark:text-gray-400">Subtotal</span>
+              <span className="font-medium tabular-nums text-gray-900 dark:text-white">
+                {subtotal.toLocaleString()} RWF
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-base font-bold border-t border-gray-100 dark:border-gray-700 pt-2">
+              <span className="text-gray-900 dark:text-white">Total</span>
+              <span className="text-blue-600 dark:text-blue-400 tabular-nums text-lg">
+                {total.toLocaleString()} RWF
+              </span>
+            </div>
+
+            <Button
+              onClick={handleOpenPayment}
+              disabled={cart.length === 0 || !selectedCustomer || isSubmitting}
+              className="w-full h-11 text-sm font-semibold bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Processing…</>
+              ) : (
+                <>{t('pos.processPayment') || 'Charge'} {total > 0 && `· ${total.toLocaleString()} RWF`}</>
+              )}
+            </Button>
           </div>
         </div>
       </div>
 
-      <AddCustomerDialog
+      {/* Modals */}
+      <AddCustomerDrawer
         isOpen={isAddCustomerOpen}
         onOpenChange={setIsAddCustomerOpen}
         onCustomerAdded={handleCustomerAdded}
       />
 
-      <PaymentModal
-        isOpen={isPaymentModalOpen}
-        onClose={() => setIsPaymentModalOpen(false)}
-        totalAmount={total}
-        onProcessPayment={handleProcessPayment}
-        isProcessing={isSubmitting}
-      />
+      {isPaymentModalOpen && (
+        <PaymentModal
+          isOpen={isPaymentModalOpen}
+          onClose={() => setIsPaymentModalOpen(false)}
+          totalAmount={total}
+          onProcessPayment={handleProcessPayment}
+        />
+      )}
     </>
-  );
+  )
 }
