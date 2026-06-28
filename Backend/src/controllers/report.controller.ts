@@ -47,6 +47,7 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
     };
 
     // Get all sales with line items, product details, and user (seller) info
+    // Hard cap at 2000 rows to prevent heap OOM — use date ranges to narrow large datasets
     const sales = await prisma.sale.findMany({
       where,
       include: {
@@ -71,7 +72,8 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
       },
       orderBy: {
         createdAt: 'desc'
-      }
+      },
+      take: 2000,
     });
 
     // Map transactions with all IDs and apply filters (skip service items)
@@ -234,6 +236,7 @@ export const getInventoryReport = async (req: BranchAuthRequest, res: Response) 
     }
 
     // Get all products with related data
+    // saleItems limited to last 200 per product to prevent heap OOM on high-volume products
     const products = await prisma.product.findMany({
       where,
       include: {
@@ -252,6 +255,7 @@ export const getInventoryReport = async (req: BranchAuthRequest, res: Response) 
               createdAt: 'desc',
             },
           },
+          take: 200,
         },
       },
       orderBy: {
@@ -493,10 +497,17 @@ export const exportReport = async (req: BranchAuthRequest, res: Response) => {
       case "inventory":
         const inventory = await prisma.product.findMany({
           where: { organizationId },
-          include: {
-            saleItems: true,
-          },
         })
+
+        // Aggregate total selling price per product in one query instead of loading all saleItems
+        const invSaleItemTotals = await prisma.saleItem.groupBy({
+          by: ['productId'],
+          where: { product: { organizationId } },
+          _sum: { totalPrice: true },
+        })
+        const invSaleTotalMap = new Map(
+          invSaleItemTotals.map(s => [s.productId, s._sum.totalPrice?.toNumber() ?? 0])
+        )
 
         // Transform inventory data for Excel
         data = inventory.map((item) => ({
@@ -506,7 +517,7 @@ export const exportReport = async (req: BranchAuthRequest, res: Response) => {
           "Expiry Date": item.expiryDate ? new Date(item.expiryDate).toISOString().split("T")[0] : "N/A",
           Quantity: item.quantity.toString(),
           "Unit Price": item.unitPrice.toString(),
-          "Selling Price": item.saleItems.reduce((sum: number, si: any) => sum + Number(si.totalPrice), 0).toString(),
+          "Selling Price": (invSaleTotalMap.get(item.id) ?? 0).toString(),
           Status: item.quantity > 0 ? "In Stock" : "Out of Stock",
         }))
         filename = `inventory-report-${new Date().toISOString().split("T")[0]}.xlsx`
@@ -564,62 +575,69 @@ export const exportReport = async (req: BranchAuthRequest, res: Response) => {
           }
         });
 
-        const stockReportData = await Promise.all(stockProducts.map(async (product) => {
-          // Use InventoryLedger instead of StockMovement
-          const periodMovements = await prisma.inventoryLedger.findMany({
-            where: {
-              productId: product.id,
-              organizationId,
-              createdAt: { gte: start, lte: end }
-            }
-          });
+        const exportProductIds = stockProducts.map(p => p.id);
 
-          // Get opening stock from ledger (balance before period start)
-          const openingBalanceResult = await prisma.inventoryLedger.findFirst({
+        const [exportPeriodGrouped, exportOpeningEntries, exportClosingEntries] = await Promise.all([
+          prisma.inventoryLedger.groupBy({
+            by: ['productId', 'direction'],
             where: {
-              productId: product.id,
+              productId: { in: exportProductIds },
               organizationId,
-              createdAt: { lt: start }
+              createdAt: { gte: start, lte: end },
             },
-            orderBy: { createdAt: 'desc' },
-            select: { runningBalance: true }
-          });
-
-          // Get closing stock from ledger (balance at period end)
-          const closingBalanceResult = await prisma.inventoryLedger.findFirst({
+            _sum: { quantity: true },
+          }),
+          prisma.inventoryLedger.findMany({
             where: {
-              productId: product.id,
+              productId: { in: exportProductIds },
               organizationId,
-              createdAt: { lte: end }
+              createdAt: { lt: start },
             },
+            select: { productId: true, runningBalance: true },
             orderBy: { createdAt: 'desc' },
-            select: { runningBalance: true }
-          });
+          }),
+          prisma.inventoryLedger.findMany({
+            where: {
+              productId: { in: exportProductIds },
+              organizationId,
+              createdAt: { lte: end },
+            },
+            select: { productId: true, runningBalance: true },
+            orderBy: { createdAt: 'desc' },
+          }),
+        ]);
 
-          const openingStock = openingBalanceResult?.runningBalance || 0;
-          const closingStock = closingBalanceResult?.runningBalance || product.quantity;
+        const exportOpeningMap = new Map<number, number>();
+        for (const e of exportOpeningEntries) {
+          if (!exportOpeningMap.has(e.productId)) exportOpeningMap.set(e.productId, Number(e.runningBalance));
+        }
+        const exportClosingMap = new Map<number, number>();
+        for (const e of exportClosingEntries) {
+          if (!exportClosingMap.has(e.productId)) exportClosingMap.set(e.productId, Number(e.runningBalance));
+        }
+        const exportMovementsMap = new Map<number, { in: number; out: number }>();
+        for (const m of exportPeriodGrouped) {
+          const entry = exportMovementsMap.get(m.productId) ?? { in: 0, out: 0 };
+          if (m.direction === 'IN') entry.in += Number(m._sum.quantity ?? 0);
+          else entry.out += Number(m._sum.quantity ?? 0);
+          exportMovementsMap.set(m.productId, entry);
+        }
 
-          let stockIn = 0;
-          let stockOut = 0;
-          periodMovements.forEach(m => {
-            if (m.direction === 'IN') {
-              stockIn += m.quantity;
-            } else {
-              stockOut += m.quantity;
-            }
-          });
-
+        const stockReportData = stockProducts.map((product) => {
+          const openingStock = exportOpeningMap.get(product.id) ?? 0;
+          const closingStock = exportClosingMap.get(product.id) ?? product.quantity;
+          const moves = exportMovementsMap.get(product.id) ?? { in: 0, out: 0 };
           return {
             "Product Name": product.name,
             "Batch Number": product.batchNumber || "N/A",
             "Opening Stock": openingStock,
-            "Stock In": stockIn,
-            "Stock Out": stockOut,
+            "Stock In": moves.in,
+            "Stock Out": moves.out,
             "Closing Stock": closingStock,
             "Unit Price": product.unitPrice.toNumber(),
             "Total Value": closingStock * product.unitPrice.toNumber(),
           };
-        }));
+        });
 
         data = stockReportData;
         filename = `stock-report-${new Date().toISOString().split("T")[0]}.xlsx`;
@@ -641,6 +659,7 @@ export const exportReport = async (req: BranchAuthRequest, res: Response) => {
             user: { select: { name: true } }
           },
           orderBy: { createdAt: 'desc' },
+          take: 10000, // cap to prevent OOM on large exports
         });
 
         data = stockMovements.map(m => ({
@@ -753,58 +772,18 @@ export const getDebtPaymentsReport = async (req: BranchAuthRequest, res: Respons
     });
     const remainingDebt = salesWithDebt._sum.debtAmount?.toNumber() || 0;
 
-    // Format payments with balance tracking
-    // We need to calculate previousBalance and newBalance for each payment
-    // To do this accurately, we need to track the customer's balance over time
-    const payments = await Promise.all(debtPayments.map(async (payment) => {
-      // Get all debt payments for this customer up to this payment date
-      const previousPayments = await prisma.debtPayment.findMany({
-        where: {
-          customerId: payment.customerId,
-          paymentDate: { lte: payment.paymentDate }
-        },
-        orderBy: { paymentDate: 'asc' }
-      });
-
-      // Get all sales with debt for this customer up to this payment date
-      const customerSales = await prisma.sale.findMany({
-        where: {
-          customerId: payment.customerId,
-          debtAmount: { gt: 0 },
-          createdAt: { lte: payment.paymentDate },
-          status: { not: 'CANCELLED' }
-        },
-        orderBy: { createdAt: 'asc' }
-      });
-
-      // Calculate total debt incurred
-      const totalDebtIncurred = customerSales.reduce((sum, sale) =>
-        sum + sale.debtAmount.toNumber(), 0
-      );
-
-      // Calculate total paid before this payment
-      const totalPaidBefore = previousPayments
-        .filter(p => p.paymentDate < payment.paymentDate ||
-          (p.paymentDate.getTime() === payment.paymentDate.getTime() && p.id < payment.id))
-        .reduce((sum, p) => sum + p.amount.toNumber(), 0);
-
-      // Previous balance = total debt - total paid before
-      const previousBalance = totalDebtIncurred - totalPaidBefore;
-
-      // New balance = previous balance - current payment
-      const newBalance = previousBalance - payment.amount.toNumber();
-
-      return {
-        id: payment.id,
-        customerName: payment.customer.name,
-        customerPhone: payment.customer.phone || 'N/A',
-        amountPaid: payment.amount.toNumber(),
-        paymentDate: payment.paymentDate.toISOString(),
-        paymentMethod: payment.paymentMethod,
-        reference: payment.reference || 'N/A',
-        notes: payment.notes || '',
-        recordedBy: payment.recordedBy.name
-      };
+    // Format payments — previousBalance/newBalance were computed but never returned,
+    // so the per-payment N+1 queries (2 per row) were pure dead code.
+    const payments = debtPayments.map((payment) => ({
+      id: payment.id,
+      customerName: payment.customer.name,
+      customerPhone: payment.customer.phone || 'N/A',
+      amountPaid: payment.amount.toNumber(),
+      paymentDate: payment.paymentDate.toISOString(),
+      paymentMethod: payment.paymentMethod,
+      reference: payment.reference || 'N/A',
+      notes: payment.notes || '',
+      recordedBy: payment.recordedBy.name,
     }));
 
     res.json({
@@ -925,17 +904,58 @@ async function calculateOpeningBalance(organizationId: number, startDate: Date):
     console.log(`[CashFlow] No cached balance found. Calculating from history.`);
   }
 
-  // Option 2: Calculate from all historical transactions
-  const historicalInflows = await getCashInflows(organizationId, new Date(0), startDate);
-  const historicalOutflows = await getCashOutflows(organizationId, new Date(0), startDate);
+  // Option 2: Calculate from historical aggregates — never load rows into memory
+  const [salesAgg, debtPayAgg, supplierPayAgg, refundedAgg, partialRefundAgg, expenseAgg] =
+    await Promise.all([
+      prisma.sale.aggregate({
+        where: {
+          organizationId,
+          createdAt: { lt: startDate },
+          status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] },
+        },
+        _sum: { cashAmount: true },
+      }),
+      prisma.debtPayment.aggregate({
+        where: { organizationId, paymentDate: { lt: startDate } },
+        _sum: { amount: true },
+      }),
+      prisma.supplierPayment.aggregate({
+        where: { organizationId, paymentDate: { lt: startDate } },
+        _sum: { amount: true },
+      }),
+      prisma.sale.aggregate({
+        where: {
+          organizationId,
+          status: 'REFUNDED',
+          refundedAt: { lt: startDate, not: null },
+        },
+        _sum: { cashAmount: true },
+      }),
+      prisma.sale.aggregate({
+        where: {
+          organizationId,
+          status: 'PARTIALLY_REFUNDED',
+          refundedAt: { lt: startDate, not: null },
+        },
+        _sum: { cashAmount: true },
+      }),
+      prisma.expense.aggregate({
+        where: { organizationId, expenseDate: { lt: startDate } },
+        _sum: { amount: true },
+      }),
+    ]);
 
-  const totalInflows = historicalInflows.reduce((sum, t) => sum + t.amount, 0);
-  const totalOutflows = Math.abs(historicalOutflows.reduce((sum, t) => sum + t.amount, 0));
+  const totalInflows =
+    (salesAgg._sum.cashAmount?.toNumber() ?? 0) +
+    (debtPayAgg._sum.amount?.toNumber() ?? 0);
 
-  console.log(`[CashFlow] Historical Calculation:`);
-  console.log(`- Inflows: ${historicalInflows.length} txns, Total: ${totalInflows}`);
-  console.log(`- Outflows: ${historicalOutflows.length} txns, Total: ${totalOutflows}`);
-  console.log(`- Calculated Opening: ${totalInflows - totalOutflows}`);
+  const totalOutflows =
+    (supplierPayAgg._sum.amount?.toNumber() ?? 0) +
+    (refundedAgg._sum.cashAmount?.toNumber() ?? 0) +
+    (partialRefundAgg._sum.cashAmount?.toNumber() ?? 0) * 0.5 +
+    (expenseAgg._sum.amount?.toNumber() ?? 0);
+
+  console.log(`[CashFlow] Historical Calculation (aggregates): inflows=${totalInflows}, outflows=${totalOutflows}`);
 
   return totalInflows - totalOutflows;
 }
@@ -1104,69 +1124,79 @@ export const getStockReport = async (req: BranchAuthRequest, res: Response) => {
       }
     });
 
-    const reportData = await Promise.all(products.map(async (product) => {
-      // 1. Get ledger movements during the period
-      const periodMovements = await prisma.inventoryLedger.findMany({
-        where: {
-          productId: product.id,
-          organizationId,
-          ...buildBranchFilter(req),
-          createdAt: { gte: start, lte: end }
-        },
-        orderBy: { createdAt: 'asc' }
-      });
+    const productIds = products.map(p => p.id);
+    const branchFilter = buildBranchFilter(req);
 
-      // 2. Get opening stock (balance before period start) from ledger
-      const openingBalanceResult = await prisma.inventoryLedger.findFirst({
+    // 3 batch queries replace N×3 per-product queries
+    const [periodMovementsGrouped, allOpeningEntries, allClosingEntries] = await Promise.all([
+      // Period movements grouped by product+direction
+      prisma.inventoryLedger.groupBy({
+        by: ['productId', 'direction'],
         where: {
-          productId: product.id,
+          productId: { in: productIds },
           organizationId,
-          ...buildBranchFilter(req),
-          createdAt: { lt: start }
+          ...branchFilter,
+          createdAt: { gte: start, lte: end },
         },
+        _sum: { quantity: true },
+      }),
+      // Last ledger entry before period per product (ordered desc → first hit = latest)
+      prisma.inventoryLedger.findMany({
+        where: {
+          productId: { in: productIds },
+          organizationId,
+          ...branchFilter,
+          createdAt: { lt: start },
+        },
+        select: { productId: true, runningBalance: true, createdAt: true },
         orderBy: { createdAt: 'desc' },
-        select: { runningBalance: true }
-      });
-
-      // 3. Get closing stock (balance at period end) from ledger
-      const closingBalanceResult = await prisma.inventoryLedger.findFirst({
+      }),
+      // Last ledger entry up to period end per product
+      prisma.inventoryLedger.findMany({
         where: {
-          productId: product.id,
+          productId: { in: productIds },
           organizationId,
-          ...buildBranchFilter(req),
-          createdAt: { lte: end }
+          ...branchFilter,
+          createdAt: { lte: end },
         },
+        select: { productId: true, runningBalance: true, createdAt: true },
         orderBy: { createdAt: 'desc' },
-        select: { runningBalance: true }
-      });
+      }),
+    ]);
 
-      const openingStock = openingBalanceResult?.runningBalance || 0;
-      const closingStock = closingBalanceResult?.runningBalance || product.quantity;
+    // Build lookup maps (first entry per productId = latest, since ordered desc)
+    const openingMap = new Map<number, number>();
+    for (const e of allOpeningEntries) {
+      if (!openingMap.has(e.productId)) openingMap.set(e.productId, Number(e.runningBalance));
+    }
+    const closingMap = new Map<number, number>();
+    for (const e of allClosingEntries) {
+      if (!closingMap.has(e.productId)) closingMap.set(e.productId, Number(e.runningBalance));
+    }
+    const movementsMap = new Map<number, { in: number; out: number }>();
+    for (const m of periodMovementsGrouped) {
+      const entry = movementsMap.get(m.productId) ?? { in: 0, out: 0 };
+      if (m.direction === 'IN') entry.in += Number(m._sum.quantity ?? 0);
+      else entry.out += Number(m._sum.quantity ?? 0);
+      movementsMap.set(m.productId, entry);
+    }
 
-      // 4. Calculate Stock In / Out during period from ledger
-      let stockIn = 0;
-      let stockOut = 0;
-
-      periodMovements.forEach(m => {
-        if (m.direction === 'IN') {
-          stockIn += m.quantity;
-        } else {
-          stockOut += m.quantity;
-        }
-      });
-
+    const reportData = products.map((product) => {
+      const openingStock = openingMap.get(product.id) ?? 0;
+      const closingStock = closingMap.get(product.id) ?? product.quantity;
+      const moves = movementsMap.get(product.id) ?? { in: 0, out: 0 };
       return {
         productId: product.id,
         productName: product.name,
         batchNumber: product.batchNumber,
         unitPrice: product.unitPrice.toNumber(),
         openingStock,
-        stockIn,
-        stockOut,
+        stockIn: moves.in,
+        stockOut: moves.out,
         closingStock,
-        stockValue: closingStock * product.unitPrice.toNumber()
+        stockValue: closingStock * product.unitPrice.toNumber(),
       };
-    }));
+    });
 
     // Summary
     const summary = reportData.reduce((acc, curr) => ({
