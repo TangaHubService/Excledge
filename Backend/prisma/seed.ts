@@ -209,7 +209,7 @@ async function createSaleInTransaction(
     totalAmount += item.quantity * item.unitPrice
   }
 
-  const invoiceNumber = await generateInvoiceNumber(orgId)
+  const invoiceNumber = await generateInvoiceNumber(orgId, branchId)
   const taxSummary = await TaxService.calculateSaleTax(orgId, items)
 
   return prisma.$transaction(
