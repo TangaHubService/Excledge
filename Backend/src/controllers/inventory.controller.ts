@@ -742,7 +742,7 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
         : undefined
 
     const stockExpr = branchId !== undefined
-      ? Prisma.sql`COALESCE((SELECT SUM(b.quantity) FROM batches b WHERE b."productId" = p.id AND b."branchId" = ${branchId} AND b."isActive" = true), 0)`
+      ? Prisma.sql`COALESCE((SELECT SUM(b.quantity)::int FROM batches b WHERE b."productId" = p.id AND b."branchId" = ${branchId} AND b."isActive" = true), 0)`
       : Prisma.sql`p.quantity`
 
     const searchVal = search && typeof search === 'string' ? search.trim() : ''
@@ -811,7 +811,7 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
       expiryDate: r.expiryDate,
       measurementUnit: r.measurementUnit,
       imageUrl: r.imageUrl,
-      quantity: r.stock,
+      quantity: Number(r.stock),
     }))
 
     res.json(success({
