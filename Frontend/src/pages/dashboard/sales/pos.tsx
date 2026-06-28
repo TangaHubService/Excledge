@@ -193,6 +193,23 @@ const CartItemRow = memo(({
             <Plus className="h-3 w-3" />
           </button>
         </div>
+
+        {/* Remaining stock indicator */}
+        {(() => {
+          const remaining = item.product.quantity - item.quantity
+          return (
+            <p className={cn(
+              'text-[10px] mt-1 font-medium',
+              remaining === 0
+                ? 'text-red-500 dark:text-red-400'
+                : remaining <= 3
+                  ? 'text-amber-500 dark:text-amber-400'
+                  : 'text-gray-400 dark:text-gray-500',
+            )}>
+              {remaining === 0 ? 'Stock limit reached' : `${remaining} remaining`}
+            </p>
+          )
+        })()}
       </div>
 
       {/* Price + remove */}

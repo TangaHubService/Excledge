@@ -32,6 +32,8 @@ type Sale = {
     insuranceAmount: string;
     debtAmount: string;
     totalAmount: string;
+    vatAmount?: string;
+    taxableAmount?: string;
     createdAt: string;
     status: string;
     saleItems: Array<{
@@ -43,6 +45,8 @@ type Sale = {
         quantity: number;
         unitPrice: string;
         totalPrice: string;
+        taxAmount?: string;
+        taxCode?: string;
         costPrice?: string;
         profit?: string;
     }>;
@@ -470,6 +474,9 @@ export default function SaleDetailsPage() {
                                         {t('inventory.unitPrice') || 'Unit Price'}
                                     </TableHead>
                                     <TableHead className={`text-right ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>
+                                        {t('sales.table.tax') || 'Tax'}
+                                    </TableHead>
+                                    <TableHead className={`text-right ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>
                                         {t('common.total') || 'Total'}
                                     </TableHead>
                                 </TableRow>
@@ -482,7 +489,14 @@ export default function SaleDetailsPage() {
                                     >
                                         <TableCell className={theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}>
                                             <div>
-                                                <p className="font-medium">{item.product.name}</p>
+                                                <p className="font-medium">
+                                                    {item.product.name}
+                                                    {item.taxCode && (
+                                                        <span className="ml-1.5 text-[10px] font-medium px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                                                            {item.taxCode}
+                                                        </span>
+                                                    )}
+                                                </p>
                                                 {item.product.batchNumber && (
                                                     <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                                                         {t('inventory.batchNumber')}: {item.product.batchNumber}
@@ -495,6 +509,11 @@ export default function SaleDetailsPage() {
                                         </TableCell>
                                         <TableCell className={`text-right ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
                                             {formatCurrency(item.unitPrice)}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            {parseFloat(item.taxAmount ?? '0') > 0
+                                                ? <span className="text-blue-600 dark:text-blue-400 font-medium">{formatCurrency(item.taxAmount!)}</span>
+                                                : <span className={theme === 'dark' ? 'text-gray-600' : 'text-gray-400'}>—</span>}
                                         </TableCell>
                                         <TableCell className={`text-right font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
                                             {formatCurrency(item.totalPrice)}
@@ -574,6 +593,16 @@ export default function SaleDetailsPage() {
                                     </div>
                                 )}
                             </>
+                        )}
+                        {parseFloat(sale.vatAmount ?? '0') > 0 && (
+                            <div className="border-t pt-4 flex justify-between items-center">
+                                <span className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    {t('sales.table.tax') || 'Tax (VAT)'}
+                                </span>
+                                <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                                    {formatCurrency(sale.vatAmount!)}
+                                </span>
+                            </div>
                         )}
                         <div className="border-t pt-4 flex justify-between items-center">
                             <span className={`text-base font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>

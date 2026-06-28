@@ -76,6 +76,8 @@ type Sale = {
     insuranceAmount: string;
     debtAmount: string;
     totalAmount: string;
+    vatAmount?: string;
+    taxableAmount?: string;
     createdAt: string;
     status: string;
     saleItems: Array<{
@@ -87,6 +89,8 @@ type Sale = {
         quantity: number;
         unitPrice: string;
         totalPrice: string;
+        taxAmount?: string;
+        taxCode?: string;
         costPrice?: string;
         profit?: string;
         itemType?: string;
@@ -401,8 +405,11 @@ export default function SalesPage() {
                                                 <TableHead className={`font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>
                                                     {t('sales.table.customer')}
                                                 </TableHead>
-                                                <TableHead className={`font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>
+                                                <TableHead className={`font-medium text-right ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>
                                                     {t('sales.table.items')}
+                                                </TableHead>
+                                                <TableHead className={`font-medium text-right ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>
+                                                    {t('sales.table.tax') || 'Tax'}
                                                 </TableHead>
                                                 <TableHead className={`font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>
                                                     {t('sales.table.method')}
@@ -460,12 +467,17 @@ export default function SalesPage() {
                                                             )}
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="py-4">
-                                                        <div className="space-y-1.5 text-center">
-                                                            <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
-                                                                {sale.saleItems.length}
-                                                            </span>
-                                                        </div>
+                                                    <TableCell className="py-4 text-right">
+                                                        <span className={`text-sm tabular-nums ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
+                                                            {sale.saleItems.reduce((s, i) => s + i.quantity, 0)}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="py-4 text-right">
+                                                        <span className={`text-sm tabular-nums ${parseFloat(sale.vatAmount ?? '0') > 0 ? 'text-blue-600 dark:text-blue-400 font-medium' : theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                                                            {parseFloat(sale.vatAmount ?? '0') > 0
+                                                                ? formatCurrency(sale.vatAmount!)
+                                                                : '—'}
+                                                        </span>
                                                     </TableCell>
                                                     <TableCell className="py-4">
                                                         <div className="flex flex-col gap-1">
@@ -801,15 +813,28 @@ export default function SalesPage() {
                                                         <TableHead className="text-xs">{t('inventory.product')}</TableHead>
                                                         <TableHead className="text-xs text-right">{t('inventory.qty')}</TableHead>
                                                         <TableHead className="text-xs text-right">{t('inventory.unitPrice')}</TableHead>
+                                                        <TableHead className="text-xs text-right">{t('sales.table.tax') || 'Tax'}</TableHead>
                                                         <TableHead className="text-xs text-right">{t('common.total')}</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {selectedSale.saleItems.map((item) => (
                                                         <TableRow key={item.id}>
-                                                            <TableCell className="text-sm font-medium">{item.serviceName || item.product?.name || 'Service'}</TableCell>
+                                                            <TableCell className="text-sm font-medium">
+                                                                <span>{item.serviceName || item.product?.name || 'Service'}</span>
+                                                                {item.taxCode && (
+                                                                    <span className="ml-1.5 text-[10px] font-medium px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                                                                        {item.taxCode}
+                                                                    </span>
+                                                                )}
+                                                            </TableCell>
                                                             <TableCell className="text-sm text-right">{item.quantity}</TableCell>
                                                             <TableCell className="text-sm text-right">{formatCurrency(item.unitPrice)}</TableCell>
+                                                            <TableCell className="text-sm text-right">
+                                                                {parseFloat(item.taxAmount ?? '0') > 0
+                                                                    ? <span className="text-blue-600 dark:text-blue-400">{formatCurrency(item.taxAmount!)}</span>
+                                                                    : <span className="text-gray-400">—</span>}
+                                                            </TableCell>
                                                             <TableCell className="text-sm text-right font-semibold">{formatCurrency(item.totalPrice)}</TableCell>
                                                         </TableRow>
                                                     ))}
@@ -855,6 +880,12 @@ export default function SalesPage() {
 
                                     {/* Total & Profit */}
                                     <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-2">
+                                        {parseFloat(selectedSale.vatAmount ?? '0') > 0 && (
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('sales.table.tax') || 'Tax (VAT)'}</span>
+                                                <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(selectedSale.vatAmount!)}</span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between items-center">
                                             <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('sales.table.total')}</span>
                                             <span className="text-lg font-bold">{formatCurrency(selectedSale.totalAmount)}</span>
