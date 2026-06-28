@@ -20,10 +20,11 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "npx prisma db seed"
+    "build:seed": "tsc -p tsconfig.seed.json",
+    "prisma:seed": "npm run build:seed && npx prisma db seed"
   },
   "prisma": {
-    "seed": "node --max-old-space-size=4096 node_modules/.bin/ts-node --transpile-only --project tsconfig.json prisma/seed.ts"
+    "seed": "node dist-seed/prisma/seed.js"
   },
   "dependencies": {
     "@kazion/dpopay-sdk": "^4.0.20",
