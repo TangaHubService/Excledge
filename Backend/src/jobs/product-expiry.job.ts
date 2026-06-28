@@ -153,17 +153,11 @@ export const dailyReportJob = cron.schedule("0 22 * * *", async () => {
       });
     }
 
-    // ── Organization totals (sum of all branches) ───────────────────
-    const sales = await prisma.sale.findMany({
-      where: {
-        organizationId: organization.id,
-        createdAt: { gte: today, lt: tomorrow },
-      },
-    });
-
-    const totalSales = sales.reduce((sum, sale) => sum + Number(sale.totalAmount), 0);
-    const cashSales = sales.reduce((sum, sale) => sum + Number(sale.cashAmount), 0);
-    const insuranceSales = sales.reduce((sum, sale) => sum + Number(sale.insuranceAmount), 0);
+    // ── Organization totals (derived from branch data — no second DB call) ──
+    const totalSales = branchReports.reduce((s, b) => s + b.data.totalSales, 0);
+    const cashSales = branchReports.reduce((s, b) => s + b.data.cashSales, 0);
+    const insuranceSales = branchReports.reduce((s, b) => s + b.data.insuranceSales, 0);
+    const orgTransactionCount = branchReports.reduce((s, b) => s + b.data.transactionCount, 0);
 
     const lowStockProducts = await prisma.product.count({
       where: {
@@ -197,7 +191,7 @@ export const dailyReportJob = cron.schedule("0 22 * * *", async () => {
 
     const reportData = {
       totalSales,
-      transactionCount: sales.length,
+      transactionCount: orgTransactionCount,
       cashSales,
       insuranceSales,
       lowStockCount: lowStockProducts,

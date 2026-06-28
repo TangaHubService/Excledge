@@ -75,16 +75,13 @@ const prisma = global.prisma || new PrismaClient({
 })
 
 // ── Prisma middleware: auto-inject branchId ──────────────────────────────
+// NOTE: The PostgreSQL session variable (app.current_branch_id) is intentionally
+// NOT set here. Doing so via $executeRawUnsafe doubles every query count and was
+// the primary driver of Node.js OOM crashes. Branch isolation is enforced below
+// via where-clause injection, which is the authoritative filter.
 prisma.$use(async (params, next) => {
   const ctx = branchStorage.getStore()
   const branchId = ctx?.branchId
-
-  // ── Set PostgreSQL session variable for RLS ──
-  if (branchId !== undefined) {
-    await prisma.$executeRawUnsafe(`SET app.current_branch_id = '${branchId}'`)
-  } else {
-    await prisma.$executeRawUnsafe(`SET app.current_branch_id = ''`)
-  }
 
   if (branchId === undefined) {
     return next(params)
