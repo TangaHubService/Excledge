@@ -61,11 +61,14 @@ const PORT = process.env.PORT || 5000;
 ------------------------------------- */
 
 const allowedOrigins = [
-  ...(process.env.FRONTEND_URL || "http://localhost:3000")
+  ...(process.env.FRONTEND_URL || "http://localhost:5173")
     .split(',')
     .map(s => s.trim())
     .filter(Boolean),
   "https://erp.exceledgecpa.com", // always allow production origin
+  "http://localhost:5173",         // Vite dev server
+  "http://localhost:3000",
+  "http://localhost:3001",
 ];
 
 app.use(cors({
