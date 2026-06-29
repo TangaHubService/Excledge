@@ -4,8 +4,8 @@ import { useForm } from 'react-hook-form'
 import { yupResolver } from '@hookform/resolvers/yup'
 import * as yup from 'yup'
 import {
-    Package, Wrench, Upload, X, Info, DollarSign,
-    Barcode, Layers, Save, Check, ChevronsUpDown
+    Package, Wrench, Upload, X,
+    Save, Check, ChevronsUpDown, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import {
@@ -26,14 +26,10 @@ import { apiClient } from '../../../lib/api-client'
 import { useBranch } from '../../../context/BranchContext'
 import { MEASUREMENT_UNIT_OPTIONS } from '../../../types/ebm'
 
-// ──────────────────────────────────────────────────────────
-// Fix #3: Floating-point safe RWF rounding helpers
-// ──────────────────────────────────────────────────────────
 function toRwf(value: number): number {
     return Math.round(value * 100) / 100
 }
 
-/** RRA inclusive tax: extract VAT from a gross amount at a given rate (e.g. 18). */
 function computeInclusiveVat(gross: number, ratePercent: number): { taxable: number; vat: number } {
     if (ratePercent <= 0 || gross <= 0) return { taxable: toRwf(gross), vat: 0 }
     const rate = ratePercent / 100
@@ -42,9 +38,6 @@ function computeInclusiveVat(gross: number, ratePercent: number): { taxable: num
     return { taxable, vat }
 }
 
-// ──────────────────────────────────────────────────────────
-// Validation schema with explicit RRA constraints
-// ──────────────────────────────────────────────────────────
 const addProductSchema = yup.object({
     itemType: yup.string().oneOf(['PRODUCT', 'SERVICE']).required(),
     name: yup.string().required('Product name is required').min(2).max(200),
@@ -59,7 +52,6 @@ const addProductSchema = yup.object({
         .string()
         .required('RRA Tax Code is required')
         .oneOf(['A', 'B', 'C', 'D'], 'Must be A, B, C, or D'),
-    // Inventory fields — only validated for PRODUCT (purged for SERVICE via useEffect)
     batchNumber: yup.string().max(50),
     expiryDate: yup.date().nullable().min(new Date(), 'Expiry must be in the future'),
     quantity: yup
@@ -92,24 +84,18 @@ interface AddProductProps {
     onSuccess?: () => void
 }
 
-// ──────────────────────────────────────────────────────────
-// Fix #1: Ordered list of section IDs for scroll-to-error
-// ──────────────────────────────────────────────────────────
-const SECTION_ORDER = [
-    'item-type',
-    'product-image',
-    'product-info',
-    'pricing-tax',
-    'inventory-details',
-    'additional-info',
+const STEPS = [
+    { id: 'basic', label: 'Basic Info' },
+    { id: 'pricing', label: 'Pricing & Inventory' },
+    { id: 'review', label: 'Review' },
 ] as const
 
-// Fields that must be purged when switching from PRODUCT to SERVICE
-const INVENTORY_FIELDS = ['batchNumber', 'expiryDate', 'quantity', 'minStock', 'measurementUnit'] as const
+type StepId = (typeof STEPS)[number]['id']
 
 export default function AddProduct({ onSuccess }: AddProductProps) {
     const navigate = useNavigate()
     const { selectedBranchId } = useBranch()
+    const [currentStep, setCurrentStep] = useState<StepId>('basic')
 
     const [itemType, setItemType] = useState<'PRODUCT' | 'SERVICE'>('PRODUCT')
     const [imageFile, setImageFile] = useState<File | null>(null)
@@ -123,14 +109,11 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
     const [categoryPopoverOpen, setCategoryPopoverOpen] = useState(false)
     const [namePopoverOpen, setNamePopoverOpen] = useState(false)
 
-    // ── Fix #1: Refs for each section block ──
     const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
     const setSectionRef = (id: string) => (el: HTMLDivElement | null) => {
         sectionRefs.current[id] = el
     }
 
-    // ── Fix #4: Focus bridge for Enter-key advancement ──
-    // Compose react-hook-form's register ref with our own so both co-exist.
     const composeRefs = (rhfRef: React.Ref<any>, fieldName: string) => (el: any) => {
         if (typeof rhfRef === 'function') rhfRef(el)
         inputRefs.current[fieldName] = el
@@ -147,9 +130,7 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
             }
         }
 
-    // Helper: destructure register() so we can inject composeRefs without overriding the built-in ref
     const bindField = (field: string, nextField: string) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { ref, ...rest } = register(field as any)
         return { ...rest, ref: composeRefs(ref, field), onKeyDown: advanceOnEnter(nextField) }
     }
@@ -185,12 +166,21 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
     const watchUnitPrice = watch('unitPrice')
     const watchTaxCode = watch('taxCode')
 
-    // Sync watched value to local state for UI branching
     useEffect(() => {
         setItemType(watchItemType as 'PRODUCT' | 'SERVICE')
     }, [watchItemType])
 
-    // ── Fix #2: Purge inventory fields when switching to SERVICE ──
+    const taxPreview = (() => {
+        const price = Number(watchUnitPrice) || 0
+        const code = watchTaxCode
+        const rateInfo = taxCodes.find((t) => t.code === code)
+        const ratePct = rateInfo?.rate ?? 0
+        const { taxable, vat } = computeInclusiveVat(price, ratePct)
+        return { price: toRwf(price), taxable, vat, ratePct, label: rateInfo?.label ?? '' }
+    })()
+
+    const INVENTORY_FIELDS = ['batchNumber', 'expiryDate', 'quantity', 'minStock', 'measurementUnit'] as const
+
     useEffect(() => {
         if (watchItemType === 'SERVICE') {
             for (const field of INVENTORY_FIELDS) {
@@ -229,16 +219,6 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
             .catch(() => {})
     }, [selectedBranchId])
 
-    // ── Tax preview (Fix #3: locked to 2-decimal RWF) ──
-    const taxPreview = (() => {
-        const price = Number(watchUnitPrice) || 0
-        const code = watchTaxCode
-        const rateInfo = taxCodes.find((t) => t.code === code)
-        const ratePct = rateInfo?.rate ?? 0
-        const { taxable, vat } = computeInclusiveVat(price, ratePct)
-        return { price: toRwf(price), taxable, vat, ratePct, label: rateInfo?.label ?? '' }
-    })()
-
     const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
@@ -275,22 +255,38 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
         }
     }
 
-    // ── Fix #1: Scroll-to-error using idiomatic React refs ──
-    const scrollToFirstError = useCallback(() => {
-        for (const sectionId of SECTION_ORDER) {
-            const sectionEl = sectionRefs.current[sectionId]
-            if (sectionEl) {
-                sectionEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const goToStep = (step: StepId) => {
+        setCurrentStep(step)
+    }
+
+    const handleNext = async () => {
+        if (currentStep === 'basic') {
+            const fields = ['itemType', 'name', 'category']
+            const valid = await trigger(fields as any)
+            if (!valid) {
+                toast.error('Please fill in all required fields')
                 return
             }
+            goToStep('pricing')
+        } else if (currentStep === 'pricing') {
+            const fields = ['unitPrice', 'taxCode']
+            const valid = await trigger(fields as any)
+            if (!valid) {
+                toast.error('Please fill in pricing fields')
+                return
+            }
+            goToStep('review')
         }
-    }, [])
+    }
+
+    const handlePrevious = () => {
+        if (currentStep === 'pricing') goToStep('basic')
+        else if (currentStep === 'review') goToStep('pricing')
+    }
 
     const onSubmit = async (data: Record<string, any>) => {
-        // Run full validation before anything else
         const isValid = await trigger()
         if (!isValid) {
-            scrollToFirstError()
             toast.error('Please fix the highlighted fields before saving')
             return
         }
@@ -324,8 +320,6 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                 payload.sku = data.sku || undefined
                 payload.barcode = data.barcode || undefined
             } else {
-                // SERVICE — inventory fields already purged by Fix #2
-                // SKU and barcode are inventory-specific; never send for SERVICE
                 payload.quantity = 0
                 payload.minStock = 0
                 payload.measurementUnit = 'OTHER'
@@ -342,534 +336,547 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
         }
     }
 
-    // ──────────────────────────────────────────────────────────
-    // Render
-    // ──────────────────────────────────────────────────────────
+    const stepIndex = STEPS.findIndex(s => s.id === currentStep)
+    const isFirstStep = stepIndex === 0
+    const isLastStep = stepIndex === STEPS.length - 1
+
     return (
-        <div className="flex flex-col lg:flex-row gap-6 max-w-7xl mx-auto px-4 py-6">
-            {/* ── MAIN FORM COLUMN ── */}
-            <div className="flex-1 min-w-0 space-y-6">
-                <form onSubmit={handleSubmit(onSubmit)}>
-                    {/* ── Item Type Toggle (section 0) ── */}
-                    <div ref={setSectionRef('item-type')} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-                        <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">
-                            Item Type <span className="text-red-500">*</span>
-                        </label>
-                        <div className="flex gap-2">
+        <div className="mx-auto max-w-xl">
+            <div className="space-y-6">
+                {/* Step Indicator */}
+                <div className="flex items-center gap-1">
+                    {STEPS.map((step, idx) => (
+                        <div key={step.id} className="flex items-center gap-1 flex-1 min-w-0">
                             <button
                                 type="button"
-                                onClick={() => { setValue('itemType', 'PRODUCT'); setItemType('PRODUCT') }}
-                                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                                    itemType === 'PRODUCT'
-                                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                                }`}
+                                onClick={() => {
+                                    if (idx < stepIndex) goToStep(step.id)
+                                }}
+                                className={cn(
+                                    'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all min-w-0',
+                                    currentStep === step.id && 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100',
+                                    currentStep !== step.id && idx < stepIndex && 'text-emerald-600 dark:text-emerald-400',
+                                    currentStep !== step.id && idx > stepIndex && 'text-gray-400 dark:text-gray-500',
+                                    idx < stepIndex && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50',
+                                )}
+                                aria-current={currentStep === step.id ? 'step' : undefined}
                             >
-                                <Package className="h-4 w-4" />
-                                Product
+                                <span className={cn(
+                                    'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
+                                    idx < stepIndex && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+                                    currentStep === step.id && 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900',
+                                    idx > stepIndex && 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500',
+                                )}>
+                                    {idx < stepIndex ? <Check className="h-3 w-3" /> : idx + 1}
+                                </span>
+                                <span className="hidden sm:inline truncate">{step.label}</span>
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => { setValue('itemType', 'SERVICE'); setItemType('SERVICE') }}
-                                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                                    itemType === 'SERVICE'
-                                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                                }`}
-                            >
-                                <Wrench className="h-4 w-4" />
-                                Service
-                            </button>
+                            {idx < STEPS.length - 1 && (
+                                <div className={cn(
+                                    'h-px flex-1 min-w-[8px] mx-1',
+                                    idx < stepIndex ? 'bg-emerald-300 dark:bg-emerald-700' : 'bg-gray-200 dark:bg-gray-700',
+                                )} aria-hidden="true" />
+                            )}
                         </div>
-                    </div>
+                    ))}
+                </div>
 
-                    {/* ── Product Image (section 1) ── */}
-                    <div ref={setSectionRef('product-image')} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-                        <div className="flex items-center gap-2 mb-4">
-                            <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20">
-                                <Upload className="h-4 w-4 text-blue-600" />
-                            </div>
-                            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Product Image</h2>
-                        </div>
-                        {imagePreview ? (
-                            <div className="relative inline-block">
-                                <img
-                                    src={imagePreview}
-                                    alt="Preview"
-                                    className="h-32 w-32 object-cover rounded-xl border border-gray-200 dark:border-gray-700"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={removeImage}
-                                    className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full shadow-md hover:bg-red-600 transition-colors"
-                                >
-                                    <X className="h-3 w-3" />
-                                </button>
-                            </div>
-                        ) : (
-                            <label className="flex flex-col items-center justify-center h-32 w-32 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors bg-gray-50 dark:bg-gray-900/50">
-                                <Upload className="h-6 w-6 text-gray-400 mb-1" />
-                                <span className="text-xs text-gray-500">Upload Image</span>
-                                <input type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
-                            </label>
-                        )}
-                    </div>
+                <form>
+                    {/* ══════ STEP 1: BASIC INFO ══════ */}
+                    {currentStep === 'basic' && (
+                        <div className="space-y-6">
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Basic Information</h2>
 
-                    {/* ── Product Info (section 2) ── */}
-                    <div ref={setSectionRef('product-info')} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-                        <div className="flex items-center gap-2 mb-5">
-                            <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/20">
-                                <Info className="h-4 w-4 text-indigo-600" />
-                            </div>
-                            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Product Info</h2>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div className="space-y-1.5 md:col-span-2">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    {itemType === 'SERVICE' ? 'Service Name' : 'Product Name'} <span className="text-red-500">*</span>
+                            <div ref={setSectionRef('item-type')}>
+                                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">
+                                    Item Type <span className="text-red-500">*</span>
                                 </label>
-                                <Popover open={namePopoverOpen} onOpenChange={setNamePopoverOpen}>
-                                    <PopoverTrigger asChild>
-                                        <button
-                                            type="button"
-                                            role="combobox"
-                                            aria-expanded={namePopoverOpen}
-                                            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                errors.name ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
-                                            }`}
-                                        >
-                                            <span className={watch('name') ? 'truncate' : 'text-gray-400 truncate'}>
-                                                {watch('name') || (itemType === 'SERVICE' ? 'Select or type service name...' : 'Select or type product name...')}
-                                            </span>
-                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                        </button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg" align="start">
-                                        <Command className="bg-transparent">
-                                            <CommandInput
-                                                placeholder="Search or type new..."
-                                                className="bg-white dark:bg-gray-800"
-                                                value={watch('name')}
-                                                onValueChange={(v) => {
-                                                    setValue('name', v, { shouldValidate: true })
-                                                }}
-                                            />
-                                            <CommandList>
-                                                {existingNames.length > 0 && (
-                                                    <CommandGroup heading="Existing names">
-                                                        {existingNames.map((n) => (
-                                                            <CommandItem
-                                                                key={n}
-                                                                value={n}
-                                                                onSelect={() => {
-                                                                    setValue('name', n, { shouldValidate: true })
-                                                                    setNamePopoverOpen(false)
-                                                                }}
-                                                            >
-                                                                <Check
-                                                                    className={cn(
-                                                                        'mr-2 h-4 w-4 shrink-0',
-                                                                        watch('name') === n ? 'opacity-100' : 'opacity-0'
-                                                                    )}
-                                                                />
-                                                                {n}
-                                                            </CommandItem>
-                                                        ))}
-                                                    </CommandGroup>
-                                                )}
-                                                {watch('name') && !existingNames.includes(watch('name')) && (
-                                                    <CommandEmpty className="py-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setNamePopoverOpen(false)}
-                                                            className="w-full text-left px-2 py-1.5 text-sm text-blue-600 hover:bg-accent rounded-sm"
-                                                        >
-                                                            Use "{watch('name')}"
-                                                        </button>
-                                                    </CommandEmpty>
-                                                )}
-                                            </CommandList>
-                                        </Command>
-                                    </PopoverContent>
-                                </Popover>
-                                {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    Category <span className="text-red-500">*</span>
-                                </label>
-                                <Popover open={categoryPopoverOpen} onOpenChange={setCategoryPopoverOpen}>
-                                    <PopoverTrigger asChild>
-                                        <button
-                                            type="button"
-                                            role="combobox"
-                                            aria-expanded={categoryPopoverOpen}
-                                            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                errors.category ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
-                                            }`}
-                                        >
-                                            <span className={watch('category') ? '' : 'text-gray-400'}>
-                                                {watch('category') || (itemType === 'SERVICE' ? 'Select or type category...' : 'Select or type category...')}
-                                            </span>
-                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                        </button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg" align="start">
-                                        <Command className="bg-transparent">
-                                            <CommandInput
-                                                placeholder="Search or type new..."
-                                                className="bg-white dark:bg-gray-800"
-                                                value={watch('category')}
-                                                onValueChange={(v) => {
-                                                    setValue('category', v, { shouldValidate: true })
-                                                }}
-                                            />
-                                            <CommandList>
-                                                {existingCategories.length > 0 && (
-                                                    <CommandGroup heading="Existing categories">
-                                                        {existingCategories.map((cat) => (
-                                                            <CommandItem
-                                                                key={cat}
-                                                                value={cat}
-                                                                onSelect={() => {
-                                                                    setValue('category', cat, { shouldValidate: true })
-                                                                    setCategoryPopoverOpen(false)
-                                                                }}
-                                                            >
-                                                                <Check
-                                                                    className={cn(
-                                                                        'mr-2 h-4 w-4',
-                                                                        watch('category') === cat ? 'opacity-100' : 'opacity-0'
-                                                                    )}
-                                                                />
-                                                                {cat}
-                                                            </CommandItem>
-                                                        ))}
-                                                    </CommandGroup>
-                                                )}
-                                                {watch('category') && !existingCategories.includes(watch('category')) && (
-                                                    <CommandEmpty className="py-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setCategoryPopoverOpen(false)}
-                                                            className="w-full text-left px-2 py-1.5 text-sm text-blue-600 hover:bg-accent rounded-sm"
-                                                        >
-                                                            Use "{watch('category')}"
-                                                        </button>
-                                                    </CommandEmpty>
-                                                )}
-                                            </CommandList>
-                                        </Command>
-                                    </PopoverContent>
-                                </Popover>
-                                {errors.category && <p className="text-xs text-red-500 mt-1">{errors.category.message}</p>}
-                            </div>
-                            <div className="space-y-1.5 md:col-span-2">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
-                                <textarea
-                                    {...register('description')}
-                                    rows={3}
-                                    placeholder={itemType === 'SERVICE' ? 'Describe the service details...' : 'Product description...'}
-                                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white resize-none"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ── Pricing & Tax (section 3) ── */}
-                    <div ref={setSectionRef('pricing-tax')} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-                        <div className="flex items-center gap-2 mb-5">
-                            <div className="p-1.5 rounded-lg bg-green-50 dark:bg-green-900/20">
-                                <DollarSign className="h-4 w-4 text-green-600" />
-                            </div>
-                            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Pricing &amp; Tax</h2>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    Unit Price <span className="text-red-500">*</span>
-                                </label>
-                                <div className="relative">
-                                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 dark:text-gray-400">
-                                        RWF
-                                    </span>
-                                    <input
-                                        {...bindField('unitPrice', 'taxCode')}
-                                        type="number"
-                                        inputMode="decimal"
-                                        step="0.01"
-                                        min="0"
-                                        placeholder="0.00"
-                                        className={`w-full pl-14 pr-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                            errors.unitPrice ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
-                                        }`}
-                                    />
-                                </div>
-                                {errors.unitPrice && <p className="text-xs text-red-500 mt-1">{errors.unitPrice.message}</p>}
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    RRA Tax Code <span className="text-red-500">*</span>
-                                </label>
-                                <select
-                                    {...bindField('taxCode', itemType === 'PRODUCT' ? 'batchNumber' : 'sku')}
-                                    className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                        errors.taxCode ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
-                                    }`}
-                                >
-                                    <option value="">Select Tax Code</option>
-                                    {taxCodes.map(tc => (
-                                        <option key={tc.code} value={tc.code}>{tc.label}</option>
-                                    ))}
-                                </select>
-                                {errors.taxCode && <p className="text-xs text-red-500 mt-1">{errors.taxCode.message}</p>}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ── Inventory Details (section 4) — PRODUCT only, else visually absent ── */}
-                    {itemType === 'PRODUCT' && (
-                        <div ref={setSectionRef('inventory-details')} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-                            <div className="flex items-center gap-2 mb-5">
-                                <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20">
-                                    <Layers className="h-4 w-4 text-amber-600" />
-                                </div>
-                                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Inventory Details</h2>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                                <div className="space-y-1.5">
-                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Batch Number</label>
-                                    <input
-                                        {...bindField('batchNumber', 'expiryDate')}
-                                        placeholder="e.g. BATCH-001"
-                                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Expiry Date</label>
-                                    <input
-                                        {...bindField('expiryDate', 'quantity')}
-                                        type="date"
-                                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Quantity <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        {...bindField('quantity', 'minStock')}
-                                        type="number"
-                                        inputMode="numeric"
-                                        min="0"
-                                        placeholder="0"
-                                        className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                            errors.quantity ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
-                                        }`}
-                                    />
-                                    {errors.quantity && <p className="text-xs text-red-500 mt-1">{errors.quantity.message}</p>}
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Min Stock <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        {...bindField('minStock', 'measurementUnit')}
-                                        type="number"
-                                        inputMode="numeric"
-                                        min="0"
-                                        placeholder="10"
-                                        className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                            errors.minStock ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
-                                        }`}
-                                    />
-                                    {errors.minStock && <p className="text-xs text-red-500 mt-1">{errors.minStock.message}</p>}
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Measurement Unit <span className="text-red-500">*</span>
-                                    </label>
-                                    <select
-                                        {...bindField('measurementUnit', 'sku')}
-                                        className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                            errors.measurementUnit ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setValue('itemType', 'PRODUCT'); setItemType('PRODUCT') }}
+                                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                                            itemType === 'PRODUCT'
+                                                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
                                         }`}
                                     >
-                                        <option value="">Select Unit</option>
-                                        {MEASUREMENT_UNIT_OPTIONS.map(u => (
-                                            <option key={u.value} value={u.value}>{u.label}</option>
-                                        ))}
-                                    </select>
-                                    {errors.measurementUnit && <p className="text-xs text-red-500 mt-1">{errors.measurementUnit.message}</p>}
+                                        <Package className="h-4 w-4" />
+                                        Product
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setValue('itemType', 'SERVICE'); setItemType('SERVICE') }}
+                                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                                            itemType === 'SERVICE'
+                                                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                        }`}
+                                    >
+                                        <Wrench className="h-4 w-4" />
+                                        Service
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div ref={setSectionRef('product-image')}>
+                                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">Product Image</label>
+                                {imagePreview ? (
+                                    <div className="relative">
+                                        <img
+                                            src={imagePreview}
+                                            alt="Preview"
+                                            className="w-full h-36 object-cover rounded-xl border border-gray-200 dark:border-gray-700"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={removeImage}
+                                            className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full shadow-md hover:bg-red-600 transition-colors"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <label className="flex flex-col items-center justify-center w-full h-28 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors bg-gray-50 dark:bg-gray-900/50">
+                                        <Upload className="h-6 w-6 text-gray-400 mb-1.5" />
+                                        <span className="text-xs text-gray-500">Click to upload image</span>
+                                        <input type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+                                    </label>
+                                )}
+                            </div>
+
+                            <div ref={setSectionRef('product-info')}>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div className="space-y-1.5 md:col-span-2">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            {itemType === 'SERVICE' ? 'Service Name' : 'Product Name'} <span className="text-red-500">*</span>
+                                        </label>
+                                        <Popover open={namePopoverOpen} onOpenChange={setNamePopoverOpen}>
+                                            <PopoverTrigger asChild>
+                                                <button
+                                                    type="button"
+                                                    role="combobox"
+                                                    aria-expanded={namePopoverOpen}
+                                                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                        errors.name ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                    }`}
+                                                >
+                                                    <span className={watch('name') ? 'truncate' : 'text-gray-400 truncate'}>
+                                                        {watch('name') || (itemType === 'SERVICE' ? 'Select or type service name...' : 'Select or type product name...')}
+                                                    </span>
+                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                </button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg" align="start">
+                                                <Command className="bg-transparent">
+                                                    <CommandInput
+                                                        placeholder="Search or type new..."
+                                                        className="bg-white dark:bg-gray-800"
+                                                        value={watch('name')}
+                                                        onValueChange={(v) => {
+                                                            setValue('name', v, { shouldValidate: true })
+                                                        }}
+                                                    />
+                                                    <CommandList>
+                                                        {existingNames.length > 0 && (
+                                                            <CommandGroup heading="Existing names">
+                                                                {existingNames.map((n) => (
+                                                                    <CommandItem
+                                                                        key={n}
+                                                                        value={n}
+                                                                        onSelect={() => {
+                                                                            setValue('name', n, { shouldValidate: true })
+                                                                            setNamePopoverOpen(false)
+                                                                        }}
+                                                                    >
+                                                                        <Check
+                                                                            className={cn(
+                                                                                'mr-2 h-4 w-4 shrink-0',
+                                                                                watch('name') === n ? 'opacity-100' : 'opacity-0'
+                                                                            )}
+                                                                        />
+                                                                        {n}
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        )}
+                                                        {watch('name') && !existingNames.includes(watch('name')) && (
+                                                            <CommandEmpty className="py-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setNamePopoverOpen(false)}
+                                                                    className="w-full text-left px-2 py-1.5 text-sm text-blue-600 hover:bg-accent rounded-sm"
+                                                                >
+                                                                    Use "{watch('name')}"
+                                                                </button>
+                                                            </CommandEmpty>
+                                                        )}
+                                                    </CommandList>
+                                                </Command>
+                                            </PopoverContent>
+                                        </Popover>
+                                        {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
+                                    </div>
+                                    <div className="space-y-1.5 md:col-span-2">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Category <span className="text-red-500">*</span>
+                                        </label>
+                                        <Popover open={categoryPopoverOpen} onOpenChange={setCategoryPopoverOpen}>
+                                            <PopoverTrigger asChild>
+                                                <button
+                                                    type="button"
+                                                    role="combobox"
+                                                    aria-expanded={categoryPopoverOpen}
+                                                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                        errors.category ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                    }`}
+                                                >
+                                                    <span className={watch('category') ? '' : 'text-gray-400'}>
+                                                        {watch('category') || 'Select or type category...'}
+                                                    </span>
+                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                </button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg" align="start">
+                                                <Command className="bg-transparent">
+                                                    <CommandInput
+                                                        placeholder="Search or type new..."
+                                                        className="bg-white dark:bg-gray-800"
+                                                        value={watch('category')}
+                                                        onValueChange={(v) => {
+                                                            setValue('category', v, { shouldValidate: true })
+                                                        }}
+                                                    />
+                                                    <CommandList>
+                                                        {existingCategories.length > 0 && (
+                                                            <CommandGroup heading="Existing categories">
+                                                                {existingCategories.map((cat) => (
+                                                                    <CommandItem
+                                                                        key={cat}
+                                                                        value={cat}
+                                                                        onSelect={() => {
+                                                                            setValue('category', cat, { shouldValidate: true })
+                                                                            setCategoryPopoverOpen(false)
+                                                                        }}
+                                                                    >
+                                                                        <Check
+                                                                            className={cn(
+                                                                                'mr-2 h-4 w-4',
+                                                                                watch('category') === cat ? 'opacity-100' : 'opacity-0'
+                                                                            )}
+                                                                        />
+                                                                        {cat}
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        )}
+                                                        {watch('category') && !existingCategories.includes(watch('category')) && (
+                                                            <CommandEmpty className="py-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setCategoryPopoverOpen(false)}
+                                                                    className="w-full text-left px-2 py-1.5 text-sm text-blue-600 hover:bg-accent rounded-sm"
+                                                                >
+                                                                    Use "{watch('category')}"
+                                                                </button>
+                                                            </CommandEmpty>
+                                                        )}
+                                                    </CommandList>
+                                                </Command>
+                                            </PopoverContent>
+                                        </Popover>
+                                        {errors.category && <p className="text-xs text-red-500 mt-1">{errors.category.message}</p>}
+                                    </div>
+                                    <div className="space-y-1.5 md:col-span-2">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                                        <textarea
+                                            {...register('description')}
+                                            rows={3}
+                                            placeholder={itemType === 'SERVICE' ? 'Describe the service details...' : 'Product description...'}
+                                            className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white resize-none"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* ── Additional Info (section 5) ── */}
-                    <div ref={setSectionRef('additional-info')} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-                        <div className="flex items-center gap-2 mb-5">
-                            <div className="p-1.5 rounded-lg bg-purple-50 dark:bg-purple-900/20">
-                                <Barcode className="h-4 w-4 text-purple-600" />
-                            </div>
-                            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Additional Info</h2>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">SKU</label>
-                                <input
-                                    {...bindField('sku', 'barcode')}
-                                    placeholder="e.g. MED-PCM-001"
-                                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Barcode</label>
-                                <input
-                                    {...bindField('barcode', '')}
-                                    inputMode="numeric"
-                                    maxLength={13}
-                                    placeholder="e.g. 8901234567890"
-                                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
-                                />
-                            </div>
-                        </div>
-                    </div>
+                    {/* ══════ STEP 2: PRICING & INVENTORY ══════ */}
+                    {currentStep === 'pricing' && (
+                        <div className="space-y-6">
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Pricing & Inventory</h2>
 
-                    {/* ── Sticky bottom form actions (visible on mobile) ── */}
-                    <div className="flex items-center justify-end gap-3 pt-6 pb-2 border-t border-gray-100 dark:border-gray-700 lg:hidden">
-                        <button
-                            type="button"
-                            onClick={() => onSuccess ? onSuccess() : navigate('/dashboard/inventory-all')}
-                            className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isSubmitting || isUploadingImage}
-                            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-blue-500/20"
-                        >
-                            {isSubmitting ? (
-                                <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                                <Save className="h-4 w-4" />
+                            <div ref={setSectionRef('pricing-tax')}>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Unit Price <span className="text-red-500">*</span>
+                                        </label>
+                                        <div className="relative">
+                                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 dark:text-gray-400">RWF</span>
+                                            <input
+                                                {...bindField('unitPrice', 'taxCode')}
+                                                type="number"
+                                                inputMode="decimal"
+                                                step="0.01"
+                                                min="0"
+                                                placeholder="0.00"
+                                                className={`w-full pl-14 pr-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                    errors.unitPrice ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                }`}
+                                            />
+                                        </div>
+                                        {errors.unitPrice && <p className="text-xs text-red-500 mt-1">{errors.unitPrice.message}</p>}
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            RRA Tax Code <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            {...bindField('taxCode', 'batchNumber')}
+                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                errors.taxCode ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                            }`}
+                                        >
+                                            <option value="">Select Tax Code</option>
+                                            {taxCodes.map(tc => (
+                                                <option key={tc.code} value={tc.code}>{tc.label}</option>
+                                            ))}
+                                        </select>
+                                        {errors.taxCode && <p className="text-xs text-red-500 mt-1">{errors.taxCode.message}</p>}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {itemType === 'PRODUCT' && (
+                                <div ref={setSectionRef('inventory-details')}>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Batch Number</label>
+                                            <input
+                                                {...bindField('batchNumber', 'expiryDate')}
+                                                placeholder="e.g. BATCH-001"
+                                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Expiry Date</label>
+                                            <input
+                                                {...bindField('expiryDate', 'quantity')}
+                                                type="date"
+                                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                Quantity <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                {...bindField('quantity', 'minStock')}
+                                                type="number"
+                                                inputMode="numeric"
+                                                min="0"
+                                                placeholder="0"
+                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                    errors.quantity ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                }`}
+                                            />
+                                            {errors.quantity && <p className="text-xs text-red-500 mt-1">{errors.quantity.message}</p>}
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                Min Stock <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                {...bindField('minStock', 'measurementUnit')}
+                                                type="number"
+                                                inputMode="numeric"
+                                                min="0"
+                                                placeholder="10"
+                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                    errors.minStock ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                }`}
+                                            />
+                                            {errors.minStock && <p className="text-xs text-red-500 mt-1">{errors.minStock.message}</p>}
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                Measurement Unit <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                {...bindField('measurementUnit', 'sku')}
+                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                    errors.measurementUnit ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                }`}
+                                            >
+                                                <option value="">Select Unit</option>
+                                                {MEASUREMENT_UNIT_OPTIONS.map(u => (
+                                                    <option key={u.value} value={u.value}>{u.label}</option>
+                                                ))}
+                                            </select>
+                                            {errors.measurementUnit && <p className="text-xs text-red-500 mt-1">{errors.measurementUnit.message}</p>}
+                                        </div>
+                                    </div>
+                                </div>
                             )}
-                            Save {itemType === 'SERVICE' ? 'Service' : 'Product'}
-                        </button>
+
+                            <div ref={setSectionRef('additional-info')}>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">SKU</label>
+                                        <input
+                                            {...bindField('sku', 'barcode')}
+                                            placeholder={itemType === 'PRODUCT' ? 'e.g. MED-PCM-001' : 'e.g. SVC-001'}
+                                            className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Barcode</label>
+                                        <input
+                                            {...bindField('barcode', '')}
+                                            inputMode="numeric"
+                                            maxLength={13}
+                                            placeholder="e.g. 8901234567890"
+                                            className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ══════ STEP 3: REVIEW & CONFIRM ══════ */}
+                    {currentStep === 'review' && (
+                        <div className="space-y-6">
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Review & Confirm</h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Please review the information below before saving.</p>
+
+                            <div className="space-y-4">
+                                <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                    <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Basic Information</h3>
+                                    </div>
+                                    <div className="px-4 py-3 space-y-2.5">
+                                        <ReviewRow label="Item Type" value={itemType === 'PRODUCT' ? 'Product' : 'Service'} />
+                                        <ReviewRow label="Name" value={watch('name') || '-'} />
+                                        <ReviewRow label="Category" value={watch('category') || '-'} />
+                                        {watch('description') && <ReviewRow label="Description" value={watch('description')} />}
+                                        {imagePreview && (
+                                            <div className="flex justify-between items-start">
+                                                <span className="text-sm text-gray-500 dark:text-gray-400">Image</span>
+                                                <img src={imagePreview} alt="Preview" className="h-12 w-12 object-cover rounded-md border" />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                    <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Pricing & Tax</h3>
+                                    </div>
+                                    <div className="px-4 py-3 space-y-2.5">
+                                        <ReviewRow label="Unit Price" value={watch('unitPrice') ? `RWF ${Number(watch('unitPrice')).toLocaleString()}` : '-'} />
+                                        <ReviewRow label="Tax Code" value={watch('taxCode') ? taxCodes.find(t => t.code === watch('taxCode'))?.label || watch('taxCode') : '-'} />
+                                        {watch('unitPrice') && watch('taxCode') && (
+                                            <>
+                                                <ReviewRow label="Taxable Amount" value={`RWF ${taxPreview.taxable.toFixed(2)}`} />
+                                                <ReviewRow label="VAT" value={`RWF ${taxPreview.vat.toFixed(2)}`} />
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {itemType === 'PRODUCT' && (
+                                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                        <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Inventory Details</h3>
+                                        </div>
+                                        <div className="px-4 py-3 space-y-2.5">
+                                            {watch('batchNumber') && <ReviewRow label="Batch Number" value={watch('batchNumber')} />}
+                                            {watch('expiryDate') && <ReviewRow label="Expiry Date" value={new Date(watch('expiryDate')!).toLocaleDateString()} />}
+                                            <ReviewRow label="Quantity" value={String(watch('quantity') ?? 0)} />
+                                            <ReviewRow label="Min Stock" value={String(watch('minStock') ?? 0)} />
+                                            <ReviewRow label="Measurement Unit" value={watch('measurementUnit') || 'PCS'} />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {(watch('sku') || watch('barcode')) && (
+                                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                        <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Additional Info</h3>
+                                        </div>
+                                        <div className="px-4 py-3 space-y-2.5">
+                                            {watch('sku') && <ReviewRow label="SKU" value={watch('sku')} />}
+                                            {watch('barcode') && <ReviewRow label="Barcode" value={watch('barcode')} />}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Navigation Buttons ── */}
+                    <div className="flex items-center justify-between gap-3 pt-6 pb-2 border-t border-gray-100 dark:border-gray-700 mt-6">
+                        <div>
+                            {!isFirstStep && (
+                                <button
+                                    type="button"
+                                    onClick={handlePrevious}
+                                    className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                    Previous
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => onSuccess ? onSuccess() : navigate('/dashboard/inventory-all')}
+                                className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
+                            >
+                                Cancel
+                            </button>
+                            {!isLastStep ? (
+                                <button
+                                    type="button"
+                                    onClick={handleNext}
+                                    className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors shadow-lg shadow-blue-500/20"
+                                >
+                                    Next
+                                    <ChevronRight className="h-4 w-4" />
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    disabled={isSubmitting || isUploadingImage}
+                                    onClick={handleSubmit(onSubmit)}
+                                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20"
+                                >
+                                    {isSubmitting ? (
+                                        <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    ) : (
+                                        <Save className="h-4 w-4" />
+                                    )}
+                                    Save {itemType === 'SERVICE' ? 'Service' : 'Product'}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </form>
             </div>
-
-            {/* ── SIDEBAR COLUMN — live tax preview + required fields + submit ── */}
-            <aside className="w-full lg:w-80 xl:w-96 shrink-0">
-                <div className="lg:sticky lg:top-24 space-y-4">
-                    {/* Tax Preview (Fix #3: strict toRwf rounding) */}
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tax Preview</h4>
-                            <span className="text-[10px] font-medium text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
-                                Tax Inclusive
-                            </span>
-                        </div>
-
-                        <div className="flex justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">Unit Price</span>
-                            <span className="font-medium">RWF {taxPreview.price.toFixed(2)}</span>
-                        </div>
-
-                        {taxPreview.label && (
-                            <>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600 dark:text-gray-400">Tax Code</span>
-                                    <span className={`font-mono font-bold ${
-                                        taxPreview.ratePct > 0 ? 'text-amber-600' : 'text-green-600'
-                                    }`}>
-                                        {watchTaxCode} — {taxPreview.label}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600 dark:text-gray-400">Taxable Amount</span>
-                                    <span className="font-medium">RWF {taxPreview.taxable.toFixed(2)}</span>
-                                </div>
-                                <div className={`flex justify-between text-sm border-t pt-2 ${
-                                    taxPreview.ratePct > 0 ? 'border-amber-200 dark:border-amber-800' : 'border-gray-200 dark:border-gray-700'
-                                }`}>
-                                    <span className="text-gray-600 dark:text-gray-400">VAT Amount</span>
-                                    <span className={`font-semibold ${
-                                        taxPreview.ratePct > 0 ? 'text-amber-600' : 'text-green-600'
-                                    }`}>
-                                        RWF {taxPreview.vat.toFixed(2)}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between text-sm border-t border-gray-200 dark:border-gray-700 pt-2">
-                                    <span className="font-semibold text-gray-800 dark:text-gray-200">Total (incl. VAT)</span>
-                                    <span className="font-bold text-lg">RWF {taxPreview.price.toFixed(2)}</span>
-                                </div>
-                            </>
-                        )}
-
-                        {!watchTaxCode && (
-                            <p className="text-xs text-gray-400 italic">Select a tax code to see the full preview</p>
-                        )}
-                    </div>
-
-                    {/* Required Fields Checklist */}
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 space-y-2">
-                        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Required Fields</h4>
-                        {[
-                            { key: 'itemType', label: 'Item Type' },
-                            { key: 'name', label: itemType === 'SERVICE' ? 'Service Name' : 'Product Name' },
-                            { key: 'category', label: 'Category' },
-                            { key: 'unitPrice', label: 'Unit Price' },
-                            { key: 'taxCode', label: 'RRA Tax Code' },
-                            ...(itemType === 'PRODUCT'
-                                ? [
-                                    { key: 'quantity', label: 'Quantity' },
-                                    { key: 'minStock', label: 'Min Stock' },
-                                    { key: 'measurementUnit', label: 'Measurement Unit' },
-                                  ]
-                                : []),
-                        ].map(({ key, label }) => {
-                            const value = watch(key as any)
-                            // itemType is always filled since it has a default
-                            const filled = key === 'itemType' ? true : value !== undefined && value !== '' && value !== null
-                            return (
-                                <div key={key} className="flex items-center gap-2 text-sm">
-                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${filled ? 'bg-green-500' : 'bg-red-400'}`} />
-                                    <span className={filled ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}>
-                                        {label}
-                                    </span>
-                                </div>
-                            )
-                        })}
-                    </div>
-
-                    {/* Submit button (sidebar on desktop) */}
-                    <button
-                        type="submit"
-                        onClick={handleSubmit(onSubmit)}
-                        disabled={isSubmitting || isUploadingImage}
-                        className="hidden lg:flex w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20 items-center justify-center gap-2"
-                    >
-                        {isSubmitting ? (
-                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                            <Save className="h-4 w-4" />
-                        )}
-                        Save {itemType === 'SERVICE' ? 'Service' : 'Product'}
-                    </button>
-
-                    {/* Cancel button (sidebar on desktop) */}
-                    <button
-                        type="button"
-                        onClick={() => onSuccess ? onSuccess() : navigate('/dashboard/inventory-all')}
-                        className="hidden lg:block w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium text-center"
-                    >
-                        Cancel
-                    </button>
-                </div>
-            </aside>
         </div>
     )
 }
+
+function ReviewRow({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-500 dark:text-gray-400">{label}</span>
+            <span className="text-sm font-medium text-gray-900 dark:text-gray-100 text-right max-w-[60%] break-words">{value}</span>
+        </div>
+    )
+}
+
+

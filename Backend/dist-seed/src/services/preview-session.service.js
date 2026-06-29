@@ -7,7 +7,8 @@ const crypto_1 = require("crypto");
 // In-memory storage for preview sessions
 // In production, consider using Redis for distributed systems
 const previewSessions = new Map();
-// Clean up expired sessions every hour
+const MAX_SESSIONS = 50; // hard cap to prevent unbounded heap growth
+// Clean up expired sessions every 15 minutes (was 1 hour — reduces peak heap)
 setInterval(() => {
     const now = new Date();
     for (const [id, session] of previewSessions.entries()) {
@@ -15,7 +16,7 @@ setInterval(() => {
             previewSessions.delete(id);
         }
     }
-}, 60 * 60 * 1000); // 1 hour
+}, 15 * 60 * 1000);
 /**
  * Create a new preview session
  */
@@ -37,6 +38,11 @@ function createPreviewSession(organizationId, entityType, validRows, invalidRows
         createdAt: now,
         expiresAt,
     };
+    // Evict oldest session when cap is reached
+    if (previewSessions.size >= MAX_SESSIONS) {
+        const oldest = [...previewSessions.entries()].sort((a, b) => a[1].createdAt.getTime() - b[1].createdAt.getTime())[0];
+        previewSessions.delete(oldest[0]);
+    }
     previewSessions.set(sessionId, session);
     return sessionId;
 }

@@ -151,15 +151,6 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         )
       }
 
-      // Reconcile server-computed VAT vs what TaxService returned
-      const computedVat = Number(taxSummary.vatAmount)
-      const clientVat = items.reduce((s: number, i: any) => s + Number(i.taxAmount || 0), 0)
-      if (Math.abs(computedVat - clientVat) > 0.01) {
-        throw new Error(
-          `VAT amount mismatch: server computed ${computedVat.toFixed(2)}, client submitted ${clientVat.toFixed(2)}`
-        )
-      }
-
       // 3. Select batches and calculate costs for PRODUCT items only
       const inventoryMethod = (req.body.inventoryMethod as 'FIFO' | 'LIFO' | 'AVERAGE') || 'FIFO';
       const saleItemsData: any[] = [];

@@ -436,7 +436,7 @@ async function seedDemoDataset() {
                 sku: "PARA-500",
                 category: "Pain relief",
                 description: "Blister 20 tablets",
-                quantity: 0,
+                quantity: 100,
                 unitPrice: new client_1.Prisma.Decimal("150.00"),
                 minStock: 20,
                 taxCategory: "STANDARD",
@@ -452,7 +452,7 @@ async function seedDemoDataset() {
                 name: "Amoxicillin 250mg",
                 sku: "AMOX-250",
                 category: "Antibiotics",
-                quantity: 0,
+                quantity: 100,
                 unitPrice: new client_1.Prisma.Decimal("800.00"),
                 minStock: 10,
                 taxCategory: "STANDARD",
@@ -468,7 +468,7 @@ async function seedDemoDataset() {
                 name: "Vitamin C 1000mg",
                 sku: "VIT-C-1K",
                 category: "Vitamins",
-                quantity: 0,
+                quantity: 100,
                 unitPrice: new client_1.Prisma.Decimal("3500.00"),
                 minStock: 5,
                 taxCategory: "ZERO_RATED",
@@ -484,7 +484,7 @@ async function seedDemoDataset() {
                 name: "Hand Sanitizer 500ml",
                 sku: "SAN-500",
                 category: "Hygiene",
-                quantity: 0,
+                quantity: 100,
                 unitPrice: new client_1.Prisma.Decimal("2500.00"),
                 minStock: 15,
                 taxCategory: "STANDARD",
@@ -500,7 +500,7 @@ async function seedDemoDataset() {
                 name: "Cotton Roll 500g",
                 sku: "COT-500",
                 category: "Supplies",
-                quantity: 0,
+                quantity: 100,
                 unitPrice: new client_1.Prisma.Decimal("4200.00"),
                 minStock: 8,
                 taxCategory: "EXEMPT",
@@ -516,7 +516,7 @@ async function seedDemoDataset() {
                 name: "Digital Thermometer",
                 sku: "THERM-D1",
                 category: "Devices",
-                quantity: 0,
+                quantity: 100,
                 unitPrice: new client_1.Prisma.Decimal("12000.00"),
                 minStock: 3,
                 taxCategory: "STANDARD",
@@ -549,14 +549,14 @@ async function seedDemoDataset() {
         unitCost: 1200,
         expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
     });
-    for (const p of [p1, p2, p3]) {
+    for (const p of [p1, p2, p3, p4, p5, p6]) {
         await (0, batch_service_1.createBatch)({
             productId: p.id,
             organizationId: org.id,
             branchId: eastBranch.id,
             userId: adminUser.id,
             batchNumber: `B-${p.sku}-EAST-1`,
-            quantity: 40,
+            quantity: 50,
             unitCost: Number(p.unitPrice) * 0.5,
             expiryDate: new Date(Date.now() + 300 * 24 * 60 * 60 * 1000),
         });
@@ -677,6 +677,7 @@ async function seedDemoDataset() {
     const pendingPo = await prisma.purchaseOrder.create({
         data: {
             orderNumber: `PO-SEED-PENDING-${Date.now()}`,
+            branchId: mainBranch.id,
             supplierId: supplierA.id,
             organizationId: org.id,
             userId: adminUser.id,
@@ -705,6 +706,7 @@ async function seedDemoDataset() {
     const completedPo = await prisma.purchaseOrder.create({
         data: {
             orderNumber: `PO-SEED-RECV-${Date.now()}`,
+            branchId: mainBranch.id,
             supplierId: supplierB.id,
             organizationId: org.id,
             userId: adminUser.id,
