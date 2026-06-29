@@ -130,7 +130,7 @@ export function CustomerForm({
                                     {t('customers.phoneNumber')}
                                 </label>
                                 <PhoneInputWithCountryCode
-                                    value={phoneValue}
+                                    value={phoneValue ?? undefined}
                                     onChange={(value: string) => setValue('phone', value, { shouldValidate: false })}
                                     className={`w-full ${formErrors.phone ? 'border-red-500' : ''}`}
                                     placeholder="e.g. 788123456"
