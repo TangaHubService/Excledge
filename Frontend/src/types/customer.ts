@@ -13,9 +13,10 @@ export interface CustomerFormData {
   id?: string;
   name: string;
   email?: string | null;
-  phone: string;
+  phone?: string | null;
   countryCode?: string;
   type: string;
+  tin?: string | null;
   balance: number;
 }
 

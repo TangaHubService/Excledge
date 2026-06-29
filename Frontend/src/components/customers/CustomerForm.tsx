@@ -37,6 +37,7 @@ export function CustomerForm({
             name: '',
             email: '',
             phone: '',
+            tin: '',
             type: 'INDIVIDUAL',
             balance: 0,
         },
@@ -48,6 +49,7 @@ export function CustomerForm({
                 name: initialData.name || '',
                 email: initialData.email || '',
                 phone: initialData.phone || '',
+                tin: initialData.tin || '',
                 type: initialData.type || 'INDIVIDUAL',
                 balance: initialData.balance || 0,
             };
@@ -57,6 +59,7 @@ export function CustomerForm({
                 name: '',
                 email: '',
                 phone: '',
+                tin: '',
                 type: 'INDIVIDUAL',
                 balance: 0,
             });
@@ -134,6 +137,25 @@ export function CustomerForm({
                                     disabled={isLoading}
                                     error={formErrors.phone ? String(formErrors.phone.message) : ''}
                                 />
+                            </div>
+
+                            <div>
+                                <label
+                                    htmlFor="tin"
+                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                >
+                                    {t('customers.tinNumber') || 'TIN Number'}
+                                </label>
+                                <input
+                                    id="tin"
+                                    type="text"
+                                    placeholder="e.g. 123456789"
+                                    className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.tin ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
+                                    {...register('tin')}
+                                />
+                                {formErrors.tin && (
+                                    <p className="mt-1 text-sm text-red-600">{formErrors.tin.message}</p>
+                                )}
                             </div>
 
                             <div>

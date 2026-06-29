@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const createCustomerSchema = z.object({
   body: z.object({
     name: z.string().min(1, 'Customer name required').max(255, 'Customer name too long'),
-    phone: z.string().min(7, 'Phone number too short').max(15, 'Phone number too long'),
+    phone: z.string().min(7, 'Phone number too short').max(15, 'Phone number too long').optional(),
     email: z.string().email('Invalid email address').optional(),
     address: z.string().optional(),
     customerType: z.enum(['INDIVIDUAL', 'CORPORATE']).default('INDIVIDUAL'),
