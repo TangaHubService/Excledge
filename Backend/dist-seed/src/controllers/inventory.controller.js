@@ -1,0 +1,908 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getTaxCodes = exports.processExpiredStock = exports.markAsDamage = exports.adjustStock = exports.getLowStockProducts = exports.getExpiredProducts = exports.getExpiringProducts = exports.deleteProduct = exports.updateProduct = exports.createProducts = exports.createProduct = exports.getProductById = exports.getProducts = void 0;
+const client_1 = require("@prisma/client");
+const prisma_1 = require("../lib/prisma");
+const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
+const auditLogger_1 = require("../utils/auditLogger");
+const inventory_ledger_service_1 = require("../services/inventory-ledger.service");
+const product_sync_service_1 = require("../services/product-sync.service");
+const apiResponse_1 = require("../utils/apiResponse");
+const getProducts = async (req, res) => {
+    try {
+        const organizationId = parseInt(req.params.organizationId);
+        const { search, category, expiryStatus, limit = "50", page = "1" } = req.query;
+        // Cap max limit to 500
+        const limitNum = Math.min(Math.max(Number.parseInt(limit) || 50, 1), 500);
+        const pageNum = Math.max(Number.parseInt(page) || 1, 1);
+        const skip = (pageNum - 1) * limitNum;
+        const branchFilter = (0, branchAuth_middleware_1.buildBranchFilter)(req);
+        const where = {
+            organizationId,
+            isActive: true,
+            deletedAt: null,
+        };
+        // Default: show all items. Optionally filter by type.
+        const itemType = req.query.itemType;
+        if (itemType === 'PRODUCT' || itemType === 'SERVICE') {
+            where.itemType = itemType;
+        }
+        if (branchFilter.branchId) {
+            where.batches = {
+                some: {
+                    branchId: branchFilter.branchId
+                }
+            };
+        }
+        if (search) {
+            where.OR = [
+                { name: { contains: search, mode: "insensitive" } },
+                { sku: { contains: search, mode: "insensitive" } },
+                { barcode: { contains: search, mode: "insensitive" } },
+                { batchNumber: { contains: search, mode: "insensitive" } },
+            ];
+        }
+        if (category) {
+            where.category = category;
+        }
+        // Expiry filter — default excludes expired products from the listing
+        if (expiryStatus === "expired") {
+            where.expiryDate = { not: null, lt: new Date() };
+        }
+        else if (expiryStatus === "expiring") {
+            where.expiryDate = {
+                not: null,
+                gte: new Date(),
+                lte: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+            };
+        }
+        else {
+            // DEFAULT: Exclude expired products from listing
+            const expiryFilter = {
+                OR: [
+                    { expiryDate: null },
+                    { expiryDate: { gte: new Date() } },
+                ],
+            };
+            // If search OR exists, nest under AND to avoid overwrite
+            where.AND = where.OR
+                ? [expiryFilter, { OR: where.OR }]
+                : [expiryFilter];
+            delete where.OR;
+        }
+        const [products, totalCount] = await Promise.all([
+            prisma_1.prisma.product.findMany({
+                where,
+                orderBy: { expiryDate: "asc" },
+                skip,
+                take: limitNum,
+            }),
+            prisma_1.prisma.product.count({ where }),
+        ]);
+        // -------------------------------------------------------
+        // 1. Single-pass stock aggregation — replaces N+1 loop
+        // -------------------------------------------------------
+        const branchForLedger = req.selectedBranchId !== null && req.selectedBranchId !== undefined
+            ? req.selectedBranchId
+            : undefined;
+        const productIds = products.map(p => p.id);
+        const stockMap = {};
+        if (productIds.length > 0) {
+            const ledgerWhere = {
+                organizationId,
+                productId: { in: productIds },
+            };
+            if (branchForLedger !== undefined) {
+                ledgerWhere.branchId = branchForLedger;
+            }
+            const stockAggregates = await prisma_1.prisma.inventoryLedger.groupBy({
+                by: ['productId', 'direction'],
+                where: ledgerWhere,
+                _sum: { quantity: true },
+            });
+            for (const pid of productIds) {
+                stockMap[pid] = 0;
+            }
+            for (const row of stockAggregates) {
+                const net = row._sum.quantity || 0;
+                stockMap[row.productId] += row.direction === 'IN' ? net : -net;
+            }
+        }
+        const productsWithStock = products.map(product => ({
+            ...product,
+            quantity: stockMap[product.id] ?? 0,
+        }));
+        // -------------------------------------------------------
+        // 2. Branch-scoped low-stock count (raw SQL)
+        // -------------------------------------------------------
+        const lowStockProducts = branchForLedger !== undefined
+            ? Number((await prisma_1.prisma.$queryRaw `
+          SELECT COUNT(*)::int as count
+          FROM products p
+          WHERE p."organizationId" = ${organizationId}
+            AND p."isActive" = true
+            AND p."deletedAt" IS NULL
+            AND p."minStock" > 0
+            AND (
+              SELECT COALESCE(SUM(b.quantity), 0)
+              FROM batches b
+              WHERE b."productId" = p.id
+                AND b."branchId" = ${branchForLedger}
+                AND b."isActive" = true
+            ) <= p."minStock"
+        `)[0]?.count || 0)
+            : Number((await prisma_1.prisma.$queryRaw `
+          SELECT COUNT(*)::int as count
+          FROM products p
+          WHERE p."organizationId" = ${organizationId}
+            AND p."isActive" = true
+            AND p."deletedAt" IS NULL
+            AND p."minStock" > 0
+            AND p.quantity <= p."minStock"
+        `)[0]?.count || 0);
+        const branchScope = branchForLedger !== undefined
+            ? { batches: { some: { branchId: branchForLedger } } }
+            : {};
+        const expiredProducts = await prisma_1.prisma.product.count({
+            where: {
+                organizationId,
+                isActive: true,
+                deletedAt: null,
+                ...branchScope,
+                expiryDate: { not: null, lt: new Date() },
+            },
+        });
+        const expiringProducts = await prisma_1.prisma.product.count({
+            where: {
+                organizationId,
+                isActive: true,
+                deletedAt: null,
+                ...branchScope,
+                expiryDate: {
+                    not: null,
+                    gte: new Date(),
+                    lte: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+                },
+            },
+        });
+        res.json((0, apiResponse_1.success)({
+            data: productsWithStock,
+            lowStockProducts,
+            expiredProducts,
+            expiringProducts,
+            pagination: {
+                totalItems: totalCount,
+                totalPages: Math.ceil(totalCount / limitNum),
+                currentPage: pageNum,
+                limit: limitNum,
+            },
+        }));
+    }
+    catch (error) {
+        console.error("[Get Products Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)("Failed to get products"));
+    }
+};
+exports.getProducts = getProducts;
+const getProductById = async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const organizationId = parseInt(req.params.organizationId);
+        const product = await prisma_1.prisma.product.findFirst({
+            where: { id, organizationId, deletedAt: null },
+        });
+        if (!product) {
+            return res.status(404).json((0, apiResponse_1.error)("Product not found"));
+        }
+        res.json((0, apiResponse_1.success)(product));
+    }
+    catch (error) {
+        console.error("[Get Product Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)("Failed to get product"));
+    }
+};
+exports.getProductById = getProductById;
+const createProduct = async (req, res) => {
+    try {
+        const organizationId = parseInt(req.params.organizationId);
+        const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode, itemType } = req.body;
+        const userId = parseInt(req.user?.userId);
+        const branchId = (0, branchAuth_middleware_1.getBranchIdForOperation)(req);
+        const isService = itemType === 'SERVICE';
+        if (expiryDate && new Date(expiryDate) < new Date() && !isService) {
+            return res.status(400).json((0, apiResponse_1.error)("Expiry date cannot be in the past"));
+        }
+        // Duplicate batchNumber check for PRODUCT items only
+        if (batchNumber && !isService) {
+            const existingProduct = await prisma_1.prisma.product.findFirst({
+                where: {
+                    organizationId,
+                    batchNumber,
+                    deletedAt: null,
+                },
+                select: { id: true, name: true },
+            });
+            if (existingProduct) {
+                return res.status(400).json((0, apiResponse_1.error)(`Product with batch number "${batchNumber}" already exists (${existingProduct.name})`));
+            }
+        }
+        // Use transaction to ensure product creation, batch, and ledger are atomic
+        const result = await prisma_1.prisma.$transaction(async (tx) => {
+            const product = await tx.product.create({
+                data: {
+                    name,
+                    batchNumber: isService ? null : batchNumber,
+                    quantity: isService ? 0 : (quantity || 0),
+                    unitPrice,
+                    expiryDate: isService ? null : (expiryDate ? new Date(expiryDate) : null),
+                    category: category || (isService ? 'Services' : undefined),
+                    description,
+                    imageUrl,
+                    minStock: isService ? 0 : (minStock || 10),
+                    organizationId: organizationId,
+                    sku,
+                    taxCategory: taxCategory || 'STANDARD',
+                    taxCode,
+                    measurementUnit: measurementUnit || 'OTHER',
+                    itemType,
+                    barcode,
+                },
+            });
+            // Skip batch and ledger for SERVICE items — no inventory tracking
+            if (!isService) {
+                // Create batch record to link product to branch
+                const batchUnitCost = unitPrice ? Number(unitPrice) : 0;
+                const batchName = batchNumber || `DEFAULT-${product.id}`;
+                await tx.batch.upsert({
+                    where: {
+                        productId_batchNumber_branchId: {
+                            productId: product.id,
+                            batchNumber: batchName,
+                            branchId,
+                        }
+                    },
+                    update: {
+                        quantity: { increment: quantity || 0 },
+                        unitCost: batchUnitCost,
+                        expiryDate: expiryDate ? new Date(expiryDate) : null,
+                        isActive: true,
+                    },
+                    create: {
+                        productId: product.id,
+                        organizationId: organizationId,
+                        branchId,
+                        batchNumber: batchName,
+                        quantity: quantity || 0,
+                        unitCost: batchUnitCost,
+                        expiryDate: expiryDate ? new Date(expiryDate) : null,
+                        isActive: true,
+                    },
+                });
+                // Create initial ledger entry for branch-scoped stock tracking
+                await (0, inventory_ledger_service_1.addStock)({
+                    organizationId: organizationId,
+                    productId: product.id,
+                    userId,
+                    quantity: quantity || 0,
+                    movementType: 'INITIAL_STOCK',
+                    branchId,
+                    reference: `INIT-${product.id}`,
+                    referenceType: 'INITIAL_STOCK',
+                    note: 'Initial stock from product creation',
+                    batchNumber,
+                    expiryDate: expiryDate ? new Date(expiryDate) : undefined,
+                    tx,
+                });
+            }
+            return product;
+        });
+        await auditLogger_1.auditLogger.inventory(req, {
+            type: 'PRODUCT_CREATE',
+            description: `Product "${result.name}" created successfully`,
+            entityType: 'Product',
+            entityId: result.id,
+            metadata: {
+                product: result,
+            }
+        });
+        (0, product_sync_service_1.syncProductToRraAsync)(result.id);
+        res.status(201).json((0, apiResponse_1.success)(result));
+    }
+    catch (error) {
+        if (error.message && error.message.includes('already exists')) {
+            return res.status(400).json((0, apiResponse_1.error)(error.message));
+        }
+        if (error.code === 'P2002') {
+            const field = error.meta?.target?.[0] || 'field';
+            return res.status(409).json((0, apiResponse_1.error)(`A product with this ${field} already exists`));
+        }
+        if (error.code === 'P2021' || error.message?.includes('does not exist') || error.code === '42704') {
+            console.error('[Schema Error]', error.message);
+            return res.status(500).json((0, apiResponse_1.error)('Temporary system error. Please try again.'));
+        }
+        console.error("[Create Product Error]:", error);
+        const message = process.env.NODE_ENV === 'development'
+            ? `Failed to create product: ${error.message}`
+            : 'Failed to create product';
+        res.status(500).json((0, apiResponse_1.error)(message));
+    }
+};
+exports.createProduct = createProduct;
+const createProducts = async (req, res) => {
+    try {
+        const organizationId = parseInt(req.params.organizationId);
+        const branchId = (0, branchAuth_middleware_1.getBranchIdForOperation)(req);
+        const products = req.body;
+        const userId = parseInt(req.user?.userId);
+        // Filter out PRODUCT items without batch numbers (services are fine without)
+        const productsWithBatch = products.filter((p) => p.batchNumber && p.itemType !== 'SERVICE');
+        const batchNumbers = productsWithBatch.map((p) => p.batchNumber);
+        if (batchNumbers.length > 0) {
+            // Check for existing Products with matching batch numbers
+            const existingProducts = await prisma_1.prisma.product.findMany({
+                where: {
+                    organizationId,
+                    batchNumber: { in: batchNumbers },
+                    deletedAt: null,
+                },
+                select: { batchNumber: true, name: true },
+            });
+            if (existingProducts.length > 0) {
+                const duplicates = existingProducts.map(p => p.batchNumber).join(', ');
+                return res.status(400).json((0, apiResponse_1.error)(existingProducts.length === 1
+                    ? `Product with batch number "${duplicates}" already exists`
+                    : `${existingProducts.length} products with batch numbers already exist: ${duplicates}`, undefined, existingProducts.map(p => ({
+                    batchNumber: p.batchNumber,
+                    name: p.name,
+                }))));
+            }
+            // Also check for existing Batches that would violate the compound unique key
+            // (productId_batchNumber_branchId). Since batches reference products via FK,
+            // a batch can only exist if its product does. This catches any edge case
+            // where a product exists but was missed by the above check.
+            const existingBatches = await prisma_1.prisma.batch.findMany({
+                where: {
+                    organizationId,
+                    branchId,
+                    batchNumber: { in: batchNumbers },
+                    isActive: true,
+                },
+                select: {
+                    batchNumber: true,
+                    product: { select: { name: true } },
+                },
+            });
+            if (existingBatches.length > 0) {
+                const conflictBatchNumbers = existingBatches.map(b => b.batchNumber).join(', ');
+                return res.status(400).json((0, apiResponse_1.error)(`Batch records already exist for: ${conflictBatchNumbers}`));
+            }
+        }
+        // Use transaction to ensure all products, batches, and ledger entries are atomic
+        const result = await prisma_1.prisma.$transaction(async (tx) => {
+            await tx.product.createMany({
+                data: products.map((product) => {
+                    const isService = product.itemType === 'SERVICE';
+                    return {
+                        name: product.name,
+                        batchNumber: isService ? null : product.batchNumber,
+                        quantity: isService ? 0 : (product.quantity || 0),
+                        unitPrice: product.unitPrice,
+                        category: product.category || (isService ? 'Services' : undefined),
+                        description: product.description,
+                        imageUrl: product.imageUrl,
+                        minStock: isService ? 0 : (product.minStock || 10),
+                        organizationId: organizationId,
+                        expiryDate: isService ? null : (product.expiryDate ? new Date(product.expiryDate) : null),
+                        sku: product.sku,
+                        taxCategory: product.taxCategory || 'STANDARD',
+                        taxCode: product.taxCode,
+                        measurementUnit: product.measurementUnit || 'OTHER',
+                        itemType: product.itemType || 'PRODUCT',
+                        barcode: isService ? null : product.barcode,
+                    };
+                }),
+            });
+            // Fetch created products to get their IDs
+            const createdProducts = await tx.product.findMany({
+                where: {
+                    organizationId: organizationId,
+                    batchNumber: {
+                        in: products.map((p) => p.batchNumber),
+                    },
+                },
+            });
+            // Create batch records and initial ledger entries for each product
+            // Skip batch/ledger for SERVICE items — no inventory tracking
+            for (const product of createdProducts) {
+                if (product.itemType === 'SERVICE')
+                    continue;
+                const batchUnitCost = product.unitPrice ? Number(product.unitPrice) : 0;
+                const batchName = product.batchNumber || `DEFAULT-${product.id}`;
+                await tx.batch.upsert({
+                    where: {
+                        productId_batchNumber_branchId: {
+                            productId: product.id,
+                            batchNumber: batchName,
+                            branchId,
+                        }
+                    },
+                    update: {
+                        quantity: { increment: product.quantity || 0 },
+                        unitCost: batchUnitCost,
+                        expiryDate: product.expiryDate || null,
+                        isActive: true,
+                    },
+                    create: {
+                        productId: product.id,
+                        organizationId: organizationId,
+                        branchId,
+                        batchNumber: batchName,
+                        quantity: product.quantity || 0,
+                        unitCost: batchUnitCost,
+                        expiryDate: product.expiryDate || null,
+                        isActive: true,
+                    },
+                });
+                if (product.quantity > 0) {
+                    await (0, inventory_ledger_service_1.addStock)({
+                        organizationId: organizationId,
+                        productId: product.id,
+                        userId,
+                        quantity: product.quantity,
+                        movementType: 'INITIAL_STOCK',
+                        branchId,
+                        reference: `INIT-${product.id}`,
+                        referenceType: 'INITIAL_STOCK',
+                        note: 'Initial stock from bulk import',
+                        batchNumber: product.batchNumber || undefined,
+                        expiryDate: product.expiryDate || undefined,
+                        tx,
+                    });
+                }
+            }
+            return createdProducts;
+        });
+        await auditLogger_1.auditLogger.inventory(req, {
+            type: 'PRODUCT_CREATE',
+            description: 'Products created successfully (Bulk)',
+            entityType: 'Product',
+            entityId: "BULK",
+            metadata: {
+                count: result.length,
+                products: result,
+            }
+        });
+        res.status(201).json((0, apiResponse_1.success)(result));
+    }
+    catch (error) {
+        // Distinguish validation errors from server errors
+        if (error.message && (error.message.includes('already exists') || error.message.includes('already exist'))) {
+            return res.status(400).json((0, apiResponse_1.error)(error.message));
+        }
+        console.error("[Create Products Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)("Failed to create products"));
+    }
+};
+exports.createProducts = createProducts;
+const updateProduct = async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const organizationId = parseInt(req.params.organizationId);
+        const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock, taxCode, measurementUnit, exemptionReference, itemType } = req.body;
+        const existingProduct = await prisma_1.prisma.product.findFirst({
+            where: { id, organizationId, deletedAt: null },
+        });
+        if (!existingProduct) {
+            return res.status(404).json((0, apiResponse_1.error)("Product not found"));
+        }
+        if (expiryDate && new Date(expiryDate) < new Date()) {
+            return res.status(400).json((0, apiResponse_1.error)("Expiry date cannot be in the past"));
+        }
+        const data = {};
+        if (name !== undefined)
+            data.name = name;
+        if (batchNumber !== undefined)
+            data.batchNumber = batchNumber;
+        if (quantity !== undefined)
+            data.quantity = quantity;
+        if (unitPrice !== undefined)
+            data.unitPrice = unitPrice;
+        if (category !== undefined)
+            data.category = category;
+        if (description !== undefined)
+            data.description = description;
+        if (minStock !== undefined)
+            data.minStock = minStock;
+        if (taxCode !== undefined)
+            data.taxCode = taxCode;
+        if (measurementUnit !== undefined)
+            data.measurementUnit = measurementUnit;
+        if (exemptionReference !== undefined)
+            data.exemptionReference = exemptionReference;
+        if (itemType !== undefined)
+            data.itemType = itemType;
+        data.expiryDate = expiryDate ? new Date(expiryDate) : null;
+        if (imageUrl !== undefined)
+            data.imageUrl = imageUrl;
+        const product = await prisma_1.prisma.product.update({
+            where: { id },
+            data,
+        });
+        await auditLogger_1.auditLogger.inventory(req, {
+            type: 'PRODUCT_UPDATE',
+            description: `Product "${product.name}" updated successfully`,
+            entityType: 'Product',
+            entityId: id,
+            metadata: {
+                previousData: existingProduct,
+                updatedData: product,
+            }
+        });
+        (0, product_sync_service_1.syncProductToRraAsync)(product.id);
+        res.json((0, apiResponse_1.success)(product));
+    }
+    catch (error) {
+        console.error("[Update Product Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)("Failed to update product"));
+    }
+};
+exports.updateProduct = updateProduct;
+const deleteProduct = async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const organizationId = parseInt(req.params.organizationId);
+        const existingProduct = await prisma_1.prisma.product.findFirst({
+            where: { id, organizationId, deletedAt: null },
+        });
+        if (!existingProduct) {
+            return res.status(404).json((0, apiResponse_1.error)("Product not found"));
+        }
+        await prisma_1.prisma.product.update({
+            where: { id },
+            data: { isActive: false, deletedAt: new Date() }
+        });
+        await auditLogger_1.auditLogger.inventory(req, {
+            type: 'PRODUCT_ARCHIVED',
+            description: `Product "${existingProduct.name}" archived successfully`,
+            entityType: 'Product',
+            entityId: id,
+            metadata: {
+                product: existingProduct,
+            }
+        });
+        res.json((0, apiResponse_1.success)({ message: "Product archived successfully" }));
+    }
+    catch (error) {
+        console.error("[Delete Product Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)("Failed to delete product"));
+    }
+};
+exports.deleteProduct = deleteProduct;
+const getExpiringProducts = async (req, res) => {
+    try {
+        const organizationId = parseInt(req.params.organizationId);
+        const { days = "30", limit = "10", page = "1" } = req.query;
+        const branchFilter = (0, branchAuth_middleware_1.buildBranchFilter)(req);
+        const where = {
+            organizationId,
+            deletedAt: null,
+            itemType: 'PRODUCT',
+            expiryDate: {
+                not: null,
+                gte: new Date(),
+                lte: new Date(Date.now() + Number.parseInt(days) * 24 * 60 * 60 * 1000),
+            },
+        };
+        if (branchFilter.branchId) {
+            where.batches = {
+                some: {
+                    branchId: branchFilter.branchId
+                }
+            };
+        }
+        const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit);
+        const take = Number.parseInt(limit);
+        const [products, totalCount] = await Promise.all([
+            prisma_1.prisma.product.findMany({
+                where,
+                orderBy: { expiryDate: "asc" },
+                skip,
+                take,
+            }),
+            prisma_1.prisma.product.count({ where }),
+        ]);
+        res.json((0, apiResponse_1.success)({
+            data: products,
+            pagination: {
+                totalItems: totalCount,
+                totalPages: Math.ceil(totalCount / take),
+                currentPage: Number.parseInt(page),
+                limit: take,
+            },
+        }));
+    }
+    catch (error) {
+        console.error("[Get Expiring Products Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)("Failed to get expiring products"));
+    }
+};
+exports.getExpiringProducts = getExpiringProducts;
+const getExpiredProducts = async (req, res) => {
+    try {
+        const organizationId = parseInt(req.params.organizationId);
+        const { days = "30", limit = "10", page = "1" } = req.query;
+        const branchFilter = (0, branchAuth_middleware_1.buildBranchFilter)(req);
+        const where = {
+            organizationId,
+            itemType: 'PRODUCT',
+            deletedAt: null,
+            expiryDate: {
+                not: null,
+                lt: new Date(),
+            },
+        };
+        if (branchFilter.branchId) {
+            where.batches = {
+                some: {
+                    branchId: branchFilter.branchId
+                }
+            };
+        }
+        const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit);
+        const take = Number.parseInt(limit);
+        const [products, totalCount] = await Promise.all([
+            prisma_1.prisma.product.findMany({
+                where,
+                orderBy: { expiryDate: "desc" },
+                skip,
+                take,
+            }),
+            prisma_1.prisma.product.count({ where }),
+        ]);
+        res.json((0, apiResponse_1.success)({
+            data: products,
+            pagination: {
+                totalItems: totalCount,
+                totalPages: Math.ceil(totalCount / take),
+                currentPage: Number.parseInt(page),
+                limit: take,
+            },
+        }));
+    }
+    catch (error) {
+        console.error("[Get Expired Products Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)("Failed to get expired products"));
+    }
+};
+exports.getExpiredProducts = getExpiredProducts;
+const getLowStockProducts = async (req, res) => {
+    try {
+        const organizationId = parseInt(req.params.organizationId);
+        const { limit = "10", page = "1", search, status } = req.query;
+        const branchId = req.selectedBranchId !== null && req.selectedBranchId !== undefined
+            ? req.selectedBranchId
+            : undefined;
+        const stockExpr = branchId !== undefined
+            ? client_1.Prisma.sql `COALESCE((SELECT SUM(b.quantity) FROM batches b WHERE b."productId" = p.id AND b."branchId" = ${branchId} AND b."isActive" = true), 0)`
+            : client_1.Prisma.sql `p.quantity`;
+        const searchVal = search && typeof search === 'string' ? search.trim() : '';
+        const hasSearch = searchVal.length > 0;
+        const searchExpr = hasSearch
+            ? client_1.Prisma.sql `AND (p.name ILIKE ${'%' + searchVal + '%'}
+          OR p.sku ILIKE ${'%' + searchVal + '%'}
+          OR p.barcode ILIKE ${'%' + searchVal + '%'}
+          OR p."batchNumber" ILIKE ${'%' + searchVal + '%'})`
+            : client_1.Prisma.empty;
+        // Status sub-filter (critical / low / warning thresholds)
+        const statusVal = status && typeof status === 'string' ? status.toLowerCase() : '';
+        let statusExpr = client_1.Prisma.empty;
+        if (statusVal === 'critical') {
+            statusExpr = client_1.Prisma.sql `AND ${stockExpr} <= (p."minStock" * 0.25)`;
+        }
+        else if (statusVal === 'low') {
+            statusExpr = client_1.Prisma.sql `AND ${stockExpr} > (p."minStock" * 0.25) AND ${stockExpr} <= (p."minStock" * 0.50)`;
+        }
+        else if (statusVal === 'warning') {
+            statusExpr = client_1.Prisma.sql `AND ${stockExpr} > (p."minStock" * 0.50) AND ${stockExpr} < p."minStock"`;
+        }
+        const baseWhere = client_1.Prisma.sql `
+      WHERE p."organizationId" = ${organizationId}
+        AND p."isActive" = true
+        AND p."deletedAt" IS NULL
+        AND p."itemType" != 'SERVICE'
+        AND p."minStock" > 0
+        AND ${stockExpr} < p."minStock"
+        ${searchExpr}
+        ${statusExpr}
+    `;
+        const totalCount = Number((await prisma_1.prisma.$queryRaw `
+      SELECT COUNT(*)::int as count FROM products p ${baseWhere}
+    `)[0]?.count || 0);
+        const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit);
+        const take = Number.parseInt(limit);
+        const rows = await prisma_1.prisma.$queryRaw `
+      SELECT p.id, p.name, p.sku, p.barcode, p."batchNumber",
+             p."unitPrice", p."minStock", p.category, p."expiryDate",
+             p."measurementUnit", p."imageUrl",
+             ${stockExpr} as stock
+      FROM products p ${baseWhere}
+      ORDER BY stock ASC
+      LIMIT ${take} OFFSET ${skip}
+    `;
+        const products = rows.map(r => ({
+            id: r.id,
+            name: r.name,
+            sku: r.sku,
+            barcode: r.barcode,
+            batchNumber: r.batchNumber,
+            unitPrice: r.unitPrice,
+            minStock: r.minStock,
+            category: r.category,
+            expiryDate: r.expiryDate,
+            measurementUnit: r.measurementUnit,
+            imageUrl: r.imageUrl,
+            quantity: r.stock,
+        }));
+        res.json((0, apiResponse_1.success)({
+            data: products,
+            pagination: {
+                totalItems: totalCount,
+                totalPages: Math.ceil(totalCount / take),
+                currentPage: Number.parseInt(page),
+                limit: take,
+            },
+        }));
+    }
+    catch (error) {
+        console.error("[Get Low Stock Products Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)("Failed to get low stock products"));
+    }
+};
+exports.getLowStockProducts = getLowStockProducts;
+const adjustStock = async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const organizationId = parseInt(req.params.organizationId);
+        const { quantity, note } = req.body;
+        const userId = parseInt(req.user?.userId);
+        const branchId = (0, branchAuth_middleware_1.getBranchIdForOperation)(req);
+        const product = await prisma_1.prisma.product.findFirst({
+            where: { id, organizationId, deletedAt: null },
+        });
+        if (!product) {
+            return res.status(404).json((0, apiResponse_1.error)("Product not found"));
+        }
+        // Use ledger service for adjustments
+        const ledgerEntry = await (0, inventory_ledger_service_1.adjustStock)({
+            organizationId: organizationId,
+            productId: id,
+            userId: userId,
+            quantity: quantity,
+            branchId,
+            reference: `ADJ-${id}-${Date.now()}`,
+            referenceType: 'ADJUSTMENT',
+            note: note || "Manual adjustment",
+        });
+        await auditLogger_1.auditLogger.inventory(req, {
+            type: 'STOCK_ADJUSTMENT',
+            description: `Stock for "${product.name}" adjusted: ${quantity > 0 ? '+' : ''}${quantity}`,
+            entityType: 'Product',
+            entityId: id,
+            metadata: {
+                previousStock: ledgerEntry.runningBalance - quantity,
+                newStock: ledgerEntry.runningBalance,
+                adjustment: quantity,
+            }
+        });
+        res.json((0, apiResponse_1.success)(ledgerEntry));
+    }
+    catch (error) {
+        console.error("[Adjust Stock Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)(error.message || "Failed to adjust stock"));
+    }
+};
+exports.adjustStock = adjustStock;
+const markAsDamage = async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const organizationId = parseInt(req.params.organizationId);
+        const { quantity, note } = req.body;
+        const userId = parseInt(req.user?.userId);
+        const branchId = (0, branchAuth_middleware_1.getBranchIdForOperation)(req);
+        const product = await prisma_1.prisma.product.findFirst({
+            where: { id, organizationId, deletedAt: null },
+        });
+        if (!product) {
+            return res.status(404).json((0, apiResponse_1.error)("Product not found"));
+        }
+        if (quantity > product.quantity) {
+            return res.status(400).json((0, apiResponse_1.error)("Damage quantity exceeds current stock"));
+        }
+        // Use ledger service for damage (Stock OUT)
+        const ledgerEntry = await (0, inventory_ledger_service_1.removeStock)({
+            organizationId: organizationId,
+            productId: id,
+            userId: userId,
+            quantity: quantity,
+            movementType: 'DAMAGE',
+            branchId,
+            reference: `DAMAGE-${id}-${Date.now()}`,
+            referenceType: 'DAMAGE',
+            note: note || "Marked as damage",
+        });
+        await auditLogger_1.auditLogger.inventory(req, {
+            type: 'STOCK_DECREASED',
+            description: `Damaged stock removed for "${product.name}": -${quantity}`,
+            entityType: 'Product',
+            entityId: id,
+            metadata: {
+                quantity,
+                reason: 'DAMAGE',
+                note,
+                newBalance: ledgerEntry.runningBalance
+            }
+        });
+        res.json((0, apiResponse_1.success)(ledgerEntry));
+    }
+    catch (error) {
+        console.error("[Mark Damage Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)(error.message || "Failed to mark damage"));
+    }
+};
+exports.markAsDamage = markAsDamage;
+const processExpiredStock = async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const organizationId = parseInt(req.params.organizationId);
+        const { quantity, note } = req.body;
+        const userId = parseInt(req.user?.userId);
+        const branchId = (0, branchAuth_middleware_1.getBranchIdForOperation)(req);
+        const product = await prisma_1.prisma.product.findFirst({
+            where: { id, organizationId, deletedAt: null },
+        });
+        if (!product) {
+            return res.status(404).json((0, apiResponse_1.error)("Product not found"));
+        }
+        const qtyToRemove = quantity || product.quantity;
+        // Use ledger service for expired stock (Stock OUT)
+        const ledgerEntry = await (0, inventory_ledger_service_1.removeStock)({
+            organizationId: organizationId,
+            productId: id,
+            userId: userId,
+            quantity: qtyToRemove,
+            movementType: 'EXPIRED',
+            branchId,
+            reference: `EXPIRED-${id}-${Date.now()}`,
+            referenceType: 'EXPIRED',
+            note: note || "Processed expired stock",
+        });
+        await auditLogger_1.auditLogger.inventory(req, {
+            type: 'STOCK_DECREASED',
+            description: `Expired stock processed for "${product.name}": -${qtyToRemove}`,
+            entityType: 'Product',
+            entityId: id,
+            metadata: {
+                quantity: qtyToRemove,
+                reason: 'EXPIRED',
+                note,
+                newBalance: ledgerEntry.runningBalance
+            }
+        });
+        res.json((0, apiResponse_1.success)(ledgerEntry));
+    }
+    catch (error) {
+        console.error("[Process Expired Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)(error.message || "Failed to process expired stock"));
+    }
+};
+exports.processExpiredStock = processExpiredStock;
+const getTaxCodes = async (_req, res) => {
+    const codes = [
+        { code: 'A', label: 'Exempted (0%)', rate: 0, category: 'EXEMPT' },
+        { code: 'B', label: 'Standard (18%)', rate: 18, category: 'STANDARD' },
+        { code: 'C', label: 'Zero-rated (0%)', rate: 0, category: 'ZERO_RATED' },
+        { code: 'D', label: 'Exempted Entity (0%)', rate: 0, category: 'EXEMPT' },
+    ];
+    res.json(codes);
+};
+exports.getTaxCodes = getTaxCodes;

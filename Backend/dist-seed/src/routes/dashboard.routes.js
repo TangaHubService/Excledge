@@ -1,0 +1,17 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const dashboard_controller_1 = require("../controllers/dashboard.controller");
+const auth_middleware_1 = require("../middleware/auth.middleware");
+const organizationAccess_middleware_1 = require("../middleware/organizationAccess.middleware");
+const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
+const router = (0, express_1.Router)();
+const orgAccess = (0, organizationAccess_middleware_1.requireOrganizationAccess)();
+router.get("/stats/:organizationId", auth_middleware_1.authenticate, orgAccess, branchAuth_middleware_1.branchAuth, dashboard_controller_1.getDashboardStats);
+router.get("/sales-trend/:organizationId", auth_middleware_1.authenticate, orgAccess, branchAuth_middleware_1.branchAuth, dashboard_controller_1.getSalesTrend);
+router.get("/notifications/:organizationId", auth_middleware_1.authenticate, orgAccess, branchAuth_middleware_1.branchAuth, dashboard_controller_1.getNotifications);
+router.get("/:organizationId/top-selling-products", auth_middleware_1.authenticate, orgAccess, branchAuth_middleware_1.branchAuth, dashboard_controller_1.topSellingProducts);
+router.get("/:organizationId/detailed-inventory", auth_middleware_1.authenticate, orgAccess, branchAuth_middleware_1.branchAuth, dashboard_controller_1.getDetailedInventory);
+router.get("/branch-stats/:organizationId", auth_middleware_1.authenticate, orgAccess, branchAuth_middleware_1.branchAuth, dashboard_controller_1.getBranchDashboardStats);
+router.get("/executive/:organizationId", auth_middleware_1.authenticate, orgAccess, branchAuth_middleware_1.branchAuth, dashboard_controller_1.getExecutiveDashboard);
+exports.default = router;

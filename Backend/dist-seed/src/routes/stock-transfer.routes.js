@@ -1,0 +1,17 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_middleware_1 = require("../middleware/auth.middleware");
+const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
+const organizationAccess_middleware_1 = require("../middleware/organizationAccess.middleware");
+const stock_transfer_controller_1 = require("../controllers/stock-transfer.controller");
+const router = (0, express_1.Router)();
+const orgAccess = (0, organizationAccess_middleware_1.requireOrganizationAccess)();
+router.use(auth_middleware_1.authenticate);
+router.get("/:organizationId", orgAccess, branchAuth_middleware_1.branchAuth, stock_transfer_controller_1.listStockTransfers);
+router.get("/:organizationId/:id", orgAccess, branchAuth_middleware_1.branchAuth, stock_transfer_controller_1.getStockTransfer);
+router.post("/:organizationId", orgAccess, branchAuth_middleware_1.branchAuth, (0, auth_middleware_1.authorize)("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), stock_transfer_controller_1.createStockTransfer);
+router.post("/:organizationId/:id/approve", orgAccess, branchAuth_middleware_1.branchAuth, (0, auth_middleware_1.authorize)("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), stock_transfer_controller_1.approveStockTransfer);
+router.post("/:organizationId/:id/reject", orgAccess, branchAuth_middleware_1.branchAuth, (0, auth_middleware_1.authorize)("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), stock_transfer_controller_1.rejectStockTransfer);
+router.post("/:organizationId/:id/complete", orgAccess, branchAuth_middleware_1.branchAuth, (0, auth_middleware_1.authorize)("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), stock_transfer_controller_1.completeStockTransfer);
+exports.default = router;
