@@ -866,6 +866,7 @@ export default function SalesForm() {
           onClose={() => setIsPaymentModalOpen(false)}
           totalAmount={total}
           onProcessPayment={handleProcessPayment}
+          isProcessing={isSubmitting}
         />
       )}
     </>

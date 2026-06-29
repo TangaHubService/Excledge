@@ -148,7 +148,7 @@ export const getCustomerById = async (req: BranchAuthRequest, res: Response) => 
 export const createCustomer = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params?.organizationId)
-    const { name, phone, email, type, balance } = req.body
+    const { name, phone, email, type, tin, TIN, balance } = req.body
 
     // Validate and map customerType
     let customerType: 'INDIVIDUAL' | 'INSURANCE' | 'CORPORATE' = 'INDIVIDUAL'
@@ -159,8 +159,9 @@ export const createCustomer = async (req: BranchAuthRequest, res: Response) => {
     const customer = await prisma.customer.create({
       data: {
         name,
-        phone,
-        email,
+        phone: phone || null,
+        email: email || null,
+        TIN: TIN || tin || null,
         customerType,
         balance: balance || 0,
         organizationId,
