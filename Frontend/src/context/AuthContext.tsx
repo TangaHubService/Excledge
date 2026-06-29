@@ -14,6 +14,7 @@ type User = {
 type AuthContextType = {
     user: User;
     isAuthenticated: boolean;
+    isLoading: boolean;
     login: (userData: User) => void;
     logout: () => void;
     refreshUserProfile: () => Promise<void>;
@@ -26,6 +27,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User>(null);
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
 
     useEffect(() => {
         const initializeAuth = async () => {
@@ -38,6 +40,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 window.location.pathname === '/verify'
             )) {
                 setIsAuthenticated(false);
+                setIsLoading(false);
                 return;
             }
 
@@ -103,6 +106,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 // No token at all
                 setIsAuthenticated(false);
             }
+            setIsLoading(false);
         };
         
         initializeAuth();
@@ -158,7 +162,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, isAuthenticated, login, logout, refreshUserProfile, isSystemOwner, isAdmin }}>
+        <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, logout, refreshUserProfile, isSystemOwner, isAdmin }}>
             {children}
         </AuthContext.Provider>
     );
