@@ -1,5 +1,4 @@
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from '../../components/ui/drawer';
-import { useTheme } from '../../context/ThemeContext';
 import { useEffect } from 'react';
 import PhoneInputWithCountryCode from '../../components/PhoneInputWithCountryCode';
 import { useForm } from 'react-hook-form';
@@ -23,7 +22,6 @@ export function CustomerForm({
     isLoading,
 }: CustomerFormProps) {
     const { t } = useTranslation();
-    const { theme } = useTheme();
 
 
     const {
@@ -75,17 +73,17 @@ export function CustomerForm({
 
     return (
         <Drawer open={true} onOpenChange={onClose}>
-            <DrawerContent
-                className={`w-full ${theme === 'dark' ? 'bg-gray-800 border border-gray-700 text-white' : 'bg-white border border-gray-200 text-gray-900'} rounded-lg p-6`}
-            >
-                <DrawerHeader>
-                    <DrawerTitle className="text-xl font-semibold mb-2">
-                        {initialData?.id ? t('customers.editCustomer') : t('customers.addNewCustomer')}
-                    </DrawerTitle>
-                </DrawerHeader>
+      <DrawerContent
+        className="sm:max-w-[680px] bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+      >
+        <DrawerHeader>
+          <DrawerTitle className="text-xl font-semibold mb-2">
+            {initialData?.id ? t('customers.editCustomer') : t('customers.addNewCustomer')}
+          </DrawerTitle>
+        </DrawerHeader>
 
 
-                <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 w-full max-w-full">
+                <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 w-full max-w-full px-6 pb-6">
                     <div>
                         <label
                             htmlFor="name"
@@ -97,7 +95,7 @@ export function CustomerForm({
                         <input
                             id="name"
                             type="text"
-                            className={`w-full max-w-full rounded-md border ${formErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white`}
+                            className={`w-full max-w-full rounded-md border ${formErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white`}
                             {...register('name')}
                         />
                         {formErrors.name && (
@@ -116,7 +114,7 @@ export function CustomerForm({
                         <input
                             id="email"
                             type="email"
-                            className={`w-full max-w-full rounded-md border ${formErrors.email ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white`}
+                            className={`w-full max-w-full rounded-md border ${formErrors.email ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white`}
                             {...register('email')}
                         />
 
@@ -143,7 +141,7 @@ export function CustomerForm({
 
                         <select
                             id="type"
-                            className={`w-full max-w-full rounded-md border ${formErrors.type ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-white`}
+                            className={`w-full max-w-full rounded-md border ${formErrors.type ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-white`}
                             {...register('type')}
                         >
                             <option value="INDIVIDUAL">{t('customers.individual')}</option>
@@ -168,7 +166,7 @@ export function CustomerForm({
                             id="balance"
                             type="number"
                             step="0.01"
-                            className={`w-full max-w-full rounded-md border ${formErrors.balance ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white ${initialData?.id ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : ''}`}
+                            className={`w-full max-w-full rounded-md border ${formErrors.balance ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white ${initialData?.id ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : ''}`}
                             {...register('balance')}
                             readOnly={!!initialData?.id}
                             disabled={!!initialData?.id}
@@ -182,7 +180,7 @@ export function CustomerForm({
                         <button
                             type="button"
                             onClick={onClose}
-                            className={`px-4 py-2 text-sm font-medium ${theme === 'dark' ? 'text-gray-300 bg-gray-900 border border-gray-700 hover:bg-gray-800' : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'} rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                             disabled={isLoading}
                         >
                             {t('common.cancel')}
