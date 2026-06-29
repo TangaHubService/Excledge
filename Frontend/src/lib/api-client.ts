@@ -20,12 +20,15 @@ const handleTokenExpiration = () => {
     return;
   }
   // Clear all authentication-related data from localStorage
-  localStorage.removeItem('token');
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-  localStorage.removeItem('user');
-  localStorage.removeItem('current_organization_id');
-  // Clear all localStorage to ensure clean state
-  localStorage.clear();
+  const keysToRemove = [
+    'token',
+    REFRESH_TOKEN_KEY,
+    'user',
+    'current_organization_id',
+    'selected_branch_id',
+    'organization',
+  ];
+  keysToRemove.forEach(key => localStorage.removeItem(key));
   // Redirect to login page
   window.location.href = '/login';
 };
@@ -41,6 +44,7 @@ function extractAccessToken(body: {
 
 class ApiClient {
   private token: string | null = null;
+  private _refreshPromise: Promise<boolean> | null = null;
 
   setToken(token: string) {
     this.token = token;
@@ -76,21 +80,34 @@ class ApiClient {
 
   private async tryRefreshAccessToken(): Promise<boolean> {
     if (typeof window === 'undefined') return false;
+
+    // If a refresh is already in-flight, reuse its result
+    if (this._refreshPromise) {
+      return this._refreshPromise;
+    }
+
     const rt = localStorage.getItem(REFRESH_TOKEN_KEY);
     if (!rt) return false;
-    try {
-      const res = await fetch(`${API_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: rt }),
-      });
-      if (!res.ok) return false;
-      const data = await res.json();
-      this.persistAuthFromResponse(data);
-      return !!extractAccessToken(data);
-    } catch {
-      return false;
-    }
+
+    this._refreshPromise = (async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: rt }),
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        this.persistAuthFromResponse(data);
+        return !!extractAccessToken(data);
+      } catch {
+        return false;
+      } finally {
+        this._refreshPromise = null;
+      }
+    })();
+
+    return this._refreshPromise;
   }
 
   /** When access JWT is expired, obtain a new pair using the stored refresh token (e.g. on app load). */
@@ -196,10 +213,11 @@ class ApiClient {
     return response.json();
   }
 
-  async requestFile(endpoint: string, options: RequestInit = {}) {
+  async requestFile(endpoint: string, options: RequestInit & { _authRetried?: boolean } = {}): Promise<Response> {
+    const { _authRetried, ...fetchOptions } = options;
     const token = this.getToken();
     const headers: Record<string, string> = {
-      ...(options.headers as Record<string, string>),
+      ...(fetchOptions.headers as Record<string, string>),
     };
 
     if (token) {
@@ -207,12 +225,29 @@ class ApiClient {
     }
 
     const response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
+      ...fetchOptions,
       headers,
     });
 
+    if (
+      response.status === 401 &&
+      !_authRetried &&
+      !this.authPathExemptFromRefreshRetry(endpoint) &&
+      typeof window !== 'undefined'
+    ) {
+      const refreshed = await this.tryRefreshAccessToken();
+      if (refreshed) {
+        return this.requestFile(endpoint, { ...fetchOptions, _authRetried: true });
+      }
+      // Refresh failed — token is dead
+      handleTokenExpiration();
+      const error = new Error("Session expired. Please login again.");
+      (error as any).response = { status: 401, data: { error: "Unauthorized" } };
+      throw error;
+    }
+
     if (!response.ok) {
-      // Handle JWT expiration (401 Unauthorized)
+      // Handle JWT expiration (401 Unauthorized) for non-retryable cases
       if (response.status === 401) {
         handleTokenExpiration();
         const error = new Error("Session expired. Please login again.");
@@ -349,18 +384,50 @@ class ApiClient {
     });
   }
 
-  async updateProfileImage(formData: FormData, id: string | number) {
-    const headers: Record<string, string> = {};
+  private async fetchWithRefresh(url: string, options: RequestInit & { _authRetried?: boolean } = {}): Promise<Response> {
+    const { _authRetried, ...fetchOptions } = options;
     const token = this.getToken();
+    const headers: Record<string, string> = {
+      ...(fetchOptions.headers as Record<string, string>),
+    };
+
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_URL}/users/profile-image/${id}`, {
-      method: "PUT",
-      headers,
-      body: formData,
-    });
+    const response = await fetch(url, { ...fetchOptions, headers });
+
+    if (
+      response.status === 401 &&
+      !_authRetried &&
+      typeof window !== 'undefined'
+    ) {
+      const refreshed = await this.tryRefreshAccessToken();
+      if (refreshed) {
+        // Retry with fresh token
+        const newToken = this.getToken();
+        const retryHeaders: Record<string, string> = {
+          ...(fetchOptions.headers as Record<string, string>),
+        };
+        if (newToken) {
+          retryHeaders["Authorization"] = `Bearer ${newToken}`;
+        }
+        return fetch(url, { ...fetchOptions, headers: retryHeaders });
+      }
+      handleTokenExpiration();
+      throw Object.assign(new Error("Session expired. Please login again."), {
+        response: { status: 401, data: { error: "Unauthorized" } },
+      });
+    }
+
+    return response;
+  }
+
+  async updateProfileImage(formData: FormData, id: string | number) {
+    const response = await this.fetchWithRefresh(
+      `${API_URL}/users/profile-image/${id}`,
+      { method: "PUT", body: formData },
+    );
 
     if (!response.ok) {
       const error = await response
@@ -373,24 +440,12 @@ class ApiClient {
   }
 
   async uploadAvatar(formData: FormData) {
-    const headers: Record<string, string> = {};
-    const token = this.getToken();
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-
-    const response = await fetch(`${API_URL}/organizations/avatar/${this.getOrganizationId()}`, {
-      method: "PUT",
-      headers,
-      body: formData,
-    });
+    const response = await this.fetchWithRefresh(
+      `${API_URL}/organizations/avatar/${this.getOrganizationId()}`,
+      { method: "PUT", body: formData },
+    );
 
     if (!response.ok) {
-      // Handle JWT expiration (401 Unauthorized)
-      if (response.status === 401) {
-        handleTokenExpiration();
-        throw new Error("Session expired. Please login again.");
-      }
       const error = await response
         .json()
         .catch(() => ({ error: "Failed to upload avatar" }));
@@ -618,21 +673,12 @@ class ApiClient {
     formData.append("file", file);
     formData.append("organizationId", this.getOrganizationId());
 
-    const token = this.getToken();
-    const response = await fetch(`${API_URL}/organizations/${this.getOrganizationId()}/bulk-invite`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    });
+    const response = await this.fetchWithRefresh(
+      `${API_URL}/organizations/${this.getOrganizationId()}/bulk-invite`,
+      { method: "POST", body: formData },
+    );
 
     if (!response.ok) {
-      // Handle JWT expiration (401 Unauthorized)
-      if (response.status === 401) {
-        handleTokenExpiration();
-        throw new Error("Session expired. Please login again.");
-      }
       const error = await response
         .json()
         .catch(() => ({ error: "An error occurred" }));
@@ -758,19 +804,11 @@ class ApiClient {
 
   async exportReport(reportType: string, params: any) {
     const query = new URLSearchParams(params).toString();
-    const token = this.getToken();
-    const response = await fetch(`${API_URL}/reports/export/${reportType}/${this.getOrganizationId()}?${query}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const response = await this.fetchWithRefresh(
+      `${API_URL}/reports/export/${reportType}/${this.getOrganizationId()}?${query}`,
+    );
 
     if (!response.ok) {
-      // Handle JWT expiration (401 Unauthorized)
-      if (response.status === 401) {
-        handleTokenExpiration();
-        throw new Error("Session expired. Please login again.");
-      }
       throw new Error("Export failed");
     }
 
@@ -1607,12 +1645,10 @@ class ApiClient {
   async uploadProductImage(file: File): Promise<{ imageUrl: string }> {
     const formData = new FormData();
     formData.append('image', file);
-    const token = this.getToken();
-    const response = await fetch(`${API_URL}/upload/image`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    });
+    const response = await this.fetchWithRefresh(
+      `${API_URL}/upload/image`,
+      { method: 'POST', body: formData },
+    );
     if (!response.ok) {
       throw new Error('Image upload failed');
     }

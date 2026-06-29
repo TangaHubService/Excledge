@@ -57,6 +57,18 @@ import { PesapalCallback } from "./pages/PesapalCallback";
 import ExpensesPage from "./pages/dashboard/expenses/ExpensesPage";
 import { ExecutiveDashboard } from "./pages/dashboard/executive/ExecutiveDashboard";
 
+// Redirect based on auth status for the root route
+const HomeRedirect = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  // Auth is still initializing — show a loading indicator
+  if (isLoading) {
+    return <Loading />;
+  }
+
+  return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
+};
+
 // Protected Route for System Owners
 const ProtectedSystemOwnerRoute = ({ children }: { children: React.ReactNode }) => {
   const { isSystemOwner, isAuthenticated } = useAuth();
@@ -85,7 +97,8 @@ function App() {
                 <Suspense fallback={<Loading />}>
                   <Routes>
                     {/* Public / Unprotected routes */}
-                    <Route path="/" element={<LandingPage />} />
+                    <Route path="/" element={<HomeRedirect />} />
+                    <Route path="/landing" element={<LandingPage />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
                     <Route path="/verify" element={<VerificationPage />} />

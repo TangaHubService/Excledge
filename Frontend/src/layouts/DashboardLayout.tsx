@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { Outlet, useNavigate, useLocation, Navigate } from "react-router-dom";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { Sidebar } from "../components/Sidebar";
 import { Header } from "../components/Header";
@@ -19,7 +19,7 @@ export function DashboardLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const { organization } = useOrganization();
-  const { isSystemOwner, isAuthenticated } = useAuth();
+  const { isSystemOwner, isAuthenticated, isLoading } = useAuth();
 
   const hasOrganization =
     organization !== null || localStorage.getItem('current_organization_id') !== null;
@@ -41,7 +41,17 @@ export function DashboardLayout() {
     }
   }, [authReady, isAuthenticated, isSystemOwner, hasOrganization, location.pathname, navigate]);
 
-  /* ── Auth is still hydrating — show skeleton ────────── */
+  /* ── Auth is still initializing — show skeleton ────── */
+  if (isLoading) {
+    return <AppShellSkeleton sidebarCollapsed={sidebarCollapsed} />;
+  }
+
+  /* ── Not authenticated — redirect ─────────────────── */
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  /* ── Auth settled but layout not yet ready — show skeleton ── */
   if (!authReady) {
     return <AppShellSkeleton sidebarCollapsed={sidebarCollapsed} />;
   }
