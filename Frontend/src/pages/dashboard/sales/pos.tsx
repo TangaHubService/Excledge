@@ -415,9 +415,18 @@ export default function SalesForm() {
       setDisplayedCount(30)
       const allCustomers = customersData.customers || []
       setCustomers(allCustomers)
-      offlineQueue.saveProducts(all)
       offlineQueue.saveCustomers(allCustomers)
-      if (allCustomers.length > 0) setSelectedCustomer(allCustomers[0].id)
+      if (allCustomers.length > 0) {
+        setSelectedCustomer(allCustomers[0].id)
+      } else {
+        // Create default Walk-in Customer
+        try {
+          const walkIn = await apiClient.createCustomer({ name: 'Walk-in Customer', type: 'INDIVIDUAL', balance: 0 })
+          setCustomers([walkIn])
+          offlineQueue.saveCustomers([walkIn])
+          setSelectedCustomer(walkIn.id)
+        } catch {}
+      }
     } catch {
       toast.error(t('pos.loadError'))
       setProducts(offlineQueue.getProducts())
