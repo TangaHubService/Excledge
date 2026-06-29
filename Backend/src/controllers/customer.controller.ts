@@ -187,7 +187,12 @@ export const updateCustomer = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
-    const { balance, ...updateData } = req.body
+    const { balance, type, tin, TIN, ...rest } = req.body
+
+    const updateData: any = { ...rest }
+    if (type !== undefined) updateData.customerType = type
+    if (TIN !== undefined) updateData.TIN = TIN
+    else if (tin !== undefined) updateData.TIN = tin
 
     const existingCustomer = await prisma.customer.findFirst({
       where: { id, organizationId, deletedAt: null },
@@ -274,11 +279,11 @@ export const bulkImportCustomers = async (req: BranchAuthRequest, res: Response)
         const address = row.address || row.Address || row.ADDRESS
         const balance = parseFloat(row.balance || row.Balance || row.BALANCE || "0")
 
-        if (!name || !phone) {
+        if (!name) {
           errors.push({
             row: i + 2,
             data: row,
-            error: "Missing required fields: name and phone",
+            error: "Missing required field: name",
           })
           continue
         }
@@ -289,17 +294,18 @@ export const bulkImportCustomers = async (req: BranchAuthRequest, res: Response)
           customerType = typeUpper
         }
 
-        const existing = await prisma.customer.findFirst({
-          where: { organizationId, phone },
-        })
-
-        if (existing) {
-          errors.push({
-            row: i + 2,
-            data: row,
-            error: `Customer with phone ${phone} already exists`,
+        if (phone) {
+          const existing = await prisma.customer.findFirst({
+            where: { organizationId, phone: String(phone) },
           })
-          continue
+          if (existing) {
+            errors.push({
+              row: i + 2,
+              data: row,
+              error: `Customer with phone ${phone} already exists`,
+            })
+            continue
+          }
         }
 
         const customer = await prisma.customer.create({
