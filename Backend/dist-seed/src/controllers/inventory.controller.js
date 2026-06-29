@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getTaxCodes = exports.processExpiredStock = exports.markAsDamage = exports.adjustStock = exports.getLowStockProducts = exports.getExpiredProducts = exports.getExpiringProducts = exports.deleteProduct = exports.updateProduct = exports.createProducts = exports.createProduct = exports.getProductById = exports.getProducts = void 0;
-const client_1 = require("@prisma/client");
 const prisma_1 = require("../lib/prisma");
 const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
 const auditLogger_1 = require("../utils/auditLogger");
@@ -80,7 +79,7 @@ const getProducts = async (req, res) => {
             prisma_1.prisma.product.count({ where }),
         ]);
         // -------------------------------------------------------
-        // 1. Single-pass stock aggregation — replaces N+1 loop
+        // 1. Single-pass stock aggregation from batches
         // -------------------------------------------------------
         const branchForLedger = req.selectedBranchId !== null && req.selectedBranchId !== undefined
             ? req.selectedBranchId
@@ -88,24 +87,24 @@ const getProducts = async (req, res) => {
         const productIds = products.map(p => p.id);
         const stockMap = {};
         if (productIds.length > 0) {
-            const ledgerWhere = {
+            const batchWhere = {
                 organizationId,
                 productId: { in: productIds },
+                isActive: true,
             };
             if (branchForLedger !== undefined) {
-                ledgerWhere.branchId = branchForLedger;
+                batchWhere.branchId = branchForLedger;
             }
-            const stockAggregates = await prisma_1.prisma.inventoryLedger.groupBy({
-                by: ['productId', 'direction'],
-                where: ledgerWhere,
+            const batchAggregates = await prisma_1.prisma.batch.groupBy({
+                by: ['productId'],
+                where: batchWhere,
                 _sum: { quantity: true },
             });
             for (const pid of productIds) {
                 stockMap[pid] = 0;
             }
-            for (const row of stockAggregates) {
-                const net = row._sum.quantity || 0;
-                stockMap[row.productId] += row.direction === 'IN' ? net : -net;
+            for (const row of batchAggregates) {
+                stockMap[row.productId] = row._sum.quantity || 0;
             }
         }
         const productsWithStock = products.map(product => ({
@@ -682,66 +681,80 @@ const getLowStockProducts = async (req, res) => {
         const branchId = req.selectedBranchId !== null && req.selectedBranchId !== undefined
             ? req.selectedBranchId
             : undefined;
-        const stockExpr = branchId !== undefined
-            ? client_1.Prisma.sql `COALESCE((SELECT SUM(b.quantity) FROM batches b WHERE b."productId" = p.id AND b."branchId" = ${branchId} AND b."isActive" = true), 0)`
-            : client_1.Prisma.sql `p.quantity`;
         const searchVal = search && typeof search === 'string' ? search.trim() : '';
-        const hasSearch = searchVal.length > 0;
-        const searchExpr = hasSearch
-            ? client_1.Prisma.sql `AND (p.name ILIKE ${'%' + searchVal + '%'}
-          OR p.sku ILIKE ${'%' + searchVal + '%'}
-          OR p.barcode ILIKE ${'%' + searchVal + '%'}
-          OR p."batchNumber" ILIKE ${'%' + searchVal + '%'})`
-            : client_1.Prisma.empty;
-        // Status sub-filter (critical / low / warning thresholds)
         const statusVal = status && typeof status === 'string' ? status.toLowerCase() : '';
-        let statusExpr = client_1.Prisma.empty;
-        if (statusVal === 'critical') {
-            statusExpr = client_1.Prisma.sql `AND ${stockExpr} <= (p."minStock" * 0.25)`;
-        }
-        else if (statusVal === 'low') {
-            statusExpr = client_1.Prisma.sql `AND ${stockExpr} > (p."minStock" * 0.25) AND ${stockExpr} <= (p."minStock" * 0.50)`;
-        }
-        else if (statusVal === 'warning') {
-            statusExpr = client_1.Prisma.sql `AND ${stockExpr} > (p."minStock" * 0.50) AND ${stockExpr} < p."minStock"`;
-        }
-        const baseWhere = client_1.Prisma.sql `
-      WHERE p."organizationId" = ${organizationId}
-        AND p."isActive" = true
-        AND p."deletedAt" IS NULL
-        AND p."itemType" != 'SERVICE'
-        AND p."minStock" > 0
-        AND ${stockExpr} < p."minStock"
-        ${searchExpr}
-        ${statusExpr}
-    `;
-        const totalCount = Number((await prisma_1.prisma.$queryRaw `
-      SELECT COUNT(*)::int as count FROM products p ${baseWhere}
-    `)[0]?.count || 0);
         const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit);
         const take = Number.parseInt(limit);
-        const rows = await prisma_1.prisma.$queryRaw `
-      SELECT p.id, p.name, p.sku, p.barcode, p."batchNumber",
-             p."unitPrice", p."minStock", p.category, p."expiryDate",
-             p."measurementUnit", p."imageUrl",
-             ${stockExpr} as stock
-      FROM products p ${baseWhere}
-      ORDER BY stock ASC
-      LIMIT ${take} OFFSET ${skip}
-    `;
-        const products = rows.map(r => ({
-            id: r.id,
-            name: r.name,
-            sku: r.sku,
-            barcode: r.barcode,
-            batchNumber: r.batchNumber,
-            unitPrice: r.unitPrice,
-            minStock: r.minStock,
-            category: r.category,
-            expiryDate: r.expiryDate,
-            measurementUnit: r.measurementUnit,
-            imageUrl: r.imageUrl,
-            quantity: r.stock,
+        // Build ORM where clause (avoids $queryRaw BigInt/Decimal serialization issues)
+        const where = {
+            organizationId,
+            isActive: true,
+            deletedAt: null,
+            itemType: { not: 'SERVICE' },
+            minStock: { gt: 0 },
+        };
+        if (searchVal) {
+            where.OR = [
+                { name: { contains: searchVal, mode: 'insensitive' } },
+                { sku: { contains: searchVal, mode: 'insensitive' } },
+                { barcode: { contains: searchVal, mode: 'insensitive' } },
+                { batchNumber: { contains: searchVal, mode: 'insensitive' } },
+            ];
+        }
+        // Fetch candidates — include branch batches only when branchId is set
+        const candidates = await prisma_1.prisma.product.findMany({
+            where,
+            select: {
+                id: true,
+                name: true,
+                sku: true,
+                barcode: true,
+                batchNumber: true,
+                unitPrice: true,
+                minStock: true,
+                category: true,
+                expiryDate: true,
+                measurementUnit: true,
+                imageUrl: true,
+                quantity: true,
+                batches: branchId !== undefined
+                    ? { where: { branchId, isActive: true }, select: { quantity: true } }
+                    : false,
+            },
+        });
+        let filtered = candidates
+            .map(p => {
+            const effectiveStock = branchId !== undefined
+                ? p.batches.reduce((s, b) => s + b.quantity, 0)
+                : p.quantity;
+            return { ...p, effectiveStock };
+        })
+            .filter(p => p.effectiveStock <= p.minStock);
+        if (statusVal === 'critical') {
+            filtered = filtered.filter(p => p.effectiveStock <= p.minStock * 0.25);
+        }
+        else if (statusVal === 'low') {
+            filtered = filtered.filter(p => p.effectiveStock > p.minStock * 0.25 && p.effectiveStock <= p.minStock * 0.50);
+        }
+        else if (statusVal === 'warning') {
+            filtered = filtered.filter(p => p.effectiveStock > p.minStock * 0.50);
+        }
+        filtered.sort((a, b) => a.effectiveStock - b.effectiveStock);
+        const totalCount = filtered.length;
+        const page_products = filtered.slice(skip, skip + take);
+        const products = page_products.map(p => ({
+            id: p.id,
+            name: p.name,
+            sku: p.sku,
+            barcode: p.barcode,
+            batchNumber: p.batchNumber,
+            unitPrice: Number(p.unitPrice), // Prisma Decimal → plain number
+            minStock: p.minStock,
+            category: p.category,
+            expiryDate: p.expiryDate,
+            measurementUnit: p.measurementUnit,
+            imageUrl: p.imageUrl,
+            quantity: p.effectiveStock,
         }));
         res.json((0, apiResponse_1.success)({
             data: products,

@@ -90,7 +90,7 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
     ])
 
     // -------------------------------------------------------
-    // 1. Single-pass stock aggregation — replaces N+1 loop
+    // 1. Single-pass stock aggregation from batches
     // -------------------------------------------------------
     const branchForLedger =
       req.selectedBranchId !== null && req.selectedBranchId !== undefined
@@ -101,24 +101,24 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
     const stockMap: Record<number, number> = {};
 
     if (productIds.length > 0) {
-      const ledgerWhere: any = {
+      const batchWhere: any = {
         organizationId,
         productId: { in: productIds },
+        isActive: true,
       };
       if (branchForLedger !== undefined) {
-        ledgerWhere.branchId = branchForLedger;
+        batchWhere.branchId = branchForLedger;
       }
 
-      const stockAggregates = await prisma.inventoryLedger.groupBy({
-        by: ['productId', 'direction'],
-        where: ledgerWhere,
+      const batchAggregates = await prisma.batch.groupBy({
+        by: ['productId'],
+        where: batchWhere,
         _sum: { quantity: true },
       });
 
       for (const pid of productIds) { stockMap[pid] = 0; }
-      for (const row of stockAggregates) {
-        const net = row._sum.quantity || 0;
-        stockMap[row.productId] += row.direction === 'IN' ? net : -net;
+      for (const row of batchAggregates) {
+        stockMap[row.productId] = row._sum.quantity || 0;
       }
     }
 

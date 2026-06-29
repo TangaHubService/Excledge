@@ -495,12 +495,15 @@ export const InventoryManagement = () => {
 
             {/* Add Product Drawer */}
             <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DrawerContent className="sm:max-w-[900px] max-h-[95vh] overflow-y-auto bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm">
-                <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4 bg-white dark:bg-gray-800 rounded-tl-2xl rounded-tr-2xl">
+              <DrawerContent className="sm:max-w-[680px] h-full min-h-[60vh] overflow-y-auto bg-white dark:bg-gray-900">
+                <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4 rounded-tl-2xl rounded-tr-2xl">
                   <DrawerTitle className="text-lg font-semibold">Add New Product</DrawerTitle>
                 </DrawerHeader>
                 <div className="p-4">
-                  <AddProduct onSuccess={() => setIsDialogOpen(false)} />
+                  <AddProduct onSuccess={() => {
+                    getProducts({ search: debouncedSearchTerm, category, expiryStatus, page: currentPage, limit: itemsPerPage, branchId: selectedBranchId });
+                    setIsDialogOpen(false);
+                  }} />
                 </div>
               </DrawerContent>
             </Drawer>
