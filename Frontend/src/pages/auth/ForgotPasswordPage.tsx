@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import { apiClient } from "../../lib/api-client";
@@ -10,10 +10,39 @@ const forgotPasswordSchema = yup.object().shape({
     email: yup.string().email("Invalid email").required("Email is required"),
 });
 
+const COOLDOWN_MINUTES = 5;
+
 export default function ForgotPasswordPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
+    const [cooldownRemaining, setCooldownRemaining] = useState(0);
+    const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (cooldownRef.current) clearInterval(cooldownRef.current);
+        };
+    }, []);
+
+    const startCooldown = () => {
+        setCooldownRemaining(COOLDOWN_MINUTES * 60);
+        cooldownRef.current = setInterval(() => {
+            setCooldownRemaining((prev) => {
+                if (prev <= 1) {
+                    if (cooldownRef.current) clearInterval(cooldownRef.current);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    };
+
+    const formatCooldown = (seconds: number) => {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, "0")}`;
+    };
 
     const {
         register,
@@ -39,6 +68,8 @@ export default function ForgotPasswordPage() {
 
     const onSubmit = async (data: { email: string }) => {
         setIsLoading(true);
+        setError("");
+        setSuccess("");
         try {
             await apiClient.requestPasswordReset({
                 email: data.email,
@@ -48,11 +79,10 @@ export default function ForgotPasswordPage() {
                 "A password reset link has been sent to your email",
                 "success"
             );
+            startCooldown();
         } catch (error: any) {
-            showToast(
-                error.response?.data?.error || error.message || "Failed to process your request",
-                "error"
-            );
+            const msg = error.response?.data?.error || error.message || "Failed to process your request";
+            showToast(msg, "error");
         } finally {
             setIsLoading(false);
         }
@@ -116,7 +146,7 @@ export default function ForgotPasswordPage() {
 
                             <button
                                 type="submit"
-                                disabled={isLoading}
+                                disabled={isLoading || cooldownRemaining > 0}
                                 className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all duration-200 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                             >
                                 {isLoading ? (
@@ -124,6 +154,8 @@ export default function ForgotPasswordPage() {
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                         Sending...
                                     </div>
+                                ) : cooldownRemaining > 0 ? (
+                                    `Resend in ${formatCooldown(cooldownRemaining)}`
                                 ) : (
                                     "Send Reset Link"
                                 )}
