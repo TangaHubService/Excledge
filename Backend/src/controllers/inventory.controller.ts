@@ -1,5 +1,4 @@
 import type { Request, Response } from "express"
-import { Prisma } from '@prisma/client'
 import { prisma } from "../lib/prisma"
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 import { buildBranchFilter, getBranchIdForOperation } from "../middleware/branchAuth.middleware"
@@ -741,77 +740,89 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
         ? req.selectedBranchId
         : undefined
 
-    const stockExpr = branchId !== undefined
-      ? Prisma.sql`COALESCE((SELECT SUM(b.quantity)::int FROM batches b WHERE b."productId" = p.id AND b."branchId" = ${branchId} AND b."isActive" = true), 0)`
-      : Prisma.sql`p.quantity`
-
     const searchVal = search && typeof search === 'string' ? search.trim() : ''
-    const hasSearch = searchVal.length > 0
-    const searchExpr = hasSearch
-      ? Prisma.sql`AND (p.name ILIKE ${'%' + searchVal + '%'}
-          OR p.sku ILIKE ${'%' + searchVal + '%'}
-          OR p.barcode ILIKE ${'%' + searchVal + '%'}
-          OR p."batchNumber" ILIKE ${'%' + searchVal + '%'})`
-      : Prisma.empty
-
-    // Status sub-filter (critical / low / warning thresholds)
     const statusVal = status && typeof status === 'string' ? status.toLowerCase() : ''
-    let statusExpr = Prisma.empty
-    if (statusVal === 'critical') {
-      statusExpr = Prisma.sql`AND ${stockExpr} <= (p."minStock" * 0.25)`
-    } else if (statusVal === 'low') {
-      statusExpr = Prisma.sql`AND ${stockExpr} > (p."minStock" * 0.25) AND ${stockExpr} <= (p."minStock" * 0.50)`
-    } else if (statusVal === 'warning') {
-      statusExpr = Prisma.sql`AND ${stockExpr} > (p."minStock" * 0.50) AND ${stockExpr} < p."minStock"`
-    }
-
-    const baseWhere = Prisma.sql`
-      WHERE p."organizationId" = ${organizationId}
-        AND p."isActive" = true
-        AND p."deletedAt" IS NULL
-        AND p."itemType" != 'SERVICE'
-        AND p."minStock" > 0
-        AND ${stockExpr} < p."minStock"
-        ${searchExpr}
-        ${statusExpr}
-    `
-
-    const totalCount = Number((await prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(*)::int as count FROM products p ${baseWhere}
-    `)[0]?.count || 0)
-
     const skip = (Number.parseInt(page as string) - 1) * Number.parseInt(limit as string)
     const take = Number.parseInt(limit as string)
 
-    const rows = await prisma.$queryRaw<Array<{
-      id: number; name: string; sku: string | null; barcode: string | null;
-      batchNumber: string | null; unitPrice: number; minStock: number;
-      category: string | null; expiryDate: Date | null;
-      measurementUnit: string; imageUrl: string | null;
-      stock: number;
-    }>>`
-      SELECT p.id, p.name, p.sku, p.barcode, p."batchNumber",
-             p."unitPrice", p."minStock", p.category, p."expiryDate",
-             p."measurementUnit", p."imageUrl",
-             ${stockExpr} as stock
-      FROM products p ${baseWhere}
-      ORDER BY stock ASC
-      LIMIT ${take} OFFSET ${skip}
-    `
+    // Build ORM where clause (avoids $queryRaw BigInt/Decimal serialization issues)
+    const where: any = {
+      organizationId,
+      isActive: true,
+      deletedAt: null,
+      itemType: { not: 'SERVICE' },
+      minStock: { gt: 0 },
+    }
+    if (searchVal) {
+      where.OR = [
+        { name: { contains: searchVal, mode: 'insensitive' } },
+        { sku: { contains: searchVal, mode: 'insensitive' } },
+        { barcode: { contains: searchVal, mode: 'insensitive' } },
+        { batchNumber: { contains: searchVal, mode: 'insensitive' } },
+      ]
+    }
 
-    const products = rows.map(r => ({
-      id: r.id,
-      name: r.name,
-      sku: r.sku,
-      barcode: r.barcode,
-      batchNumber: r.batchNumber,
-      unitPrice: r.unitPrice,
-      minStock: r.minStock,
-      category: r.category,
-      expiryDate: r.expiryDate,
-      measurementUnit: r.measurementUnit,
-      imageUrl: r.imageUrl,
-      quantity: Number(r.stock),
+    // Fetch candidates — include branch batches only when branchId is set
+    const candidates = await prisma.product.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        barcode: true,
+        batchNumber: true,
+        unitPrice: true,
+        minStock: true,
+        category: true,
+        expiryDate: true,
+        measurementUnit: true,
+        imageUrl: true,
+        quantity: true,
+        batches: branchId !== undefined
+          ? { where: { branchId, isActive: true }, select: { quantity: true } }
+          : false,
+      },
+    })
+
+    // Compute effective stock and apply low-stock + status filters in JS
+    // (Prisma can't express column-to-column comparisons in where clauses)
+    type Candidate = typeof candidates[number] & { effectiveStock: number }
+
+    let filtered: Candidate[] = candidates
+      .map(p => {
+        const effectiveStock = branchId !== undefined
+          ? ((p as any).batches as Array<{ quantity: number }>).reduce((s, b) => s + b.quantity, 0)
+          : p.quantity
+        return { ...p, effectiveStock }
+      })
+      .filter(p => p.effectiveStock < p.minStock) as Candidate[]
+
+    if (statusVal === 'critical') {
+      filtered = filtered.filter(p => p.effectiveStock <= p.minStock * 0.25)
+    } else if (statusVal === 'low') {
+      filtered = filtered.filter(p => p.effectiveStock > p.minStock * 0.25 && p.effectiveStock <= p.minStock * 0.50)
+    } else if (statusVal === 'warning') {
+      filtered = filtered.filter(p => p.effectiveStock > p.minStock * 0.50)
+    }
+
+    filtered.sort((a, b) => a.effectiveStock - b.effectiveStock)
+
+    const totalCount = filtered.length
+    const page_products = filtered.slice(skip, skip + take)
+
+    const products = page_products.map(p => ({
+      id: p.id,
+      name: p.name,
+      sku: p.sku,
+      barcode: p.barcode,
+      batchNumber: p.batchNumber,
+      unitPrice: Number(p.unitPrice),   // Prisma Decimal → plain number
+      minStock: p.minStock,
+      category: p.category,
+      expiryDate: p.expiryDate,
+      measurementUnit: p.measurementUnit,
+      imageUrl: p.imageUrl,
+      quantity: p.effectiveStock,
     }))
 
     res.json(success({
