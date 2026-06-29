@@ -19,6 +19,13 @@ export const createOrganizationSchema = yup.object().shape({
         .email("Enter a valid email address"),
     businessType: yup
         .string()
-        .required("Business type is required")
+        .required("Business type is required"),
+    otherBusinessType: yup
+        .string()
+        .when('businessType', {
+            is: 'OTHER',
+            then: (s) => s.required('Please specify your business type'),
+            otherwise: (s) => s.notRequired(),
+        }),
 
 });
