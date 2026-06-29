@@ -178,6 +178,29 @@ export default function CreateOrganizationModal({
                   {errors.businessType.message}
                 </p>
               )}
+              {watch('businessType') === 'OTHER' && (
+                <div className="mt-3 space-y-2">
+                  <label
+                    htmlFor="otherBusinessType"
+                    className="block text-sm font-medium text-gray-900 dark:text-white"
+                  >
+                    Specify Business Type *
+                  </label>
+                  <input
+                    id="otherBusinessType"
+                    type="text"
+                    placeholder="e.g., Car Wash"
+                    {...register("otherBusinessType")}
+                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${errors.otherBusinessType
+                      ? "border-red-500 focus:ring-red-400"
+                      : "border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
+                      }`}
+                  />
+                  {errors.otherBusinessType && (
+                    <p className="text-sm text-red-500">{errors.otherBusinessType.message}</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Address */}
