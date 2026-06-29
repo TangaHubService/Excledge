@@ -114,8 +114,7 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
         });
 
         if (!user) {
-            // For security, don't reveal if the email exists or not
-            return res.json({ message: "If an account exists with this email, a password reset link has been sent" });
+            return res.status(404).json({ error: "No account found with this email address" });
         }
 
         // Generate password reset token (opaque random token)
