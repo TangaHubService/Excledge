@@ -795,7 +795,7 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
           : p.quantity
         return { ...p, effectiveStock }
       })
-      .filter(p => p.effectiveStock < p.minStock) as Candidate[]
+      .filter(p => p.effectiveStock <= p.minStock) as Candidate[]
 
     if (statusVal === 'critical') {
       filtered = filtered.filter(p => p.effectiveStock <= p.minStock * 0.25)
