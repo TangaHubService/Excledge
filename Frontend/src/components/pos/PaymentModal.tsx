@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../context/ThemeContext';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from '../ui/drawer';
@@ -42,6 +42,7 @@ export function PaymentModal({
   const [payments, setPayments] = useState<PaymentEntry[]>([]);
   const [currentPaymentIndex, setCurrentPaymentIndex] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const submittingRef = useRef(false);
 
   // Helper function to get payment method translation with proper fallback
   const getPaymentMethodLabel = (methodValue: string): string => {
@@ -83,18 +84,25 @@ export function PaymentModal({
   };
 
   const handleProcessPayment = async () => {
-    const validPayments = payments.filter((p) => p.amount > 0);
-    const totalPaid = validPayments.reduce((sum, p) => sum + p.amount, 0);
-    const remaining = totalAmount - totalPaid;
+    if (submittingRef.current || isProcessing) return;
+    submittingRef.current = true;
 
-    if (Math.abs(remaining) > 0.01) {
-      const confirmMessage = remaining > 0
-        ? t('pos.confirmPartialPayment') || `Incomplete. Continue?`
-        : t('pos.confirmOverpayment') || `Overpaid. Continue?`;
-      if (!window.confirm(confirmMessage)) return;
+    try {
+      const validPayments = payments.filter((p) => p.amount > 0);
+      const totalPaid = validPayments.reduce((sum, p) => sum + p.amount, 0);
+      const remaining = totalAmount - totalPaid;
+
+      if (Math.abs(remaining) > 0.01) {
+        const confirmMessage = remaining > 0
+          ? t('pos.confirmPartialPayment') || `Incomplete. Continue?`
+          : t('pos.confirmOverpayment') || `Overpaid. Continue?`;
+        if (!window.confirm(confirmMessage)) { submittingRef.current = false; return; }
+      }
+
+      await onProcessPayment(validPayments);
+    } finally {
+      submittingRef.current = false;
     }
-
-    await onProcessPayment(validPayments);
   };
 
   const totalPaid = calculateTotalPaid();

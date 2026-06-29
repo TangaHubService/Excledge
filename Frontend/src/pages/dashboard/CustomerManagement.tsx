@@ -26,6 +26,7 @@ export interface Customer {
   phone: string;
   type: "INDIVIDUAL" | "CORPORATE" | "INSURANCE";
   balance: string;
+  TIN?: string;
   totalPurchases?: number;
   address?: string;
   createdAt?: string;
@@ -479,6 +480,7 @@ export function CustomerManagement() {
             editingCustomer
               ? {
                 ...editingCustomer,
+                tin: editingCustomer.TIN || '',
                 balance:
                   typeof editingCustomer.balance === "string"
                     ? parseFloat(editingCustomer.balance)
@@ -488,6 +490,7 @@ export function CustomerManagement() {
                 name: "",
                 email: "",
                 phone: "",
+                tin: "",
                 type: "INDIVIDUAL",
                 balance: 0,
               }
