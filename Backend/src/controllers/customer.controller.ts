@@ -311,7 +311,7 @@ export const bulkImportCustomers = async (req: BranchAuthRequest, res: Response)
         const customer = await prisma.customer.create({
           data: {
             name: String(name),
-            phone: String(phone),
+            phone: phone ? String(phone) : null,
             email: email ? String(email) : null,
             address: address ? String(address) : null,
             customerType,
