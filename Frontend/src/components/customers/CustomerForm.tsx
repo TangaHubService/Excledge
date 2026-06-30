@@ -87,7 +87,7 @@ export function CustomerForm({
 
 
                 <div className="px-6 pb-6">
-                    <div className="bg-white rounded-lg p-5 space-y-5">
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-5 space-y-5">
                         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
                             <div>
                                 <label
