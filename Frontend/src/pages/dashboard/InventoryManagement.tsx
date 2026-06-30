@@ -430,8 +430,7 @@ export const InventoryManagement = () => {
 
   return (
     <div
-      className={`min-h-screen ${theme === "dark" ? "bg-gray-900" : "bg-gray-50"
-        } p-6`}
+      className="p-6"
     >
       <div className="max-w-7xl mx-auto space-y-4">
         {/* Toast Notification */}

@@ -58,7 +58,7 @@ export function DashboardLayout() {
 
   /* ── Full shell ────────────────────────────────────── */
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-100 dark:bg-zinc-900">
+    <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-900">
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}

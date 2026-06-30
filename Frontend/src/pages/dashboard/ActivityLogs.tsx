@@ -358,7 +358,7 @@ const ActivityLogs = () => {
     }
 
     return (
-        <div className="space-y-6 bg-white dark:bg-gray-900 dark:text-white">
+        <div className="space-y-6 dark:text-white">
             {/* Header */}
             <div className="flex flex-col gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">

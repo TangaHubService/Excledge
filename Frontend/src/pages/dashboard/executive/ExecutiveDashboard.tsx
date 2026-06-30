@@ -195,7 +195,7 @@ export function ExecutiveDashboard() {
   const allBranches: Branch[] = data?.branchTable.map(r => ({ id: r.branchId, name: r.branchName })) ?? []
 
   return (
-    <div ref={containerRef} className="-mx-4 -mt-6 sm:-mx-6 lg:-mx-8 sm:-mt-6 min-h-screen bg-[#F8FAFC]">
+    <div ref={containerRef} className="-mx-4 sm:-mx-6 lg:-mx-8 bg-gray-50 dark:bg-gray-900">
 
       {/* ── Dark top bar ─────────────────────────────────────────────── */}
       <div className="bg-[#0F172A] px-4 py-5 sm:px-6 lg:px-8">

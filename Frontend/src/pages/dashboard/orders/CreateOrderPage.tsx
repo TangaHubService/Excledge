@@ -243,7 +243,7 @@ export const CreateOrderPage: React.FC = () => {
     }
 
     return (
-        <div className={`min-h-screen pb-12 ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50/50'}`}>
+        <div className="pb-12">
             <div className="max-w-6xl mx-auto px-4 py-6">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
