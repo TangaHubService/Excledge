@@ -496,6 +496,8 @@
         "outstandingBalance": "Solde impayé",
         "addNewCustomer": "Ajouter un nouveau client",
         "fullName": "Nom complet",
+        "phoneNumber": "Numéro de téléphone",
+        "tinNumber": "Numéro TIN",
         "customerType": "Type de client",
         "individual": "Individuel",
         "corporate": "Entreprise",

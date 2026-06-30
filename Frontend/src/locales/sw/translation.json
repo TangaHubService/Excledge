@@ -501,6 +501,8 @@
         "outstandingBalance": "Salio linalobaki",
         "addNewCustomer": "Ongeza Mteja Mpya",
         "fullName": "Jina Kamili",
+        "phoneNumber": "Nambari ya Simu",
+        "tinNumber": "Nambari ya TIN",
         "customerType": "Aina ya Mteja",
         "individual": "Binafsi",
         "corporate": "Kampuni",
