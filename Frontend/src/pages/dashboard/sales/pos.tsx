@@ -252,7 +252,7 @@ const AddCustomerDrawer = memo(({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
-    name: '', email: '', phone: '', countryCode: '+250', type: 'CASH',
+    name: '', email: '', phone: '', countryCode: '+250', type: 'INDIVIDUAL', tin: '',
   })
 
   const handlePhoneChange = (phone: string, countryCode: string) => {
@@ -268,8 +268,7 @@ const AddCustomerDrawer = memo(({
   const validate = () => {
     const errs: Record<string, string> = {}
     if (!formData.name.trim()) errs.name = t('validation.required')
-    if (!formData.phone) errs.phone = t('validation.required')
-    else if (formData.phone.length < 10) errs.phone = t('validation.invalidPhone')
+    if (formData.phone && formData.phone.length < 10) errs.phone = t('validation.invalidPhone')
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errs.email = t('validation.invalidEmail')
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -280,13 +279,15 @@ const AddCustomerDrawer = memo(({
     if (!validate()) return
     setIsSubmitting(true)
     try {
-      const phone = formData.phone.startsWith('+') ? formData.phone : `${formData.countryCode}${formData.phone}`
+      const phone = formData.phone
+        ? (formData.phone.startsWith('+') ? formData.phone : `${formData.countryCode}${formData.phone}`)
+        : undefined
       const { countryCode, ...rest } = { ...formData, phone }
-      const newCustomer = await apiClient.createCustomer(rest)
+      const newCustomer = await apiClient.createCustomer({ ...rest, tin: formData.tin || undefined })
       toast.success(t('messages.customerCreated'))
       onCustomerAdded(newCustomer)
       onOpenChange(false)
-      setFormData({ name: '', email: '', phone: '', countryCode: '+250', type: 'CASH' })
+      setFormData({ name: '', email: '', phone: '', countryCode: '+250', type: 'INDIVIDUAL', tin: '' })
       setErrors({})
     } catch {
       toast.error(t('messages.saveError'))
@@ -303,12 +304,12 @@ const AddCustomerDrawer = memo(({
         </DrawerHeader>
         <div className="space-y-4 px-4 pb-6">
           <div className="space-y-1.5">
-            <Label>{t('pos.customerName')}</Label>
+            <Label>{t('pos.customerName')} *</Label>
             <Input name="name" value={formData.name} onChange={handleChange} placeholder={t('pos.customerNamePlaceholder')} />
             {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
           </div>
           <div className="space-y-1.5">
-            <Label>{t('pos.phoneNumber')}</Label>
+            <Label>{t('pos.phoneNumber')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span></Label>
             <PhoneInputWithCountryCode
               value={formData.phone}
               countryCode={formData.countryCode}
@@ -323,12 +324,17 @@ const AddCustomerDrawer = memo(({
             {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
           </div>
           <div className="space-y-1.5">
+            <Label>{t('customers.tinNumber')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span></Label>
+            <Input name="tin" value={formData.tin} onChange={handleChange} placeholder="e.g. 123456789" />
+          </div>
+          <div className="space-y-1.5">
             <Label>{t('pos.customerType')}</Label>
             <Select value={formData.type} onValueChange={v => setFormData(p => ({ ...p, type: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="INSURANCE">{t('pos.insurance')}</SelectItem>
+                <SelectItem value="INDIVIDUAL">{t('customers.individual')}</SelectItem>
                 <SelectItem value="CORPORATE">{t('pos.corporate')}</SelectItem>
+                <SelectItem value="INSURANCE">{t('pos.insurance')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
