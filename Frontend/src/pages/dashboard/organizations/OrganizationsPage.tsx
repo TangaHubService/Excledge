@@ -226,7 +226,7 @@ export default function OrganizationsPage() {
     const currentOrgId = organization?.id || localStorage.getItem('current_organization_id');
 
     return (
-      <div className="min-h-screen bg-gray-50/50 dark:bg-gray-900 p-6">
+      <div className="p-6">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <div>
