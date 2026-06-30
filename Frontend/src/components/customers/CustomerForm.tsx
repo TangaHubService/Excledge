@@ -128,7 +128,7 @@ export function CustomerForm({
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    {t('customers.phoneNumber')}
+                                    {t('customers.phoneNumber')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
                                 </label>
                                 <PhoneInputWithCountryCode
                                     value={phoneValue ?? undefined}
@@ -145,7 +145,7 @@ export function CustomerForm({
                                     htmlFor="tin"
                                     className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                                 >
-                                    {t('customers.tinNumber') || 'TIN Number'}
+                                    {t('customers.tinNumber')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
                                 </label>
                                 <input
                                     id="tin"

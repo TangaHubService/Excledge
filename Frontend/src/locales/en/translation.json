@@ -517,6 +517,8 @@
         "outstandingBalance": "Outstanding Balance",
         "addNewCustomer": "Add New Customer",
         "fullName": "Full Name",
+        "phoneNumber": "Phone Number",
+        "tinNumber": "TIN Number",
         "customerType": "Customer Type",
         "individual": "Individual",
         "corporate": "Corporate",
