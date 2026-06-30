@@ -61,7 +61,7 @@ function DrawerContent({
         data-slot="drawer-content"
         aria-describedby={undefined}
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 gap-4 border p-6 shadow-lg duration-200 overflow-y-auto",
+          "bg-white dark:bg-gray-900 data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 gap-4 border p-6 shadow-lg duration-200 overflow-y-auto",
           side === "right"
             ? "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-full max-w-lg border-l"
             : "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-full max-w-lg border-r",
