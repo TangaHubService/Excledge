@@ -657,7 +657,7 @@ export default function SalesForm() {
       )}
 
       {/* Full-height POS shell — sits inside the DashboardLayout main scroll area */}
-      <div className="flex h-[calc(100vh-56px)] -mt-6 -mx-4 sm:-mx-6 lg:-mx-8 overflow-hidden bg-gray-50 dark:bg-gray-900">
+      <div className="flex h-[calc(100vh-8.5rem)] -mx-4 sm:-mx-6 lg:-mx-8 overflow-hidden bg-gray-50 dark:bg-gray-900">
 
         {/* ── LEFT: product browser ───────────────────────────────────────── */}
         <div className="flex flex-1 flex-col min-w-0 border-r border-gray-200 dark:border-gray-700">
