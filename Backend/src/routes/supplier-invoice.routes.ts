@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import path from 'path';
+import fs from 'fs';
 import multer from 'multer';
 import {
   uploadAndScanInvoice,
@@ -17,9 +18,14 @@ import { requireOrganizationAccess } from '../middleware/organizationAccess.midd
 const router = Router();
 const orgAccess = requireOrganizationAccess();
 
+// multer's diskStorage does not create the destination directory itself —
+// it must already exist or every upload fails with ENOENT.
+const invoiceUploadDir = path.join(process.cwd(), 'uploads', 'invoices');
+fs.mkdirSync(invoiceUploadDir, { recursive: true });
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
-    cb(null, path.join(process.cwd(), 'uploads', 'invoices'));
+    cb(null, invoiceUploadDir);
   },
   filename: (_req, file, cb) => {
     const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
