@@ -1661,22 +1661,37 @@ class ApiClient {
     const formData = new FormData();
     formData.append('invoice', file);
 
+    const STALL_TIMEOUT_MS = 20_000; // no upload progress for this long → treat as stalled
+    const TOTAL_TIMEOUT_MS = 120_000; // hard cap on the whole request (upload + server processing)
+
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       const branchParam = this.getBranchQueryParam();
       const sep = branchParam ? '?' : '';
       xhr.open('POST', `${API_URL}/supplier-invoices/${organizationId}/scan${sep}${branchParam}`);
+      xhr.timeout = TOTAL_TIMEOUT_MS;
 
       const token = this.getToken();
       if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
+      let stallTimer: ReturnType<typeof setTimeout>;
+      const resetStallTimer = () => {
+        clearTimeout(stallTimer);
+        stallTimer = setTimeout(() => {
+          xhr.abort();
+        }, STALL_TIMEOUT_MS);
+      };
+      resetStallTimer();
+
       xhr.upload.onprogress = (e) => {
+        resetStallTimer();
         if (e.lengthComputable && onProgress) {
           onProgress(Math.round((e.loaded / e.total) * 100));
         }
       };
 
       xhr.onload = () => {
+        clearTimeout(stallTimer);
         try {
           const data = JSON.parse(xhr.responseText);
           if (xhr.status >= 200 && xhr.status < 300) {
@@ -1689,7 +1704,21 @@ class ApiClient {
         }
       };
 
-      xhr.onerror = () => reject(new Error('Network error during upload'));
+      xhr.onerror = () => {
+        clearTimeout(stallTimer);
+        reject(new Error('Network error during upload'));
+      };
+
+      xhr.ontimeout = () => {
+        clearTimeout(stallTimer);
+        reject(new Error('The request took too long and timed out. Please try again with a smaller file or check your connection.'));
+      };
+
+      xhr.onabort = () => {
+        clearTimeout(stallTimer);
+        reject(new Error('Upload stalled and was cancelled. Please check your connection or try a smaller file.'));
+      };
+
       xhr.send(formData);
     });
   }
