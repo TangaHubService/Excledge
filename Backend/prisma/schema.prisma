@@ -52,6 +52,8 @@ model Organization {
   invoiceCounters             OrganizationInvoiceCounter[]
   lastSyncCursor              DateTime?                   @map("last_sync_cursor")
   lastSuccessfulVdsContact    DateTime?                   @map("last_successful_vds_contact")
+  supplierInvoices  SupplierInvoice[]
+  invoiceImportLogs InvoiceImportLog[]
 
   @@map("organizations")
 }
@@ -92,6 +94,8 @@ model Branch {
   purchaseOrders      PurchaseOrder[]
   invoiceCounters     OrganizationInvoiceCounter[]
   receiptCounters     BranchReceiptCounter[]
+  supplierInvoices    SupplierInvoice[]
+  invoiceImportLogs   InvoiceImportLog[]
 
   @@unique([organizationId, bhfId])
   @@unique([organizationId, code])
@@ -129,9 +133,10 @@ model Supplier {
   updatedAt      DateTime        @updatedAt
   id             Int             @id @default(autoincrement())
   organizationId Int
-  products       Product[]
-  purchaseOrders PurchaseOrder[]
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products         Product[]
+  purchaseOrders   PurchaseOrder[]
+  supplierInvoices SupplierInvoice[]
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@map("suppliers")
@@ -222,6 +227,8 @@ model User {
   userOrganizations        UserOrganization[]
   createdOrders            PurchaseOrder[]          @relation("CreatedOrders")
   userBranches             UserBranch[]             // NEW: Branch assignments
+  createdInvoices          SupplierInvoice[]
+  invoiceImportLogs        InvoiceImportLog[]
 
   @@map("users")
   @@index([deletedAt])
@@ -388,14 +395,15 @@ model Product {
   itemCd             String?              // Unique item code registered with RRA
   pkgUnitCd          String?              // Packaging unit code (e.g. "CT", "BT")
   qtyUnitCd          String?              // Quantity unit code (e.g. "U", "KG")
-  batches            Batch[]
-  inventoryLedgers   InventoryLedger[]
-  organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  supplier           Supplier?            @relation(fields: [supplierId], references: [id])
-  purchaseOrderItems PurchaseOrderItem[]
-  saleItems          SaleItem[]
-  stockTransferItems StockTransferItem[]
-  stockMovements     StockMovement[]
+  batches              Batch[]
+  inventoryLedgers     InventoryLedger[]
+  organization         Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier             Supplier?            @relation(fields: [supplierId], references: [id])
+  purchaseOrderItems   PurchaseOrderItem[]
+  saleItems            SaleItem[]
+  stockTransferItems   StockTransferItem[]
+  stockMovements       StockMovement[]
+  supplierInvoiceItems SupplierInvoiceItem[]
 
   @@map("products")
   @@index([name])
@@ -1263,4 +1271,152 @@ enum MeasurementUnit {
   GRAM
   ML
   OTHER
+}
+
+// ─── Supplier Invoice Scanner ──────────────────────────────────────────────
+
+enum SupplierInvoiceStatus {
+  DRAFT
+  PROCESSING
+  REVIEW
+  APPROVED
+  IMPORTED
+  FAILED
+}
+
+enum MatchStatus {
+  UNMATCHED
+  MATCHED
+  MERGED
+  NEW
+}
+
+enum ImportItemStatus {
+  PENDING
+  IMPORTED
+  SKIPPED
+  ERROR
+}
+
+model SupplierInvoice {
+  id               Int                    @id @default(autoincrement())
+  organizationId   Int
+  branchId         Int
+  supplierId       Int?
+  createdById      Int
+  invoiceNumber    String?
+  invoiceDate      DateTime?
+  supplierName     String?
+  supplierAddress  String?
+  currency         String                 @default("RWF")
+  subtotal         Decimal?               @db.Decimal(10, 2)
+  taxAmount        Decimal?               @db.Decimal(10, 2)
+  discount         Decimal?               @db.Decimal(10, 2)
+  totalAmount      Decimal?               @db.Decimal(10, 2)
+  status           SupplierInvoiceStatus  @default(DRAFT)
+  notes            String?
+  importedAt       DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  organization  Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch        Branch                 @relation(fields: [branchId], references: [id])
+  supplier      Supplier?              @relation(fields: [supplierId], references: [id])
+  createdBy     User                   @relation(fields: [createdById], references: [id])
+  items         SupplierInvoiceItem[]
+  ocrResults    OcrResult[]
+  files         SupplierInvoiceFile[]
+  importLogs    InvoiceImportLog[]
+
+  @@index([organizationId])
+  @@index([branchId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([organizationId, status])
+  @@map("supplier_invoices")
+}
+
+model SupplierInvoiceItem {
+  id            Int              @id @default(autoincrement())
+  invoiceId     Int
+  productId     Int?
+  productName   String
+  description   String?
+  sku           String?
+  barcode       String?
+  batchNumber   String?
+  expiryDate    DateTime?
+  quantity      Int
+  unitPrice     Decimal          @db.Decimal(10, 2)
+  sellingPrice  Decimal?         @db.Decimal(10, 2)
+  totalPrice    Decimal          @db.Decimal(10, 2)
+  taxRate       Decimal?         @db.Decimal(5, 2)
+  category      String?
+  manufacturer  String?
+  confidence    Float?
+  matchStatus   MatchStatus      @default(UNMATCHED)
+  importStatus  ImportItemStatus @default(PENDING)
+  errorMessage  String?
+
+  invoice  SupplierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product  Product?        @relation(fields: [productId], references: [id])
+
+  @@index([invoiceId])
+  @@index([productId])
+  @@map("supplier_invoice_items")
+}
+
+model SupplierInvoiceFile {
+  id           Int      @id @default(autoincrement())
+  invoiceId    Int
+  originalName String
+  storedName   String
+  mimeType     String
+  fileSize     Int
+  filePath     String
+  createdAt    DateTime @default(now())
+
+  invoice SupplierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("supplier_invoice_files")
+}
+
+model OcrResult {
+  id           Int      @id @default(autoincrement())
+  invoiceId    Int
+  provider     String
+  rawOutput    Json
+  parsedData   Json?
+  confidence   Float?
+  processingMs Int?
+  createdAt    DateTime @default(now())
+
+  invoice SupplierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("ocr_results")
+}
+
+model InvoiceImportLog {
+  id             Int      @id @default(autoincrement())
+  invoiceId      Int
+  organizationId Int
+  branchId       Int
+  userId         Int
+  totalItems     Int
+  importedItems  Int
+  skippedItems   Int
+  errorItems     Int
+  summary        Json?
+  createdAt      DateTime @default(now())
+
+  invoice      SupplierInvoice @relation(fields: [invoiceId], references: [id])
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  branch       Branch          @relation(fields: [branchId], references: [id])
+  user         User            @relation(fields: [userId], references: [id])
+
+  @@index([invoiceId])
+  @@index([organizationId])
+  @@map("invoice_import_logs")
 }

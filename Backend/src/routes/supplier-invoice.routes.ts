@@ -1,0 +1,107 @@
+import { Router } from 'express';
+import path from 'path';
+import multer from 'multer';
+import {
+  uploadAndScanInvoice,
+  getInvoices,
+  getInvoice,
+  updateInvoiceItems,
+  matchProducts,
+  importInvoiceProducts,
+  deleteInvoice,
+} from '../controllers/supplier-invoice.controller';
+import { authenticate, authorize } from '../middleware/auth.middleware';
+import { branchAuth } from '../middleware/branchAuth.middleware';
+import { requireOrganizationAccess } from '../middleware/organizationAccess.middleware';
+
+const router = Router();
+const orgAccess = requireOrganizationAccess();
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, path.join(process.cwd(), 'uploads', 'invoices'));
+  },
+  filename: (_req, file, cb) => {
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const ext = path.extname(file.originalname);
+    cb(null, `invoice-${unique}${ext}`);
+  },
+});
+
+const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+  if (allowed.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only PDF, JPG, JPEG, and PNG files are allowed'));
+  }
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+});
+
+router.post(
+  '/:organizationId/scan',
+  authenticate,
+  orgAccess,
+  branchAuth,
+  authorize('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'),
+  upload.single('invoice'),
+  uploadAndScanInvoice
+);
+
+router.get(
+  '/:organizationId',
+  authenticate,
+  orgAccess,
+  branchAuth,
+  getInvoices
+);
+
+router.get(
+  '/:organizationId/:id',
+  authenticate,
+  orgAccess,
+  branchAuth,
+  getInvoice
+);
+
+router.put(
+  '/:organizationId/:id/items',
+  authenticate,
+  orgAccess,
+  branchAuth,
+  authorize('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'),
+  updateInvoiceItems
+);
+
+router.post(
+  '/:organizationId/match',
+  authenticate,
+  orgAccess,
+  branchAuth,
+  matchProducts
+);
+
+router.post(
+  '/:organizationId/:id/import',
+  authenticate,
+  orgAccess,
+  branchAuth,
+  authorize('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'),
+  importInvoiceProducts
+);
+
+router.delete(
+  '/:organizationId/:id',
+  authenticate,
+  orgAccess,
+  branchAuth,
+  authorize('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'),
+  deleteInvoice
+);
+
+export default router;
