@@ -1654,6 +1654,86 @@ class ApiClient {
     }
     return response.json();
   }
+
+  // ==================== Supplier Invoice Scanner ====================
+
+  async scanInvoice(organizationId: string, file: File, onProgress?: (pct: number) => void): Promise<any> {
+    const formData = new FormData();
+    formData.append('invoice', file);
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const branchParam = this.getBranchQueryParam();
+      const sep = branchParam ? '?' : '';
+      xhr.open('POST', `${API_URL}/supplier-invoices/${organizationId}/scan${sep}${branchParam}`);
+
+      const token = this.getToken();
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(data);
+          } else {
+            reject(new Error(data?.error || data?.message || 'Upload failed'));
+          }
+        } catch {
+          reject(new Error('Invalid server response'));
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('Network error during upload'));
+      xhr.send(formData);
+    });
+  }
+
+  async getSupplierInvoices(organizationId: string, params?: { status?: string; page?: number; limit?: number; search?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params?.search) qs.set('search', params.search);
+    const query = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/supplier-invoices/${organizationId}${query}`);
+  }
+
+  async getSupplierInvoice(organizationId: string, id: number | string) {
+    return this.request(`/supplier-invoices/${organizationId}/${id}`);
+  }
+
+  async updateInvoiceItems(organizationId: string, id: number | string, payload: { items?: any[]; invoiceHeader?: any }) {
+    return this.request(`/supplier-invoices/${organizationId}/${id}/items`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async matchInvoiceProducts(organizationId: string, items: Array<{ productName: string; barcode?: string; sku?: string }>) {
+    return this.request(`/supplier-invoices/${organizationId}/match`, {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+  }
+
+  async importInvoiceProducts(organizationId: string, id: number | string, itemActions: any[]) {
+    return this.request(`/supplier-invoices/${organizationId}/${id}/import`, {
+      method: 'POST',
+      body: JSON.stringify({ itemActions }),
+    });
+  }
+
+  async deleteSupplierInvoice(organizationId: string, id: number | string) {
+    return this.request(`/supplier-invoices/${organizationId}/${id}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

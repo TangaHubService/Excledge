@@ -27,6 +27,8 @@ import {
   Loader2,
   Wallet,
   LineChart,
+  ScanLine,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -89,6 +91,8 @@ const baseNavigation: NavItem[] = [
   { id: "orders-header", name: "nav.ordersHeader", href: "", type: "header" },
   { id: "orders", name: "nav.orders", href: "orders", icon: ShoppingCart },
   { id: "suppliers", name: "nav.suppliers", href: "suppliers", icon: Users },
+  { id: "supplier-invoices", name: "Supplier Invoices", href: "supplier-invoices", icon: FileText },
+  { id: "scan-invoice", name: "Scan Invoice", href: "scan-invoice", icon: ScanLine },
 
   { id: "finance-header", name: "nav.financeHeader", href: "", type: "header" },
   { id: "expenses", name: "nav.expenses", href: "expenses", icon: Wallet },

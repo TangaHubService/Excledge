@@ -56,6 +56,8 @@ import OrganizationsPage from "./pages/dashboard/organizations/OrganizationsPage
 import { PesapalCallback } from "./pages/PesapalCallback";
 import ExpensesPage from "./pages/dashboard/expenses/ExpensesPage";
 import { ExecutiveDashboard } from "./pages/dashboard/executive/ExecutiveDashboard";
+import { SupplierInvoicesPage } from "./pages/dashboard/inventory/SupplierInvoicesPage";
+import { ScanInvoicePage } from "./pages/dashboard/inventory/ScanInvoicePage";
 
 // Redirect based on auth status for the root route
 const HomeRedirect = () => {
@@ -165,6 +167,9 @@ function App() {
                       <Route path="expenses" element={<ExpensesPage />} />
                       <Route path="executive" element={<ExecutiveDashboard />} />
                       <Route path="organizations" element={<OrganizationsPage />} />
+                      <Route path="supplier-invoices" element={<SupplierInvoicesPage />} />
+                      <Route path="scan-invoice" element={<ScanInvoicePage />} />
+                      <Route path="scan-invoice/:id" element={<ScanInvoicePage />} />
 
                       <Route path="subscription" element={<SubscriptionManagementPage />} />
                       <Route path="history" element={<BillingHistoryPage />} />

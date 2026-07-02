@@ -35,6 +35,7 @@ const BRANCH_AWARE_MODELS = new Set([
   'ActivityLog',
   'PurchaseOrder',
   'Notification',
+  'SupplierInvoice',
 ])
 
 // Prisma operations where we can inject `branchId` into the `where` clause.
