@@ -13,8 +13,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../../../components/ui/select'
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '../../../components/ui/dialog'
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter,
+} from '../../../components/ui/drawer'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -149,11 +149,11 @@ function ExpenseFormDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{initial ? 'Edit Expense' : 'Record Expense'}</DialogTitle>
-        </DialogHeader>
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="sm:max-w-lg">
+        <DrawerHeader>
+          <DrawerTitle>{initial ? 'Edit Expense' : 'Record Expense'}</DrawerTitle>
+        </DrawerHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-1">
           <div className="grid grid-cols-2 gap-4">
             {/* Category */}
@@ -246,17 +246,17 @@ function ExpenseFormDialog({
             </div>
           </div>
 
-          <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+          <DrawerFooter className="flex-row pt-2 px-0 border-t border-gray-100 dark:border-gray-700">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
               Cancel
             </Button>
             <Button type="submit" disabled={saving} className="flex-1 bg-blue-600 hover:bg-blue-700">
               {saving ? 'Saving…' : initial ? 'Save Changes' : 'Record Expense'}
             </Button>
-          </div>
+          </DrawerFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </DrawerContent>
+    </Drawer>
   )
 }
 
