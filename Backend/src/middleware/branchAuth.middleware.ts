@@ -100,7 +100,7 @@ export const branchAuth = async (
         if (branchId === null) {
             req.selectedBranchId = null;
             // Run without branch scope – all data visible
-            return withBranchScope(undefined, next);
+            return withBranchScope(undefined, () => next());
         }
 
         // If branchId specified, validate access
@@ -112,7 +112,7 @@ export const branchAuth = async (
 
         req.selectedBranchId = branchId;
         // Run entire request in branch-scoped AsyncLocalStorage context
-        withBranchScope(branchId, next);
+        return withBranchScope(branchId, () => next());
     } catch (error: any) {
         console.error('[Branch Auth Error]:', error);
         res.status(500).json({ error: 'Failed to authorize branch access' });

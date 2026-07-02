@@ -197,6 +197,15 @@ export const ScanInvoicePage: React.FC = () => {
     }
     setSelectedFile(file);
   };
+  const handleManualEntry = () => {
+    // Create empty invoice state for manual data entry
+    setInvoiceId(null);
+    setInvoiceHeader({});
+    setItems([{ productName: '', quantity: 1, unitPrice: 0, totalPrice: 0, confidence: 1 }]);
+    setStep('review');
+    toast.info('Ready for manual product entry - click "Add row" to add products');
+  };
+
 
   const handleUpload = async () => {
     if (!selectedFile) return;
@@ -535,12 +544,20 @@ export const ScanInvoicePage: React.FC = () => {
 
               <div className="mt-4 p-3 rounded-lg bg-muted/40 flex items-start gap-2 text-xs text-muted-foreground">
                 <Sparkles className="size-4 mt-0.5 text-primary shrink-0" />
-                <span>{t('invoiceScanner.aiPowered')} — AI extracts all product fields automatically. Review and edit before importing.</span>
+                <span>Upload an invoice for AI extraction, or click 'Manual Entry' to enter products directly without uploading a file.</span>
               </div>
             </CardContent>
           </Card>
 
-          <div className="flex justify-end">
+          <div className="flex justify-between gap-3">
+            <Button 
+              variant="outline" 
+              onClick={handleManualEntry} 
+              className="gap-2"
+            >
+              <Edit2 className="size-4" />
+              Manual Entry (No Upload)
+            </Button>
             <Button
               disabled={!selectedFile}
               onClick={handleUpload}
