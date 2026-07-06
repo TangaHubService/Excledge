@@ -1657,9 +1657,12 @@ class ApiClient {
 
   // ==================== Supplier Invoice Scanner ====================
 
-  async scanInvoice(organizationId: string, file: File, onProgress?: (pct: number) => void): Promise<any> {
+  async scanInvoice(organizationId: string, file: File, onProgress?: (pct: number) => void, extractedData?: unknown): Promise<any> {
     const formData = new FormData();
     formData.append('invoice', file);
+    if (extractedData) {
+      formData.append('extractedData', JSON.stringify(extractedData));
+    }
 
     const STALL_TIMEOUT_MS = 20_000; // no upload progress for this long → treat as stalled
     const TOTAL_TIMEOUT_MS = 120_000; // hard cap on the whole request (upload + server processing)

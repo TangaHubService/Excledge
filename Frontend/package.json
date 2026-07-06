@@ -50,6 +50,7 @@
     "jspdf-autotable": "^5.0.2",
     "jwt-decode": "^4.0.0",
     "lucide-react": "0.445.0",
+    "pdfjs-dist": "^6.1.200",
     "qrcode": "^1.5.4",
     "react": "^19.1.1",
     "react-day-picker": "^9.11.2",
@@ -64,6 +65,7 @@
     "recharts": "2.13.3",
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^3.3.1",
+    "tesseract.js": "^7.0.0",
     "use-debounce": "^10.0.6",
     "xlsx": "^0.18.5",
     "yup": "^1.7.1"
