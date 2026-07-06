@@ -413,6 +413,28 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
       return res.status(400).json(apiError('Invoice has already been imported'));
     }
 
+    // Link (or create) the Supplier record so this supplier shows up in the
+    // supplier list, without duplicating one that already exists by name.
+    let supplierId = invoice.supplierId;
+    const supplierName = invoice.supplierName?.trim();
+    if (!supplierId && supplierName) {
+      const existingSupplier = await prisma.supplier.findFirst({
+        where: { organizationId, name: { equals: supplierName, mode: 'insensitive' } },
+      });
+
+      const supplier = existingSupplier || await prisma.supplier.create({
+        data: {
+          organizationId,
+          name: supplierName,
+          email: '',
+          address: invoice.supplierAddress || null,
+        },
+      });
+
+      supplierId = supplier.id;
+      await prisma.supplierInvoice.update({ where: { id }, data: { supplierId } });
+    }
+
     const actionsMap = new Map(itemActions.map((a) => [a.itemId, a]));
 
     let importedItems = 0;
