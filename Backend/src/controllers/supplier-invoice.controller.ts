@@ -420,21 +420,25 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
     let errorItems = 0;
     const importErrors: Array<{ itemId: number; error: string }> = [];
 
-    await prisma.$transaction(
-      async (tx) => {
-        for (const item of invoice.items) {
-          const action = actionsMap.get(item.id);
+    // Each item gets its own transaction: once a Postgres statement fails, the
+    // whole transaction is aborted and refuses further commands (25P02), so a
+    // single bad item can't be allowed to share a transaction with the others
+    // (or with the ERROR-status write that records its own failure).
+    for (const item of invoice.items) {
+      const action = actionsMap.get(item.id);
 
-          if (!action || action.action === 'skip') {
-            await tx.supplierInvoiceItem.update({
-              where: { id: item.id },
-              data: { importStatus: 'SKIPPED' },
-            });
-            skippedItems++;
-            continue;
-          }
+      if (!action || action.action === 'skip') {
+        await prisma.supplierInvoiceItem.update({
+          where: { id: item.id },
+          data: { importStatus: 'SKIPPED' },
+        });
+        skippedItems++;
+        continue;
+      }
 
-          try {
+      try {
+        await prisma.$transaction(
+          async (tx) => {
             const mergedData = { ...item, ...(action.data || {}) };
             const qty = parseInt(String(mergedData.quantity)) || 0;
             const unitPrice = clampMoney(parseFloat(String(mergedData.unitPrice)) || 0);
@@ -561,42 +565,47 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
                 },
               });
             }
-
-            importedItems++;
-          } catch (itemErr: any) {
-            console.error(`[Import Item ${item.id} Error]:`, itemErr);
-            await tx.supplierInvoiceItem.update({
-              where: { id: item.id },
-              data: { importStatus: 'ERROR', errorMessage: itemErr.message },
-            });
-            errorItems++;
-            importErrors.push({ itemId: item.id, error: itemErr.message });
-          }
-        }
-
-        // Mark invoice as imported
-        await tx.supplierInvoice.update({
-          where: { id },
-          data: { status: 'IMPORTED', importedAt: new Date() },
-        });
-
-        // Create import log
-        await tx.invoiceImportLog.create({
-          data: {
-            invoiceId: id,
-            organizationId,
-            branchId,
-            userId,
-            totalItems: invoice.items.length,
-            importedItems,
-            skippedItems,
-            errorItems,
-            summary: { errors: importErrors },
           },
-        });
-      },
-      { timeout: 60000 }
-    );
+          { timeout: 30000 }
+        );
+
+        importedItems++;
+      } catch (itemErr: any) {
+        console.error(`[Import Item ${item.id} Error]:`, itemErr);
+        try {
+          await prisma.supplierInvoiceItem.update({
+            where: { id: item.id },
+            data: { importStatus: 'ERROR', errorMessage: itemErr.message },
+          });
+        } catch (statusErr: any) {
+          console.error(`[Import Item ${item.id} Status Update Error]:`, statusErr);
+        }
+        errorItems++;
+        importErrors.push({ itemId: item.id, error: itemErr.message });
+      }
+    }
+
+    // Mark invoice as imported and log the run (separate from the per-item
+    // transactions above, so it always runs regardless of item-level errors)
+    await prisma.$transaction([
+      prisma.supplierInvoice.update({
+        where: { id },
+        data: { status: 'IMPORTED', importedAt: new Date() },
+      }),
+      prisma.invoiceImportLog.create({
+        data: {
+          invoiceId: id,
+          organizationId,
+          branchId,
+          userId,
+          totalItems: invoice.items.length,
+          importedItems,
+          skippedItems,
+          errorItems,
+          summary: { errors: importErrors },
+        },
+      }),
+    ]);
 
     await auditLogger.inventory(req, {
       type: 'PRODUCT_CREATE',
