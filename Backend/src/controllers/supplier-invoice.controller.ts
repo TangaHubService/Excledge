@@ -7,7 +7,7 @@ import { buildBranchFilter, getBranchIdForOperation } from '../middleware/branch
 import { auditLogger } from '../utils/auditLogger';
 import { success, error as apiError } from '../utils/apiResponse';
 import { addStock } from '../services/inventory-ledger.service';
-import { scanInvoiceFile } from '../services/ocr.service';
+import { normalizeExtractedData } from '../services/ocr.service';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -50,20 +50,20 @@ export const uploadAndScanInvoice = async (req: BranchAuthRequest, res: Response
       },
     });
 
-    // 3. Run OCR (async - respond with invoice ID, client polls for status)
+    // 3. Parse the data extracted client-side (scanning runs in the browser)
     let extractedData;
     let ocrError: string | null = null;
 
     try {
-      extractedData = await scanInvoiceFile(filePath, mimeType);
+      const raw = req.body.extractedData ? JSON.parse(req.body.extractedData) : null;
+      if (!raw || !Array.isArray(raw.products)) {
+        throw new Error('No scan data received');
+      }
+      extractedData = normalizeExtractedData(raw);
     } catch (err: any) {
-      ocrError = err.message || 'OCR failed';
-      extractedData = {
-        products: [],
-        confidence: 0,
-        provider: 'failed',
-        processingMs: Date.now() - start,
-      };
+      ocrError = err.message || 'No scan data received';
+      extractedData = normalizeExtractedData(null);
+      extractedData.processingMs = Date.now() - start;
     }
 
     // 4. Save OCR result (original is immutable)

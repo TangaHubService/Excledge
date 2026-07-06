@@ -214,15 +214,16 @@ export const ScanInvoicePage: React.FC = () => {
 
     try {
       setUploadProgress(0);
-      const msgs = ['Reading invoice...', 'Extracting products...', 'Normalizing data...', 'Please wait...'];
-      let msgIdx = 0;
-      const msgInterval = setInterval(() => {
-        msgIdx = (msgIdx + 1) % msgs.length;
-        setProcessingMsg(msgs[msgIdx]);
-      }, 1500);
 
-      const result = await apiClient.scanInvoice(organizationId, selectedFile, setUploadProgress);
-      clearInterval(msgInterval);
+      const { scanInvoiceLocally } = await import('../../../lib/invoiceOcr');
+      const extracted = await scanInvoiceLocally(selectedFile, (pct, message) => {
+        setUploadProgress(pct);
+        setProcessingMsg(message);
+      });
+
+      setProcessingMsg('Uploading invoice...');
+      setUploadProgress(0);
+      const result = await apiClient.scanInvoice(organizationId, selectedFile, setUploadProgress, extracted);
 
       const inv = result?.data ?? result;
       setInvoiceId(inv.id);
@@ -544,7 +545,7 @@ export const ScanInvoicePage: React.FC = () => {
 
               <div className="mt-4 p-3 rounded-lg bg-muted/40 flex items-start gap-2 text-xs text-muted-foreground">
                 <Sparkles className="size-4 mt-0.5 text-primary shrink-0" />
-                <span>Upload an invoice for AI extraction, or click 'Manual Entry' to enter products directly without uploading a file.</span>
+                <span>Upload an invoice for on-device scanning, or click 'Manual Entry' to enter products directly without uploading a file.</span>
               </div>
             </CardContent>
           </Card>
