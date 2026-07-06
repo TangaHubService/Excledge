@@ -7,7 +7,7 @@ import { buildBranchFilter, getBranchIdForOperation } from '../middleware/branch
 import { auditLogger } from '../utils/auditLogger';
 import { success, error as apiError } from '../utils/apiResponse';
 import { addStock } from '../services/inventory-ledger.service';
-import { normalizeExtractedData } from '../services/ocr.service';
+import { normalizeExtractedData, clampMoney, clampTaxRate } from '../services/ocr.service';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -256,10 +256,10 @@ export const updateInvoiceItems = async (req: BranchAuthRequest, res: Response) 
             supplierId: invoiceHeader.supplierId ?? invoice.supplierId,
             currency: invoiceHeader.currency ?? invoice.currency,
             notes: invoiceHeader.notes ?? invoice.notes,
-            subtotal: invoiceHeader.subtotal ?? invoice.subtotal,
-            taxAmount: invoiceHeader.taxAmount ?? invoice.taxAmount,
-            discount: invoiceHeader.discount ?? invoice.discount,
-            totalAmount: invoiceHeader.totalAmount ?? invoice.totalAmount,
+            subtotal: invoiceHeader.subtotal != null ? clampMoney(Number(invoiceHeader.subtotal)) : invoice.subtotal,
+            taxAmount: invoiceHeader.taxAmount != null ? clampMoney(Number(invoiceHeader.taxAmount)) : invoice.taxAmount,
+            discount: invoiceHeader.discount != null ? clampMoney(Number(invoiceHeader.discount)) : invoice.discount,
+            totalAmount: invoiceHeader.totalAmount != null ? clampMoney(Number(invoiceHeader.totalAmount)) : invoice.totalAmount,
           },
         });
       }
@@ -280,10 +280,10 @@ export const updateInvoiceItems = async (req: BranchAuthRequest, res: Response) 
               batchNumber: item.batchNumber || null,
               expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
               quantity: parseInt(item.quantity) || 0,
-              unitPrice: parseFloat(item.unitPrice) || 0,
-              sellingPrice: item.sellingPrice ? parseFloat(item.sellingPrice) : null,
-              totalPrice: parseFloat(item.totalPrice) || 0,
-              taxRate: item.taxRate ? parseFloat(item.taxRate) : null,
+              unitPrice: clampMoney(parseFloat(item.unitPrice) || 0),
+              sellingPrice: item.sellingPrice ? clampMoney(parseFloat(item.sellingPrice)) : null,
+              totalPrice: clampMoney(parseFloat(item.totalPrice) || 0),
+              taxRate: item.taxRate ? clampTaxRate(parseFloat(item.taxRate)) : null,
               category: item.category || null,
               manufacturer: item.manufacturer || null,
             },
@@ -299,10 +299,10 @@ export const updateInvoiceItems = async (req: BranchAuthRequest, res: Response) 
               batchNumber: item.batchNumber || null,
               expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
               quantity: parseInt(item.quantity) || 0,
-              unitPrice: parseFloat(item.unitPrice) || 0,
-              sellingPrice: item.sellingPrice ? parseFloat(item.sellingPrice) : null,
-              totalPrice: parseFloat(item.totalPrice) || 0,
-              taxRate: item.taxRate ? parseFloat(item.taxRate) : null,
+              unitPrice: clampMoney(parseFloat(item.unitPrice) || 0),
+              sellingPrice: item.sellingPrice ? clampMoney(parseFloat(item.sellingPrice)) : null,
+              totalPrice: clampMoney(parseFloat(item.totalPrice) || 0),
+              taxRate: item.taxRate ? clampTaxRate(parseFloat(item.taxRate)) : null,
               category: item.category || null,
               manufacturer: item.manufacturer || null,
             },
@@ -437,7 +437,7 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
           try {
             const mergedData = { ...item, ...(action.data || {}) };
             const qty = parseInt(String(mergedData.quantity)) || 0;
-            const unitPrice = parseFloat(String(mergedData.unitPrice)) || 0;
+            const unitPrice = clampMoney(parseFloat(String(mergedData.unitPrice)) || 0);
             const batchNumber = mergedData.batchNumber || `INV-${id}-${item.id}`;
             const expiryDate = mergedData.expiryDate ? new Date(mergedData.expiryDate) : null;
 
