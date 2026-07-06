@@ -110,6 +110,8 @@ export const ScanInvoicePage: React.FC = () => {
   const { theme } = useTheme();
   const organizationId = apiClient.getOrganizationId();
   const isDark = theme === 'dark';
+  const outlineBtnClass = isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-50';
+  const primaryBtnClass = 'bg-blue-600 hover:bg-blue-700 text-white';
 
   // Wizard state
   const [step, setStep] = useState<WizardStep>(existingId ? 'review' : 'upload');
@@ -450,12 +452,12 @@ export const ScanInvoicePage: React.FC = () => {
     <div className={cn('min-h-screen p-6', isDark ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-900')}>
       {/* Page header */}
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard/supplier-invoices')}>
+        <Button variant="ghost" size="icon" className="hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => navigate('/dashboard/supplier-invoices')}>
           <ChevronLeft className="size-5" />
         </Button>
         <div>
           <h1 className="text-xl font-bold">{t('invoiceScanner.title')}</h1>
-          <p className="text-sm text-muted-foreground">{t('invoiceScanner.subtitle')}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t('invoiceScanner.subtitle')}</p>
         </div>
       </div>
 
@@ -473,19 +475,19 @@ export const ScanInvoicePage: React.FC = () => {
                 <div className="flex flex-col items-center">
                   <div className={cn(
                     'flex items-center justify-center size-9 rounded-full border-2 transition-all text-xs font-bold',
-                    isActive ? 'border-primary bg-primary text-white' :
-                    isDone ? 'border-primary bg-primary/10 text-primary' :
-                    'border-muted bg-transparent text-muted-foreground'
+                    isActive ? 'border-blue-600 bg-blue-600 text-white shadow-sm shadow-blue-600/30' :
+                    isDone ? (isDark ? 'border-blue-500 bg-blue-900/30 text-blue-400' : 'border-blue-200 bg-blue-50 text-blue-600') :
+                    (isDark ? 'border-gray-700 bg-transparent text-gray-500' : 'border-gray-200 bg-transparent text-gray-400')
                   )}>
                     {isDone ? <CheckCircle2 className="size-4" /> : s.icon}
                   </div>
                   <span className={cn(
                     'mt-1 text-xs font-medium hidden sm:block',
-                    isActive ? 'text-primary' : isDone ? 'text-primary/70' : 'text-muted-foreground'
+                    isActive ? 'text-blue-600 dark:text-blue-400' : isDone ? 'text-blue-600/70 dark:text-blue-400/70' : 'text-gray-400 dark:text-gray-500'
                   )}>{s.label}</span>
                 </div>
                 {idx < STEPS.length - 1 && (
-                  <div className={cn('flex-1 h-0.5 mx-2', isDone ? 'bg-primary' : 'bg-muted')} />
+                  <div className={cn('flex-1 h-0.5 mx-2', isDone ? 'bg-blue-600' : isDark ? 'bg-gray-700' : 'bg-gray-200')} />
                 )}
               </React.Fragment>
             );
@@ -496,7 +498,7 @@ export const ScanInvoicePage: React.FC = () => {
       {/* ── STEP: Upload ──────────────────────────────────────────────────── */}
       {step === 'upload' && (
         <div className="max-w-xl mx-auto space-y-6">
-          <Card>
+          <Card className={cn(isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200')}>
             <CardContent className="pt-6">
               <div
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -505,9 +507,9 @@ export const ScanInvoicePage: React.FC = () => {
                 onClick={() => fileInputRef.current?.click()}
                 className={cn(
                   'flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 cursor-pointer transition-all',
-                  dragOver ? 'border-primary bg-primary/5 scale-[1.01]' :
+                  dragOver ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/10 scale-[1.01]' :
                   selectedFile ? 'border-green-500 bg-green-50 dark:bg-green-900/10' :
-                  isDark ? 'border-gray-600 hover:border-primary/60 hover:bg-gray-800/30' : 'border-gray-300 hover:border-primary/60 hover:bg-gray-50'
+                  isDark ? 'border-gray-700 hover:border-blue-500/60 hover:bg-gray-800/30' : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'
                 )}
               >
                 {selectedFile ? (
@@ -516,11 +518,11 @@ export const ScanInvoicePage: React.FC = () => {
                       ? <FileText className="size-12 text-green-500 mb-3" />
                       : <ImageIcon className="size-12 text-green-500 mb-3" />}
                     <p className="font-semibold text-green-600 dark:text-green-400">{selectedFile.name}</p>
-                    <p className="text-sm text-muted-foreground mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="mt-2 text-muted-foreground"
+                      className="mt-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                       onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}
                     >
                       <X className="size-4 mr-1" /> Change file
@@ -528,10 +530,10 @@ export const ScanInvoicePage: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    <Upload className="size-12 text-muted-foreground mb-3" />
+                    <Upload className="size-12 text-gray-500 dark:text-gray-400 mb-3" />
                     <p className="text-lg font-semibold">{t('invoiceScanner.dropzoneTitle')}</p>
-                    <p className="text-sm text-muted-foreground">{t('invoiceScanner.dropzoneSubtitle')}</p>
-                    <p className="text-xs text-muted-foreground mt-2">{t('invoiceScanner.dropzoneHint')}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{t('invoiceScanner.dropzoneSubtitle')}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{t('invoiceScanner.dropzoneHint')}</p>
                   </>
                 )}
               </div>
@@ -543,18 +545,21 @@ export const ScanInvoicePage: React.FC = () => {
                 onChange={(e) => e.target.files?.[0] && validateAndSetFile(e.target.files[0])}
               />
 
-              <div className="mt-4 p-3 rounded-lg bg-muted/40 flex items-start gap-2 text-xs text-muted-foreground">
-                <Sparkles className="size-4 mt-0.5 text-primary shrink-0" />
+              <div className={cn(
+                'mt-4 p-3 rounded-lg border flex items-start gap-2 text-xs',
+                isDark ? 'bg-blue-900/10 border-blue-900/30 text-blue-200/70' : 'bg-blue-50 border-blue-100 text-blue-900/70'
+              )}>
+                <Sparkles className="size-4 mt-0.5 text-blue-600 dark:text-blue-400 shrink-0" />
                 <span>Upload an invoice for on-device scanning, or click 'Manual Entry' to enter products directly without uploading a file.</span>
               </div>
             </CardContent>
           </Card>
 
           <div className="flex justify-between gap-3">
-            <Button 
-              variant="outline" 
-              onClick={handleManualEntry} 
-              className="gap-2"
+            <Button
+              variant="outline"
+              onClick={handleManualEntry}
+              className={cn('gap-2', outlineBtnClass)}
             >
               <Edit2 className="size-4" />
               Manual Entry (No Upload)
@@ -562,7 +567,7 @@ export const ScanInvoicePage: React.FC = () => {
             <Button
               disabled={!selectedFile}
               onClick={handleUpload}
-              className="gap-2 min-w-[160px]"
+              className={cn('gap-2 min-w-[160px] disabled:bg-blue-600', primaryBtnClass)}
             >
               <ScanLine className="size-4" />
               {t('invoiceScanner.scanInvoice')}
@@ -575,23 +580,23 @@ export const ScanInvoicePage: React.FC = () => {
       {step === 'processing' && (
         <div className="max-w-sm mx-auto flex flex-col items-center gap-6 py-16 text-center">
           <div className="relative">
-            <div className="size-20 rounded-full bg-primary/10 flex items-center justify-center">
-              <ScanLine className="size-10 text-primary animate-pulse" />
+            <div className="size-20 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+              <ScanLine className="size-10 text-blue-600 dark:text-blue-400 animate-pulse" />
             </div>
           </div>
           <div className="space-y-1">
             <p className="text-lg font-semibold">{t('invoiceScanner.processing')}</p>
-            <p className="text-sm text-muted-foreground">{processingMsg}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{processingMsg}</p>
           </div>
           {uploadProgress > 0 && uploadProgress < 100 && (
             <div className="w-full space-y-1">
               <div className={cn('h-2 rounded-full overflow-hidden', isDark ? 'bg-gray-700' : 'bg-gray-200')}>
                 <div
-                  className="h-full bg-primary transition-all duration-300"
+                  className="h-full bg-blue-600 transition-all duration-300"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
-              <p className="text-xs text-muted-foreground">{uploadProgress}%</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{uploadProgress}%</p>
             </div>
           )}
         </div>
@@ -601,7 +606,7 @@ export const ScanInvoicePage: React.FC = () => {
       {step === 'review' && (
         <div className="space-y-4">
           {/* Invoice header card */}
-          <Card>
+          <Card className={cn(isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200')}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">{t('invoiceScanner.invoiceNumber')}</CardTitle>
             </CardHeader>
@@ -652,12 +657,12 @@ export const ScanInvoicePage: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">{visibleItems.length} products</span>
               {errorCount > 0 && (
-                <Badge variant="destructive" className="text-xs">
+                <Badge className="text-xs border-transparent bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
                   <AlertTriangle className="size-3 mr-1" /> {errorCount} errors
                 </Badge>
               )}
               {selectedCount > 0 && (
-                <Badge variant="secondary" className="text-xs">
+                <Badge className="text-xs border-transparent bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
                   {selectedCount} selected
                 </Badge>
               )}
@@ -665,47 +670,47 @@ export const ScanInvoicePage: React.FC = () => {
             <div className="flex items-center gap-2">
               {selectedCount > 0 && (
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setShowBulkDialog('category')}>
+                  <Button size="sm" variant="outline" className={outlineBtnClass} onClick={() => setShowBulkDialog('category')}>
                     Change Category
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setShowBulkDialog('expiry')}>
+                  <Button size="sm" variant="outline" className={outlineBtnClass} onClick={() => setShowBulkDialog('expiry')}>
                     Set Expiry
                   </Button>
-                  <Button size="sm" variant="destructive" onClick={bulkDelete}>
+                  <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white" onClick={bulkDelete}>
                     <Trash2 className="size-3 mr-1" /> Delete
                   </Button>
                 </div>
               )}
-              <Button size="sm" variant="outline" onClick={addNewRow}>
+              <Button size="sm" variant="outline" className={outlineBtnClass} onClick={addNewRow}>
                 <Plus className="size-4 mr-1" /> {t('invoiceScanner.addRow')}
               </Button>
             </div>
           </div>
 
           {/* Products table */}
-          <Card>
+          <Card className={cn(isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200')}>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[900px]">
                   <thead>
-                    <tr className={cn('border-b', isDark ? 'border-gray-700' : 'border-gray-200')}>
+                    <tr className={cn('border-b', isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50')}>
                       <th className="w-8 px-3 py-2">
                         <Checkbox
                           checked={visibleItems.length > 0 && visibleItems.every((i) => i._selected)}
                           onCheckedChange={toggleSelectAll}
                         />
                       </th>
-                      <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Product Name *</th>
-                      <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">SKU</th>
-                      <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Barcode</th>
-                      <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Batch</th>
-                      <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Expiry</th>
-                      <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs">Qty *</th>
-                      <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs">Unit Price *</th>
-                      <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs">Selling Price</th>
-                      <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Category</th>
-                      <th className="px-3 py-2 text-center font-medium text-muted-foreground text-xs">Conf.</th>
-                      <th className="px-3 py-2 text-center font-medium text-muted-foreground text-xs">Actions</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400 text-xs">Product Name *</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400 text-xs">SKU</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400 text-xs">Barcode</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400 text-xs">Batch</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400 text-xs">Expiry</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-500 dark:text-gray-400 text-xs">Qty *</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-500 dark:text-gray-400 text-xs">Unit Price *</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-500 dark:text-gray-400 text-xs">Selling Price</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400 text-xs">Category</th>
+                      <th className="px-3 py-2 text-center font-medium text-gray-500 dark:text-gray-400 text-xs">Conf.</th>
+                      <th className="px-3 py-2 text-center font-medium text-gray-500 dark:text-gray-400 text-xs">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -779,7 +784,7 @@ export const ScanInvoicePage: React.FC = () => {
                                   <Input value={item.description || ''} onChange={(e) => handleItemChange(realIdx, 'description', e.target.value)} className="h-7 text-xs mt-0.5" />
                                 </div>
                               </div>
-                              <Button size="sm" className="mt-2 h-7 text-xs" onClick={() => setEditingItemIdx(null)}>
+                              <Button size="sm" className="mt-2 h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setEditingItemIdx(null)}>
                                 <CheckCircle2 className="size-3 mr-1" /> Done
                               </Button>
                             </td>
@@ -788,20 +793,20 @@ export const ScanInvoicePage: React.FC = () => {
                             <>
                               <td className="px-3 py-2">
                                 <div className="flex items-center gap-1">
-                                  {hasErrors && <AlertTriangle className="size-3 text-destructive shrink-0" />}
+                                  {hasErrors && <AlertTriangle className="size-3 text-red-600 dark:text-red-400 shrink-0" />}
                                   {lowConf && !hasErrors && <AlertTriangle className="size-3 text-yellow-500 shrink-0" />}
-                                  <span className={cn('font-medium', hasErrors ? 'text-destructive' : '')}>{item.productName || <span className="text-muted-foreground italic">Enter name</span>}</span>
+                                  <span className={cn('font-medium', hasErrors ? 'text-red-600 dark:text-red-400' : '')}>{item.productName || <span className="text-gray-500 dark:text-gray-400 italic">Enter name</span>}</span>
                                 </div>
                                 {hasErrors && (
-                                  <p className="text-xs text-destructive mt-0.5">{item._errors!.join(', ')}</p>
+                                  <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{item._errors!.join(', ')}</p>
                                 )}
                               </td>
-                              <td className="px-3 py-2 text-muted-foreground">{item.sku || '—'}</td>
+                              <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{item.sku || '—'}</td>
                               <td className="px-3 py-2 font-mono text-xs">{item.barcode || '—'}</td>
                               <td className="px-3 py-2">{item.batchNumber || '—'}</td>
                               <td className="px-3 py-2 text-xs">
                                 {item.expiryDate
-                                  ? <span className={item.expiryDate && new Date(item.expiryDate) < new Date() ? 'text-destructive' : ''}>
+                                  ? <span className={item.expiryDate && new Date(item.expiryDate) < new Date() ? 'text-red-600 dark:text-red-400' : ''}>
                                       {item.expiryDate}
                                     </span>
                                   : '—'}
@@ -822,14 +827,14 @@ export const ScanInvoicePage: React.FC = () => {
                           {editingItemIdx !== realIdx && (
                             <td className="px-3 py-2">
                               <div className="flex items-center gap-1 justify-center">
-                                <button title={t('invoiceScanner.editRow')} onClick={() => setEditingItemIdx(realIdx)} className="p-1 rounded hover:bg-muted">
-                                  <Edit2 className="size-3.5 text-muted-foreground" />
+                                <button title={t('invoiceScanner.editRow')} onClick={() => setEditingItemIdx(realIdx)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                                  <Edit2 className="size-3.5 text-gray-500 dark:text-gray-400" />
                                 </button>
-                                <button title={t('invoiceScanner.duplicateRow')} onClick={() => duplicateRow(realIdx)} className="p-1 rounded hover:bg-muted">
-                                  <Copy className="size-3.5 text-muted-foreground" />
+                                <button title={t('invoiceScanner.duplicateRow')} onClick={() => duplicateRow(realIdx)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                                  <Copy className="size-3.5 text-gray-500 dark:text-gray-400" />
                                 </button>
-                                <button title={t('invoiceScanner.deleteRow')} onClick={() => deleteRow(realIdx)} className="p-1 rounded hover:bg-muted">
-                                  <Trash2 className="size-3.5 text-destructive/70" />
+                                <button title={t('invoiceScanner.deleteRow')} onClick={() => deleteRow(realIdx)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                                  <Trash2 className="size-3.5 text-red-500/70 dark:text-red-400/70" />
                                 </button>
                               </div>
                             </td>
@@ -839,7 +844,7 @@ export const ScanInvoicePage: React.FC = () => {
                     })}
                     {visibleItems.length === 0 && (
                       <tr>
-                        <td colSpan={12} className="text-center py-8 text-muted-foreground text-sm">
+                        <td colSpan={12} className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
                           No products yet. Click "Add row" to add products manually.
                         </td>
                       </tr>
@@ -851,10 +856,10 @@ export const ScanInvoicePage: React.FC = () => {
           </Card>
 
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => navigate('/dashboard/supplier-invoices')}>
+            <Button variant="outline" className={outlineBtnClass} onClick={() => navigate('/dashboard/supplier-invoices')}>
               <ChevronLeft className="size-4 mr-1" /> Back to list
             </Button>
-            <Button onClick={saveReview} disabled={saving} className="min-w-[160px]">
+            <Button onClick={saveReview} disabled={saving} className={cn('min-w-[160px]', primaryBtnClass)}>
               {saving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
               Next: Match Products <ChevronRight className="size-4 ml-1" />
             </Button>
@@ -865,14 +870,14 @@ export const ScanInvoicePage: React.FC = () => {
       {/* ── STEP: Match ───────────────────────────────────────────────────── */}
       {step === 'match' && (
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Review how each extracted product matches existing inventory. Choose whether to update an existing product or create a new one.
           </p>
 
           {matching ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="size-8 animate-spin text-primary mr-3" />
-              <span className="text-muted-foreground">Searching inventory for matches...</span>
+              <Loader2 className="size-8 animate-spin text-blue-600 dark:text-blue-400 mr-3" />
+              <span className="text-gray-500 dark:text-gray-400">Searching inventory for matches...</span>
             </div>
           ) : (
             <div className="space-y-3">
@@ -882,13 +887,14 @@ export const ScanInvoicePage: React.FC = () => {
 
                 return (
                   <Card key={item.id || visualIdx} className={cn(
-                    match?.match ? (isDark ? 'border-blue-800' : 'border-blue-200') : ''
+                    isDark ? 'bg-gray-900' : 'bg-white',
+                    match?.match ? (isDark ? 'border-blue-800' : 'border-blue-200') : (isDark ? 'border-gray-800' : 'border-gray-200')
                   )}>
                     <CardContent className="pt-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex-1">
                           <p className="font-medium">{item.productName}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                             Qty: {item.quantity} · Price: {Number(item.unitPrice).toLocaleString()}
                             {item.barcode && ` · Barcode: ${item.barcode}`}
                           </p>
@@ -901,15 +907,15 @@ export const ScanInvoicePage: React.FC = () => {
                                 <Search className="size-3 inline mr-1" />
                                 {t('invoiceScanner.existingProductFound')}: {match.match.name}
                               </p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                                 {t('invoiceScanner.currentStock')}: {match.match.quantity} · {t('invoiceScanner.incoming')}: {item.quantity} · {t('invoiceScanner.newStock')}: {match.match.quantity + item.quantity}
                               </p>
-                              <p className="text-xs text-muted-foreground">Match: {match.matchType} ({Math.round(match.confidence * 100)}% confidence)</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Match: {match.matchType} ({Math.round(match.confidence * 100)}% confidence)</p>
                             </div>
                           </div>
                         ) : (
                           <div className={cn('px-3 py-2 rounded-lg text-xs', isDark ? 'bg-gray-800' : 'bg-gray-100')}>
-                            <p className="text-muted-foreground">No existing product found</p>
+                            <p className="text-gray-500 dark:text-gray-400">No existing product found</p>
                           </div>
                         )}
 
@@ -919,6 +925,7 @@ export const ScanInvoicePage: React.FC = () => {
                               <Button
                                 size="sm"
                                 variant={action?.action === 'update' ? 'default' : 'outline'}
+                                className={action?.action === 'update' ? primaryBtnClass : outlineBtnClass}
                                 onClick={() => updateItemAction(item.id!, 'update', match.match!.id)}
                               >
                                 {t('invoiceScanner.updateExisting')}
@@ -926,6 +933,7 @@ export const ScanInvoicePage: React.FC = () => {
                               <Button
                                 size="sm"
                                 variant={action?.action === 'create' ? 'default' : 'outline'}
+                                className={action?.action === 'create' ? primaryBtnClass : outlineBtnClass}
                                 onClick={() => updateItemAction(item.id!, 'create')}
                               >
                                 {t('invoiceScanner.createNew')}
@@ -936,6 +944,7 @@ export const ScanInvoicePage: React.FC = () => {
                             <Button
                               size="sm"
                               variant={action?.action === 'create' ? 'default' : 'outline'}
+                              className={action?.action === 'create' ? primaryBtnClass : outlineBtnClass}
                               onClick={() => updateItemAction(item.id!, 'create')}
                             >
                               {t('invoiceScanner.createNew')}
@@ -944,6 +953,7 @@ export const ScanInvoicePage: React.FC = () => {
                           <Button
                             size="sm"
                             variant={action?.action === 'skip' ? 'destructive' : 'ghost'}
+                            className={action?.action === 'skip' ? 'bg-red-600 hover:bg-red-700 text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}
                             onClick={() => updateItemAction(item.id!, 'skip')}
                           >
                             {t('invoiceScanner.skip')}
@@ -958,10 +968,10 @@ export const ScanInvoicePage: React.FC = () => {
           )}
 
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => goToStep('review')}>
+            <Button variant="outline" className={outlineBtnClass} onClick={() => goToStep('review')}>
               <ChevronLeft className="size-4 mr-1" /> Back
             </Button>
-            <Button onClick={() => goToStep('import')} disabled={matching}>
+            <Button onClick={() => goToStep('import')} disabled={matching} className={primaryBtnClass}>
               Next: Import Summary <ChevronRight className="size-4 ml-1" />
             </Button>
           </div>
@@ -971,39 +981,39 @@ export const ScanInvoicePage: React.FC = () => {
       {/* ── STEP: Import summary ──────────────────────────────────────────── */}
       {step === 'import' && (
         <div className="max-w-lg mx-auto space-y-6">
-          <Card>
+          <Card className={cn(isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200')}>
             <CardHeader>
               <CardTitle className="text-base">{t('invoiceScanner.importSummary')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div className={cn('rounded-lg p-3', isDark ? 'bg-gray-800' : 'bg-gray-50')}>
-                  <p className="text-muted-foreground text-xs">{t('invoiceScanner.supplierLabel')}</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">{t('invoiceScanner.supplierLabel')}</p>
                   <p className="font-medium mt-0.5">{invoiceHeader.supplierName || '—'}</p>
                 </div>
                 <div className={cn('rounded-lg p-3', isDark ? 'bg-gray-800' : 'bg-gray-50')}>
-                  <p className="text-muted-foreground text-xs">{t('invoiceScanner.invoiceLabel')}</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">{t('invoiceScanner.invoiceLabel')}</p>
                   <p className="font-medium mt-0.5">{invoiceHeader.invoiceNumber || '—'}</p>
                 </div>
                 <div className={cn('rounded-lg p-3', isDark ? 'bg-gray-800' : 'bg-gray-50')}>
-                  <p className="text-muted-foreground text-xs">{t('invoiceScanner.productsLabel')}</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">{t('invoiceScanner.productsLabel')}</p>
                   <p className="font-medium mt-0.5 text-lg">{visibleItems.length}</p>
                 </div>
                 <div className={cn('rounded-lg p-3', isDark ? 'bg-gray-800' : 'bg-gray-50')}>
-                  <p className="text-muted-foreground text-xs">{t('invoiceScanner.newLabel')}</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">{t('invoiceScanner.newLabel')}</p>
                   <p className="font-medium mt-0.5 text-lg text-green-600 dark:text-green-400">
                     {itemActions.filter((a) => a.action === 'create').length}
                   </p>
                 </div>
                 <div className={cn('rounded-lg p-3', isDark ? 'bg-gray-800' : 'bg-gray-50')}>
-                  <p className="text-muted-foreground text-xs">{t('invoiceScanner.existingLabel')}</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">{t('invoiceScanner.existingLabel')}</p>
                   <p className="font-medium mt-0.5 text-lg text-blue-600 dark:text-blue-400">
                     {itemActions.filter((a) => a.action === 'update').length}
                   </p>
                 </div>
                 <div className={cn('rounded-lg p-3', isDark ? 'bg-gray-800' : 'bg-gray-50')}>
-                  <p className="text-muted-foreground text-xs">Skipped</p>
-                  <p className="font-medium mt-0.5 text-lg text-muted-foreground">
+                  <p className="text-gray-500 dark:text-gray-400 text-xs">Skipped</p>
+                  <p className="font-medium mt-0.5 text-lg text-gray-500 dark:text-gray-400">
                     {itemActions.filter((a) => a.action === 'skip').length}
                   </p>
                 </div>
@@ -1012,13 +1022,13 @@ export const ScanInvoicePage: React.FC = () => {
           </Card>
 
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => goToStep('match')}>
+            <Button variant="outline" className={outlineBtnClass} onClick={() => goToStep('match')}>
               <ChevronLeft className="size-4 mr-1" /> Back
             </Button>
             <Button
               onClick={handleImport}
               disabled={importing}
-              className="min-w-[200px] gap-2"
+              className={cn('min-w-[200px] gap-2', primaryBtnClass)}
             >
               {importing ? <Loader2 className="size-4 animate-spin" /> : <Package className="size-4" />}
               {importing ? t('invoiceScanner.importing') : t('invoiceScanner.importProducts')}
@@ -1035,27 +1045,27 @@ export const ScanInvoicePage: React.FC = () => {
           </div>
           <div>
             <h2 className="text-xl font-bold">{t('invoiceScanner.importSuccess')}</h2>
-            <p className="text-sm text-muted-foreground mt-2">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
               {importResult
                 ? t('invoiceScanner.importSuccessDesc', { count: importResult.importedItems })
                 : 'Invoice has been imported successfully'}
             </p>
             {importResult?.errorItems > 0 && (
-              <p className="text-xs text-destructive mt-1">
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                 {importResult.errorItems} items failed. Check activity logs.
               </p>
             )}
           </div>
           <div className="flex flex-col gap-3 w-full">
-            <Button onClick={() => navigate('/dashboard/inventory-all')} className="gap-2">
+            <Button onClick={() => navigate('/dashboard/inventory-all')} className={cn('gap-2', primaryBtnClass)}>
               <Package className="size-4" />
               {t('invoiceScanner.goToInventory')}
             </Button>
-            <Button variant="outline" onClick={() => navigate('/dashboard/supplier-invoices')} className="gap-2">
+            <Button variant="outline" className={cn('gap-2', outlineBtnClass)} onClick={() => navigate('/dashboard/supplier-invoices')}>
               <FileText className="size-4" />
               {t('invoiceScanner.viewInvoice')}
             </Button>
-            <Button variant="ghost" onClick={() => {
+            <Button variant="ghost" className="text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => {
               setStep('upload');
               setSelectedFile(null);
               setInvoiceId(null);
@@ -1074,21 +1084,21 @@ export const ScanInvoicePage: React.FC = () => {
 
       {/* ── Bulk dialogs ──────────────────────────────────────────────────── */}
       <Dialog open={showBulkDialog === 'category'} onOpenChange={() => setShowBulkDialog(null)}>
-        <DialogContent>
+        <DialogContent className={cn(isDark ? 'bg-gray-900 border-gray-800 text-gray-100' : 'bg-white border-gray-200')}>
           <DialogHeader><DialogTitle>Change Category for {selectedCount} items</DialogTitle></DialogHeader>
           <div className="space-y-3 mt-2">
             <Label>Category</Label>
             <Input value={bulkCategoryValue} onChange={(e) => setBulkCategoryValue(e.target.value)} placeholder="e.g. Antibiotics, Vitamins" />
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowBulkDialog(null)}>Cancel</Button>
-              <Button onClick={() => bulkChangeCategory(bulkCategoryValue)}>Apply</Button>
+              <Button variant="outline" className={outlineBtnClass} onClick={() => setShowBulkDialog(null)}>Cancel</Button>
+              <Button className={primaryBtnClass} onClick={() => bulkChangeCategory(bulkCategoryValue)}>Apply</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={showBulkDialog === 'expiry'} onOpenChange={() => setShowBulkDialog(null)}>
-        <DialogContent>
+        <DialogContent className={cn(isDark ? 'bg-gray-900 border-gray-800 text-gray-100' : 'bg-white border-gray-200')}>
           <DialogHeader><DialogTitle>Set Expiry Date for {selectedCount} items</DialogTitle></DialogHeader>
           <div className="space-y-3 mt-2">
             <Label>Expiry Date</Label>
@@ -1098,8 +1108,8 @@ export const ScanInvoicePage: React.FC = () => {
               min={new Date().toISOString().split('T')[0]}
             />
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowBulkDialog(null)}>Cancel</Button>
-              <Button onClick={() => bulkSetExpiry(bulkCategoryValue)}>Apply</Button>
+              <Button variant="outline" className={outlineBtnClass} onClick={() => setShowBulkDialog(null)}>Cancel</Button>
+              <Button className={primaryBtnClass} onClick={() => bulkSetExpiry(bulkCategoryValue)}>Apply</Button>
             </div>
           </div>
         </DialogContent>
