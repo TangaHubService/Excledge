@@ -121,6 +121,10 @@ function toNumber(raw: string): number {
   return parseFloat(raw.replace(/,/g, '')) || 0;
 }
 
+// Matches the backend's Decimal(10,2) column limit — an OCR misread (e.g. a
+// barcode read as a price) shouldn't silently blow past what the DB can store.
+const MAX_MONEY = 99_999_999.99;
+
 export function parseInvoiceText(rawText: string): ExtractedInvoiceData {
   const lines = rawText
     .split('\n')
@@ -142,15 +146,17 @@ export function parseInvoiceText(rawText: string): ExtractedInvoiceData {
     if (name.length < 2 || NOISE_WORDS.test(name)) continue;
 
     const quantity = Math.max(1, Math.round(toNumber(match[2])) || 1);
-    const unitPrice = Math.max(0, toNumber(match[3]));
-    const totalPrice = match[4] ? toNumber(match[4]) : quantity * unitPrice;
+    const rawUnitPrice = Math.max(0, toNumber(match[3]));
+    const rawTotalPrice = match[4] ? toNumber(match[4]) : quantity * rawUnitPrice;
+    // A price this large is almost certainly a misread barcode/serial, not a real amount.
+    const looksBogus = rawUnitPrice > MAX_MONEY || rawTotalPrice > MAX_MONEY;
 
     products.push({
       productName: name,
       quantity,
-      unitPrice,
-      totalPrice,
-      confidence: 0.5,
+      unitPrice: Math.min(rawUnitPrice, MAX_MONEY),
+      totalPrice: Math.min(rawTotalPrice, MAX_MONEY),
+      confidence: looksBogus ? 0.1 : 0.5,
     });
   }
 
