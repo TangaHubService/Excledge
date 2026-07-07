@@ -1,7 +1,11 @@
 import { prisma } from '../lib/prisma';
 import { config } from '../config';
 import type { Decimal } from '@prisma/client/runtime/library';
+import type { Prisma } from '@prisma/client';
 import { buildVsdcEnvelope, saveInvc, parseVsdcResponse } from './vsdc-api.service';
+
+/** Any Prisma client capable of running queries — the top-level client or a $transaction callback's `tx`. */
+type PrismaClientOrTx = typeof prisma | Prisma.TransactionClient;
 
 export type SaleWithRelations = {
   id: number;
@@ -172,8 +176,8 @@ function isMissingDatabaseObjectError(error: unknown, objectName: string): boole
   );
 }
 
-async function nextInvoiceSequenceFromCounterTable(organizationId: number, branchId: number): Promise<number> {
-  const rows = await prisma.$queryRaw<Array<{ nextSequence: number }>>`
+async function nextInvoiceSequenceFromCounterTable(organizationId: number, branchId: number, client: PrismaClientOrTx = prisma): Promise<number> {
+  const rows = await client.$queryRaw<Array<{ nextSequence: number }>>`
     INSERT INTO "organization_invoice_counters" ("organizationId", "branchId", "nextSequence", "updatedAt")
     VALUES (${organizationId}, ${branchId}, 1, NOW())
     ON CONFLICT ("organizationId", "branchId") DO UPDATE
@@ -185,25 +189,25 @@ async function nextInvoiceSequenceFromCounterTable(organizationId: number, branc
   return Number(rows[0]?.nextSequence ?? 0);
 }
 
-async function nextInvoiceSequenceFromLegacySequence(): Promise<number> {
-  const rows = await prisma.$queryRaw<Array<{ nextSequence: bigint | number }>>`
+async function nextInvoiceSequenceFromLegacySequence(client: PrismaClientOrTx = prisma): Promise<number> {
+  const rows = await client.$queryRaw<Array<{ nextSequence: bigint | number }>>`
     SELECT nextval('invoice_seq')::bigint AS "nextSequence"
   `;
 
   return Number(rows[0]?.nextSequence ?? 0);
 }
 
-async function allocateNextInvoiceSequence(organizationId: number, branchId: number): Promise<number> {
+async function allocateNextInvoiceSequence(organizationId: number, branchId: number, client: PrismaClientOrTx = prisma): Promise<number> {
   if (invoiceSequenceMode === 'per_org') {
-    return nextInvoiceSequenceFromCounterTable(organizationId, branchId);
+    return nextInvoiceSequenceFromCounterTable(organizationId, branchId, client);
   }
 
   if (invoiceSequenceMode === 'legacy_sequence') {
-    return nextInvoiceSequenceFromLegacySequence();
+    return nextInvoiceSequenceFromLegacySequence(client);
   }
 
   try {
-    const sequence = await nextInvoiceSequenceFromCounterTable(organizationId, branchId);
+    const sequence = await nextInvoiceSequenceFromCounterTable(organizationId, branchId, client);
     invoiceSequenceMode = 'per_org';
     return sequence;
   } catch (error) {
@@ -213,7 +217,7 @@ async function allocateNextInvoiceSequence(organizationId: number, branchId: num
   }
 
   try {
-    const sequence = await nextInvoiceSequenceFromLegacySequence();
+    const sequence = await nextInvoiceSequenceFromLegacySequence(client);
     invoiceSequenceMode = 'legacy_sequence';
 
     if (!loggedLegacyInvoiceFallback) {
@@ -342,7 +346,13 @@ export function buildRraSendReceiptPayload(
   const codeToSlot: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
 
   const itemList = sale.saleItems.map((si, idx) => {
-    const slot = codeToSlot[(si.taxCode ?? 'A').toUpperCase()] ?? 0;
+    const rawCode = (si.taxCode ?? 'A').toUpperCase();
+    const slot = codeToSlot[rawCode];
+    if (slot === undefined) {
+      throw new Error(
+        `Cannot submit sale ${sale.saleNumber ?? sale.id} to RRA: sale item ${idx + 1} has invalid tax code "${rawCode}". Only A, B, C, D are valid for line items.`
+      );
+    }
     const tAmt = fix2(si.taxAmount.toNumber());
     const tbAmt = fix2(si.totalPrice.toNumber() - tAmt);
     taxblAmt[slot] = fix2(taxblAmt[slot] + tbAmt);
@@ -362,7 +372,7 @@ export function buildRraSendReceiptPayload(
       splyAmt:    fix2(tbAmt),
       dcRt:       fix2(si.dcRate.toNumber()),
       dcAmt:      fix2(si.dcAmt.toNumber()),
-      taxTyCd:    (si.taxCode ?? 'A').toUpperCase(),
+      taxTyCd:    rawCode,
       taxblAmt:   fix2(tbAmt),
       taxAmt:     fix2(tAmt),
       totAmt:     fix2(si.totalPrice.toNumber()),
@@ -438,12 +448,12 @@ async function enqueueSaleRetry(params: {
  * Atomically allocate next invoice sequence for a branch (PostgreSQL upsert).
  * RRA requires per-branch (per-device) sequences, not per-organization.
  */
-export async function generateInvoiceNumber(organizationId: number, branchId: number): Promise<string> {
-  const sequence = (await allocateNextInvoiceSequence(organizationId, branchId))
+export async function generateInvoiceNumber(organizationId: number, branchId: number, client: PrismaClientOrTx = prisma): Promise<string> {
+  const sequence = (await allocateNextInvoiceSequence(organizationId, branchId, client))
     .toString()
     .padStart(6, '0');
 
-  const organization = await prisma.organization.findUnique({
+  const organization = await client.organization.findUnique({
     where: { id: organizationId },
     select: { TIN: true },
   });
@@ -534,7 +544,12 @@ export async function submitInvoiceToEbm(params: {
     return { success: false, error: 'Organization not found' };
   }
 
-  const payload = buildRraSendReceiptPayload(sale, org);
+  let payload: Record<string, unknown>;
+  try {
+    payload = buildRraSendReceiptPayload(sale, org);
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Invalid sale payload' };
+  }
 
   let txRow = await prisma.ebmTransaction.findFirst({
     where: {

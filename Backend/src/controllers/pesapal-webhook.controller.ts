@@ -135,6 +135,20 @@ async function handleCompletedTransaction(transactionStatus: PesapalTransactionS
 
         logWebhook('Subscription found', { id: subscription.id, status: subscription.status });
 
+        // Idempotency guard: this endpoint can be replayed by anyone who has seen
+        // the orderTrackingId (e.g. via the browser redirect URL), so make sure we
+        // don't extend the subscription again for a transaction already recorded.
+        const existingPayment = await prisma.payment.findFirst({
+            where: { paymentId: transactionStatus.order_tracking_id },
+        });
+
+        if (existingPayment) {
+            logWebhook('Payment for this order already processed. Skipping.', {
+                orderTrackingId: transactionStatus.order_tracking_id,
+            });
+            return;
+        }
+
         // Map Pesapal status to internal PaymentStatus
         const mapPesapalStatusToPaymentStatus = (status: string): PaymentStatus => {
             const statusMap: Record<string, PaymentStatus> = {

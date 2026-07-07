@@ -17,28 +17,23 @@ export const recordDebtPayment = async (req: AuthRequest, res: Response) => {
 
         // Start a transaction
         const result = await prisma.$transaction(async (tx) => {
-            // 1. Get the sale with current debt
-            const sale = await tx.sale.findFirst({
-                where: {
-                    id: saleId,
-                    organizationId,
-                    OR: [
-                        { debtAmount: { gt: 0 } },
-                        { status: 'COMPLETED' }
-                    ]
-                },
-                include: {
-                    customer: true,
-                    saleItems: true
-                }
-            });
+            // 1. Lock the sale row first — concurrent partial payments on the same
+            // sale must serialize, or two requests can both read the same debt
+            // balance and each independently think their payment fits within it.
+            const [lockedSale] = await tx.$queryRaw<Array<{
+                id: number; customerId: number; debtAmount: string; status: string;
+            }>>`
+                SELECT id, "customerId", "debtAmount", status FROM sales
+                WHERE id = ${saleId} AND "organizationId" = ${organizationId}
+                FOR UPDATE
+            `;
 
-            if (!sale) {
+            if (!lockedSale || (Number(lockedSale.debtAmount) <= 0 && lockedSale.status !== 'COMPLETED')) {
                 throw new Error("Sale not found or no debt to pay");
             }
 
             const paymentAmount = Number(amount);
-            const currentDebt = Number(sale.debtAmount);
+            const currentDebt = Number(lockedSale.debtAmount);
 
             if (isNaN(paymentAmount) || paymentAmount <= 0) {
                 throw new Error("Invalid payment amount");
@@ -58,7 +53,7 @@ export const recordDebtPayment = async (req: AuthRequest, res: Response) => {
             const payment = await tx.debtPayment.create({
                 data: {
                     saleId,
-                    customerId: sale.customerId,
+                    customerId: lockedSale.customerId,
                     organizationId,
                     amount: paymentAmount,
                     paymentMethod,
@@ -68,18 +63,18 @@ export const recordDebtPayment = async (req: AuthRequest, res: Response) => {
                 }
             });
 
-            // 3. Update sale's debt amount
+            // 3. Update sale's debt amount atomically (safe now that the row is locked)
             await tx.sale.update({
                 where: { id: saleId },
                 data: {
-                    debtAmount: remainingDebt,
+                    debtAmount: { decrement: paymentAmount },
                     cashAmount: { increment: paymentAmount }
                 },
             });
 
             // 4. Update customer's balance
             await tx.customer.update({
-                where: { id: sale.customerId },
+                where: { id: lockedSale.customerId },
                 data: {
                     balance: { decrement: paymentAmount },
                 },

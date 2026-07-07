@@ -508,6 +508,20 @@ export async function adjustStock(params: AdjustStockParams) {
 
   // Use transaction
   return await prisma.$transaction(async (tx) => {
+    // Lock product row using FOR UPDATE to prevent race conditions — matches
+    // addStock/removeStock so a concurrent sale/adjustment on the same product
+    // can't read the same pre-adjustment balance and push stock negative.
+    const lockedProduct = await tx.$queryRaw<Array<{ id: number }>>`
+      SELECT id
+      FROM products
+      WHERE id = ${productId} AND "organizationId" = ${organizationId}
+      FOR UPDATE
+    `;
+
+    if (!lockedProduct || lockedProduct.length === 0) {
+      throw new Error(`Product with ID ${productId} not found in organization ${organizationId}`);
+    }
+
     // Get current balance for this specific branch
     const currentBalance = await getCurrentStockInTransaction(
       tx,

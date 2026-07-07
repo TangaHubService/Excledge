@@ -30,6 +30,12 @@ export const config = {
     quarterly: Number.parseFloat(process.env.QUARTERLY_PRICE || "79.99"),
     yearly: Number.parseFloat(process.env.YEARLY_PRICE || "299.99"),
   },
+  inventory: {
+    // Applied when auto-creating a product from a scanned supplier invoice and
+    // OCR couldn't extract a selling price — keeps the product from going live
+    // priced at cost (zero margin). Tune per business via env if needed.
+    defaultMarkupPercent: Number.parseFloat(process.env.DEFAULT_PRODUCT_MARKUP_PERCENT || "20"),
+  },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
     apiKey: process.env.CLOUDINARY_API_KEY || "",

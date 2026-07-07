@@ -8,6 +8,7 @@ import { auditLogger } from '../utils/auditLogger';
 import { success, error as apiError } from '../utils/apiResponse';
 import { addStock } from '../services/inventory-ledger.service';
 import { normalizeExtractedData, clampMoney, clampTaxRate } from '../services/ocr.service';
+import { config } from '../config';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -464,6 +465,15 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
             const mergedData = { ...item, ...(action.data || {}) };
             const qty = parseInt(String(mergedData.quantity)) || 0;
             const unitPrice = clampMoney(parseFloat(String(mergedData.unitPrice)) || 0);
+            // Selling price must never default to cost — that's a zero-margin (or free)
+            // product. Prefer the OCR-extracted selling price; if none was extracted,
+            // fall back to a configured markup over cost rather than cost itself.
+            const extractedSellingPrice = mergedData.sellingPrice != null
+              ? clampMoney(parseFloat(String(mergedData.sellingPrice)))
+              : 0;
+            const sellingPrice = extractedSellingPrice > 0
+              ? extractedSellingPrice
+              : clampMoney(unitPrice * (1 + config.inventory.defaultMarkupPercent / 100));
             const batchNumber = mergedData.batchNumber || `INV-${id}-${item.id}`;
             const expiryDate = mergedData.expiryDate ? new Date(mergedData.expiryDate) : null;
 
@@ -537,7 +547,7 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
                   barcode: mergedData.barcode || null,
                   batchNumber,
                   quantity: qty,
-                  unitPrice,
+                  unitPrice: sellingPrice,
                   expiryDate,
                   category: mergedData.category || null,
                   description: mergedData.description || null,

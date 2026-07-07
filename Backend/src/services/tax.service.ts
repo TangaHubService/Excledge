@@ -52,9 +52,10 @@ export class TaxService {
         }
     }
 
-    /** Allowed tax codes for line items */
+    /** Allowed tax codes for line items. E is reserved for internal RRA use only
+     *  and must never be assigned to a product or submitted on a sale. */
     static readonly ALLOWED_TAX_CODES: ReadonlySet<RraTaxCode> = new Set([
-        RraTaxCode.A, RraTaxCode.B, RraTaxCode.C, RraTaxCode.D, RraTaxCode.E,
+        RraTaxCode.A, RraTaxCode.B, RraTaxCode.C, RraTaxCode.D,
     ]);
 
     static validateTaxRate(taxCode: RraTaxCode, taxRate: number): { valid: boolean; expectedRate: number } {

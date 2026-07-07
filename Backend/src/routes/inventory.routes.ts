@@ -27,21 +27,22 @@ import {
 import { authenticate, authorize } from "../middleware/auth.middleware";
 import { branchAuth } from "../middleware/branchAuth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
+import { requireActiveSubscription } from '../middleware/feature-access.middleware';
 
 const router = Router();
 
 const orgAccess = requireOrganizationAccess();
 
 router.get("/tax-codes", getTaxCodes);
-router.get("/products/:organizationId", authenticate, orgAccess, branchAuth, getProducts);
-router.get("/products/:organizationId/expiring", authenticate, orgAccess, branchAuth, getExpiringProducts);
-router.get("/products/:organizationId/expired", authenticate, orgAccess, branchAuth, getExpiredProducts);
-router.get("/products/:organizationId/low-stock", authenticate, orgAccess, branchAuth, getLowStockProducts);
+router.get("/products/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, getProducts);
+router.get("/products/:organizationId/expiring", authenticate, orgAccess, requireActiveSubscription(), branchAuth, getExpiringProducts);
+router.get("/products/:organizationId/expired", authenticate, orgAccess, requireActiveSubscription(), branchAuth, getExpiredProducts);
+router.get("/products/:organizationId/low-stock", authenticate, orgAccess, requireActiveSubscription(), branchAuth, getLowStockProducts);
 router.get("/:id", authenticate, getProductById);
 router.post(
   "/:organizationId",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   createProduct
@@ -49,7 +50,7 @@ router.post(
 router.post(
   "/:organizationId/products",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   createProducts
@@ -57,7 +58,7 @@ router.post(
 router.put(
   "/:organizationId/product/:id",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   updateProduct
@@ -65,7 +66,7 @@ router.put(
 router.delete(
   "/:organizationId/product/:id",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   deleteProduct
@@ -74,7 +75,7 @@ router.delete(
 router.post(
   "/:organizationId/product/:id/adjust",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   adjustStock
@@ -83,7 +84,7 @@ router.post(
 router.post(
   "/:organizationId/product/:id/damage",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   markAsDamage
@@ -92,7 +93,7 @@ router.post(
 router.post(
   "/:organizationId/product/:id/process-expired",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   processExpiredStock
@@ -102,7 +103,7 @@ router.post(
 router.post(
   "/:organizationId/ledger/in",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   addStockToInventory
@@ -111,7 +112,7 @@ router.post(
 router.post(
   "/:organizationId/ledger/out",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   removeStockFromInventory
@@ -120,7 +121,7 @@ router.post(
 router.post(
   "/:organizationId/ledger/adjustment",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   adjustInventoryStock
@@ -129,7 +130,7 @@ router.post(
 router.get(
   "/:organizationId/ledger",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   getInventoryLedger
 );
@@ -137,7 +138,7 @@ router.get(
 router.get(
   "/:organizationId/ledger/summary",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   getInventorySummaryReport
 );
@@ -145,7 +146,7 @@ router.get(
 router.get(
   "/:organizationId/ledger/current-stock/:productId",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   getCurrentStockLevel
 );
@@ -153,7 +154,7 @@ router.get(
 router.get(
   "/:organizationId/ledger/history/:productId",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   getProductInventoryHistory
 );
@@ -161,7 +162,7 @@ router.get(
 router.post(
   "/:organizationId/ledger/recalculate/:productId",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"),
   recalculateStock

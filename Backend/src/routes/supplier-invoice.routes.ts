@@ -14,6 +14,7 @@ import {
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { branchAuth } from '../middleware/branchAuth.middleware';
 import { requireOrganizationAccess } from '../middleware/organizationAccess.middleware';
+import { requireActiveSubscription } from '../middleware/feature-access.middleware';
 
 const router = Router();
 const orgAccess = requireOrganizationAccess();
@@ -52,7 +53,7 @@ const upload = multer({
 router.post(
   '/:organizationId/scan',
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'),
   upload.single('invoice'),
@@ -62,7 +63,7 @@ router.post(
 router.get(
   '/:organizationId',
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   getInvoices
 );
@@ -70,7 +71,7 @@ router.get(
 router.get(
   '/:organizationId/:id',
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   getInvoice
 );
@@ -78,7 +79,7 @@ router.get(
 router.put(
   '/:organizationId/:id/items',
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'),
   updateInvoiceItems
@@ -87,7 +88,7 @@ router.put(
 router.post(
   '/:organizationId/match',
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   matchProducts
 );
@@ -95,7 +96,7 @@ router.post(
 router.post(
   '/:organizationId/:id/import',
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'),
   importInvoiceProducts
@@ -104,7 +105,7 @@ router.post(
 router.delete(
   '/:organizationId/:id',
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'),
   deleteInvoice

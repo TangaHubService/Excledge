@@ -43,47 +43,58 @@ export const recordSupplierPayment = async (req: AuthRequest, res: Response) => 
             });
         }
 
-        // Get total payments made so far
-        const existingPayments = await prisma.supplierPayment.aggregate({
-            where: {
-                purchaseOrderId: parseInt(purchaseOrderId)
-            },
-            _sum: {
-                amount: true
+        // Read-check-create must be atomic and the PO row locked, or two concurrent
+        // payment submissions can both read the same pre-payment total, both pass
+        // the overpayment check, and together overpay the PO.
+        let newTotal = 0;
+        let totalPaid = 0;
+        const payment = await prisma.$transaction(async (tx) => {
+            const [lockedPo] = await tx.$queryRaw<Array<{ id: number; totalAmount: string }>>`
+                SELECT id, "totalAmount" FROM purchase_orders
+                WHERE id = ${Number(purchaseOrderId)} AND "organizationId" = ${Number(organizationId)}
+                FOR UPDATE
+            `;
+            if (!lockedPo) {
+                throw new Error('Purchase order not found');
             }
-        });
 
-        const totalPaid = existingPayments._sum.amount?.toNumber() || 0;
-        const newTotal = totalPaid + parseFloat(amount);
-
-        // Check if payment exceeds purchase order total
-        if (newTotal > purchaseOrder.totalAmount.toNumber()) {
-            return res.status(400).json({
-                success: false,
-                message: `Payment exceeds purchase order total. Remaining: ${purchaseOrder.totalAmount.toNumber() - totalPaid}`
+            const existingPayments = await tx.supplierPayment.aggregate({
+                where: {
+                    purchaseOrderId: parseInt(purchaseOrderId)
+                },
+                _sum: {
+                    amount: true
+                }
             });
-        }
 
-        // Create supplier payment
-        const payment = await prisma.supplierPayment.create({
-            data: {
-                purchaseOrderId: Number(purchaseOrderId),
-                organizationId: Number(organizationId),
-                amount: parseFloat(amount),
-                paymentMethod,
-                paymentDate: new Date(paymentDate),
-                reference,
-                notes,
-                recordedById: Number(userId)
-            },
-            include: {
-                purchaseOrder: {
-                    select: {
-                        orderNumber: true,
-                        totalAmount: true
+            totalPaid = existingPayments._sum.amount?.toNumber() || 0;
+            newTotal = totalPaid + parseFloat(amount);
+            const orderTotal = Number(lockedPo.totalAmount);
+
+            if (newTotal > orderTotal) {
+                throw new Error(`Payment exceeds purchase order total. Remaining: ${orderTotal - totalPaid}`);
+            }
+
+            return tx.supplierPayment.create({
+                data: {
+                    purchaseOrderId: Number(purchaseOrderId),
+                    organizationId: Number(organizationId),
+                    amount: parseFloat(amount),
+                    paymentMethod,
+                    paymentDate: new Date(paymentDate),
+                    reference,
+                    notes,
+                    recordedById: Number(userId)
+                },
+                include: {
+                    purchaseOrder: {
+                        select: {
+                            orderNumber: true,
+                            totalAmount: true
+                        }
                     }
                 }
-            }
+            });
         });
 
         // Log activity
@@ -116,6 +127,9 @@ export const recordSupplierPayment = async (req: AuthRequest, res: Response) => 
         });
     } catch (error: any) {
         console.error('Error recording supplier payment:', error);
+        if (typeof error?.message === 'string' && error.message.startsWith('Payment exceeds purchase order total')) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
         res.status(500).json({
             success: false,
             message: 'Failed to record supplier payment',

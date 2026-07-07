@@ -12,6 +12,7 @@ import {
 import { authenticate, authorize } from "../middleware/auth.middleware";
 import { branchAuth } from "../middleware/branchAuth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
+import { requireActiveSubscription } from '../middleware/feature-access.middleware';
 import { vsdcOnlineGuard } from "../middleware/vsdc-offline-guard.middleware";
 import { validate } from "../middleware/validate.middleware";
 import { createSaleSchema, cancelSaleSchema } from "../validations/sales.validation";
@@ -24,7 +25,7 @@ const orgAccess = requireOrganizationAccess();
 router.post(
   "/:organizationId",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   vsdcOnlineGuard,
@@ -36,7 +37,7 @@ router.post(
 router.get(
   "/:organizationId",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   getSales
@@ -46,7 +47,7 @@ router.get(
 router.get(
   "/:organizationId/:id",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   getSaleById
@@ -56,7 +57,7 @@ router.get(
 router.put(
   "/:id/pay-debt/:organizationId",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   payDebt
@@ -66,7 +67,7 @@ router.put(
 router.post(
   "/:id/refund/:organizationId",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   refundSale
@@ -76,7 +77,7 @@ router.post(
 router.post(
   "/:organizationId/:saleId/cancel",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   validate(cancelSaleSchema),
@@ -87,7 +88,7 @@ router.post(
 router.post(
   "/:organizationId/:saleId/reprint",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   reprintSaleReceipt
@@ -97,7 +98,7 @@ router.post(
 router.get(
   "/:organizationId/:saleId/ebm-receipt",
   authenticate,
-  orgAccess,
+  orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   getEbmReceipt

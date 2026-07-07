@@ -2,6 +2,50 @@ import { Request, Response, NextFunction } from 'express';
 import { SubscriptionService } from '../services/subscription.service';
 import { prisma } from '../lib/prisma';
 
+/**
+ * Blocks the request unless the organization has a subscription that is
+ * currently ACTIVE or TRIALING and not past its endDate. SYSTEM_OWNER bypasses,
+ * same as requireOrganizationAccess. Apply this on operational (paid-feature)
+ * routes — never on auth, organization-creation, subscription-management, or
+ * system-owner routes, or an org with a lapsed subscription could never renew.
+ */
+export const requireActiveSubscription = () => {
+    return async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const jwtRole = String((req as any).user?.role ?? '');
+            if (jwtRole === 'SYSTEM_OWNER') {
+                return next();
+            }
+
+            const organizationId = Number(req.params.organizationId);
+            if (!organizationId || Number.isNaN(organizationId)) {
+                return res.status(400).json({ error: 'Organization ID is required' });
+            }
+
+            const subscription = await prisma.subscription.findFirst({
+                where: {
+                    organizationId,
+                    status: { in: ['ACTIVE', 'TRIALING'] },
+                    endDate: { gt: new Date() },
+                },
+                select: { id: true },
+            });
+
+            if (!subscription) {
+                return res.status(403).json({
+                    error: 'Your subscription is inactive or has expired. Please renew to continue.',
+                    code: 'SUBSCRIPTION_INACTIVE',
+                });
+            }
+
+            next();
+        } catch (error) {
+            console.error('Error checking subscription status:', error);
+            res.status(500).json({ error: 'Failed to verify subscription status' });
+        }
+    };
+};
+
 export const requireFeature = (featureKey: string) => {
     const subscriptionService = new SubscriptionService(prisma);
 
