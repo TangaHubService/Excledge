@@ -89,9 +89,11 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       finalPaymentType = 'CASH'
     }
 
-    // Generate sale number and invoice number (per-branch sequence per RRA requirement)
+    // Sale number now; invoice number is allocated inside the transaction below so
+    // that a rollback (e.g. insufficient stock, tax mismatch) also rolls back the
+    // sequence increment — otherwise a failed sale permanently burns an RRA invoice
+    // number, leaving a gap in the mandated gapless sequence.
     const saleNumber = `SALE-${Date.now()}`
-    const invoiceNumber = await generateInvoiceNumber(organizationId!, branchId as number)
 
     // C6: determine receipt type label (NS/TS/PS)
     const org = await prisma.organization.findUnique({
@@ -229,7 +231,10 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         });
       }
 
-      // 4. Create sale with server-computed values
+      // 4. Allocate the RRA invoice sequence number and create the sale together,
+      // so a rollback of this transaction also rolls back the sequence increment.
+      const invoiceNumber = await generateInvoiceNumber(organizationId!, branchId as number, tx)
+
       const newSale = await tx.sale.create({
         data: {
           saleNumber,

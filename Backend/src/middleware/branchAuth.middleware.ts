@@ -85,8 +85,12 @@ export const branchAuth = async (
 
         req.branchScope = canAccessAll ? 'ALL' : 'LIMITED';
 
-        // Get branchId from query parameter (optional)
-        const branchIdParam = req.query.branchId as string | undefined;
+        // Get branchId from the query string OR request body (write endpoints send it
+        // in the body, e.g. createSale/createProduct) — both must be validated the
+        // same way, otherwise a branch-restricted user could bypass this check by
+        // simply putting an arbitrary branchId in the body instead of the query.
+        const branchIdParam = (req.query.branchId as string | undefined) ??
+            (req.body?.branchId != null ? String(req.body.branchId) : undefined);
         let branchId: number | null = null;
 
         if (branchIdParam && branchIdParam !== 'undefined' && branchIdParam !== 'null') {

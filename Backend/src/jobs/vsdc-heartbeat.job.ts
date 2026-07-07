@@ -4,13 +4,20 @@ import { config } from '../config';
 import { isEbmEnabled } from '../services/rra-ebm.service';
 import { buildVsdcEnvelope, vsdcHeartbeat } from '../services/vsdc-api.service';
 
+// Must run well inside the offline-block window (default 2h, see
+// vsdc-offline-guard.middleware.ts) or a real overnight sales lull trips the
+// guard even though the VSDC is actually still reachable. Runs 3x per window
+// so one failed/skipped run doesn't let the guard go stale, clamped to a
+// sane range regardless of how VSDC_OFFLINE_BLOCK_MS is configured.
+const VSDC_OFFLINE_BLOCK_MS = Number(process.env.VSDC_OFFLINE_BLOCK_MS ?? 2 * 60 * 60 * 1000);
+const HEARTBEAT_MINUTES = Math.max(5, Math.min(360, Math.floor(VSDC_OFFLINE_BLOCK_MS / 3 / 60_000)));
+
 /**
- * 6-hour VSDC heartbeat — issues a state-check handshake to the VSDC
- * gateway for every active organization. On success, updates
- * `lastSuccessfulVdsContact` to keep the 24-hour offline guard accurate
- * even during zero-sales intervals.
+ * VSDC heartbeat — issues a state-check handshake to the VSDC gateway for
+ * every active organization. On success, updates `lastSuccessfulVdsContact`
+ * to keep the offline guard accurate even during zero-sales intervals.
  */
-export const vsdcHeartbeatJob = cron.schedule('0 */6 * * *', async () => {
+export const vsdcHeartbeatJob = cron.schedule(`*/${HEARTBEAT_MINUTES} * * * *`, async () => {
   if (!isEbmEnabled()) {
     return;
   }

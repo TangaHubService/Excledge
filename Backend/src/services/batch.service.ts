@@ -271,6 +271,39 @@ export async function selectBatchesForSale(
 /**
  * Update batch quantity after sale
  */
+async function deductBatchQuantityLocked(
+  tx: any,
+  batchId: number,
+  quantityToDeduct: number,
+  organizationId: number,
+) {
+  // Lock the row first so concurrent sales touching the same batch serialize
+  // instead of both reading the same pre-deduction quantity (lost update).
+  const [locked] = await tx.$queryRaw<Array<{ id: number; quantity: number }>>`
+    SELECT id, quantity FROM batches
+    WHERE id = ${batchId} AND "organizationId" = ${organizationId}
+    FOR UPDATE
+  `;
+
+  if (!locked) {
+    throw new Error(`Batch with ID ${batchId} not found`);
+  }
+
+  if (locked.quantity < quantityToDeduct) {
+    throw new Error(`Insufficient batch quantity. Available: ${locked.quantity}, Requested: ${quantityToDeduct}`);
+  }
+
+  const newQuantity = locked.quantity - quantityToDeduct;
+
+  return tx.batch.update({
+    where: { id: batchId },
+    data: {
+      quantity: { decrement: quantityToDeduct },
+      isActive: newQuantity > 0, // Deactivate if quantity reaches zero
+    },
+  });
+}
+
 export async function updateBatchQuantity(
   batchId: number,
   quantityToDeduct: number,
@@ -279,63 +312,11 @@ export async function updateBatchQuantity(
 ) {
   // If transaction client is provided, use it directly (we're already in a transaction)
   if (tx) {
-    const batch = await tx.batch.findFirst({
-      where: {
-        id: batchId,
-        organizationId,
-      },
-    });
-
-    if (!batch) {
-      throw new Error(`Batch with ID ${batchId} not found`);
-    }
-
-    if (batch.quantity < quantityToDeduct) {
-      throw new Error(`Insufficient batch quantity. Available: ${batch.quantity}, Requested: ${quantityToDeduct}`);
-    }
-
-    const updatedBatch = await tx.batch.update({
-      where: { id: batchId },
-      data: {
-        quantity: batch.quantity - quantityToDeduct,
-      },
-    });
-
-    return updatedBatch;
+    return deductBatchQuantityLocked(tx, batchId, quantityToDeduct, organizationId);
   }
 
   // Otherwise, create a new transaction
-  return await prisma.$transaction(async (tx) => {
-    const batch = await tx.batch.findFirst({
-      where: {
-        id: batchId,
-        organizationId,
-      },
-    });
-
-    if (!batch) {
-      throw new Error(`Batch with ID ${batchId} not found`);
-    }
-
-    if (batch.quantity < quantityToDeduct) {
-      throw new Error(
-        `Insufficient batch quantity. Available: ${batch.quantity}, Requested: ${quantityToDeduct}`
-      );
-    }
-
-    const newQuantity = batch.quantity - quantityToDeduct;
-
-    // Update batch
-    const updatedBatch = await tx.batch.update({
-      where: { id: batchId },
-      data: {
-        quantity: newQuantity,
-        isActive: newQuantity > 0, // Deactivate if quantity reaches zero
-      },
-    });
-
-    return updatedBatch;
-  });
+  return prisma.$transaction((tx) => deductBatchQuantityLocked(tx, batchId, quantityToDeduct, organizationId));
 }
 
 /**

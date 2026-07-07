@@ -10,7 +10,8 @@ export const createProductSchema = z.object({
     description: z.string().optional(),
     minStock: z.coerce.number().nonnegative('Minimum stock cannot be negative').default(10),
     taxCategory: z.enum(['STANDARD', 'ZERO_RATED', 'EXEMPT']).default('STANDARD'),
-    taxCode: z.enum(['A', 'B', 'C', 'D', 'E']).optional(),
+    // E is reserved for RRA internal use only and must never be assignable to a product.
+    taxCode: z.enum(['A', 'B', 'C', 'D']).optional(),
     measurementUnit: z.enum(['PCS', 'KG', 'LTR', 'MTR', 'BOX', 'PAIR', 'DOZEN', 'GRAM', 'ML', 'OTHER']).default('PCS'),
     itemType: z.enum(['PRODUCT', 'SERVICE']).default('PRODUCT'),
     expiryDate: z.string().datetime().optional(),
@@ -30,7 +31,8 @@ export const updateProductSchema = z.object({
     description: z.string().optional(),
     minStock: z.coerce.number().nonnegative('Minimum stock cannot be negative').optional(),
     taxCategory: z.enum(['STANDARD', 'ZERO_RATED', 'EXEMPT']).optional(),
-    taxCode: z.enum(['A', 'B', 'C', 'D', 'E']).optional(),
+    // E is reserved for RRA internal use only and must never be assignable to a product.
+    taxCode: z.enum(['A', 'B', 'C', 'D']).optional(),
     measurementUnit: z.enum(['PCS', 'KG', 'LTR', 'MTR', 'BOX', 'PAIR', 'DOZEN', 'GRAM', 'ML', 'OTHER']).optional(),
     itemType: z.enum(['PRODUCT', 'SERVICE']).optional(),
     expiryDate: z.string().datetime().optional().nullable(),

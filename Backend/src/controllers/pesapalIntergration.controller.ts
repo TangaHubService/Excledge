@@ -42,6 +42,22 @@ export const pesapalIpnController = async (req: Request, res: Response) => {
 
             // Update subscription based on payment status
             if (transaction.payment_status_description === 'Completed') {
+                // Idempotency guard: this endpoint can be replayed by anyone who has
+                // seen the orderTrackingId, so don't reprocess a transaction we've
+                // already recorded a payment for.
+                const existingPayment = await prisma.payment.findFirst({
+                    where: { paymentId: OrderTrackingId },
+                });
+
+                if (existingPayment) {
+                    return res.status(200).json({
+                        orderNotificationType: "IPNCHANGE",
+                        orderTrackingId: OrderTrackingId,
+                        orderMerchantReference: OrderMerchantReference,
+                        status: 200
+                    });
+                }
+
                 // Find the subscription by the merchant reference
                 const subscription = await prisma.subscription.findFirst({
                     where: {

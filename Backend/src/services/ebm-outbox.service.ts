@@ -84,7 +84,6 @@ export async function createSaleWithOutbox(input: SaleOutboxInput) {
 
   const totalAmount = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
   const saleNumber = `SALE-${Date.now()}`;
-  const invoiceNumber = await generateInvoiceNumber(organizationId, branchId);
 
   const operation: EbmOperation = 'SALE';
 
@@ -130,6 +129,10 @@ export async function createSaleWithOutbox(input: SaleOutboxInput) {
         product: { connect: { id: item.productId } },
       };
     });
+
+    // Allocate the RRA invoice sequence inside the transaction so a rollback
+    // (bad stock, tax mismatch, etc.) also rolls back the sequence increment.
+    const invoiceNumber = await generateInvoiceNumber(organizationId, branchId, tx);
 
     const newSale = await tx.sale.create({
       data: {
@@ -385,7 +388,18 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
     // Build gateway payload based on operation type
     let payload: Record<string, unknown>;
     if (row.operation === 'SALE') {
-      payload = buildRraSendReceiptPayload(sale, org);
+      try {
+        payload = buildRraSendReceiptPayload(sale, org);
+      } catch (e: unknown) {
+        // A bad tax code on this sale should not block the rest of the batch —
+        // dead-letter this row only, it will never succeed on retry either.
+        await prisma.ebmOutbox.update({
+          where: { id: row.id },
+          data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid sale payload' },
+        });
+        failed += 1;
+        continue;
+      }
       payload['idempotencyKey'] = row.idempotencyKey;
     } else if (row.operation === 'REFUND') {
       // For REFUND: find the original SALE's EBM invoice number

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { branchAuth } from '../middleware/branchAuth.middleware';
 import { requireOrganizationAccess } from '../middleware/organizationAccess.middleware';
+import { requireActiveSubscription } from '../middleware/feature-access.middleware';
 import {
     recordDebtPayment,
     getSalePayments,
@@ -18,7 +19,7 @@ const orgAccess = requireOrganizationAccess();
 payDebtRouter.post(
     '/:saleId/:organizationId',
     authenticate,
-    orgAccess,
+    orgAccess, requireActiveSubscription(),
     branchAuth,
     recordDebtPayment
 );
@@ -27,7 +28,7 @@ payDebtRouter.post(
 payDebtRouter.get(
     '/sale/:saleId/:organizationId',
     authenticate,
-    orgAccess,
+    orgAccess, requireActiveSubscription(),
     branchAuth,
     getSalePayments
 );
@@ -36,7 +37,7 @@ payDebtRouter.get(
 payDebtRouter.get(
     '/customer/:customerId/:organizationId',
     authenticate,
-    orgAccess,
+    orgAccess, requireActiveSubscription(),
     branchAuth,
     getCustomerDebtPayments
 );
@@ -45,14 +46,14 @@ payDebtRouter.get(
 payDebtRouter.get(
     '/outstanding/:organizationId',
     authenticate,
-    orgAccess,
+    orgAccess, requireActiveSubscription(),
     branchAuth,
     getOutstandingDebts
 );
 payDebtRouter.get(
     '/all/:organizationId',
     authenticate,
-    orgAccess,
+    orgAccess, requireActiveSubscription(),
     branchAuth,
     getAllPaymentHistory
 );

@@ -5,6 +5,6 @@ import { authenticate } from '../middleware/auth.middleware';
 const router = Router();
 
 // Image upload endpoint
-router.post('/image', upload.single('image'), uploadImage);
+router.post('/image', authenticate, upload.single('image'), uploadImage);
 
 export default router;
