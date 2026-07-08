@@ -12,6 +12,8 @@ import { toast } from 'react-toastify';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
 import SalesInvoicePDF, { type SaleEbmTransaction } from '../../../components/invoice/SalesInvoicePDF';
+import { fiscalBlockFromSale } from '../../../utils/invoiceFiscal';
+import { buildInvoiceQrDataUrl } from '../../../utils/qrCode';
 import { useOrganization } from '../../../context/OrganizationContext';
 import { Badge } from '../../../components/ui/badge';
 
@@ -149,6 +151,7 @@ export default function SaleDetailsPage() {
 
         setIsDownloadingInvoice(true);
         try {
+            const qrDataUrl = await buildInvoiceQrDataUrl(fiscalBlockFromSale(sale));
             const blob = await pdf(<SalesInvoicePDF
                 sale={sale}
                 organizationName={organization?.name}
@@ -158,6 +161,7 @@ export default function SaleDetailsPage() {
                 organizationPhone={(organization as any)?.phone}
                 organizationEmail={(organization as any)?.email}
                 organizationVrn={(organization as any)?.VRN}
+                qrDataUrl={qrDataUrl}
             />).toBlob();
 
             saveAs(blob, `invoice-${sale.saleNumber}.pdf`);
@@ -175,6 +179,7 @@ export default function SaleDetailsPage() {
 
         setIsPrintingInvoice(true);
         try {
+            const qrDataUrl = await buildInvoiceQrDataUrl(fiscalBlockFromSale(sale));
             const blob = await pdf(<SalesInvoicePDF
                 sale={sale}
                 organizationName={organization?.name}
@@ -184,6 +189,7 @@ export default function SaleDetailsPage() {
                 organizationPhone={(organization as any)?.phone}
                 organizationEmail={(organization as any)?.email}
                 organizationVrn={(organization as any)?.VRN}
+                qrDataUrl={qrDataUrl}
             />).toBlob();
 
             const url = URL.createObjectURL(blob);

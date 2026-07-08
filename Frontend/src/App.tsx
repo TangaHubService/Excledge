@@ -59,7 +59,8 @@ import { ExecutiveDashboard } from "./pages/dashboard/executive/ExecutiveDashboa
 import { SupplierInvoicesPage } from "./pages/dashboard/inventory/SupplierInvoicesPage";
 import { ScanInvoicePage } from "./pages/dashboard/inventory/ScanInvoicePage";
 
-// Redirect based on auth status for the root route
+// Root route: signed-in users go straight to the dashboard; signed-out
+// visitors see the marketing landing page (not a redirect straight to login).
 const HomeRedirect = () => {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -68,7 +69,11 @@ const HomeRedirect = () => {
     return <Loading />;
   }
 
-  return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <LandingPage />;
 };
 
 // Protected Route for System Owners

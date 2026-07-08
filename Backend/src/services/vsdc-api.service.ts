@@ -5,29 +5,41 @@ import { config } from '../config';
 const RRA_SECURITY_KEY: string = config.ebm.securityKey || '';
 
 // ──────────────────────────────────────────────
-// C2: VSDC status-code tables (RRA ALGO EBM API v8.2 §4)
+// VSDC result-code table (RRA VSDC API Documentation v1.0.5 §4.14)
 // ──────────────────────────────────────────────
 
-/** HTTP-200 but STATUS != "0" means a business-level rejection. */
-const VSDC_ERRORS: Record<string, string> = {
-  '0': 'Success',
-  '1': 'General error',
-  '2': 'Invalid TIN',
-  '3': 'Device not registered',
-  '4': 'Duplicate invoice number',
-  '5': 'Invalid invoice date/time',
-  '6': 'Invalid tax amount',
-  '7': 'Invalid receipt type',
-  '8': 'Invalid MRC number',
-  '9': 'Tax period closed',
-  '10': 'Device disabled',
-  '11': 'Organization suspended',
-  '12': 'Invalid branch code',
-  '99': 'System maintenance',
+/** `resultCd` values documented by the spec; "000" is the only success code. */
+const VSDC_RESULT_MESSAGES: Record<string, string> = {
+  '000': 'It is succeeded',
+  '001': 'There is no search result',
+  '881': 'Purchase is mandatory',
+  '882': 'Purchase code is invalid',
+  '883': 'Purchase already used',
+  '884': 'Invalid customer TIN was provided',
+  '891': 'An error occurred while Request URL is created',
+  '892': 'An error occurred while Request Header data is created',
+  '893': 'An error occurred while Request Body data is created',
+  '894': 'An error regarding server communication occurred',
+  '895': 'An error regarding unallowed Request Method occurred',
+  '896': 'An error regarding Request Status occurred',
+  '899': 'An error regarding Client occurred',
+  '900': 'There is no Header information',
+  '901': 'It is not valid device',
+  '902': 'This device is installed',
+  '903': 'Only VSDC device can be verified',
+  '910': 'Request parameter error',
+  '911': 'There is no request full text',
+  '912': 'There is a request Method error',
+  '921': 'Sales or sales invoice data which is declared cannot be received',
+  '922': 'Sales invoice data can be received after receiving the sales data',
+  '990': 'The maximum number of views are exceeded',
+  '991': 'There is an error during registration',
+  '992': 'There is an error during modification',
+  '993': 'There is an error during deletion',
+  '994': 'There is an overlapped Data',
+  '995': 'There is no downloaded file',
+  '999': 'There is an unknown error. Please ask the administrator',
 };
-
-/** STATUS codes that indicate warnings but should not block the sale. */
-const VSDC_WARNINGS = new Set(['98']);
 
 export function parseVsdcStatusCode(raw: unknown): {
   code: string;
@@ -39,15 +51,13 @@ export function parseVsdcStatusCode(raw: unknown): {
     return { code: '?', isError: true, isWarning: false, message: 'No response body' };
   }
   const o = raw as Record<string, unknown>;
-  const resp = o.RESPONSE && typeof o.RESPONSE === 'object'
-    ? (o.RESPONSE as Record<string, unknown>)
-    : o;
-  const status = String(resp.STATUS ?? o.STATUS ?? resp.status ?? o.status ?? '?');
-  const message = VSDC_ERRORS[status] ?? `Unknown VSDC status ${status}`;
+  const code = String(o.resultCd ?? '?');
+  const serverMessage = typeof o.resultMsg === 'string' && o.resultMsg.length > 0 ? o.resultMsg : undefined;
+  const message = serverMessage ?? VSDC_RESULT_MESSAGES[code] ?? `Unknown VSDC result code ${code}`;
   return {
-    code: status,
-    isError: status !== '0' && !VSDC_WARNINGS.has(status) && status !== '?',
-    isWarning: VSDC_WARNINGS.has(status),
+    code,
+    isError: code !== '000' && code !== '?',
+    isWarning: false,
     message,
   };
 }
@@ -68,10 +78,14 @@ export interface VsdcEnvelope {
 }
 
 export interface VsdcResponse {
+  /** VSDC's per-receipt-type counter — the "A" half of the required A/B RT counter. */
   rcptNo: string;
   intrlData: string;
   vsdcSignature: string;
-  qrPayload: string;
+  /** All-receipts counter — the "B" half of the required A/B RT counter. Not a QR payload. */
+  totRcptNo: string;
+  /** VSDC device id — needed client-side to build the printed QR string (CIS spec §7.24.7). */
+  sdcId: string;
   sdcDateTime: string;
 }
 
@@ -229,12 +243,27 @@ async function postToEndpoint(
 // Response parser (RRA canonical fields)
 // ──────────────────────────────────────────────
 
+/** Parse VSDC's compact `yyyyMMddhhmmss` timestamp into an ISO string `new Date()` can read. */
+function parseRraCompactDateTime(s: string): string {
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(s);
+  if (!m) return s;
+  const [, y, mo, d, h, mi, se] = m;
+  return `${y}-${mo}-${d}T${h}:${mi}:${se}`;
+}
+
+/**
+ * Parse the response to `/trnsSales/saveSales`:
+ * `{ resultCd, resultMsg, resultDt, data: { rcptNo, intrlData, rcptSign, totRcptNo, vsdcRcptPbctDate, sdcId, mrcNo } }`
+ * (RRA VSDC API Documentation v1.0.5 §3.3.6.1). There is no QR payload in this
+ * response — the CIS builds the QR string itself from these fields.
+ */
 export function parseVsdcResponse(raw: unknown): VsdcResponse {
   const fallback: VsdcResponse = {
     rcptNo: '',
     intrlData: '',
     vsdcSignature: '',
-    qrPayload: '',
+    totRcptNo: '',
+    sdcId: '',
     sdcDateTime: '',
   };
 
@@ -243,28 +272,11 @@ export function parseVsdcResponse(raw: unknown): VsdcResponse {
   }
 
   const o = raw as Record<string, unknown>;
-
-  // Handle RRA canonical response structure:
-  // { RESPONSE: { MESSAGE: { num, ysdcregsig, ysdcrecnum, ysdcintdata, ... }, QR_CODE, STATUS, DISTRIBUTOR_TIN } }
-  const responseBlock =
-    o.RESPONSE && typeof o.RESPONSE === 'object'
-      ? (o.RESPONSE as Record<string, unknown>)
-      : null;
-  const messageBlock =
-    responseBlock?.MESSAGE && typeof responseBlock.MESSAGE === 'object'
-      ? (responseBlock.MESSAGE as Record<string, unknown>)
-      : null;
-
-  // Also support existing gateway format: o.data
   const data = (o.data && typeof o.data === 'object' ? o.data : {}) as Record<string, unknown>;
 
   const pick = (...keys: string[]): string => {
     for (const k of keys) {
-      const v =
-        o[k] ??
-        data[k] ??
-        (messageBlock ? messageBlock[k] : undefined) ??
-        (responseBlock ? responseBlock[k] : undefined);
+      const v = data[k] ?? o[k];
       if (v !== undefined && v !== null && String(v).length > 0) {
         return String(v);
       }
@@ -272,17 +284,15 @@ export function parseVsdcResponse(raw: unknown): VsdcResponse {
     return '';
   };
 
+  const rawDateTime = pick('vsdcRcptPbctDate', 'sdcDateTime');
+
   return {
-    // RRA field: "num" holds the invoice/receipt number
-    rcptNo: pick('rcptNo', 'num', 'receiptNo', 'receipt_number', 'ebmInvoiceNumber', 'invoiceNumber', 'fiscalInvoiceNumber'),
-    // RRA field: "ysdcintdata" holds the internal data / verification code
-    intrlData: pick('intrlData', 'ysdcintdata', 'internalData', 'verificationCode', 'verification_code'),
-    // RRA field: "ysdcregsig" holds the fiscal signature
-    vsdcSignature: pick('vsdcSignature', 'ysdcregsig', 'rcptSign', 'receiptSignature', 'fiscalSignature'),
-    // RRA field: "QR_CODE" holds the encrypted QR payload
-    qrPayload: pick('qrPayload', 'QR_CODE', 'qr_code', 'qrCode', 'qrData'),
-    // RRA fields: "ysdcmrctim" or "ysdctime" hold the SDC timestamp
-    sdcDateTime: pick('sdcDateTime', 'ysdcmrctim', 'ysdctime', 'issuedAt', 'timestamp', 'submittedAt'),
+    rcptNo: pick('rcptNo'),
+    intrlData: pick('intrlData'),
+    vsdcSignature: pick('rcptSign', 'vsdcSignature'),
+    totRcptNo: pick('totRcptNo'),
+    sdcId: pick('sdcId'),
+    sdcDateTime: rawDateTime ? parseRraCompactDateTime(rawDateTime) : '',
   };
 }
 
@@ -299,7 +309,7 @@ export async function saveInvc(
   payload: Record<string, unknown>,
 ): Promise<VsdcApiResult> {
   if (config.ebm.useMock) {
-    return mockResult('INVC');
+    return mockResult('INVC', envelope.sdcId);
   }
   const { vsdcUrl, ...envelopeFields } = envelope;
   return postToEndpoint(config.ebm.salePath || '/saveInvc', { ...envelopeFields, ...payload }, vsdcUrl);
@@ -375,7 +385,8 @@ export async function vsdcHeartbeat(
         rcptNo: 'HEARTBEAT-ACK',
         intrlData: '',
         vsdcSignature: '',
-        qrPayload: '',
+        totRcptNo: '',
+        sdcId: '',
         sdcDateTime: new Date().toISOString(),
       },
       rawStatus: 200,
@@ -390,18 +401,24 @@ export async function vsdcHeartbeat(
 // Mock helper
 // ──────────────────────────────────────────────
 
-function mockResult(prefix: string): VsdcApiResult {
+function mockResult(prefix: string, sdcId?: string): VsdcApiResult {
   const ref = `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  // rcptNo/totRcptNo must be numeric strings (parsed with parseInt downstream into
+  // EbmTransaction.sdcRcptNo/totalRcptNo), so this mirrors the real /trnsSales/saveSales
+  // response shape rather than the old free-text ref.
+  const rcptNo = String(Math.floor(Date.now() / 1000) % 100000);
+  const totRcptNo = String(Math.floor(Date.now() / 1000) % 1000000);
   return {
     success: true,
     data: {
-      rcptNo: ref,
+      rcptNo,
       intrlData: `MOCK-INTERNAL-${ref}`,
       vsdcSignature: `MOCK-SIG-${ref}`,
-      qrPayload: `https://mock.rra.gov.rw/verify?rcpt=${ref}`,
+      totRcptNo,
+      sdcId: sdcId || 'SDC000000000',
       sdcDateTime: new Date().toISOString(),
     },
     rawStatus: 200,
-    rawBody: { mock: true, ref },
+    rawBody: { resultCd: '000', resultMsg: 'It is succeeded', mock: true, data: { rcptNo, totRcptNo } },
   };
 }

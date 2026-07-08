@@ -233,12 +233,13 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
 
       // 4. Allocate the RRA invoice sequence number and create the sale together,
       // so a rollback of this transaction also rolls back the sequence increment.
-      const invoiceNumber = await generateInvoiceNumber(organizationId!, branchId as number, tx)
+      const { invoiceNumber, vsdcInvcNo } = await generateInvoiceNumber(organizationId!, branchId as number, tx)
 
       const newSale = await tx.sale.create({
         data: {
           saleNumber,
           invoiceNumber,
+          vsdcInvcNo,
           customerId: parseInt(customerId),
           userId: userId!,
           organizationId: organizationId!,

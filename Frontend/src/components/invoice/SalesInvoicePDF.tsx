@@ -8,6 +8,9 @@ import {
 } from '@react-pdf/renderer';
 import { format } from 'date-fns';
 import logo from "../../assets/vdlogo.fd0748ee6ccf6d81d171.png";
+import { type SaleEbmTransaction, fiscalBlockFromSale } from '../../utils/invoiceFiscal';
+
+export type { SaleEbmTransaction };
 
 interface SaleItem {
     id: string;
@@ -23,33 +26,7 @@ interface SaleItem {
     serviceDescription?: string | null;
 }
 
-/** EBM/VSDC rows returned with sale detail (from API). */
-export interface SaleEbmTransaction {
-    id?: string | number;
-    operation?: string | null;
-    submissionStatus?: string;
-    ebmInvoiceNumber?: string | null;
-    errorMessage?: string | null;
-    // D3: dedicated SDC columns (B1)
-    sdcRcptNo?: number | null;
-    internalData?: string | null;
-    receiptSignature?: string | null;
-    qrPayload?: string | null;
-    rcptLabel?: string | null;
-    sdcDateTime?: string | null;
-    responseData?: {
-        normalized?: {
-            ebmInvoiceNumber?: string;
-            receiptQrPayload?: string;
-            verificationCode?: string;
-            sdcDateTime?: string;
-            intrlData?: string;
-            vsdcSignature?: string;
-        };
-    } | null;
-}
-
-interface Sale {
+export interface Sale {
     id: string;
     saleNumber: string;
     invoiceNumber?: string | null;
@@ -247,31 +224,6 @@ const RCPT_LABEL_DISPLAY: Record<string, string> = {
     TS: 'Training',    TR: 'Training Refund',
     PS: 'Proforma',
 };
-
-function fiscalBlockFromSale(sale: Sale) {
-    const txs = sale.ebmTransactions ?? [];
-    const saleTxs = txs.filter((t) => !t.operation || t.operation === 'SALE');
-    const success = saleTxs.find((t) => t.submissionStatus === 'SUCCESS');
-    const pending = saleTxs.find((t) =>
-        ['PENDING', 'SUBMITTED', 'RETRYING'].includes(t.submissionStatus ?? ''),
-    );
-    const failed = saleTxs.find((t) => t.submissionStatus === 'FAILED');
-    const norm = success?.responseData?.normalized;
-
-    // Prefer dedicated columns (B1), fall back to responseData JSON blob
-    return {
-        success,
-        pending,
-        failed,
-        ebmInvoiceNumber: success?.ebmInvoiceNumber ?? norm?.ebmInvoiceNumber,
-        sdcRcptNo:        success?.sdcRcptNo ?? null,
-        internalData:     success?.internalData ?? norm?.intrlData ?? null,
-        receiptSignature: success?.receiptSignature ?? norm?.vsdcSignature ?? norm?.verificationCode ?? null,
-        qrPayload:        success?.qrPayload ?? norm?.receiptQrPayload ?? null,
-        sdcDateTime:      success?.sdcDateTime ?? norm?.sdcDateTime ?? null,
-        rcptLabel:        success?.rcptLabel ?? sale.rcptLabel ?? null,
-    };
-}
 
 const SalesInvoicePDF: React.FC<SalesInvoicePDFProps> = ({
     sale,
@@ -580,11 +532,40 @@ const SalesInvoicePDF: React.FC<SalesInvoicePDFProps> = ({
                     if (!f.success && !f.pending && !f.failed && !sale.ebmTransactions?.length) {
                         return null;
                     }
+                    // A/B RT counter (CIS spec §7.24.4/7.25): "A" = per-receipt-type
+                    // counter, "B" = all-receipts counter, "RT" = receipt label.
+                    const counter = f.sdcRcptNo != null && f.totalRcptNo != null
+                        ? `${f.sdcRcptNo}/${f.totalRcptNo}${f.rcptLabel ? ` ${f.rcptLabel}` : ''}`
+                        : null;
+
                     return (
                         <View style={styles.fiscalBox}>
+                            {/* No official RRA logo asset available — text mark stands in for it
+                                until one is supplied (CIS spec §7.29 requires the RRA logo). */}
+                            <Text style={[styles.fiscalTitle, { textAlign: 'center', letterSpacing: 0.5 }]}>
+                                RWANDA REVENUE AUTHORITY
+                            </Text>
                             <Text style={styles.fiscalTitle}>RRA EBM FISCAL RECEIPT</Text>
 
-                            {/* Receipt type label (D3) */}
+                            {!f.success ? (
+                                <View style={{
+                                    backgroundColor: f.failed ? '#fee2e2' : '#fef3c7',
+                                    borderRadius: 3,
+                                    padding: 5,
+                                    marginBottom: 6,
+                                }}>
+                                    <Text style={{ fontSize: 9, fontWeight: 'bold', color: f.failed ? '#991b1b' : '#92400e' }}>
+                                        NOT YET FISCALIZED
+                                    </Text>
+                                    <Text style={{ fontSize: 8, color: f.failed ? '#991b1b' : '#92400e', marginTop: 2 }}>
+                                        {f.failed
+                                            ? `Last fiscal error: ${f.failed.errorMessage ?? 'Unknown'}`
+                                            : 'Fiscal submission pending or retrying — this receipt has not yet been confirmed by RRA.'}
+                                    </Text>
+                                </View>
+                            ) : null}
+
+                            {/* Receipt type label */}
                             {f.rcptLabel ? (
                                 <View style={styles.row}>
                                     <Text style={styles.label}>Receipt Type:</Text>
@@ -608,10 +589,10 @@ const SalesInvoicePDF: React.FC<SalesInvoicePDFProps> = ({
                                 </View>
                             ) : null}
 
-                            {f.sdcRcptNo != null ? (
+                            {counter ? (
                                 <View style={styles.row}>
-                                    <Text style={styles.label}>SDC Receipt No:</Text>
-                                    <Text style={styles.value}>{f.sdcRcptNo}</Text>
+                                    <Text style={styles.label}>Receipt Counter:</Text>
+                                    <Text style={styles.value}>{counter}</Text>
                                 </View>
                             ) : null}
 
@@ -636,27 +617,17 @@ const SalesInvoicePDF: React.FC<SalesInvoicePDFProps> = ({
                                 </View>
                             ) : null}
 
-                            {/* QR code image if pre-computed, else QR string */}
+                            {/* QR code image — built by the caller (buildInvoiceQrDataUrl) per
+                                CIS spec §7.24.7 from sdcDateTime/sdcId/sdcRcptNo/internalData/signature. */}
                             {qrDataUrl ? (
                                 <View style={{ alignItems: 'center', marginTop: 6 }}>
                                     <Image src={qrDataUrl} style={{ width: 100, height: 100 }} />
                                     <Text style={{ fontSize: 7, color: '#555', marginTop: 2 }}>
-                                        Scan to verify on RRA portal
+                                        Scan to verify
                                     </Text>
                                 </View>
-                            ) : f.qrPayload ? (
-                                <Text style={[styles.fiscalMuted, { fontSize: 6 }]}>
-                                    QR: {f.qrPayload.length > 120 ? `${f.qrPayload.slice(0, 120)}…` : f.qrPayload}
-                                </Text>
-                            ) : null}
-
-                            {f.pending && !f.success ? (
-                                <Text style={styles.fiscalMuted}>Fiscal submission pending or retrying.</Text>
-                            ) : null}
-                            {f.failed && !f.success ? (
-                                <Text style={styles.fiscalMuted}>
-                                    Last fiscal error: {f.failed.errorMessage ?? 'Unknown'}
-                                </Text>
+                            ) : f.success ? (
+                                <Text style={styles.fiscalMuted}>QR code unavailable.</Text>
                             ) : null}
                         </View>
                     );
