@@ -8,6 +8,7 @@ import { auditLogger } from '../utils/auditLogger';
 import { success, error as apiError } from '../utils/apiResponse';
 import { addStock } from '../services/inventory-ledger.service';
 import { normalizeExtractedData, clampMoney, clampTaxRate } from '../services/ocr.service';
+import { analyzeInvoice } from '../services/invoice-analysis.service';
 import { config } from '../config';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'invoices');
@@ -92,6 +93,7 @@ export const uploadAndScanInvoice = async (req: BranchAuthRequest, res: Response
       sellingPrice: p.sellingPrice || null,
       totalPrice: p.totalPrice ?? p.quantity * p.unitPrice,
       taxRate: p.taxRate || null,
+      taxAmount: p.taxAmount || null,
       category: p.category || null,
       manufacturer: p.manufacturer || null,
       confidence: p.confidence,
@@ -108,9 +110,13 @@ export const uploadAndScanInvoice = async (req: BranchAuthRequest, res: Response
         status: ocrError ? 'REVIEW' : 'REVIEW',
         supplierName: extractedData.supplierName || null,
         supplierAddress: extractedData.supplierAddress || null,
+        vendorTIN: extractedData.vendorTIN || null,
         invoiceNumber: extractedData.invoiceNumber || null,
         invoiceDate: extractedData.invoiceDate ? new Date(extractedData.invoiceDate) : null,
         currency: extractedData.currency || 'RWF',
+        paymentTerms: extractedData.paymentTerms || null,
+        dueDate: extractedData.dueDate ? new Date(extractedData.dueDate) : null,
+        poNumber: extractedData.poNumber || null,
         subtotal: extractedData.subtotal ?? null,
         taxAmount: extractedData.taxAmount ?? null,
         discount: extractedData.discount ?? null,
@@ -123,6 +129,18 @@ export const uploadAndScanInvoice = async (req: BranchAuthRequest, res: Response
       },
     });
 
+    // Semantic analysis (math verification, duplicate lines, fraud score, PO
+    // match) runs on whatever was just extracted, regardless of source — it
+    // doesn't care whether the client used the AI call or the Tesseract
+    // fallback. Non-fatal: a bug here shouldn't block the upload response.
+    if (items.length > 0) {
+      try {
+        await analyzeInvoice(invoice.id);
+      } catch (analysisErr) {
+        console.error('[Invoice Analysis Error]:', analysisErr);
+      }
+    }
+
     await auditLogger.inventory(req, {
       type: 'OTHER',
       description: `Scanned supplier invoice: ${file.originalname}`,
@@ -131,7 +149,18 @@ export const uploadAndScanInvoice = async (req: BranchAuthRequest, res: Response
       metadata: { provider: extractedData.provider, itemsFound: items.length, ocrError },
     });
 
-    res.json(success(updatedInvoice, ocrError
+    const finalInvoice = items.length > 0
+      ? await prisma.supplierInvoice.findUnique({
+          where: { id: invoice.id },
+          include: {
+            items: true,
+            files: true,
+            ocrResults: { orderBy: { createdAt: 'asc' }, take: 1 },
+          },
+        })
+      : updatedInvoice;
+
+    res.json(success(finalInvoice, ocrError
       ? `File uploaded. OCR unavailable: ${ocrError}. Please enter product details manually.`
       : `Invoice scanned successfully. Found ${items.length} products.`
     ));
@@ -255,7 +284,11 @@ export const updateInvoiceItems = async (req: BranchAuthRequest, res: Response) 
             invoiceDate: invoiceHeader.invoiceDate ? new Date(invoiceHeader.invoiceDate) : invoice.invoiceDate,
             supplierName: invoiceHeader.supplierName ?? invoice.supplierName,
             supplierId: invoiceHeader.supplierId ?? invoice.supplierId,
+            vendorTIN: invoiceHeader.vendorTIN ?? invoice.vendorTIN,
             currency: invoiceHeader.currency ?? invoice.currency,
+            paymentTerms: invoiceHeader.paymentTerms ?? invoice.paymentTerms,
+            dueDate: invoiceHeader.dueDate ? new Date(invoiceHeader.dueDate) : invoice.dueDate,
+            poNumber: invoiceHeader.poNumber ?? invoice.poNumber,
             notes: invoiceHeader.notes ?? invoice.notes,
             subtotal: invoiceHeader.subtotal != null ? clampMoney(Number(invoiceHeader.subtotal)) : invoice.subtotal,
             taxAmount: invoiceHeader.taxAmount != null ? clampMoney(Number(invoiceHeader.taxAmount)) : invoice.taxAmount,
@@ -285,6 +318,7 @@ export const updateInvoiceItems = async (req: BranchAuthRequest, res: Response) 
               sellingPrice: item.sellingPrice ? clampMoney(parseFloat(item.sellingPrice)) : null,
               totalPrice: clampMoney(parseFloat(item.totalPrice) || 0),
               taxRate: item.taxRate ? clampTaxRate(parseFloat(item.taxRate)) : null,
+              taxAmount: item.taxAmount ? clampMoney(parseFloat(item.taxAmount)) : null,
               category: item.category || null,
               manufacturer: item.manufacturer || null,
             },
@@ -304,6 +338,7 @@ export const updateInvoiceItems = async (req: BranchAuthRequest, res: Response) 
               sellingPrice: item.sellingPrice ? clampMoney(parseFloat(item.sellingPrice)) : null,
               totalPrice: clampMoney(parseFloat(item.totalPrice) || 0),
               taxRate: item.taxRate ? clampTaxRate(parseFloat(item.taxRate)) : null,
+              taxAmount: item.taxAmount ? clampMoney(parseFloat(item.taxAmount)) : null,
               category: item.category || null,
               manufacturer: item.manufacturer || null,
             },
@@ -311,6 +346,12 @@ export const updateInvoiceItems = async (req: BranchAuthRequest, res: Response) 
         }
       }
     });
+
+    try {
+      await analyzeInvoice(id);
+    } catch (analysisErr) {
+      console.error('[Invoice Analysis Error]:', analysisErr);
+    }
 
     const updated = await prisma.supplierInvoice.findFirst({
       where: { id, organizationId },

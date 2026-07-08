@@ -8,54 +8,73 @@ datasource db {
 }
 
 model Organization {
-  name              String
-  businessType      BusinessType             @default(PHARMACY)
-  TIN               String?      // 9-digit RRA Tax Identification Number
-  VRN               String?      // VAT Registration Number (for VAT-registered orgs)
-  currency          String?
-  ebmDeviceId       String?      // Legacy: org-level fallback (use Branch.ebmDeviceId per branch)
-  ebmSerialNo       String?      // Legacy: org-level fallback (use Branch.ebmSerialNo per branch)
-  avatar            String?
-  address           String?
-  phone             String?
-  email             String?
-  isActive          Boolean                  @default(true)
-  trainingMode      Boolean                  @default(false)
-  createdAt         DateTime                 @default(now())
-  updatedAt         DateTime                 @updatedAt
-  stripeCustomerId  String?
-  id                Int                      @id @default(autoincrement())
-  activityLogs      ActivityLog[]
-  batches           Batch[]
-  cashBalances      CashBalance[]
-  customers         Customer[]
-  debtPayments      DebtPayment[]
-  ebmOutbox         EbmOutbox[]
-  ebmQueue          EbmQueue[]
-  ebmTransactions   EbmTransaction[]
-  expenses          Expense[]
-  inventoryLedgers  InventoryLedger[]
-  notifications     Notification[]
-  invitations       OrganizationInvitation[]
-  products          Product[]
-  purchaseOrders    PurchaseOrder[]
-  sales             Sale[]
-  stockMovements    StockMovement[]
-  subscriptions     Subscription[]           @relation("OrganizationSubscriptions")
-  supplierPayments  SupplierPayment[]
-  suppliers         Supplier[]
-  userOrganizations UserOrganization[]
-  warehouses        Warehouse[]
-  branches          Branch[]                 // NEW: Branch management
-  taxConfigurations TaxConfiguration[]
-  stockTransfers    StockTransfer[]
-  invoiceCounters             OrganizationInvoiceCounter[]
-  lastSyncCursor              DateTime?                   @map("last_sync_cursor")
-  lastSuccessfulVdsContact    DateTime?                   @map("last_successful_vds_contact")
-  supplierInvoices  SupplierInvoice[]
-  invoiceImportLogs InvoiceImportLog[]
+  name                     String
+  businessType             BusinessType                 @default(PHARMACY)
+  TIN                      String? // 9-digit RRA Tax Identification Number
+  VRN                      String? // VAT Registration Number (for VAT-registered orgs)
+  currency                 String?
+  ebmDeviceId              String? // Legacy: org-level fallback (use Branch.ebmDeviceId per branch)
+  ebmSerialNo              String? // Legacy: org-level fallback (use Branch.ebmSerialNo per branch)
+  avatar                   String?
+  address                  String?
+  phone                    String?
+  email                    String?
+  isActive                 Boolean                      @default(true)
+  trainingMode             Boolean                      @default(false)
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+  stripeCustomerId         String?
+  id                       Int                          @id @default(autoincrement())
+  activityLogs             ActivityLog[]
+  batches                  Batch[]
+  cashBalances             CashBalance[]
+  customers                Customer[]
+  debtPayments             DebtPayment[]
+  ebmOutbox                EbmOutbox[]
+  ebmQueue                 EbmQueue[]
+  ebmTransactions          EbmTransaction[]
+  expenses                 Expense[]
+  inventoryLedgers         InventoryLedger[]
+  notifications            Notification[]
+  invitations              OrganizationInvitation[]
+  products                 Product[]
+  purchaseOrders           PurchaseOrder[]
+  sales                    Sale[]
+  stockMovements           StockMovement[]
+  subscriptions            Subscription[]               @relation("OrganizationSubscriptions")
+  supplierPayments         SupplierPayment[]
+  suppliers                Supplier[]
+  userOrganizations        UserOrganization[]
+  warehouses               Warehouse[]
+  branches                 Branch[] // NEW: Branch management
+  taxConfigurations        TaxConfiguration[]
+  stockTransfers           StockTransfer[]
+  invoiceCounters          OrganizationInvoiceCounter[]
+  lastSyncCursor           DateTime?                    @map("last_sync_cursor")
+  lastSuccessfulVdsContact DateTime?                    @map("last_successful_vds_contact")
+  supplierInvoices         SupplierInvoice[]
+  invoiceImportLogs        InvoiceImportLog[]
+  settings                 OrganizationSetting?
 
   @@map("organizations")
+}
+
+/// Per-organization workspace customization: sidebar visibility, feature flags, and
+/// preferences. Modeled as JSON so new settings ship without a migration (Phase 1 —
+/// "Zero-Downtime Adaptability"); each field defaults to `{}` so older rows never
+/// need backfilling and the app-layer DEFAULT_SETTINGS fallback stays the source of truth.
+model OrganizationSetting {
+  id             Int      @id @default(autoincrement())
+  organizationId Int      @unique
+  sidebarConfig  Json     @default("{}")
+  featureFlags   Json     @default("{}")
+  preferences    Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_settings")
 }
 
 // NEW: Branch Model - Core entity for inventory management
@@ -63,15 +82,15 @@ model Branch {
   id             Int          @id @default(autoincrement())
   organizationId Int
   name           String
-  code           String       // internal code e.g., "KIGALI-01"
+  code           String // internal code e.g., "KIGALI-01"
   // RRA/EBM per-branch device credentials (each branch has its own VSDC device)
-  bhfId          String?      // RRA-assigned branch code, e.g. "00", "01"
-  ebmDeviceId    String?      // VSDC device ID issued per branch by RRA
-  ebmSerialNo    String?      // VSDC device serial number issued per branch by RRA
-  vsdcUrl        String?      // Per-branch VSDC endpoint URL (B3)
+  bhfId          String? // RRA-assigned branch code, e.g. "00", "01"
+  ebmDeviceId    String? // VSDC device ID issued per branch by RRA
+  ebmSerialNo    String? // VSDC device serial number issued per branch by RRA
+  vsdcUrl        String? // Per-branch VSDC endpoint URL (B3)
   location       String?
   address        String?
-  addressLine2   String?      // Second address line (B3)
+  addressLine2   String? // Second address line (B3)
   phone          String?
   status         BranchStatus @default(ACTIVE)
   metadata       Json?
@@ -79,7 +98,7 @@ model Branch {
   updatedAt      DateTime     @updatedAt
 
   // Relations
-  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization      Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userBranches      UserBranch[]
   invitations       OrganizationInvitation[]
   sales             Sale[]
@@ -89,13 +108,13 @@ model Branch {
   activityLogs      ActivityLog[]
   batches           Batch[]
   inventoryLedgers  InventoryLedger[]
-  transfersFrom       StockTransfer[]          @relation("TransferFrom")
-  transfersTo         StockTransfer[]          @relation("TransferTo")
-  purchaseOrders      PurchaseOrder[]
-  invoiceCounters     OrganizationInvoiceCounter[]
-  receiptCounters     BranchReceiptCounter[]
-  supplierInvoices    SupplierInvoice[]
-  invoiceImportLogs   InvoiceImportLog[]
+  transfersFrom     StockTransfer[]              @relation("TransferFrom")
+  transfersTo       StockTransfer[]              @relation("TransferTo")
+  purchaseOrders    PurchaseOrder[]
+  invoiceCounters   OrganizationInvoiceCounter[]
+  receiptCounters   BranchReceiptCounter[]
+  supplierInvoices  SupplierInvoice[]
+  invoiceImportLogs InvoiceImportLog[]
 
   @@unique([organizationId, bhfId])
   @@unique([organizationId, code])
@@ -112,10 +131,10 @@ model UserBranch {
   branchId  Int
   isPrimary Boolean  @default(false)
   createdAt DateTime @default(now())
-  
+
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  
+
   @@unique([userId, branchId])
   @@index([userId])
   @@index([branchId])
@@ -123,20 +142,20 @@ model UserBranch {
 }
 
 model Supplier {
-  name           String
-  email          String
-  phone          String?
-  address        String?
-  contactPerson  String?
-  isActive       Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  id             Int             @id @default(autoincrement())
-  organizationId Int
+  name             String
+  email            String
+  phone            String?
+  address          String?
+  contactPerson    String?
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  id               Int               @id @default(autoincrement())
+  organizationId   Int
   products         Product[]
   purchaseOrders   PurchaseOrder[]
   supplierInvoices SupplierInvoice[]
-  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@map("suppliers")
@@ -155,7 +174,7 @@ model PurchaseOrder {
   id               Int                 @id @default(autoincrement())
   supplierId       Int
   organizationId   Int
-  branchId         Int                 // NEW Branch-scoped PO
+  branchId         Int // NEW Branch-scoped PO
   userId           Int
   isActive         Boolean             @default(true)
   items            PurchaseOrderItem[]
@@ -165,6 +184,7 @@ model PurchaseOrder {
   user             User                @relation(fields: [userId], references: [id])
   supplierPayments SupplierPayment[]
   User             User[]              @relation("CreatedOrders")
+  matchedInvoices  SupplierInvoice[]   @relation("MatchedPurchaseOrder")
 
   @@index([organizationId])
   @@index([branchId])
@@ -226,14 +246,14 @@ model User {
   recordedSupplierPayments SupplierPayment[]        @relation("RecordedSupplierPayments")
   userOrganizations        UserOrganization[]
   createdOrders            PurchaseOrder[]          @relation("CreatedOrders")
-  userBranches             UserBranch[]             // NEW: Branch assignments
+  userBranches             UserBranch[] // NEW: Branch assignments
   createdInvoices          SupplierInvoice[]
   invoiceImportLogs        InvoiceImportLog[]
 
-  @@map("users")
   @@index([deletedAt])
   @@index([passwordResetToken])
   @@index([refreshToken])
+  @@map("users")
 }
 
 model UserOrganization {
@@ -263,7 +283,7 @@ model OrganizationInvitation {
   updatedAt       DateTime         @updatedAt
   id              Int              @id @default(autoincrement())
   organizationId  Int
-  branchId        Int?             // Optional branch-scoped invitation
+  branchId        Int? // Optional branch-scoped invitation
   invitedBy       Int
   invitedUserId   Int?
   inviter         User             @relation("InvitedBy", fields: [invitedBy], references: [id])
@@ -366,46 +386,45 @@ model Payment {
 }
 
 model Product {
-  name               String
-  sku                String?
-  batchNumber        String?
-  quantity           Int                  @default(0)
-  unitPrice          Decimal              @db.Decimal(10, 2)
-  expiryDate         DateTime?
-  category           String?
-  description        String?
-  minStock           Int                  @default(10)
-  taxCategory        TaxCategory          @default(STANDARD)
-  taxCode            RraTaxCode?
-  measurementUnit    MeasurementUnit      @default(PCS)
-  itemType           ItemType             @default(PRODUCT)
-  ebmSyncStatus      EbmSyncStatus        @default(PENDING)
-  ebmSyncedAt        DateTime?
-  barcode            String?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  deletedAt          DateTime?
-  imageUrl           String?
-  id                 Int                  @id @default(autoincrement())
-  organizationId     Int
-  supplierId         Int?
-  isActive           Boolean              @default(true)
+  name                 String
+  sku                  String?
+  batchNumber          String?
+  quantity             Int                   @default(0)
+  unitPrice            Decimal               @db.Decimal(10, 2)
+  expiryDate           DateTime?
+  category             String?
+  description          String?
+  minStock             Int                   @default(10)
+  taxCategory          TaxCategory           @default(STANDARD)
+  taxCode              RraTaxCode?
+  measurementUnit      MeasurementUnit       @default(PCS)
+  itemType             ItemType              @default(PRODUCT)
+  ebmSyncStatus        EbmSyncStatus         @default(PENDING)
+  ebmSyncedAt          DateTime?
+  barcode              String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  deletedAt            DateTime?
+  imageUrl             String?
+  id                   Int                   @id @default(autoincrement())
+  organizationId       Int
+  supplierId           Int?
+  isActive             Boolean               @default(true)
   // RRA item classification fields (B2)
-  itemClsCd          String?              // RRA item classification code (e.g. "5020230302")
-  itemCd             String?              // Unique item code registered with RRA
-  pkgUnitCd          String?              // Packaging unit code (e.g. "CT", "BT")
-  qtyUnitCd          String?              // Quantity unit code (e.g. "U", "KG")
+  itemClsCd            String? // RRA item classification code (e.g. "5020230302")
+  itemCd               String? // Unique item code registered with RRA
+  pkgUnitCd            String? // Packaging unit code (e.g. "CT", "BT")
+  qtyUnitCd            String? // Quantity unit code (e.g. "U", "KG")
   batches              Batch[]
   inventoryLedgers     InventoryLedger[]
-  organization         Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  supplier             Supplier?            @relation(fields: [supplierId], references: [id])
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier             Supplier?             @relation(fields: [supplierId], references: [id])
   purchaseOrderItems   PurchaseOrderItem[]
   saleItems            SaleItem[]
   stockTransferItems   StockTransferItem[]
   stockMovements       StockMovement[]
   supplierInvoiceItems SupplierInvoiceItem[]
 
-  @@map("products")
   @@index([name])
   @@index([sku])
   @@index([barcode])
@@ -414,6 +433,7 @@ model Product {
   @@index([organizationId, isActive])
   @@index([organizationId, itemType])
   @@index([deletedAt])
+  @@map("products")
 }
 
 model Customer {
@@ -424,7 +444,7 @@ model Customer {
   customerType   CustomerType  @default(INDIVIDUAL)
   balance        Decimal       @default(0) @db.Decimal(10, 2)
   isActive       Boolean       @default(true)
-  TIN            String?       // RRA Tax ID
+  TIN            String? // RRA Tax ID
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?
@@ -434,11 +454,11 @@ model Customer {
   debtPayments   DebtPayment[]
   sales          Sale[]
 
-  @@map("customers")
   @@index([organizationId])
   @@index([phone])
   @@index([organizationId, customerType])
   @@index([deletedAt])
+  @@map("customers")
 }
 
 model DebtPayment {
@@ -482,16 +502,16 @@ model Sale {
   customerId         Int
   userId             Int
   organizationId     Int
-  branchId           Int              // NEW: Branch association
+  branchId           Int // NEW: Branch association
   refundedById       Int?             @map("refunded_by")
   cancelledById      Int?             @map("cancelled_by")
   originalSaleId     Int?             @map("original_sale_id")
   isProforma         Boolean          @default(false)
   reprintCount       Int              @default(0)
   invoiceNumber      String?          @unique @map("invoice_number")
-  vatAmount          Decimal          @default(0)   @db.Decimal(10, 2)
-  taxableAmount      Decimal          @default(0)   @db.Decimal(10, 2)
-  rcptLabel          RcptLabel?       // RRA receipt type label (B4): NS/NR/CS/CR/TS/TR/PS
+  vatAmount          Decimal          @default(0) @db.Decimal(10, 2)
+  taxableAmount      Decimal          @default(0) @db.Decimal(10, 2)
+  rcptLabel          RcptLabel? // RRA receipt type label (B4): NS/NR/CS/CR/TS/TR/PS
   vsdcInvcNo         Int?             @map("vsdc_invc_no") // Raw numeric invoice number sent to VSDC as invcNo (reused as orgInvcNo on refund)
   debtPayments       DebtPayment[]
   ebmQueueItems      EbmQueue[]       @relation("SaleEbmQueue")
@@ -507,9 +527,9 @@ model Sale {
 
   @@index([organizationId, status, createdAt])
   @@index([invoiceNumber])
-  @@index([branchId])              // NEW
-  @@index([branchId, createdAt])   // NEW
-  @@index([branchId, status])      // NEW
+  @@index([branchId]) // NEW
+  @@index([branchId, createdAt]) // NEW
+  @@index([branchId, status]) // NEW
   @@map("sales")
 }
 
@@ -526,7 +546,7 @@ model ActivityLog {
   id             Int           @id @default(autoincrement())
   organizationId Int?
   userId         Int?
-  branchId       Int?          // NEW: Branch association (optional)
+  branchId       Int? // NEW: Branch association (optional)
   module         LogModule     @default(SYSTEM)
   status         LogStatus     @default(SUCCESS)
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
@@ -536,34 +556,34 @@ model ActivityLog {
   @@index([organizationId, module, createdAt])
   @@index([userId, createdAt])
   @@index([entityType, entityId])
-  @@index([branchId])              // NEW
+  @@index([branchId]) // NEW
   @@map("activity_logs")
 }
 
 model SaleItem {
-  id                 Int               @id @default(autoincrement())
+  id                 Int             @id @default(autoincrement())
   saleId             Int
   productId          Int?
   batchId            Int?
   quantity           Int
-  unitPrice          Decimal           @db.Decimal(10, 2)
-  totalPrice         Decimal           @db.Decimal(10, 2)
-  costPrice          Decimal           @default(0) @db.Decimal(10, 2)
-  profit             Decimal           @default(0) @db.Decimal(10, 2)
-  taxRate            Decimal           @default(0) @db.Decimal(5, 2)
-  taxAmount          Decimal           @default(0) @db.Decimal(10, 2)
+  unitPrice          Decimal         @db.Decimal(10, 2)
+  totalPrice         Decimal         @db.Decimal(10, 2)
+  costPrice          Decimal         @default(0) @db.Decimal(10, 2)
+  profit             Decimal         @default(0) @db.Decimal(10, 2)
+  taxRate            Decimal         @default(0) @db.Decimal(5, 2)
+  taxAmount          Decimal         @default(0) @db.Decimal(10, 2)
   taxCode            RraTaxCode?
-  measurementUnit    MeasurementUnit   @default(PCS)
+  measurementUnit    MeasurementUnit @default(PCS)
   exemptionReference String?
-  dcRate             Decimal           @default(0) @db.Decimal(5, 2)  // Discount rate % (B5)
-  dcAmt              Decimal           @default(0) @db.Decimal(10, 2) // Discount amount (B5)
-  itemType           ItemType          @default(PRODUCT)
+  dcRate             Decimal         @default(0) @db.Decimal(5, 2) // Discount rate % (B5)
+  dcAmt              Decimal         @default(0) @db.Decimal(10, 2) // Discount amount (B5)
+  itemType           ItemType        @default(PRODUCT)
   serviceName        String?
   serviceDescription String?
 
-  batch   Batch?    @relation(fields: [batchId], references: [id])
-  product Product?  @relation(fields: [productId], references: [id])
-  sale    Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  batch   Batch?   @relation(fields: [batchId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+  sale    Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
   @@index([saleId])
   @@index([productId])
@@ -603,7 +623,7 @@ model StockMovement {
   organizationId Int
   productId      Int
   userId         Int
-  branchId       Int               // NEW: Branch association
+  branchId       Int // NEW: Branch association
   organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product        Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
   user           User              @relation(fields: [userId], references: [id])
@@ -612,9 +632,9 @@ model StockMovement {
   @@index([organizationId])
   @@index([productId])
   @@index([createdAt])
-  @@index([branchId])              // NEW
-  @@index([branchId, productId])   // NEW
-  @@index([branchId, createdAt])   // NEW
+  @@index([branchId]) // NEW
+  @@index([branchId, productId]) // NEW
+  @@index([branchId, createdAt]) // NEW
   @@map("stock_movements")
 }
 
@@ -642,8 +662,8 @@ model Batch {
   id               Int                @id @default(autoincrement())
   productId        Int
   organizationId   Int
-  branchId         Int                // NEW: Branch-based inventory
-  warehouseId      Int?               // DEPRECATED: kept for migration
+  branchId         Int // NEW: Branch-based inventory
+  warehouseId      Int? // DEPRECATED: kept for migration
   batchNumber      String
   quantity         Int
   unitCost         Decimal            @db.Decimal(10, 2)
@@ -660,14 +680,14 @@ model Batch {
   inventoryLedgers InventoryLedger[]
   saleItems        SaleItem[]
 
-  @@unique([productId, batchNumber, branchId])  // CHANGED from warehouseId
+  @@unique([productId, batchNumber, branchId]) // CHANGED from warehouseId
   @@index([productId, isActive])
   @@index([organizationId])
   @@index([expiryDate])
   @@index([receivedAt])
-  @@index([branchId])              // NEW
-  @@index([branchId, productId])   // NEW
-  @@index([productId, branchId])   // Optimizes product+branch stock lookups
+  @@index([branchId]) // NEW
+  @@index([branchId, productId]) // NEW
+  @@index([productId, branchId]) // Optimizes product+branch stock lookups
   @@map("batches")
 }
 
@@ -692,8 +712,8 @@ model InventoryLedger {
   id             Int                   @id @default(autoincrement())
   organizationId Int
   productId      Int
-  branchId       Int                   // NEW: Branch-based inventory
-  warehouseId    Int?                  // DEPRECATED: kept for migration
+  branchId       Int // NEW: Branch-based inventory
+  warehouseId    Int? // DEPRECATED: kept for migration
   userId         Int
   movementType   InventoryMovementType
   direction      InventoryDirection
@@ -717,42 +737,44 @@ model InventoryLedger {
   warehouse      Warehouse?            @relation(fields: [warehouseId], references: [id]) // DEPRECATED
 
   @@index([organizationId, productId, createdAt])
-  @@index([organizationId, productId, branchId, createdAt])  // CHANGED
+  @@index([organizationId, productId, branchId, createdAt]) // CHANGED
   @@index([organizationId, movementType, createdAt])
   @@index([productId, createdAt])
   @@index([reference, referenceType])
   @@index([createdAt])
-  @@index([branchId])              // NEW
-  @@index([branchId, productId])   // NEW
+  @@index([branchId]) // NEW
+  @@index([branchId, productId]) // NEW
   @@map("inventory_ledger")
 }
 
 model TaxConfiguration {
-  id             Int           @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   organizationId Int
-  vatRate        Decimal       @db.Decimal(5, 2)  // e.g. 18.00
+  vatRate        Decimal      @db.Decimal(5, 2) // e.g. 18.00
   effectiveDate  DateTime
-  createdAt      DateTime      @default(now())
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   @@index([organizationId, effectiveDate])
   @@map("tax_configurations")
 }
 
 model StockTransfer {
-  id             Int                  @id @default(autoincrement())
+  id             Int                 @id @default(autoincrement())
   organizationId Int
   fromBranchId   Int
   toBranchId     Int
-  status         StockTransferStatus  @default(PENDING)
+  status         StockTransferStatus @default(PENDING)
   notes          String?
   requestedById  Int
   approvedById   Int?
-  createdAt      DateTime             @default(now())
+  createdAt      DateTime            @default(now())
   completedAt    DateTime?
   items          StockTransferItem[]
-  organization   Organization         @relation(fields: [organizationId], references: [id])
-  fromBranch     Branch               @relation("TransferFrom", fields: [fromBranchId], references: [id])
-  toBranch       Branch               @relation("TransferTo", fields: [toBranchId], references: [id])
+  organization   Organization        @relation(fields: [organizationId], references: [id])
+  fromBranch     Branch              @relation("TransferFrom", fields: [fromBranchId], references: [id])
+  toBranch       Branch              @relation("TransferTo", fields: [toBranchId], references: [id])
+
   @@index([organizationId])
   @@index([fromBranchId])
   @@index([toBranchId])
@@ -760,12 +782,13 @@ model StockTransfer {
 }
 
 model StockTransferItem {
-  id               Int           @id @default(autoincrement())
-  transferId       Int
-  productId        Int
-  quantity         Int
-  transfer         StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  product          Product       @relation(fields: [productId], references: [id])
+  id         Int           @id @default(autoincrement())
+  transferId Int
+  productId  Int
+  quantity   Int
+  transfer   StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product    Product       @relation(fields: [productId], references: [id])
+
   @@index([transferId])
   @@index([productId])
   @@map("stock_transfer_items")
@@ -773,11 +796,11 @@ model StockTransferItem {
 
 /// Per-branch, per-receipt-type atomic counter (RRA spec §3.2 — each label has its own sequence).
 model BranchReceiptCounter {
-  branchId   Int
-  rcptLabel  RcptLabel
-  nextSeq    Int       @default(0)
-  updatedAt  DateTime  @updatedAt
-  branch     Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  branchId  Int
+  rcptLabel RcptLabel
+  nextSeq   Int       @default(0)
+  updatedAt DateTime  @updatedAt
+  branch    Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@id([branchId, rcptLabel])
   @@map("branch_receipt_counters")
@@ -834,20 +857,20 @@ model EbmTransaction {
 }
 
 model EbmQueue {
-  id             Int          @id @default(autoincrement())
-  organizationId Int
-  saleId         Int?
-  invoiceNumber  String?
-  payload        Json
-  priority       Int          @default(0)
-  retryCount     Int          @default(0)
-  nextRetryAt    DateTime?
-  lastError      String?
+  id               Int                 @id @default(autoincrement())
+  organizationId   Int
+  saleId           Int?
+  invoiceNumber    String?
+  payload          Json
+  priority         Int                 @default(0)
+  retryCount       Int                 @default(0)
+  nextRetryAt      DateTime?
+  lastError        String?
   submissionStatus EbmSubmissionStatus @default(PENDING)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  sale           Sale?        @relation("SaleEbmQueue", fields: [saleId], references: [id])
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sale             Sale?               @relation("SaleEbmQueue", fields: [saleId], references: [id])
 
   @@index([organizationId])
   @@index([submissionStatus])
@@ -857,22 +880,22 @@ model EbmQueue {
 }
 
 model EbmOutbox {
-  id               Int               @id @default(autoincrement())
-  organizationId   Int
-  saleId           Int
-  operation        EbmOperation
-  idempotencyKey   String            @unique
-  payload          Json
-  status           EbmOutboxStatus   @default(PENDING)
-  retryCount       Int               @default(0)
-  lastError        String?
-  nextAttemptAt    DateTime          @default(now())
-  sdcDateTime      DateTime?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id             Int             @id @default(autoincrement())
+  organizationId Int
+  saleId         Int
+  operation      EbmOperation
+  idempotencyKey String          @unique
+  payload        Json
+  status         EbmOutboxStatus @default(PENDING)
+  retryCount     Int             @default(0)
+  lastError      String?
+  nextAttemptAt  DateTime        @default(now())
+  sdcDateTime    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  sale             Sale              @relation(fields: [saleId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sale         Sale         @relation(fields: [saleId], references: [id])
 
   @@index([organizationId, status])
   @@index([status, nextAttemptAt])
@@ -884,7 +907,7 @@ model Expense {
   id             Int             @id @default(autoincrement())
   organizationId Int
   userId         Int
-  branchId       Int             // NEW: Branch association
+  branchId       Int // NEW: Branch association
   category       ExpenseCategory
   amount         Decimal         @db.Decimal(10, 2)
   paymentMethod  String
@@ -901,7 +924,7 @@ model Expense {
   @@index([organizationId, expenseDate])
   @@index([category])
   @@index([paymentMethod])
-  @@index([branchId])              // NEW
+  @@index([branchId]) // NEW
   @@index([branchId, expenseDate]) // NEW
   @@map("expenses")
 }
@@ -931,7 +954,7 @@ model SupplierPayment {
 model CashBalance {
   id             Int          @id @default(autoincrement())
   organizationId Int
-  branchId       Int          // NEW: Branch association
+  branchId       Int // NEW: Branch association
   balance        Decimal      @db.Decimal(10, 2)
   balanceDate    DateTime
   notes          String?
@@ -943,7 +966,7 @@ model CashBalance {
   recordedBy     User         @relation("RecordedCashBalances", fields: [recordedById], references: [id])
 
   @@index([organizationId, balanceDate])
-  @@index([branchId])              // NEW
+  @@index([branchId]) // NEW
   @@index([branchId, balanceDate]) // NEW
   @@map("cash_balances")
 }
@@ -990,7 +1013,7 @@ enum PurchaseOrderStatus {
 enum UserRole {
   SYSTEM_OWNER
   ADMIN
-  BRANCH_MANAGER  // NEW: For branch-level management
+  BRANCH_MANAGER // NEW: For branch-level management
   ACCOUNTANT
   SELLER
 }
@@ -1249,13 +1272,13 @@ enum EbmOutboxStatus {
 
 // RRA receipt type labels (CIS/VSDC spec §3.2)
 enum RcptLabel {
-  NS  // Normal Sale
-  NR  // Normal Refund
-  CS  // Copy Sale
-  CR  // Copy Refund
-  TS  // Training Sale
-  TR  // Training Refund
-  PS  // Proforma Sale
+  NS // Normal Sale
+  NR // Normal Refund
+  CS // Copy Sale
+  CR // Copy Refund
+  TS // Training Sale
+  TR // Training Refund
+  PS // Proforma Sale
 }
 
 enum ItemType {
@@ -1302,71 +1325,98 @@ enum ImportItemStatus {
 }
 
 model SupplierInvoice {
-  id               Int                    @id @default(autoincrement())
-  organizationId   Int
-  branchId         Int
-  supplierId       Int?
-  createdById      Int
-  invoiceNumber    String?
-  invoiceDate      DateTime?
-  supplierName     String?
-  supplierAddress  String?
-  currency         String                 @default("RWF")
-  subtotal         Decimal?               @db.Decimal(10, 2)
-  taxAmount        Decimal?               @db.Decimal(10, 2)
-  discount         Decimal?               @db.Decimal(10, 2)
-  totalAmount      Decimal?               @db.Decimal(10, 2)
-  status           SupplierInvoiceStatus  @default(DRAFT)
-  notes            String?
-  importedAt       DateTime?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
+  id              Int                   @id @default(autoincrement())
+  organizationId  Int
+  branchId        Int
+  supplierId      Int?
+  createdById     Int
+  invoiceNumber   String?
+  invoiceDate     DateTime?
+  supplierName    String?
+  supplierAddress String?
+  currency        String                @default("RWF")
+  subtotal        Decimal?              @db.Decimal(10, 2)
+  taxAmount       Decimal?              @db.Decimal(10, 2)
+  discount        Decimal?              @db.Decimal(10, 2)
+  totalAmount     Decimal?              @db.Decimal(10, 2)
+  status          SupplierInvoiceStatus @default(DRAFT)
+  notes           String?
+  importedAt      DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
-  organization  Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  branch        Branch                 @relation(fields: [branchId], references: [id])
-  supplier      Supplier?              @relation(fields: [supplierId], references: [id])
-  createdBy     User                   @relation(fields: [createdById], references: [id])
-  items         SupplierInvoiceItem[]
-  ocrResults    OcrResult[]
-  files         SupplierInvoiceFile[]
-  importLogs    InvoiceImportLog[]
+  // ── Semantic analysis (B: AI extraction + business-intelligence pass) ──
+  vendorTIN              String? // RRA/tax ID read off the vendor letterhead — compliance matching
+  paymentTerms           String? // e.g. "Net 30", free text as extracted
+  dueDate                DateTime?
+  poNumber               String? // PO reference as printed on the invoice, if any
+  poMatchStatus          PoMatchStatus @default(UNMATCHED)
+  matchedPurchaseOrderId Int?
+  mathVerified           Boolean       @default(false) // line items + tax - discount reconcile to totalAmount within tolerance
+  fraudRiskScore         Int? // 0-100 heuristic score; see invoice-analysis.service.ts
+  analysisFlags          Json? // structured findings: math deltas, duplicate lines, fraud reasons, PO diff
+
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch               Branch                @relation(fields: [branchId], references: [id])
+  supplier             Supplier?             @relation(fields: [supplierId], references: [id])
+  createdBy            User                  @relation(fields: [createdById], references: [id])
+  items                SupplierInvoiceItem[]
+  ocrResults           OcrResult[]
+  files                SupplierInvoiceFile[]
+  importLogs           InvoiceImportLog[]
+  matchedPurchaseOrder PurchaseOrder?        @relation("MatchedPurchaseOrder", fields: [matchedPurchaseOrderId], references: [id])
 
   @@index([organizationId])
   @@index([branchId])
   @@index([supplierId])
   @@index([status])
   @@index([organizationId, status])
+  @@index([matchedPurchaseOrderId])
   @@map("supplier_invoices")
 }
 
 model SupplierInvoiceItem {
-  id            Int              @id @default(autoincrement())
-  invoiceId     Int
-  productId     Int?
-  productName   String
-  description   String?
-  sku           String?
-  barcode       String?
-  batchNumber   String?
-  expiryDate    DateTime?
-  quantity      Int
-  unitPrice     Decimal          @db.Decimal(10, 2)
-  sellingPrice  Decimal?         @db.Decimal(10, 2)
-  totalPrice    Decimal          @db.Decimal(10, 2)
-  taxRate       Decimal?         @db.Decimal(5, 2)
-  category      String?
-  manufacturer  String?
-  confidence    Float?
-  matchStatus   MatchStatus      @default(UNMATCHED)
-  importStatus  ImportItemStatus @default(PENDING)
-  errorMessage  String?
+  id           Int              @id @default(autoincrement())
+  invoiceId    Int
+  productId    Int?
+  productName  String
+  description  String?
+  sku          String?
+  barcode      String?
+  batchNumber  String?
+  expiryDate   DateTime?
+  quantity     Int
+  unitPrice    Decimal          @db.Decimal(10, 2)
+  sellingPrice Decimal?         @db.Decimal(10, 2)
+  totalPrice   Decimal          @db.Decimal(10, 2)
+  taxRate      Decimal?         @db.Decimal(5, 2)
+  category     String?
+  manufacturer String?
+  confidence   Float?
+  matchStatus  MatchStatus      @default(UNMATCHED)
+  importStatus ImportItemStatus @default(PENDING)
+  errorMessage String?
 
-  invoice  SupplierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  product  Product?        @relation(fields: [productId], references: [id])
+  // ── Semantic analysis ──
+  taxAmount       Decimal? @db.Decimal(10, 2) // per-line tax, distinct from the header-level taxRate %
+  isDuplicate     Boolean  @default(false) // flagged by invoice-analysis.service.ts as a repeated line
+  discrepancyNote String? // e.g. "line total != qty * unitPrice"
+
+  invoice SupplierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product Product?        @relation(fields: [productId], references: [id])
 
   @@index([invoiceId])
   @@index([productId])
   @@map("supplier_invoice_items")
+}
+
+// ─── AI Invoice Extraction (semantic analysis targets) ─────────────────────
+
+enum PoMatchStatus {
+  UNMATCHED // no PO number/candidate found
+  MATCHED // PO found and line items reconcile
+  PARTIAL // PO found but quantities/amounts differ
+  MISMATCHED // PO found but supplier/total materially disagree
 }
 
 model SupplierInvoiceFile {
