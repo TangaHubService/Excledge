@@ -23,9 +23,7 @@ export const Header = ({
     };
     return (
         <header
-            className={`sticky top-0 z-50 w-full border-b transition-all duration-300 ${scrolled
-                ? "bg-background/95 backdrop-blur-lg shadow-md"
-                : "bg-background/60 backdrop-blur-sm"
+            className={`sticky top-0 z-50 w-full border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 transition-shadow duration-300 ${scrolled ? "shadow-md" : ""
                 }`}
         >
             <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -135,7 +133,7 @@ export const Header = ({
 
             {/* Mobile Navigation */}
             {isMenuOpen && (
-                <div className="md:hidden bg-background/98 backdrop-blur-lg border-t shadow-lg animate-fade-in">
+                <div className="md:hidden bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 shadow-lg animate-fade-in">
                     <div className="px-4 py-3 space-y-1 max-h-[calc(100vh-4rem)] overflow-y-auto">
                         <a
                             href="#home"

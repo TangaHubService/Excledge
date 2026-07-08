@@ -132,12 +132,13 @@ export async function createSaleWithOutbox(input: SaleOutboxInput) {
 
     // Allocate the RRA invoice sequence inside the transaction so a rollback
     // (bad stock, tax mismatch, etc.) also rolls back the sequence increment.
-    const invoiceNumber = await generateInvoiceNumber(organizationId, branchId, tx);
+    const { invoiceNumber, vsdcInvcNo } = await generateInvoiceNumber(organizationId, branchId, tx);
 
     const newSale = await tx.sale.create({
       data: {
         saleNumber,
         invoiceNumber,
+        vsdcInvcNo,
         customerId,
         userId,
         organizationId,
@@ -348,6 +349,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         },
         customer: true,
         branch: true,
+        user: { select: { id: true, name: true } },
       },
     })) as (SaleWithRelations & { originalSaleId?: number | null }) | null;
 
@@ -373,7 +375,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
 
     const org = await prisma.organization.findUnique({
       where: { id: row.organizationId },
-      select: { TIN: true, ebmDeviceId: true, ebmSerialNo: true, name: true },
+      select: { TIN: true, name: true, address: true },
     });
 
     if (!org) {
@@ -428,20 +430,26 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         continue;
       }
       const originalSale = originalSaleId
-        ? await prisma.sale.findFirst({ where: { id: originalSaleId }, select: { invoiceNumber: true, totalAmount: true } })
+        ? await prisma.sale.findFirst({ where: { id: originalSaleId }, select: { invoiceNumber: true, vsdcInvcNo: true, totalAmount: true } })
         : null;
-      payload = {
-        environment: config.ebm.environment,
-        operation: 'REFUND',
-        idempotencyKey: row.idempotencyKey,
-        seller: { tin: org.TIN ?? null, deviceId: org.ebmDeviceId ?? null, serialNo: org.ebmSerialNo ?? null, name: org.name },
-        originalInvoiceNumber: originalSale?.invoiceNumber ?? null,
-        originalEbmInvoiceNumber: origTx.ebmInvoiceNumber,
-        refundSaleId: sale.id,
-        refundSaleNumber: sale.saleNumber,
-        refundTotalAmount: Math.abs(Number(sale.totalAmount)),
-        reason: (row.payload as { reason?: string })?.reason ?? null,
-      };
+      try {
+        // §4.16 Refund Reason Code: '06' = Refund (generic — the free-text
+        // reason from the outbox row payload goes into `remark` instead).
+        payload = buildRraSendReceiptPayload(sale, org, {
+          orgInvcNo: originalSale?.vsdcInvcNo ?? undefined,
+          rfdDt: new Date(),
+          rfdRsnCd: '06',
+        });
+        payload.remark = (row.payload as { reason?: string })?.reason ?? '';
+        payload.idempotencyKey = row.idempotencyKey;
+      } catch (e: unknown) {
+        await prisma.ebmOutbox.update({
+          where: { id: row.id },
+          data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid refund payload' },
+        });
+        failed += 1;
+        continue;
+      }
     } else {
       // VOID: only fire if original was fiscalized
       const origTx = await prisma.ebmTransaction.findFirst({
@@ -457,17 +465,20 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         succeeded += 1;
         continue;
       }
-      payload = {
-        environment: config.ebm.environment,
-        operation: 'VOID',
-        idempotencyKey: row.idempotencyKey,
-        seller: { tin: org.TIN ?? null, deviceId: org.ebmDeviceId ?? null, serialNo: org.ebmSerialNo ?? null, name: org.name },
-        originalInvoiceNumber: sale.invoiceNumber,
-        originalEbmInvoiceNumber: origTx.ebmInvoiceNumber,
-        saleId: sale.id,
-        saleNumber: sale.saleNumber,
-        reason: (row.payload as { reason?: string })?.reason ?? null,
-      };
+      try {
+        // A cancellation resubmits the SAME invoice number with cnclDt/cnclReqDt
+        // set and salesSttsCd='04' — it's not a new document.
+        payload = buildRraSendReceiptPayload(sale, org, { cnclDt: new Date() });
+        payload.remark = (row.payload as { reason?: string })?.reason ?? '';
+        payload.idempotencyKey = row.idempotencyKey;
+      } catch (e: unknown) {
+        await prisma.ebmOutbox.update({
+          where: { id: row.id },
+          data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid void payload' },
+        });
+        failed += 1;
+        continue;
+      }
     }
 
     // ── Mark in-flight ──
@@ -553,11 +564,14 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
             ebmInvoiceNumber: vsdc.rcptNo,
             submittedAt: new Date(),
             sdcDateTime: sdcDateTime as any,
-            // B1 dedicated columns
+            // B1 dedicated columns — sdcRcptNo/totalRcptNo are the "A"/"B" halves
+            // of the required A/B RT receipt counter (§7.24.4/7.25); VSDC does not
+            // return a QR payload — the CIS builds the QR string itself (qrCode.ts).
             sdcRcptNo: vsdc.rcptNo ? parseInt(vsdc.rcptNo, 10) || null : null,
+            totalRcptNo: vsdc.totRcptNo ? parseInt(vsdc.totRcptNo, 10) || null : null,
+            sdcId: vsdc.sdcId || null,
             internalData: vsdc.intrlData || null,
             receiptSignature: vsdc.vsdcSignature || null,
-            qrPayload: vsdc.qrPayload || null,
             rcptLabel: rcptLabel as any,
             // C8 electronic journal
             journalText: ejText,

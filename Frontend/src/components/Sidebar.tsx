@@ -67,6 +67,11 @@ interface SidebarProps {
   onCollapsedChange?: (collapsed: boolean) => void;
 }
 
+/** A leading (pre-header) item, or a header plus the items that belong to its collapsible section. */
+type NavBlock =
+  | { kind: "item"; item: NavItem }
+  | { kind: "group"; header: NavItem; items: NavItem[] };
+
 /* ─── Navigation configuration ──────────────────────── */
 
 const baseNavigation: NavItem[] = [
@@ -264,6 +269,30 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
     );
   }, []);
 
+  // Section (header) groups collapse/expand independently and remember the
+  // user's preference across reloads. Nothing is collapsed by default so the
+  // sidebar looks the same as before until a group is explicitly toggled.
+  const [collapsedGroups, setCollapsedGroups] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("sidebar-collapsed-groups");
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleGroup = useCallback((id: string) => {
+    setCollapsedGroups(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      try {
+        localStorage.setItem("sidebar-collapsed-groups", JSON.stringify(next));
+      } catch {
+        // ignore storage errors (e.g. private browsing)
+      }
+      return next;
+    });
+  }, []);
+
   const isActiveRoute = useCallback(
     (path: string): boolean => {
       if (path === "") return false;
@@ -287,6 +316,112 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
       ),
     [user?.role, organization?.hasActiveSubscription, isSystemOwner, organization],
   );
+
+  // Fold the flat item list into blocks: items before the first header render
+  // as-is, everything after a header belongs to that header's collapsible group.
+  const navBlocks = useMemo<NavBlock[]>(() => {
+    const blocks: NavBlock[] = [];
+    let currentGroup: Extract<NavBlock, { kind: "group" }> | null = null;
+    for (const item of navItems) {
+      if (item.type === "header") {
+        currentGroup = { kind: "group", header: item, items: [] };
+        blocks.push(currentGroup);
+      } else if (currentGroup) {
+        currentGroup.items.push(item);
+      } else {
+        blocks.push({ kind: "item", item });
+      }
+    }
+    return blocks;
+  }, [navItems]);
+
+  // If navigation lands on a route inside a collapsed group (deep link, browser
+  // back/forward, refresh), auto-expand that group so the active item is visible.
+  useEffect(() => {
+    const activeGroup = navBlocks.find(
+      (b): b is Extract<NavBlock, { kind: "group" }> =>
+        b.kind === "group" && b.items.some(i => isActiveRoute(i.href)),
+    );
+    if (activeGroup && collapsedGroups.includes(activeGroup.header.id)) {
+      setCollapsedGroups(prev => prev.filter(id => id !== activeGroup.header.id));
+    }
+    // Only re-run when the route or the available groups change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, navBlocks]);
+
+  const renderNavItem = (item: NavItem) => {
+    const isActive = isActiveRoute(item.href);
+    const hasSubmenu = !!item.submenu?.length;
+    const isExpanded = expandedMenus.includes(item.id);
+
+    return (
+      <>
+        {hasSubmenu ? (
+          <button
+            type="button"
+            onClick={() => toggleSubmenu(item.id)}
+            className={cn(
+              "dashboard-nav-item w-full",
+              isCollapsed ? "justify-center px-2" : "justify-between px-3",
+              isActive
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-200 hover:bg-white/10 hover:text-white",
+            )}
+            title={isCollapsed ? t(item.name) : undefined}
+          >
+            <span className={cn("flex min-w-0 items-center gap-3", !isCollapsed && "flex-1")}>
+              {item.icon && <item.icon className="h-5 w-5 shrink-0" />}
+              {!isCollapsed && <span className="truncate text-left">{t(item.name)}</span>}
+            </span>
+            {!isCollapsed &&
+              (isExpanded ? (
+                <ChevronDown className="h-4 w-4 shrink-0 opacity-80" />
+              ) : (
+                <ChevronRight className="h-4 w-4 shrink-0 opacity-80" />
+              ))}
+          </button>
+        ) : (
+          <Link
+            to={item.href || "#"}
+            onClick={onClose}
+            className={cn(
+              "dashboard-nav-item",
+              isCollapsed ? "justify-center px-2" : "px-3",
+              isActive
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-200 hover:bg-white/10 hover:text-white",
+            )}
+            title={isCollapsed ? t(item.name) : undefined}
+          >
+            {item.icon && <item.icon className="h-5 w-5 shrink-0" />}
+            {!isCollapsed && t(item.name)}
+          </Link>
+        )}
+
+        {/* Submenu */}
+        {hasSubmenu && isExpanded && !isCollapsed && item.submenu && (
+          <div className="ml-3 mt-0.5 space-y-0.5 border-l border-white/20 pl-2">
+            {item.submenu.map(sub => (
+              <Link
+                key={sub.id}
+                to={sub.href}
+                onClick={onClose}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                  isActiveRoute(sub.href)
+                    ? "bg-white/15 font-medium text-white"
+                    : "text-slate-300 hover:bg-white/10 hover:text-white",
+                )}
+              >
+                <sub.icon className="h-4 w-4 shrink-0" />
+                <span>{t(sub.name)}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </>
+    );
+  };
 
   /* ── Render ────────────────────────────────────────── */
 
@@ -410,86 +545,41 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
         {/* ── Scrollable nav area ─────────────────────── */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3" id="sidebar-nav">
           <div className={cn("space-y-0.5", isCollapsed ? "px-2" : "px-3")}>
-            {navItems.map(item => {
-              if (item.type === "header") {
-                return (
-                  <div
-                    key={`hdr-${item.id}`}
-                    className={cn(isCollapsed ? "px-2" : "px-3", "pb-1.5 pt-4 first:pt-0")}
-                  >
-                    {!isCollapsed && (
-                      <span className="dashboard-nav-section-label block">{t(item.name)}</span>
-                    )}
-                  </div>
-                );
+            {navBlocks.map(block => {
+              if (block.kind === "item") {
+                return <div key={block.item.id}>{renderNavItem(block.item)}</div>;
               }
 
-              const isActive = isActiveRoute(item.href);
-              const hasSubmenu = !!item.submenu?.length;
-              const isExpanded = expandedMenus.includes(item.id);
+              // Collapsing a section is a sidebar-expanded-only affordance — in
+              // icon-only mode there are no labels to click, so always show items.
+              const isGroupCollapsed = !isCollapsed && collapsedGroups.includes(block.header.id);
 
               return (
-                <div key={item.id}>
-                  {hasSubmenu ? (
-                    <button
-                      type="button"
-                      onClick={() => toggleSubmenu(item.id)}
-                      className={cn(
-                        "dashboard-nav-item w-full",
-                        isCollapsed ? "justify-center px-2" : "justify-between px-3",
-                        isActive
-                          ? "bg-white text-slate-900 shadow-sm"
-                          : "text-slate-200 hover:bg-white/10 hover:text-white",
-                      )}
-                      title={isCollapsed ? t(item.name) : undefined}
-                    >
-                      <span className={cn("flex min-w-0 items-center gap-3", !isCollapsed && "flex-1")}>
-                        {item.icon && <item.icon className="h-5 w-5 shrink-0" />}
-                        {!isCollapsed && <span className="truncate text-left">{t(item.name)}</span>}
-                      </span>
-                      {!isCollapsed &&
-                        (isExpanded ? (
-                          <ChevronDown className="h-4 w-4 shrink-0 opacity-80" />
+                <div key={`grp-${block.header.id}`}>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(block.header.id)}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-lg pb-1.5 pt-4 first:pt-0",
+                      isCollapsed ? "px-2" : "px-3",
+                    )}
+                    aria-expanded={!isGroupCollapsed}
+                  >
+                    {!isCollapsed && (
+                      <>
+                        <span className="dashboard-nav-section-label">{t(block.header.name)}</span>
+                        {isGroupCollapsed ? (
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                         ) : (
-                          <ChevronRight className="h-4 w-4 shrink-0 opacity-80" />
-                        ))}
-                    </button>
-                  ) : (
-                    <Link
-                      to={item.href || "#"}
-                      onClick={onClose}
-                      className={cn(
-                        "dashboard-nav-item",
-                        isCollapsed ? "justify-center px-2" : "px-3",
-                        isActive
-                          ? "bg-white text-slate-900 shadow-sm"
-                          : "text-slate-200 hover:bg-white/10 hover:text-white",
-                      )}
-                      title={isCollapsed ? t(item.name) : undefined}
-                    >
-                      {item.icon && <item.icon className="h-5 w-5 shrink-0" />}
-                      {!isCollapsed && t(item.name)}
-                    </Link>
-                  )}
-
-                  {/* Submenu */}
-                  {hasSubmenu && isExpanded && !isCollapsed && item.submenu && (
-                    <div className="ml-3 mt-0.5 space-y-0.5 border-l border-white/20 pl-2">
-                      {item.submenu.map(sub => (
-                        <Link
-                          key={sub.id}
-                          to={sub.href}
-                          onClick={onClose}
-                          className={cn(
-                            "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
-                            isActiveRoute(sub.href)
-                              ? "bg-white/15 font-medium text-white"
-                              : "text-slate-300 hover:bg-white/10 hover:text-white",
-                          )}
-                        >
-                          <sub.icon className="h-4 w-4 shrink-0" />
-                          <span>{t(sub.name)}</span>
-                        </Link>
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        )}
+                      </>
+                    )}
+                  </button>
+                  {!isGroupCollapsed && (
+                    <div className="space-y-0.5">
+                      {block.items.map(item => (
+                        <div key={item.id}>{renderNavItem(item)}</div>
                       ))}
                     </div>
                   )}

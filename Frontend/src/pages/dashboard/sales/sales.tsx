@@ -15,6 +15,8 @@ import { toast } from 'react-toastify';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
 import SalesInvoicePDF, { type SaleEbmTransaction } from '../../../components/invoice/SalesInvoicePDF';
+import { fiscalBlockFromSale } from '../../../utils/invoiceFiscal';
+import { buildInvoiceQrDataUrl } from '../../../utils/qrCode';
 import { useOrganization } from '../../../context/OrganizationContext';
 import { useTheme } from '../../../context/ThemeContext';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
@@ -238,6 +240,7 @@ export default function SalesPage() {
     const handleDownloadInvoice = async (sale: Sale) => {
         setIsDownloadingInvoice(sale.id);
         try {
+            const qrDataUrl = await buildInvoiceQrDataUrl(fiscalBlockFromSale(sale));
             // Generate PDF blob
             const blob = await pdf(<SalesInvoicePDF
                 sale={sale}
@@ -248,6 +251,7 @@ export default function SalesPage() {
                 organizationPhone={(organization as any)?.phone}
                 organizationEmail={(organization as any)?.email}
                 organizationVrn={(organization as any)?.VRN}
+                qrDataUrl={qrDataUrl}
             />).toBlob();
 
             // Download the file
@@ -920,6 +924,7 @@ export default function SalesPage() {
                                         onClick={async () => {
                                             setIsDownloadingInvoice(selectedSale.id);
                                             try {
+                                                const qrDataUrl = await buildInvoiceQrDataUrl(fiscalBlockFromSale(selectedSale));
                                                 const blob = await pdf(<SalesInvoicePDF
                                                     sale={selectedSale}
                                                     organizationName={organization?.name}
@@ -929,6 +934,7 @@ export default function SalesPage() {
                                                     organizationPhone={(organization as any)?.phone}
                                                     organizationEmail={(organization as any)?.email}
                                                     organizationVrn={(organization as any)?.VRN}
+                                                    qrDataUrl={qrDataUrl}
                                                 />).toBlob();
                                                 saveAs(blob, `invoice-${selectedSale.saleNumber}.pdf`);
                                                 toast.success(t('sales.invoiceDownloadSuccess'));

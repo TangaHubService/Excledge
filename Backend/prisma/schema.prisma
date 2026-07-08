@@ -492,6 +492,7 @@ model Sale {
   vatAmount          Decimal          @default(0)   @db.Decimal(10, 2)
   taxableAmount      Decimal          @default(0)   @db.Decimal(10, 2)
   rcptLabel          RcptLabel?       // RRA receipt type label (B4): NS/NR/CS/CR/TS/TR/PS
+  vsdcInvcNo         Int?             @map("vsdc_invc_no") // Raw numeric invoice number sent to VSDC as invcNo (reused as orgInvcNo on refund)
   debtPayments       DebtPayment[]
   ebmQueueItems      EbmQueue[]       @relation("SaleEbmQueue")
   ebmTransactions    EbmTransaction[] @relation("SaleEbmTransactions")
@@ -813,7 +814,9 @@ model EbmTransaction {
   createdAt                DateTime            @default(now())
   updatedAt                DateTime            @updatedAt
   // RRA SDC response fields (B1)
-  sdcRcptNo                Int?
+  sdcRcptNo                Int? // "A" half of the required A/B RT receipt counter (VSDC's rcptNo, per receipt-type)
+  totalRcptNo              Int? // "B" half of the required A/B RT receipt counter (VSDC's totRcptNo, all receipts)
+  sdcId                    String? // VSDC device id returned with the response — needed client-side to build the printed QR string (CIS spec §7.24.7)
   internalData             String?
   receiptSignature         String?
   qrPayload                String?

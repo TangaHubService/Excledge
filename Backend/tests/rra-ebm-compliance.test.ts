@@ -1,5 +1,5 @@
 import { TaxService } from '../src/services/tax.service';
-import { parseVsdcResponse } from '../src/services/vsdc-api.service';
+import { parseVsdcResponse, parseVsdcStatusCode } from '../src/services/vsdc-api.service';
 import { parseGatewayResponse, gatewayErrorMessage } from '../src/services/rra-ebm.service';
 import { RraTaxCode, TaxCategory } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -88,94 +88,33 @@ describe('RRA TAX CODE MAPPING (TAX_A / B / C / D)', () => {
 });
 
 // ============================================================================
-// Module 2: INVOICE — Response Parsing (RRA canonical fields)
+// Module 2: INVOICE — Response Parsing (RRA VSDC API v1.0.5 §3.3.6.1)
 // ============================================================================
-describe('INVOICE — parseVsdcResponse (RRA canonical response)', () => {
-  it('parses RRA success response with RESPONSE.MESSAGE structure', () => {
-    const rraResponse = {
-      RESPONSE: {
-        DISTRIBUTOR_TIN: 999000025,
-        MESSAGE: {
-          flag: 'INVOICE',
-          ysdcrecnum: '2/2 NS ISH:2',
-          num: 'SAP12320t001',
-          ysdcid: 'SDC009000057',
-          ysdcintdata: 'S5AU-274J-FLNW-I4E5-6QG5-7DVE-EQ',
-          ysdcmrc: 'VALG01VNA08',
-          ysdcitems: 1,
-          ysdcmrctim: '2024-03-21 16:21:36.944',
-          ysdcregsig: 'HLTC-GCDF-PJEI-U7F4',
-          ysdctime: '2024-03-21 16:21:36.944',
-        },
-        STATUS: 'SUCCESS',
-        QR_CODE: '?DATA=S5QjrxaYnotNVt20BTA91QkNtMc6BieExFBNChbniZy1zDq7GXV+go2mJ1Krd5LtFwD7XIn+uwcqX4Lg9YADIen8U04X5iA+8ewNbSdakIsdnr/ETW9VQdtw4+rK2ejA2XQo3fJrmOW/DUGQRv9qwex31yxUAme4+DD83qOoGEZ08DTEenNAT0/+z0XtAgjLOhwW2UdG976cTfUmHP2IsEdKZ33D7PfO9gECcCqxmE4C5hV2rA4OjeDoZlbp+mCZXhfzdSAQG3VhjShLXJOArA==',
+describe('INVOICE — parseVsdcResponse (/trnsSales/saveSales response)', () => {
+  it('parses a successful sales-transaction response', () => {
+    const vsdcResponse = {
+      resultCd: '000',
+      resultMsg: 'It is succeeded',
+      resultDt: '20211027162114',
+      data: {
+        rcptNo: 27,
+        intrlData: 'GZGGIZLYTJSSD7YLYLGIIG6FCY',
+        rcptSign: 'TQZMKL57AGBMSTPO',
+        totRcptNo: 32,
+        vsdcRcptPbctDate: '20211027162114',
+        sdcId: 'SDC010000005',
+        mrcNo: 'WIS01006230',
       },
     };
 
-    const result = parseVsdcResponse(rraResponse);
+    const result = parseVsdcResponse(vsdcResponse);
 
-    expect(result.rcptNo).toBe('SAP12320t001');
-    expect(result.intrlData).toBe('S5AU-274J-FLNW-I4E5-6QG5-7DVE-EQ');
-    expect(result.vsdcSignature).toBe('HLTC-GCDF-PJEI-U7F4');
-    expect(result.qrPayload).toContain('?DATA=');
-    expect(result.sdcDateTime).toBe('2024-03-21 16:21:36.944');
-  });
-
-  it('parses RRA refund response correctly', () => {
-    const refundResponse = {
-      RESPONSE: {
-        DISTRIBUTOR_TIN: 'C000652902X',
-        MESSAGE: {
-          flag: 'REFUND',
-          ysdcrecnum: '3307/3208 NR ISH:3208',
-          num: 'SAP12320t01',
-          ysdcid: 'VATES0000614',
-          ysdcintdata: '3HW5-R74P-FY2H-J5YD-GZC6-B7BL-NE',
-          ysdcmrc: 'VALG01CAP01',
-          ysdcitems: 1,
-          ysdcmrctim: '2023-11-03 10:11:40',
-          ysdcregsig: 'VSWE-XNBG-JXPR-EJ7I',
-          ysdctime: '2023-11-03 10:11:40',
-        },
-        STATUS: 'SUCCESS',
-        QR_CODE: 'https://verify.url?DATA=ABC123',
-      },
-    };
-
-    const result = parseVsdcResponse(refundResponse);
-
-    expect(result.rcptNo).toBe('SAP12320t01');
-    expect(result.vsdcSignature).toBe('VSWE-XNBG-JXPR-EJ7I');
-    expect(result.intrlData).toBe('3HW5-R74P-FY2H-J5YD-GZC6-B7BL-NE');
-    expect(result.qrPayload).toBe('https://verify.url?DATA=ABC123');
-  });
-
-  it('parses RRA purchase response (no QR_CODE for purchases)', () => {
-    const purchaseResponse = {
-      RESPONSE: {
-        DISTRIBUTOR_TIN: 'C000652902X',
-        MESSAGE: {
-          flag: 'PURCHASE',
-          ysdcrecnum: '',
-          num: '1225299-ZR00134',
-          ysdcid: 'VATES0000614',
-          ysdcintdata: '',
-          ysdcmrc: 'VALG01CAP01',
-          ysdcitems: 1,
-          ysdcmrctim: '2023-11-03 10:17:57',
-          ysdcregsig: '',
-          ysdctime: '2023-11-03 10:17:57',
-        },
-        STATUS: 'SUCCESS',
-        QR_CODE: '',
-      },
-    };
-
-    const result = parseVsdcResponse(purchaseResponse);
-
-    expect(result.rcptNo).toBe('1225299-ZR00134');
-    expect(result.qrPayload).toBe('');
-    expect(result.vsdcSignature).toBe('');
+    expect(result.rcptNo).toBe('27');
+    expect(result.intrlData).toBe('GZGGIZLYTJSSD7YLYLGIIG6FCY');
+    expect(result.vsdcSignature).toBe('TQZMKL57AGBMSTPO');
+    expect(result.totRcptNo).toBe('32');
+    expect(result.sdcId).toBe('SDC010000005');
+    expect(result.sdcDateTime).toBe('2021-10-27T16:21:14');
   });
 
   it('returns empty fallback when response is null', () => {
@@ -183,13 +122,34 @@ describe('INVOICE — parseVsdcResponse (RRA canonical response)', () => {
     expect(result.rcptNo).toBe('');
     expect(result.intrlData).toBe('');
     expect(result.vsdcSignature).toBe('');
-    expect(result.qrPayload).toBe('');
+    expect(result.totRcptNo).toBe('');
+    expect(result.sdcId).toBe('');
     expect(result.sdcDateTime).toBe('');
   });
 
   it('returns empty fallback when response is not an object', () => {
     const result = parseVsdcResponse('invalid');
     expect(result.rcptNo).toBe('');
+  });
+});
+
+describe('parseVsdcStatusCode (§4.14 API Response Code)', () => {
+  it('resultCd "000" is success, not an error', () => {
+    const status = parseVsdcStatusCode({ resultCd: '000', resultMsg: 'It is succeeded' });
+    expect(status.isError).toBe(false);
+    expect(status.code).toBe('000');
+  });
+
+  it('any other resultCd is an error, using resultMsg verbatim', () => {
+    const status = parseVsdcStatusCode({ resultCd: '910', resultMsg: 'Request parameter error' });
+    expect(status.isError).toBe(true);
+    expect(status.message).toBe('Request parameter error');
+  });
+
+  it('falls back to the §4.14 table when resultMsg is absent', () => {
+    const status = parseVsdcStatusCode({ resultCd: '881' });
+    expect(status.isError).toBe(true);
+    expect(status.message).toBe('Purchase is mandatory');
   });
 });
 

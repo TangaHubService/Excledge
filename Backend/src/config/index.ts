@@ -47,10 +47,16 @@ export const config = {
     apiKey: process.env.EBM_API_KEY || "",
     apiSecret: process.env.EBM_API_SECRET || "",
     environment: process.env.EBM_ENVIRONMENT || "sandbox",
-    // Canonical RRA VSDC endpoints
-    salePath: process.env.EBM_SALE_PATH || "/saveInvc",
-    refundPath: process.env.EBM_REFUND_PATH || "/saveInvc",
-    voidPath: process.env.EBM_VOID_PATH || "/saveInvc",
+    // Canonical RRA VSDC endpoints (RRA VSDC API Documentation v1.0.5, §3.2.1)
+    // Sale, refund, and cancellation all go through the same sales-transaction
+    // endpoint — they're distinguished by rcptTyCd/salesSttsCd/orgInvcNo in the
+    // payload, not by URL.
+    salePath: process.env.EBM_SALE_PATH || "/trnsSales/saveSales",
+    refundPath: process.env.EBM_REFUND_PATH || "/trnsSales/saveSales",
+    voidPath: process.env.EBM_VOID_PATH || "/trnsSales/saveSales",
+    // NOTE: item/movement/purchase/import paths below are out of scope for this
+    // pass (product-sync/stock-movement-sync/purchase-sync services) and are left
+    // unchanged even though they're also not real VSDC paths — see EBM audit.
     itemPath: process.env.EBM_ITEM_PATH || "/saveItem",
     movementPath: process.env.EBM_MOVEMENT_PATH || "/selectMvmt",
     purchasePath: process.env.EBM_PURCHASE_PATH || "/savePurc",

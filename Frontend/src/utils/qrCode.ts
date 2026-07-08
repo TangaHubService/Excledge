@@ -48,3 +48,33 @@ export async function qrToDataUrl(qrString: string): Promise<string> {
     color: { dark: '#000000', light: '#FFFFFF' },
   });
 }
+
+/**
+ * Build the printable QR data URL for a fiscalized sale in one call — composes
+ * buildRraQrString() + qrToDataUrl(). Returns null when any required field is
+ * missing (not yet fiscalized, or an older row predating one of these columns),
+ * so callers can render the "not yet fiscalized" state instead of a broken image.
+ */
+export async function buildInvoiceQrDataUrl(fiscal: {
+  sdcDateTime?: string | null;
+  sdcId?: string | null;
+  sdcRcptNo?: number | null;
+  internalData?: string | null;
+  receiptSignature?: string | null;
+}): Promise<string | null> {
+  if (!fiscal.sdcDateTime || !fiscal.sdcId || fiscal.sdcRcptNo == null || !fiscal.internalData || !fiscal.receiptSignature) {
+    return null;
+  }
+  const qrString = buildRraQrString({
+    sdcDateTime: fiscal.sdcDateTime,
+    sdcId: fiscal.sdcId,
+    sdcRcptNo: fiscal.sdcRcptNo,
+    internalData: fiscal.internalData,
+    receiptSignature: fiscal.receiptSignature,
+  });
+  try {
+    return await qrToDataUrl(qrString);
+  } catch {
+    return null;
+  }
+}
