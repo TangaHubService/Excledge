@@ -498,10 +498,15 @@ export async function generateInvoiceNumber(
     select: { TIN: true },
   });
 
+  // TIN-derived code is cosmetic only — it is NOT guaranteed unique across
+  // organizations (many orgs have no TIN yet and all fall back to the same
+  // literal), and the sequence above resets per (organizationId, branchId).
+  // branchId is a global PK, so folding it in makes the whole string globally
+  // unique by construction, independent of TIN state or branch count per org.
   const orgCode = organization?.TIN?.replace(/\D/g, '').slice(-4) || 'ORG';
   const year = new Date().getFullYear();
 
-  return { invoiceNumber: `INV-${orgCode}-${year}-${sequence}`, vsdcInvcNo };
+  return { invoiceNumber: `INV-${orgCode}-B${branchId}-${year}-${sequence}`, vsdcInvcNo };
 }
 
 /**
