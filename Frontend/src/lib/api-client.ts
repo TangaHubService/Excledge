@@ -377,6 +377,17 @@ class ApiClient {
     });
   }
 
+  async getOrganizationSettings(id: string | number) {
+    return this.request(`/organizations/${id}/settings`);
+  }
+
+  async updateOrganizationSettings(id: string | number, patch: any) {
+    return this.request(`/organizations/${id}/settings`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  }
+
   async updateProfile(formData: any, id: string | number) {
     return this.request(`/users/${this.getOrganizationId()}/update/${id}`, {
       method: "PUT",
