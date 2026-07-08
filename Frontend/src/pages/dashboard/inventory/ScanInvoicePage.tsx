@@ -54,6 +54,7 @@ interface InvoiceItem {
   sellingPrice?: number;
   totalPrice?: number;
   taxRate?: number;
+  taxAmount?: number;
   category?: string;
   manufacturer?: string;
   confidence?: number;
@@ -67,7 +68,11 @@ interface InvoiceHeader {
   invoiceDate?: string;
   supplierName?: string;
   supplierId?: number;
+  vendorTIN?: string;
   currency?: string;
+  paymentTerms?: string;
+  dueDate?: string;
+  poNumber?: string;
   notes?: string;
   subtotal?: number;
   taxAmount?: number;
@@ -154,7 +159,11 @@ export const ScanInvoicePage: React.FC = () => {
         invoiceNumber: inv.invoiceNumber,
         invoiceDate: inv.invoiceDate ? inv.invoiceDate.split('T')[0] : undefined,
         supplierName: inv.supplierName,
+        vendorTIN: inv.vendorTIN,
         currency: inv.currency,
+        paymentTerms: inv.paymentTerms,
+        dueDate: inv.dueDate ? inv.dueDate.split('T')[0] : undefined,
+        poNumber: inv.poNumber,
         notes: inv.notes,
         subtotal: inv.subtotal,
         taxAmount: inv.taxAmount,
@@ -167,6 +176,7 @@ export const ScanInvoicePage: React.FC = () => {
         unitPrice: Number(item.unitPrice),
         totalPrice: Number(item.totalPrice),
         sellingPrice: item.sellingPrice ? Number(item.sellingPrice) : undefined,
+        taxAmount: item.taxAmount != null ? Number(item.taxAmount) : undefined,
       })));
       if (inv.status === 'IMPORTED') {
         setStep('done');
@@ -217,11 +227,27 @@ export const ScanInvoicePage: React.FC = () => {
     try {
       setUploadProgress(0);
 
-      const { scanInvoiceLocally } = await import('../../../lib/invoiceOcr');
-      const extracted = await scanInvoiceLocally(selectedFile, (pct, message) => {
+      const { isAiExtractionConfigured, extractInvoiceWithAI } = await import('../../../lib/aiInvoiceExtraction');
+      const onProgress = (pct: number, message: string) => {
         setUploadProgress(pct);
         setProcessingMsg(message);
-      });
+      };
+
+      let extracted;
+      if (isAiExtractionConfigured()) {
+        try {
+          setProcessingMsg('Analyzing invoice with AI...');
+          extracted = await extractInvoiceWithAI(selectedFile, onProgress);
+        } catch (aiErr: any) {
+          console.error('AI extraction failed, falling back to on-device OCR:', aiErr);
+          toast.info('AI scan unavailable — falling back to on-device scanning');
+        }
+      }
+
+      if (!extracted) {
+        const { scanInvoiceLocally } = await import('../../../lib/invoiceOcr');
+        extracted = await scanInvoiceLocally(selectedFile, onProgress);
+      }
 
       setProcessingMsg('Uploading invoice...');
       setUploadProgress(0);
@@ -233,7 +259,11 @@ export const ScanInvoicePage: React.FC = () => {
         invoiceNumber: inv.invoiceNumber,
         invoiceDate: inv.invoiceDate ? inv.invoiceDate.split('T')[0] : undefined,
         supplierName: inv.supplierName,
+        vendorTIN: inv.vendorTIN,
         currency: inv.currency || 'RWF',
+        paymentTerms: inv.paymentTerms,
+        dueDate: inv.dueDate ? inv.dueDate.split('T')[0] : undefined,
+        poNumber: inv.poNumber,
         subtotal: inv.subtotal,
         taxAmount: inv.taxAmount,
         discount: inv.discount,
@@ -244,6 +274,7 @@ export const ScanInvoicePage: React.FC = () => {
         expiryDate: item.expiryDate ? item.expiryDate.split('T')[0] : undefined,
         unitPrice: Number(item.unitPrice),
         totalPrice: Number(item.totalPrice),
+        taxAmount: item.taxAmount != null ? Number(item.taxAmount) : undefined,
       })));
 
       if (inv.items?.length === 0) {
@@ -356,6 +387,7 @@ export const ScanInvoicePage: React.FC = () => {
           sellingPrice: item.sellingPrice,
           totalPrice: item.totalPrice,
           taxRate: item.taxRate,
+          taxAmount: item.taxAmount,
           category: item.category,
           manufacturer: item.manufacturer,
         })),

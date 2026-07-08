@@ -2,44 +2,13 @@ import { createWorker } from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
 // eslint-disable-next-line import/no-unresolved
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import type { ExtractedProduct, ExtractedInvoiceData } from './invoiceExtraction.types';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
 const MAX_PDF_PAGES = 5;
 
-export interface ExtractedProduct {
-  productName: string;
-  description?: string;
-  sku?: string;
-  barcode?: string;
-  batchNumber?: string;
-  expiryDate?: string;
-  quantity: number;
-  unitPrice: number;
-  sellingPrice?: number;
-  totalPrice?: number;
-  taxRate?: number;
-  category?: string;
-  manufacturer?: string;
-  confidence: number;
-}
-
-export interface ExtractedInvoiceData {
-  supplierName?: string;
-  supplierAddress?: string;
-  invoiceNumber?: string;
-  invoiceDate?: string;
-  currency?: string;
-  subtotal?: number;
-  taxAmount?: number;
-  discount?: number;
-  totalAmount?: number;
-  products: ExtractedProduct[];
-  rawText?: string;
-  confidence: number;
-  provider: string;
-  processingMs: number;
-}
+export type { ExtractedProduct, ExtractedInvoiceData };
 
 // ── Text extraction (OCR) ───────────────────────────────────────────────────
 

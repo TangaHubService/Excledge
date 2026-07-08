@@ -14,6 +14,8 @@ import {
   cancelInvitation,
   declineInvitation,
   updateOrganizationAvatar,
+  getOrgSettings,
+  updateOrgSettings,
 } from "../controllers/organization.controller";
 import { authenticate } from "../middleware/auth.middleware";
 import { uploadSingle } from "../middleware/upload.middleware";
@@ -36,6 +38,8 @@ router.put(
   updateOrganizationAvatar
 );
 router.delete("/:id", authenticate, orgAccessById, deleteOrganization);
+router.get("/:id/settings", authenticate, orgAccessById, getOrgSettings);
+router.patch("/:id/settings", authenticate, orgAccessById, updateOrgSettings);
 router.post("/:organizationId/invite", authenticate, orgAccess, inviteUser);
 router.post("/:organizationId/bulk-invite", authenticate, orgAccess, bulkInviteUsers);
 router.post("/accept-invitation/:token", acceptInvitation);

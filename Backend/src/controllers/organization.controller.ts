@@ -7,6 +7,11 @@ import { generateStrongPassword } from "../utils/generatePassword";
 import { auditLogger } from "../utils/auditLogger";
 import { deleteFromCloudinary, uploadToCloudinary } from "../config/cloudinary";
 import { SubscriptionService } from "../services/subscription.service";
+import {
+  getOrganizationSettings,
+  upsertOrganizationSettings,
+} from "../services/organization-settings.service";
+import type { OrganizationSettingsPatch } from "../types/organization-settings.types";
 
 import type { Request, Response } from "express";
 
@@ -290,6 +295,67 @@ export const updateOrganization = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error updating organization:", error);
     res.status(500).json({ error: "Failed to update organization" });
+  }
+};
+
+/** Any org member may read settings — the client needs them to render the sidebar/flags. */
+export const getOrgSettings = async (req: Request, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.id);
+    const settings = await getOrganizationSettings(organizationId);
+    res.json({ settings });
+  } catch (error) {
+    console.error("Error fetching organization settings:", error);
+    res.status(500).json({ error: "Failed to fetch organization settings" });
+  }
+};
+
+function isPlainPatchObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Only admins may change workspace-shaping settings; SYSTEM_OWNER bypasses via the route middleware. */
+export const updateOrgSettings = async (req: Request, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.id);
+    //@ts-ignore
+    const userId = parseInt(req.user?.userId as string);
+
+    const userOrganization = await prisma.userOrganization.findFirst({
+      where: { userId, organizationId, role: "ADMIN" },
+    });
+
+    if (!userOrganization) {
+      return res
+        .status(403)
+        .json({ error: "Only admins can update organization settings" });
+    }
+
+    const { sidebarConfig, featureFlags, preferences } = req.body ?? {};
+    const patch: OrganizationSettingsPatch = {};
+
+    for (const [key, value] of Object.entries({ sidebarConfig, featureFlags, preferences })) {
+      if (value === undefined) continue;
+      if (!isPlainPatchObject(value)) {
+        return res.status(400).json({ error: `${key} must be an object` });
+      }
+      (patch as Record<string, unknown>)[key] = value;
+    }
+
+    const settings = await upsertOrganizationSettings(organizationId, patch);
+
+    await auditLogger.system(req, {
+      type: "SETTINGS_UPDATE",
+      description: `Organization settings updated`,
+      entityType: "OrganizationSetting",
+      entityId: organizationId,
+      metadata: { patch },
+    });
+
+    res.json({ message: "Organization settings updated successfully", settings });
+  } catch (error) {
+    console.error("Error updating organization settings:", error);
+    res.status(500).json({ error: "Failed to update organization settings" });
   }
 };
 
