@@ -15,7 +15,11 @@ import {
     Phone,
     Mail,
     Fingerprint,
-    Star
+    Star,
+    Settings as SettingsIcon,
+    LayoutGrid,
+    ToggleLeft,
+    SlidersHorizontal
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
@@ -25,6 +29,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerDescription } from '../../../components/ui/drawer';
 import { Badge } from '../../../components/ui/badge';
+import { Switch } from '../../../components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import PhoneInputWithCountryCode from '../../../components/PhoneInputWithCountryCode';
 import { apiClient } from '../../../lib/api-client';
 import { toast } from 'react-toastify';
@@ -56,6 +62,92 @@ interface Branch {
     status: 'ACTIVE' | 'INACTIVE';
 }
 
+interface ISidebarConfig {
+    dashboard: boolean;
+    pos: boolean;
+    inventory: boolean;
+    purchaseOrders: boolean;
+    suppliers: boolean;
+    customers: boolean;
+    hr: boolean;
+    accounting: boolean;
+    expenses: boolean;
+    reports: boolean;
+    users: boolean;
+    activityLogs: boolean;
+    billing: boolean;
+}
+
+interface IFeatureFlags {
+    allowNegativeStock: boolean;
+    ebmIntegrationEnabled: boolean;
+    requireStockAdjustmentApproval: boolean;
+    allowManualDiscounts: boolean;
+    stockTransfersEnabled: boolean;
+}
+
+interface IPreferences {
+    language: string;
+    timezone: string;
+    dateFormat: string;
+    defaultLandingPage: string;
+    lowStockThresholdOverride: number | null;
+}
+
+interface IOrganizationSettings {
+    sidebarConfig: ISidebarConfig;
+    featureFlags: IFeatureFlags;
+    preferences: IPreferences;
+}
+
+const SIDEBAR_MODULE_LABELS: Record<keyof ISidebarConfig, string> = {
+    dashboard: 'Dashboard',
+    pos: 'Point of Sale',
+    inventory: 'Inventory',
+    purchaseOrders: 'Purchase Orders',
+    suppliers: 'Suppliers',
+    customers: 'Customers',
+    hr: 'HR',
+    accounting: 'Accounting',
+    expenses: 'Expenses',
+    reports: 'Reports',
+    users: 'Users',
+    activityLogs: 'Activity Logs',
+    billing: 'Billing',
+};
+
+const FEATURE_FLAG_LABELS: Record<keyof IFeatureFlags, { label: string; description: string }> = {
+    allowNegativeStock: {
+        label: 'Allow Negative Stock',
+        description: "Let sales proceed even when there isn't enough stock on hand.",
+    },
+    ebmIntegrationEnabled: {
+        label: 'RRA EBM Integration',
+        description: 'Push completed sales to the RRA EBM/VSDC electronic invoicing system.',
+    },
+    requireStockAdjustmentApproval: {
+        label: 'Require Stock Adjustment Approval',
+        description: 'A manager must approve stock adjustments before they take effect.',
+    },
+    allowManualDiscounts: {
+        label: 'Allow Manual Discounts',
+        description: 'Let sellers apply ad-hoc discounts at checkout without manager override.',
+    },
+    stockTransfersEnabled: {
+        label: 'Stock Transfers',
+        description: 'Enable transferring stock between branches.',
+    },
+};
+
+const LANGUAGE_OPTIONS = [
+    { value: 'en', label: 'English' },
+    { value: 'rw', label: 'Kinyarwanda' },
+    { value: 'fr', label: 'Français' },
+    { value: 'sw', label: 'Kiswahili' },
+];
+
+const DATE_FORMAT_OPTIONS = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'];
+
 export function OrganizationConfig() {
     const { t } = useTranslation();
     const { user } = useAuth();
@@ -68,6 +160,8 @@ export function OrganizationConfig() {
     const [isSavingOrg, setIsSavingOrg] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [previewAvatar, setPreviewAvatar] = useState<string | null>(null);
+    const [settings, setSettings] = useState<IOrganizationSettings | null>(null);
+    const [isSavingSettings, setIsSavingSettings] = useState(false);
 
     // Branch dialog state
     const [branchDialogOpen, setBranchDialogOpen] = useState(false);
@@ -91,15 +185,19 @@ export function OrganizationConfig() {
             setLoading(true);
             const orgId = localStorage.getItem('current_organization_id');
             if (orgId) {
-                const [orgResponse, branchesResponse] = await Promise.all([
+                const [orgResponse, branchesResponse, settingsResponse] = await Promise.all([
                     apiClient.getOrganization(orgId),
-                    apiClient.getBranches()
+                    apiClient.getBranches(),
+                    apiClient.getOrganizationSettings(orgId)
                 ]);
 
                 if (orgResponse?.organization) {
                     setOrganization(orgResponse.organization);
                 }
                 setBranches(branchesResponse || []);
+                if (settingsResponse?.settings) {
+                    setSettings(settingsResponse.settings);
+                }
             }
         } catch (error: any) {
             toast.error(error.message || 'Failed to fetch settings');
@@ -226,6 +324,40 @@ export function OrganizationConfig() {
         }
     };
 
+    const toggleSidebarModule = (key: keyof ISidebarConfig) => {
+        if (!isAuthorized) return;
+        setSettings(prev => prev ? { ...prev, sidebarConfig: { ...prev.sidebarConfig, [key]: !prev.sidebarConfig[key] } } : prev);
+    };
+
+    const toggleFeatureFlag = (key: keyof IFeatureFlags) => {
+        if (!isAuthorized) return;
+        setSettings(prev => prev ? { ...prev, featureFlags: { ...prev.featureFlags, [key]: !prev.featureFlags[key] } } : prev);
+    };
+
+    const updatePreference = <K extends keyof IPreferences>(key: K, value: IPreferences[K]) => {
+        if (!isAuthorized) return;
+        setSettings(prev => prev ? { ...prev, preferences: { ...prev.preferences, [key]: value } } : prev);
+    };
+
+    const handleSettingsSave = async () => {
+        if (!settings || !isAuthorized) return;
+        const orgId = localStorage.getItem('current_organization_id');
+        if (!orgId) return;
+
+        setIsSavingSettings(true);
+        try {
+            const response = await apiClient.updateOrganizationSettings(orgId, settings);
+            if (response?.settings) {
+                setSettings(response.settings);
+            }
+            toast.success('Organization settings updated');
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to update organization settings');
+        } finally {
+            setIsSavingSettings(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex h-[400px] items-center justify-center">
@@ -246,7 +378,7 @@ export function OrganizationConfig() {
             </div>
 
             <Tabs defaultValue="details" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 lg:w-[400px] bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+                <TabsList className="grid w-full grid-cols-3 lg:w-[560px] bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
                     <TabsTrigger value="details" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm">
                         <Building2 className="h-4 w-4 mr-2" />
                         Details
@@ -254,6 +386,10 @@ export function OrganizationConfig() {
                     <TabsTrigger value="branches" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm">
                         <GitBranch className="h-4 w-4 mr-2" />
                         Branches
+                    </TabsTrigger>
+                    <TabsTrigger value="settings" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm">
+                        <SettingsIcon className="h-4 w-4 mr-2" />
+                        Settings
                     </TabsTrigger>
                 </TabsList>
 
@@ -535,6 +671,205 @@ export function OrganizationConfig() {
                             </Table>
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                {/* Organization Settings Tab */}
+                <TabsContent value="settings" className="mt-6 space-y-6">
+                    {!settings ? (
+                        <div className="flex h-[200px] items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                        </div>
+                    ) : (
+                        <>
+                            <Card className="border-none shadow-xl bg-white dark:bg-gray-800 overflow-hidden">
+                                <CardHeader className="border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-blue-600/5 to-indigo-600/5">
+                                    <div className="flex items-center gap-2">
+                                        <LayoutGrid className="h-5 w-5 text-blue-600" />
+                                        <CardTitle>Sidebar Modules</CardTitle>
+                                    </div>
+                                    <CardDescription>
+                                        Choose which sections appear in the navigation for this workspace.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="p-6">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {(Object.keys(SIDEBAR_MODULE_LABELS) as (keyof ISidebarConfig)[]).map((key) => (
+                                            <div
+                                                key={key}
+                                                className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-700 px-4 py-3"
+                                            >
+                                                <Label htmlFor={`sidebar-${key}`} className="cursor-pointer">
+                                                    {SIDEBAR_MODULE_LABELS[key]}
+                                                </Label>
+                                                <Switch
+                                                    id={`sidebar-${key}`}
+                                                    checked={settings.sidebarConfig[key]}
+                                                    onCheckedChange={() => toggleSidebarModule(key)}
+                                                    disabled={!isAuthorized || isSavingSettings}
+                                                    className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300 dark:data-[state=unchecked]:bg-gray-600"
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-none shadow-xl bg-white dark:bg-gray-800 overflow-hidden">
+                                <CardHeader className="border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-indigo-600/5 to-purple-600/5">
+                                    <div className="flex items-center gap-2">
+                                        <ToggleLeft className="h-5 w-5 text-indigo-600" />
+                                        <CardTitle>Feature Flags</CardTitle>
+                                    </div>
+                                    <CardDescription>
+                                        Operational switches that change business logic across the workspace.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="p-6">
+                                    <div className="space-y-3">
+                                        {(Object.keys(FEATURE_FLAG_LABELS) as (keyof IFeatureFlags)[]).map((key) => (
+                                            <div
+                                                key={key}
+                                                className="flex items-center justify-between gap-4 rounded-xl border border-gray-100 dark:border-gray-700 px-4 py-3"
+                                            >
+                                                <div className="space-y-0.5">
+                                                    <Label htmlFor={`flag-${key}`} className="cursor-pointer">
+                                                        {FEATURE_FLAG_LABELS[key].label}
+                                                    </Label>
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                        {FEATURE_FLAG_LABELS[key].description}
+                                                    </p>
+                                                </div>
+                                                <Switch
+                                                    id={`flag-${key}`}
+                                                    checked={settings.featureFlags[key]}
+                                                    onCheckedChange={() => toggleFeatureFlag(key)}
+                                                    disabled={!isAuthorized || isSavingSettings}
+                                                    className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300 dark:data-[state=unchecked]:bg-gray-600"
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-none shadow-xl bg-white dark:bg-gray-800 overflow-hidden">
+                                <CardHeader className="border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-purple-600/5 to-pink-600/5">
+                                    <div className="flex items-center gap-2">
+                                        <SlidersHorizontal className="h-5 w-5 text-purple-600" />
+                                        <CardTitle>Preferences</CardTitle>
+                                    </div>
+                                    <CardDescription>
+                                        Cosmetic and default-experience settings for this workspace.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="p-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-2">
+                                            <Label>Language</Label>
+                                            <Select
+                                                value={settings.preferences.language}
+                                                onValueChange={(value) => updatePreference('language', value)}
+                                                disabled={!isAuthorized || isSavingSettings}
+                                            >
+                                                <SelectTrigger className="w-full rounded-xl">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {LANGUAGE_OPTIONS.map((opt) => (
+                                                        <SelectItem key={opt.value} value={opt.value}>
+                                                            {opt.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label>Timezone</Label>
+                                            <Input
+                                                value={settings.preferences.timezone}
+                                                onChange={(e) => updatePreference('timezone', e.target.value)}
+                                                disabled={!isAuthorized || isSavingSettings}
+                                                placeholder="e.g. Africa/Kigali"
+                                                className="rounded-xl"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label>Date Format</Label>
+                                            <Select
+                                                value={settings.preferences.dateFormat}
+                                                onValueChange={(value) => updatePreference('dateFormat', value)}
+                                                disabled={!isAuthorized || isSavingSettings}
+                                            >
+                                                <SelectTrigger className="w-full rounded-xl">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {DATE_FORMAT_OPTIONS.map((fmt) => (
+                                                        <SelectItem key={fmt} value={fmt}>
+                                                            {fmt}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label>Default Landing Page</Label>
+                                            <Select
+                                                value={settings.preferences.defaultLandingPage}
+                                                onValueChange={(value) => updatePreference('defaultLandingPage', value)}
+                                                disabled={!isAuthorized || isSavingSettings}
+                                            >
+                                                <SelectTrigger className="w-full rounded-xl">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {(Object.keys(SIDEBAR_MODULE_LABELS) as (keyof ISidebarConfig)[]).map((key) => (
+                                                        <SelectItem key={key} value={key}>
+                                                            {SIDEBAR_MODULE_LABELS[key]}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label>Low Stock Threshold Override</Label>
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                value={settings.preferences.lowStockThresholdOverride ?? ''}
+                                                onChange={(e) =>
+                                                    updatePreference(
+                                                        'lowStockThresholdOverride',
+                                                        e.target.value === '' ? null : Number(e.target.value)
+                                                    )
+                                                }
+                                                disabled={!isAuthorized || isSavingSettings}
+                                                placeholder="Use per-product thresholds"
+                                                className="rounded-xl"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {isAuthorized && (
+                                        <div className="flex justify-end pt-6 mt-6 border-t border-gray-100 dark:border-gray-700">
+                                            <Button
+                                                onClick={handleSettingsSave}
+                                                disabled={isSavingSettings}
+                                                className="bg-blue-600 hover:bg-blue-700 text-white px-8 rounded-xl shadow-lg shadow-blue-500/20"
+                                            >
+                                                {isSavingSettings ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                                                Save Settings
+                                            </Button>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </>
+                    )}
                 </TabsContent>
             </Tabs>
 
