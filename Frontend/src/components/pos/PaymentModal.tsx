@@ -65,12 +65,20 @@ export function PaymentModal({
   }, [isOpen]);
 
   const updatePayment = (index: number, field: keyof PaymentEntry, value: string | number) => {
-    const newPayments = [...payments];
-    newPayments[index] = { ...newPayments[index], [field]: value };
-    setPayments(newPayments);
-    if (errors[newPayments[index].id]) {
+    // Functional form — the payment-method button below calls updatePayment
+    // twice in the same click handler (method, then amount). Reading `payments`
+    // from closure here would make the second call overwrite the first with
+    // stale data (React batches setState within one handler), so the method
+    // selection would silently revert. Building off `prev` avoids that.
+    setPayments((prev) => {
+      const newPayments = [...prev];
+      newPayments[index] = { ...newPayments[index], [field]: value };
+      return newPayments;
+    });
+    const entryId = payments[index]?.id;
+    if (entryId && errors[entryId]) {
       const newErrors = { ...errors };
-      delete newErrors[newPayments[index].id];
+      delete newErrors[entryId];
       setErrors(newErrors);
     }
   };
