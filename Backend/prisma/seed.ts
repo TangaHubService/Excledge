@@ -32,30 +32,22 @@ const DEMO_ADMIN_EMAIL = "demo.admin@exceledge.test"
 
 const subscriptionPlans = [
   {
-    title: "Free Trial",
-    description: "24-hour free trial with full access to all features",
-    price: 0,
-    period: "MONTHLY",
-    isActive: true,
-    maxUsers: 5,
-    features: ["Inventory Management", "Sales Tracking", "Basic Reports"],
-  },
-  {
     title: "Simple Starter",
-    description: "Perfect for sole traders and micro-businesses",
+    description: "More power for growing teams — daily backups, priority features, and room to scale.",
     price: 15000,
     period: "MONTHLY",
+    popular: true,
     features: [
       "1 user account",
       "Inventory Management",
       "Sales & POS",
       "Purchase order",
-      "24/7 support",
+      "24/7 support"
     ],
   },
   {
     title: "Essential",
-    description: "Great for growing small teams",
+    description: "Everything you need to get started with inventory, sales, and reporting.",
     price: 40000,
     period: "MONTHLY",
     features: [
@@ -65,15 +57,14 @@ const subscriptionPlans = [
       "Purchase order",
       "Tax declaration service",
       "Quarterly visit",
-      "24/7 support",
+      "24/7 support"
     ],
   },
   {
     title: "Professional",
-    description: "Advanced tools for established businesses",
+    description: "Everything you need to get started with inventory, sales, and reporting.",
     price: 100000,
     period: "MONTHLY",
-    popular: true,
     features: [
       "10 user accounts",
       "Inventory Management",
@@ -82,12 +73,12 @@ const subscriptionPlans = [
       "Payroll management",
       "Tax declaration service",
       "Monthly visit",
-      "24/7 support",
+      "24/7 support"
     ],
   },
   {
     title: "Advanced",
-    description: "Complete operational, accounting, and compliance control",
+    description: "Everything you need to get started with inventory, sales, and reporting.",
     price: 500000,
     period: "MONTHLY",
     features: [
@@ -96,14 +87,14 @@ const subscriptionPlans = [
       "Sales & POS",
       "Purchase order",
       "Payroll management",
-      "Tax declaration service",
-      "2 visits a month",
-      "Accounting service",
-      "Compliance advisory",
       "QuickBooks Async",
-      "24/7 support",
+      "Accounting service",
+      "Tax declaration service",
+      "Compliance advisory",
+      "2 visits a month",
+      "24/7 support"
     ],
-  },
+  }
 ]
 
 function extractMaxUsers(features: string[]): number {
