@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'async_hooks'
 
 // ── AsyncLocalStorage for branch context ──────────────────────────────────
 export interface BranchContext {
-  branchId?: number
+  branchId?: number | number[]
 }
 
 export const branchStorage = new AsyncLocalStorage<BranchContext>()
@@ -11,16 +11,16 @@ export const branchStorage = new AsyncLocalStorage<BranchContext>()
 /**
  * Run a callback inside a branch-scoped context.
  * Every Prisma query within the callback will automatically be filtered
- * to the given branchId on models that support it.
+ * to the given branchId (or set of branchIds) on models that support it.
  */
-export function withBranchScope<T>(branchId: number | undefined, fn: () => T): T {
+export function withBranchScope<T>(branchId: number | number[] | undefined, fn: () => T): T {
   return branchStorage.run({ branchId }, fn)
 }
 
 /**
  * Get the current branch ID from AsyncLocalStorage (or undefined).
  */
-export function getCurrentBranchId(): number | undefined {
+export function getCurrentBranchId(): number | number[] | undefined {
   return branchStorage.getStore()?.branchId
 }
 
@@ -95,20 +95,24 @@ prisma.$use(async (params, next) => {
 
   // ── FILTER operations (findMany, findFirst, update, delete, etc.) ──
   if (BRANCH_FILTERABLE_OPS.has(params.action)) {
+    const branchWhere = Array.isArray(branchId) ? { in: branchId } : branchId
     const args = params.args as Record<string, any> | undefined
     if (!args) {
-      params.args = { where: { branchId } }
+      params.args = { where: { branchId: branchWhere } }
     } else {
       const existingWhere = args.where ?? {}
       // Only inject if branchId is not already specified (avoid override)
       if (existingWhere.branchId === undefined) {
-        args.where = { ...existingWhere, branchId }
+        args.where = { ...existingWhere, branchId: branchWhere }
       }
     }
   }
 
   // ── CREATE operations – inject branchId into data ──
-  if (BRANCH_CREATE_OPS.has(params.action)) {
+  // Only for a single resolved branch: a multi-branch (array) context can't
+  // determine which one branch a new record belongs to, so creates rely on
+  // the explicit, already-validated branchId in the request body instead.
+  if (BRANCH_CREATE_OPS.has(params.action) && !Array.isArray(branchId)) {
     const args = params.args as Record<string, any> | undefined
     if (args?.data) {
       if (Array.isArray(args.data)) {

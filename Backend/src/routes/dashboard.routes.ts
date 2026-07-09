@@ -8,7 +8,7 @@ import {
   getBranchDashboardStats,
   getExecutiveDashboard,
 } from "../controllers/dashboard.controller";
-import { authenticate } from "../middleware/auth.middleware";
+import { authenticate, authorize } from "../middleware/auth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
 import { requireActiveSubscription } from '../middleware/feature-access.middleware';
 import { branchAuth } from "../middleware/branchAuth.middleware";
@@ -22,7 +22,8 @@ router.get("/sales-trend/:organizationId", authenticate, orgAccess, requireActiv
 router.get("/notifications/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, getNotifications);
 router.get("/:organizationId/top-selling-products", authenticate, orgAccess, requireActiveSubscription(), branchAuth, topSellingProducts);
 router.get("/:organizationId/detailed-inventory", authenticate, orgAccess, requireActiveSubscription(), branchAuth, getDetailedInventory);
-router.get("/branch-stats/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, getBranchDashboardStats);
-router.get("/executive/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, getExecutiveDashboard);
+// Cross-branch comparison views – deliberately org-wide, so restricted to org admins/system owner only.
+router.get("/branch-stats/:organizationId", authenticate, orgAccess, requireActiveSubscription(), authorize("ADMIN", "SYSTEM_OWNER"), branchAuth, getBranchDashboardStats);
+router.get("/executive/:organizationId", authenticate, orgAccess, requireActiveSubscription(), authorize("ADMIN", "SYSTEM_OWNER"), branchAuth, getExecutiveDashboard);
 
 export default router;

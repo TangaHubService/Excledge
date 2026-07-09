@@ -59,7 +59,10 @@ export const UserManagement = () => {
   const isCurrentUser = (userId?: string) => userId === currentUser.id;
   const isAdmin = (userRole: string) => userRole.toUpperCase() === 'ADMIN';
   const currentUserIsAdmin = isAdmin(currentUser.role || '');
-  const canEdit = (userId?: string) => currentUserIsAdmin && !isCurrentUser(userId);
+  // Admins may edit anyone except themselves and other Admins (role/status changes on an
+  // Admin are System-Owner-only; the backend enforces this too — this is UX, not the security boundary).
+  const canEdit = (userId?: string, userRole?: string) =>
+    currentUserIsAdmin && !isCurrentUser(userId) && !isAdmin(userRole || '');
   const canDisable = (userId?: string, userRole?: string) =>
     currentUserIsAdmin && !isCurrentUser(userId) && !isAdmin(userRole || '');
 
@@ -381,21 +384,21 @@ export const UserManagement = () => {
                           <div className="relative group">
                             <button
                               onClick={() => {
-                                if (canEdit(user.id)) {
+                                if (canEdit(user.id, user.role)) {
                                   setIsDialogOpen(true);
                                   setEditingUserId(user.id || null);
                                   setFormData({ email: user.email, role: user.role, branchId: "" });
                                 }
                               }}
-                              disabled={!canEdit(user.id)}
-                              className={`px-3 py-1 text-sm rounded-lg transition-colors ${canEdit(user.id)
+                              disabled={!canEdit(user.id, user.role)}
+                              className={`px-3 py-1 text-sm rounded-lg transition-colors ${canEdit(user.id, user.role)
                                 ? 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                                 : 'text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60'
                                 }`}
                             >
                               Edit
                             </button>
-                            {!canEdit(user.id) && (
+                            {!canEdit(user.id, user.role) && (
                               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
                                 {t('userManagement.cannotEditOwn')}
                               </div>
