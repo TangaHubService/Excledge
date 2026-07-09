@@ -110,6 +110,7 @@
         "noDataToPreview": "Aucune donnée à prévisualiser"
     },
     "nav": {
+        "home": "Accueil",
         "dashboard": "Tableau de bord",
         "inventory": "Inventaire",
         "sales": "Ventes",

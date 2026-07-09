@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
+  Home,
   LayoutDashboard,
   ShoppingCart,
   Package,
@@ -75,6 +76,7 @@ type NavBlock =
 /* ─── Navigation configuration ──────────────────────── */
 
 const baseNavigation: NavItem[] = [
+  { id: "home", name: "nav.home", href: "/", icon: Home },
   { id: "dashboard", name: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
   { id: "executive", name: "Executive Dashboard", href: "executive", icon: LineChart },
 

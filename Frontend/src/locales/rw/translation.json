@@ -117,6 +117,7 @@
         "sw": "Igiswahili"
     },
     "nav": {
+        "home": "Ahabanza",
         "dashboard": "Ikibaho",
         "inventory": "Ibicuruzwa",
         "sales": "Igurisha",

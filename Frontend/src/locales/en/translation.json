@@ -113,6 +113,7 @@
         "noDataToPreview": "No data to preview"
     },
     "nav": {
+        "home": "Home",
         "dashboard": "Dashboard",
         "inventory": "Inventory",
         "sales": "Sales",
