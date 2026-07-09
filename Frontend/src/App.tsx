@@ -59,23 +59,6 @@ import { ExecutiveDashboard } from "./pages/dashboard/executive/ExecutiveDashboa
 import { SupplierInvoicesPage } from "./pages/dashboard/inventory/SupplierInvoicesPage";
 import { ScanInvoicePage } from "./pages/dashboard/inventory/ScanInvoicePage";
 
-// Root route: signed-in users go straight to the dashboard; signed-out
-// visitors see the marketing landing page (not a redirect straight to login).
-const HomeRedirect = () => {
-  const { isAuthenticated, isLoading } = useAuth();
-
-  // Auth is still initializing — show a loading indicator
-  if (isLoading) {
-    return <Loading />;
-  }
-
-  if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return <LandingPage />;
-};
-
 // Protected Route for System Owners
 const ProtectedSystemOwnerRoute = ({ children }: { children: React.ReactNode }) => {
   const { isSystemOwner, isAuthenticated } = useAuth();
@@ -103,8 +86,9 @@ function App() {
               <BrowserRouter>
                 <Suspense fallback={<Loading />}>
                   <Routes>
-                    {/* Public / Unprotected routes */}
-                    <Route path="/" element={<HomeRedirect />} />
+                    {/* Public / Unprotected routes — the landing page is always shown at
+                        "/" for both signed-in and signed-out visitors, no auth redirect. */}
+                    <Route path="/" element={<LandingPage />} />
                     <Route path="/landing" element={<LandingPage />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />

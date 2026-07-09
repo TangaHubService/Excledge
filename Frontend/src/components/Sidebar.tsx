@@ -553,6 +553,10 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
               // Collapsing a section is a sidebar-expanded-only affordance — in
               // icon-only mode there are no labels to click, so always show items.
               const isGroupCollapsed = !isCollapsed && collapsedGroups.includes(block.header.id);
+              // Highlight the category the user is currently inside, so the
+              // active main section reads clearly even when its own group is
+              // collapsed or has several items.
+              const isGroupActive = block.items.some(i => isActiveRoute(i.href));
 
               return (
                 <div key={`grp-${block.header.id}`}>
@@ -560,14 +564,30 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
                     type="button"
                     onClick={() => toggleGroup(block.header.id)}
                     className={cn(
-                      "flex w-full items-center justify-between rounded-lg pb-1.5 pt-4 first:pt-0",
+                      "flex w-full items-center justify-between gap-2 rounded-lg pb-1.5 pt-4 first:pt-0",
                       isCollapsed ? "px-2" : "px-3",
                     )}
                     aria-expanded={!isGroupCollapsed}
+                    aria-current={isGroupActive ? "true" : undefined}
                   >
                     {!isCollapsed && (
                       <>
-                        <span className="dashboard-nav-section-label">{t(block.header.name)}</span>
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          {isGroupActive && (
+                            <span
+                              className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400"
+                              aria-hidden="true"
+                            />
+                          )}
+                          <span
+                            className={cn(
+                              "dashboard-nav-section-label truncate",
+                              isGroupActive && "text-sky-300 dark:text-sky-300",
+                            )}
+                          >
+                            {t(block.header.name)}
+                          </span>
+                        </span>
                         {isGroupCollapsed ? (
                           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                         ) : (

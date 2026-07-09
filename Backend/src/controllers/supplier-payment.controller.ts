@@ -1,13 +1,28 @@
 import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.middleware';
+import type { BranchAuthRequest } from '../middleware/branchAuth.middleware';
 import { logManualActivity } from '../middleware/activity-log.middleware';
 import { ActivityType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 
+// SupplierPayment has no branchId column of its own — it belongs to a branch
+// via its purchase order, so filtering goes through that relation.
+function purchaseOrderBranchFilter(req: BranchAuthRequest) {
+    const id = req.selectedBranchId;
+    if (id !== null && id !== undefined) {
+        return { purchaseOrder: { branchId: id } };
+    }
+    const ids = req.selectedBranchIds;
+    if (ids && ids.length > 0) {
+        return { purchaseOrder: { branchId: { in: ids } } };
+    }
+    return {};
+}
+
 /**
  * Record a supplier payment
  */
-export const recordSupplierPayment = async (req: AuthRequest, res: Response) => {
+export const recordSupplierPayment = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
         const userId = req.user?.userId!;
@@ -28,11 +43,17 @@ export const recordSupplierPayment = async (req: AuthRequest, res: Response) => 
             });
         }
 
-        // Verify purchase order exists and belongs to organization
+        // Verify purchase order exists, belongs to the organization, and — for a
+        // branch-restricted user — belongs to a branch they actually have access to.
         const purchaseOrder = await prisma.purchaseOrder.findFirst({
             where: {
                 id: Number(purchaseOrderId),
-                organizationId: Number(organizationId)
+                organizationId: Number(organizationId),
+                ...(req.selectedBranchId !== null && req.selectedBranchId !== undefined
+                    ? { branchId: req.selectedBranchId }
+                    : req.selectedBranchIds && req.selectedBranchIds.length > 0
+                        ? { branchId: { in: req.selectedBranchIds } }
+                        : {})
             }
         });
 
@@ -141,12 +162,12 @@ export const recordSupplierPayment = async (req: AuthRequest, res: Response) => 
 /**
  * Get all supplier payments
  */
-export const getSupplierPayments = async (req: AuthRequest, res: Response) => {
+export const getSupplierPayments = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
         const { startDate, endDate, purchaseOrderId, paymentMethod, limit = '50', page = '1' } = req.query;
 
-        const where: any = { organizationId };
+        const where: any = { organizationId, ...purchaseOrderBranchFilter(req) };
 
         // Date filter
         if (startDate && endDate) {
@@ -232,7 +253,7 @@ export const getSupplierPayments = async (req: AuthRequest, res: Response) => {
 /**
  * Get supplier payment by ID
  */
-export const getSupplierPaymentById = async (req: AuthRequest, res: Response) => {
+export const getSupplierPaymentById = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
         const paymentId = parseInt(req.params.paymentId);
@@ -240,7 +261,8 @@ export const getSupplierPaymentById = async (req: AuthRequest, res: Response) =>
         const payment = await prisma.supplierPayment.findFirst({
             where: {
                 id: Number(paymentId),
-                organizationId: Number(organizationId)
+                organizationId: Number(organizationId),
+                ...purchaseOrderBranchFilter(req)
             },
             include: {
                 purchaseOrder: {

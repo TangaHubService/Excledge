@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api-client';
 import { useOrganization } from './OrganizationContext';
 
@@ -197,13 +198,21 @@ export const BranchProvider: React.FC<BranchProviderProps> = ({ children }) => {
     };
 
     const { organization } = useOrganization();
+    const queryClient = useQueryClient();
+
     useEffect(() => {
         refreshBranches();
     }, [organization?.id]);
 
+    // Single, reusable hook for "refresh everything on branch change" — every
+    // page's React Query hooks refetch automatically, with no page reload and
+    // no per-page invalidation logic to duplicate. Pages using plain
+    // useEffect + apiClient calls already refetch on their own by including
+    // selectedBranchId in their effect dependencies.
     const handleSetSelectedBranch = (id: number | null) => {
         setSelectedBranchId(id);
         localStorage.setItem('selected_branch_id', id === null ? 'all' : String(id));
+        queryClient.invalidateQueries();
     };
 
     return (

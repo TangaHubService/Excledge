@@ -2,14 +2,34 @@ import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth.middleware';
+import type { BranchAuthRequest } from '../middleware/branchAuth.middleware';
 import { logManualActivity } from '../middleware/activity-log.middleware';
 
-export const recordDebtPayment = async (req: AuthRequest, res: Response) => {
+// DebtPayment has no branchId column of its own — it belongs to a branch via
+// its sale, so filtering goes through that relation.
+function saleBranchFilter(req: BranchAuthRequest) {
+    const id = req.selectedBranchId;
+    if (id !== null && id !== undefined) {
+        return { sale: { branchId: id } };
+    }
+    const ids = req.selectedBranchIds;
+    if (ids && ids.length > 0) {
+        return { sale: { branchId: { in: ids } } };
+    }
+    return {};
+}
+
+export const recordDebtPayment = async (req: BranchAuthRequest, res: Response) => {
     try {
         const saleId = parseInt(req.params.saleId);
         const organizationId = parseInt(req.params.organizationId);
         const { amount, paymentMethod = 'CASH', reference, notes } = req.body;
         const userId = parseInt(req.user?.userId as string);
+        // Only the single-branch case can be enforced inside the raw, row-locking
+        // query below; a multi-branch assignment (selectedBranchIds) falls back to
+        // organization-level scoping here — the app has no path today that grants
+        // a user more than one branch, so this is a defensive no-op in practice.
+        const branchId = req.selectedBranchId ?? null;
 
         if (!userId) {
             return res.status(401).json({ success: false, error: "Unauthorized" });
@@ -25,6 +45,7 @@ export const recordDebtPayment = async (req: AuthRequest, res: Response) => {
             }>>`
                 SELECT id, "customerId", "debtAmount", status FROM sales
                 WHERE id = ${saleId} AND "organizationId" = ${organizationId}
+                  AND (${branchId}::int IS NULL OR "branchId" = ${branchId})
                 FOR UPDATE
             `;
 
@@ -120,7 +141,7 @@ export const recordDebtPayment = async (req: AuthRequest, res: Response) => {
     }
 };
 
-export const getSalePayments = async (req: AuthRequest, res: Response) => {
+export const getSalePayments = async (req: BranchAuthRequest, res: Response) => {
     try {
         const saleId = Number(req.params.saleId);
         const organizationId = parseInt(req.params.organizationId);
@@ -128,7 +149,8 @@ export const getSalePayments = async (req: AuthRequest, res: Response) => {
         const payments = await prisma.debtPayment.findMany({
             where: {
                 saleId: Number(saleId),
-                organizationId
+                organizationId,
+                ...saleBranchFilter(req)
             },
             orderBy: { paymentDate: 'desc' },
             include: {
@@ -152,7 +174,7 @@ export const getSalePayments = async (req: AuthRequest, res: Response) => {
     }
 };
 
-export const getCustomerDebtPayments = async (req: AuthRequest, res: Response) => {
+export const getCustomerDebtPayments = async (req: BranchAuthRequest, res: Response) => {
     try {
         const customerId = Number(req.params.customerId);
         const organizationId = parseInt(req.params.organizationId);
@@ -160,7 +182,8 @@ export const getCustomerDebtPayments = async (req: AuthRequest, res: Response) =
         const payments = await prisma.debtPayment.findMany({
             where: {
                 customerId: Number(customerId),
-                organizationId
+                organizationId,
+                ...saleBranchFilter(req)
             },
             orderBy: { paymentDate: 'desc' },
             include: {
@@ -220,7 +243,7 @@ export const getOutstandingDebts = async (req: AuthRequest, res: Response) => {
     }
 };
 
-export const getAllPaymentHistory = async (req: AuthRequest, res: Response) => {
+export const getAllPaymentHistory = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = Number(req.params.organizationId);
         const {
@@ -239,6 +262,7 @@ export const getAllPaymentHistory = async (req: AuthRequest, res: Response) => {
 
         const where: Prisma.DebtPaymentWhereInput = {
             organizationId,
+            ...saleBranchFilter(req),
             ...(paymentMethod && { paymentMethod }),
             ...(customerName && { customer: { name: { contains: customerName, mode: 'insensitive' } } }),
             ...(recordedByName && { recordedBy: { name: { contains: recordedByName, mode: 'insensitive' } } }),

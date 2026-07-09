@@ -25,6 +25,12 @@ export function getCurrentBranchId(): number | number[] | undefined {
 }
 
 // ── Models that have a `branchId` field ──────────────────────────────────
+// NOTE: keep this in sync with prisma/schema.prisma. `Notification` was
+// listed here previously but the `notifications` table has no `branchId`
+// column — injecting one would throw P2022 ("column does not exist") the
+// moment branch scoping became active for that model. Notifications are
+// org-wide by design today; adding real per-branch notifications requires
+// a schema migration (a nullable `branchId` column) before re-adding it here.
 const BRANCH_AWARE_MODELS = new Set([
   'Sale',
   'Batch',
@@ -34,7 +40,6 @@ const BRANCH_AWARE_MODELS = new Set([
   'InventoryLedger',
   'ActivityLog',
   'PurchaseOrder',
-  'Notification',
   'SupplierInvoice',
 ])
 

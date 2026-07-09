@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useBranch } from '../context/BranchContext';
+import { useAuth } from '../context/AuthContext';
 import {
   ChevronDown,
   Layers,
@@ -69,6 +70,12 @@ export const BranchSelector: React.FC<BranchSelectorProps> = ({ toolbar = false 
     loading,
     canAccessAllBranches,
   } = useBranch();
+  const { user } = useAuth();
+
+  // Sellers/Cashiers must always see only their assigned branch — never an
+  // interactive switcher, even in the unusual case they have more than one
+  // branch assigned (that's reserved for Store Managers/Admins).
+  const isSingleBranchRole = user?.role === 'SELLER' || user?.role === 'ACCOUNTANT';
 
   /* Auto-focus search when dropdown opens */
   useEffect(() => {
@@ -84,7 +91,11 @@ export const BranchSelector: React.FC<BranchSelectorProps> = ({ toolbar = false 
 
   /* ── Derived state ──────────────────────────────────── */
 
-  const isRestricted = !loading && userBranches.length > 0 && !canAccessAllBranches && userBranches.length <= 1;
+  const isRestricted =
+    !loading &&
+    userBranches.length > 0 &&
+    !canAccessAllBranches &&
+    (userBranches.length <= 1 || isSingleBranchRole);
 
   const selectedBranch: Branch | undefined = selectedBranchId !== null
     ? userBranches.find(b => b.id === selectedBranchId)
