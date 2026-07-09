@@ -409,18 +409,33 @@ export const getDebtorsReport = async (req: BranchAuthRequest, res: Response) =>
   try {
     const organizationId = parseInt(req.params.organizationId)
 
+    // Customer has no branchId column of its own (it's an org-wide record — see
+    // customer.controller.ts). Spreading buildBranchFilter() (`{branchId: ...}`)
+    // directly here would throw P2022 since `customers.branchId` does not exist.
+    // A debtor report is inherently about customers who already have a
+    // debt-creating sale, so scoping through that relation is both safe (no
+    // "invisible until first transaction" problem) and matches "only debtors
+    // with activity in this branch".
+    const debtSaleCondition = { OR: [{ paymentType: "DEBT" as const }, { paymentType: "MIXED" as const }] }
+    const branchId = req.selectedBranchId
+    const branchIds = req.selectedBranchIds
+    const debtSalesWhere =
+      branchId !== null && branchId !== undefined
+        ? { ...debtSaleCondition, branchId }
+        : branchIds && branchIds.length > 0
+          ? { ...debtSaleCondition, branchId: { in: branchIds } }
+          : debtSaleCondition
+
     // Get all customers with debt
     const debtors = await prisma.customer.findMany({
       where: {
         organizationId,
-        ...buildBranchFilter(req),
         balance: { gt: 0 },
+        sales: { some: debtSalesWhere },
       },
       include: {
         sales: {
-          where: {
-            OR: [{ paymentType: "DEBT" }, { paymentType: "MIXED" }],
-          },
+          where: debtSalesWhere,
           orderBy: { createdAt: "desc" },
         },
       },
@@ -721,9 +736,22 @@ export const getDebtPaymentsReport = async (req: BranchAuthRequest, res: Respons
     const organizationId = parseInt(req.params.organizationId);
     const { startDate, endDate } = req.query;
 
+    // DebtPayment has no branchId column of its own — it belongs to a branch
+    // via its sale, so filtering must go through that relation. Spreading
+    // buildBranchFilter() (which yields `{branchId: ...}`) directly here would
+    // throw P2022 since `debt_payments.branchId` does not exist.
+    const branchId = req.selectedBranchId;
+    const branchIds = req.selectedBranchIds;
+    const saleBranchFilter =
+      branchId !== null && branchId !== undefined
+        ? { sale: { branchId } }
+        : branchIds && branchIds.length > 0
+          ? { sale: { branchId: { in: branchIds } } }
+          : {};
+
     const where: any = {
       organizationId,
-      ...buildBranchFilter(req),
+      ...saleBranchFilter,
       ...(startDate && endDate && {
         paymentDate: {
           gte: new Date(startDate as string),

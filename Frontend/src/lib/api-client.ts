@@ -224,7 +224,14 @@ class ApiClient {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_URL}${endpoint}`, {
+    // ── Auto-inject branchId into query string (same as request()) ──
+    // File downloads/exports must respect the selected branch too, or an
+    // export could silently include other branches' data.
+    const branchParam = this.getBranchQueryParam();
+    const separator = endpoint.includes('?') ? '&' : '?';
+    const url = branchParam ? `${API_URL}${endpoint}${separator}${branchParam}` : `${API_URL}${endpoint}`;
+
+    const response = await fetch(url, {
       ...fetchOptions,
       headers,
     });
