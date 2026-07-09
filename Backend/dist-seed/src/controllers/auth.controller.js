@@ -255,6 +255,14 @@ const refresh = async (req, res) => {
         if (!user || !user.refreshToken || user.refreshToken !== hashedRefreshToken) {
             return res.status(401).json({ error: "Invalid refresh token" });
         }
+        if (!user.isActive) {
+            // Deactivated account — clear the stored token so this can't be replayed again.
+            await prisma_1.prisma.user.update({
+                where: { id: user.id },
+                data: { refreshToken: null, refreshTokenExpiry: null },
+            });
+            return res.status(401).json({ error: "Account is deactivated" });
+        }
         // Check if refresh token has expired
         if (user.refreshTokenExpiry && user.refreshTokenExpiry < new Date()) {
             return res.status(401).json({ error: "Refresh token has expired" });

@@ -49,7 +49,6 @@ const getCustomers = async (req, res) => {
         const limitNum = Math.min(Math.max(Number.parseInt(limit) || 50, 1), 500);
         const pageNum = Math.max(Number.parseInt(page) || 1, 1);
         const skip = (pageNum - 1) * limitNum;
-        const branchFilter = (0, branchAuth_middleware_1.buildBranchFilter)(req);
         const where = { organizationId, deletedAt: null };
         if (showInactive !== "true") {
             where.isActive = true;
@@ -64,14 +63,12 @@ const getCustomers = async (req, res) => {
         if (hasDebt === "true") {
             where.balance = { gt: 0 };
         }
-        // When a branch is selected, scope customers to those with sales in that branch
-        if (branchFilter.branchId !== undefined) {
-            where.sales = {
-                some: {
-                    branchId: branchFilter.branchId,
-                },
-            };
-        }
+        // Customers are organization-wide records (the Customer model has no
+        // branchId column), so no branch filter is applied here. Filtering by
+        // `sales.some({branchId})` was previously attempted, but that hid every
+        // customer that had not yet made a purchase in the selected branch,
+        // including newly created customers — the same root-cause bug as
+        // suppliers (see supplier.controller.ts getSuppliers).
         const customers = await prisma_1.prisma.customer.findMany({
             where,
             select: {
@@ -117,16 +114,12 @@ const getCustomerById = async (req, res) => {
         if (!organizationId) {
             return res.status(400).json({ error: "Organization ID is required" });
         }
+        // Customers themselves are org-wide (see getCustomers), but their sales
+        // history is branch-scoped data — a branch-restricted user must only see
+        // the sales that happened in their own branch(es).
         const branchFilter = (0, branchAuth_middleware_1.buildBranchFilter)(req);
         const customer = await prisma_1.prisma.customer.findFirst({
-            where: {
-                id,
-                organizationId,
-                deletedAt: null,
-                ...(branchFilter.branchId !== undefined
-                    ? { sales: { some: { branchId: branchFilter.branchId } } }
-                    : {}),
-            },
+            where: { id, organizationId, deletedAt: null },
             select: {
                 id: true,
                 name: true,
@@ -138,6 +131,7 @@ const getCustomerById = async (req, res) => {
                 balance: true,
                 isActive: true,
                 sales: {
+                    where: branchFilter.branchId !== undefined ? { branchId: branchFilter.branchId } : undefined,
                     select: {
                         id: true,
                         saleNumber: true,
@@ -168,7 +162,7 @@ exports.getCustomerById = getCustomerById;
 const createCustomer = async (req, res) => {
     try {
         const organizationId = parseInt(req.params?.organizationId);
-        const { name, phone, email, type, balance } = req.body;
+        const { name, phone, email, type, tin, TIN, balance } = req.body;
         // Validate and map customerType
         let customerType = 'INDIVIDUAL';
         if (type === 'INSURANCE' || type === 'CORPORATE') {
@@ -177,8 +171,9 @@ const createCustomer = async (req, res) => {
         const customer = await prisma_1.prisma.customer.create({
             data: {
                 name,
-                phone,
-                email,
+                phone: phone || null,
+                email: email || null,
+                TIN: TIN || tin || null,
                 customerType,
                 balance: balance || 0,
                 organizationId,
@@ -203,7 +198,14 @@ const updateCustomer = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const organizationId = parseInt(req.params.organizationId);
-        const { balance, ...updateData } = req.body;
+        const { balance, type, tin, TIN, ...rest } = req.body;
+        const updateData = { ...rest };
+        if (type !== undefined)
+            updateData.customerType = type;
+        if (TIN !== undefined)
+            updateData.TIN = TIN;
+        else if (tin !== undefined)
+            updateData.TIN = tin;
         const existingCustomer = await prisma_1.prisma.customer.findFirst({
             where: { id, organizationId, deletedAt: null },
         });
@@ -279,11 +281,11 @@ const bulkImportCustomers = async (req, res) => {
                 const type = row.type || row.Type || row.TYPE || row.customerType || row.CustomerType || "INDIVIDUAL";
                 const address = row.address || row.Address || row.ADDRESS;
                 const balance = parseFloat(row.balance || row.Balance || row.BALANCE || "0");
-                if (!name || !phone) {
+                if (!name) {
                     errors.push({
                         row: i + 2,
                         data: row,
-                        error: "Missing required fields: name and phone",
+                        error: "Missing required field: name",
                     });
                     continue;
                 }
@@ -292,21 +294,23 @@ const bulkImportCustomers = async (req, res) => {
                 if (typeUpper === 'INSURANCE' || typeUpper === 'CORPORATE') {
                     customerType = typeUpper;
                 }
-                const existing = await prisma_1.prisma.customer.findFirst({
-                    where: { organizationId, phone },
-                });
-                if (existing) {
-                    errors.push({
-                        row: i + 2,
-                        data: row,
-                        error: `Customer with phone ${phone} already exists`,
+                if (phone) {
+                    const existing = await prisma_1.prisma.customer.findFirst({
+                        where: { organizationId, phone: String(phone) },
                     });
-                    continue;
+                    if (existing) {
+                        errors.push({
+                            row: i + 2,
+                            data: row,
+                            error: `Customer with phone ${phone} already exists`,
+                        });
+                        continue;
+                    }
                 }
                 const customer = await prisma_1.prisma.customer.create({
                     data: {
                         name: String(name),
-                        phone: String(phone),
+                        phone: phone ? String(phone) : null,
                         email: email ? String(email) : null,
                         address: address ? String(address) : null,
                         customerType,

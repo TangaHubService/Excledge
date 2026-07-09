@@ -9,8 +9,9 @@ const axios_1 = __importDefault(require("axios"));
 const prisma_1 = require("../lib/prisma");
 const client_1 = require("@prisma/client");
 const currencyConverter_1 = require("../utils/currencyConverter");
+const paypack_1 = require("../lib/paypack");
 const config_1 = require("../config");
-const PESAPAL_API_URL = process.env.PESAPAL_API_URL;
+const PESAPAL_API_URL = paypack_1.pesapalConfig.baseUrl;
 // Helper function to get transaction status
 const getTransactionStatus = async (orderTrackingId) => {
     try {
@@ -38,6 +39,20 @@ const pesapalIpnController = async (req, res) => {
             const transaction = await getTransactionStatus(OrderTrackingId);
             // Update subscription based on payment status
             if (transaction.payment_status_description === 'Completed') {
+                // Idempotency guard: this endpoint can be replayed by anyone who has
+                // seen the orderTrackingId, so don't reprocess a transaction we've
+                // already recorded a payment for.
+                const existingPayment = await prisma_1.prisma.payment.findFirst({
+                    where: { paymentId: OrderTrackingId },
+                });
+                if (existingPayment) {
+                    return res.status(200).json({
+                        orderNotificationType: "IPNCHANGE",
+                        orderTrackingId: OrderTrackingId,
+                        orderMerchantReference: OrderMerchantReference,
+                        status: 200
+                    });
+                }
                 // Find the subscription by the merchant reference
                 const subscription = await prisma_1.prisma.subscription.findFirst({
                     where: {

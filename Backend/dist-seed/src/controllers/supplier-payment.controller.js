@@ -4,6 +4,19 @@ exports.deleteSupplierPayment = exports.getSupplierPaymentById = exports.getSupp
 const activity_log_middleware_1 = require("../middleware/activity-log.middleware");
 const client_1 = require("@prisma/client");
 const prisma_1 = require("../lib/prisma");
+// SupplierPayment has no branchId column of its own — it belongs to a branch
+// via its purchase order, so filtering goes through that relation.
+function purchaseOrderBranchFilter(req) {
+    const id = req.selectedBranchId;
+    if (id !== null && id !== undefined) {
+        return { purchaseOrder: { branchId: id } };
+    }
+    const ids = req.selectedBranchIds;
+    if (ids && ids.length > 0) {
+        return { purchaseOrder: { branchId: { in: ids } } };
+    }
+    return {};
+}
 /**
  * Record a supplier payment
  */
@@ -19,11 +32,17 @@ const recordSupplierPayment = async (req, res) => {
                 message: 'Missing required fields: purchaseOrderId, amount, paymentMethod, paymentDate'
             });
         }
-        // Verify purchase order exists and belongs to organization
+        // Verify purchase order exists, belongs to the organization, and — for a
+        // branch-restricted user — belongs to a branch they actually have access to.
         const purchaseOrder = await prisma_1.prisma.purchaseOrder.findFirst({
             where: {
                 id: Number(purchaseOrderId),
-                organizationId: Number(organizationId)
+                organizationId: Number(organizationId),
+                ...(req.selectedBranchId !== null && req.selectedBranchId !== undefined
+                    ? { branchId: req.selectedBranchId }
+                    : req.selectedBranchIds && req.selectedBranchIds.length > 0
+                        ? { branchId: { in: req.selectedBranchIds } }
+                        : {})
             }
         });
         if (!purchaseOrder) {
@@ -32,44 +51,54 @@ const recordSupplierPayment = async (req, res) => {
                 message: 'Purchase order not found'
             });
         }
-        // Get total payments made so far
-        const existingPayments = await prisma_1.prisma.supplierPayment.aggregate({
-            where: {
-                purchaseOrderId: parseInt(purchaseOrderId)
-            },
-            _sum: {
-                amount: true
+        // Read-check-create must be atomic and the PO row locked, or two concurrent
+        // payment submissions can both read the same pre-payment total, both pass
+        // the overpayment check, and together overpay the PO.
+        let newTotal = 0;
+        let totalPaid = 0;
+        const payment = await prisma_1.prisma.$transaction(async (tx) => {
+            const [lockedPo] = await tx.$queryRaw `
+                SELECT id, "totalAmount" FROM purchase_orders
+                WHERE id = ${Number(purchaseOrderId)} AND "organizationId" = ${Number(organizationId)}
+                FOR UPDATE
+            `;
+            if (!lockedPo) {
+                throw new Error('Purchase order not found');
             }
-        });
-        const totalPaid = existingPayments._sum.amount?.toNumber() || 0;
-        const newTotal = totalPaid + parseFloat(amount);
-        // Check if payment exceeds purchase order total
-        if (newTotal > purchaseOrder.totalAmount.toNumber()) {
-            return res.status(400).json({
-                success: false,
-                message: `Payment exceeds purchase order total. Remaining: ${purchaseOrder.totalAmount.toNumber() - totalPaid}`
+            const existingPayments = await tx.supplierPayment.aggregate({
+                where: {
+                    purchaseOrderId: parseInt(purchaseOrderId)
+                },
+                _sum: {
+                    amount: true
+                }
             });
-        }
-        // Create supplier payment
-        const payment = await prisma_1.prisma.supplierPayment.create({
-            data: {
-                purchaseOrderId: Number(purchaseOrderId),
-                organizationId: Number(organizationId),
-                amount: parseFloat(amount),
-                paymentMethod,
-                paymentDate: new Date(paymentDate),
-                reference,
-                notes,
-                recordedById: Number(userId)
-            },
-            include: {
-                purchaseOrder: {
-                    select: {
-                        orderNumber: true,
-                        totalAmount: true
+            totalPaid = existingPayments._sum.amount?.toNumber() || 0;
+            newTotal = totalPaid + parseFloat(amount);
+            const orderTotal = Number(lockedPo.totalAmount);
+            if (newTotal > orderTotal) {
+                throw new Error(`Payment exceeds purchase order total. Remaining: ${orderTotal - totalPaid}`);
+            }
+            return tx.supplierPayment.create({
+                data: {
+                    purchaseOrderId: Number(purchaseOrderId),
+                    organizationId: Number(organizationId),
+                    amount: parseFloat(amount),
+                    paymentMethod,
+                    paymentDate: new Date(paymentDate),
+                    reference,
+                    notes,
+                    recordedById: Number(userId)
+                },
+                include: {
+                    purchaseOrder: {
+                        select: {
+                            orderNumber: true,
+                            totalAmount: true
+                        }
                     }
                 }
-            }
+            });
         });
         // Log activity
         await (0, activity_log_middleware_1.logManualActivity)({
@@ -101,6 +130,9 @@ const recordSupplierPayment = async (req, res) => {
     }
     catch (error) {
         console.error('Error recording supplier payment:', error);
+        if (typeof error?.message === 'string' && error.message.startsWith('Payment exceeds purchase order total')) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
         res.status(500).json({
             success: false,
             message: 'Failed to record supplier payment',
@@ -116,7 +148,7 @@ const getSupplierPayments = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
         const { startDate, endDate, purchaseOrderId, paymentMethod, limit = '50', page = '1' } = req.query;
-        const where = { organizationId };
+        const where = { organizationId, ...purchaseOrderBranchFilter(req) };
         // Date filter
         if (startDate && endDate) {
             where.paymentDate = {
@@ -203,7 +235,8 @@ const getSupplierPaymentById = async (req, res) => {
         const payment = await prisma_1.prisma.supplierPayment.findFirst({
             where: {
                 id: Number(paymentId),
-                organizationId: Number(organizationId)
+                organizationId: Number(organizationId),
+                ...purchaseOrderBranchFilter(req)
             },
             include: {
                 purchaseOrder: {

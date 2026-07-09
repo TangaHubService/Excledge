@@ -83,7 +83,7 @@ const subscriptionPlans = [
             "2 visits a month",
             "24/7 support"
         ],
-    },
+    }
 ];
 function extractMaxUsers(features) {
     const userFeature = features.find((f) => /user account/i.test(f));
@@ -114,7 +114,7 @@ async function seedSubscriptionPlans() {
         featureMap[featureName] = feature;
     }
     for (const plan of subscriptionPlans) {
-        await prisma.subscriptionPlan.upsert({
+        const dbPlan = await prisma.subscriptionPlan.upsert({
             where: { name: plan.title },
             update: {
                 description: plan.description,
@@ -132,13 +132,20 @@ async function seedSubscriptionPlans() {
                 billingCycle: plan.period,
                 isActive: plan.isActive,
                 maxUsers: extractMaxUsers(plan.features),
-                features: {
-                    create: plan.features.map((featureName) => ({
-                        feature: { connect: { key: featureMap[featureName].key } },
-                    })),
-                },
             },
         });
+        // Re-sync features in array order on every run (create AND update), since
+        // upsert's update branch doesn't touch relations and row order otherwise
+        // reflects whenever the plan was first seeded rather than the array above.
+        await prisma.planFeature.deleteMany({ where: { planId: dbPlan.id } });
+        for (const featureName of plan.features) {
+            await prisma.planFeature.create({
+                data: {
+                    planId: dbPlan.id,
+                    featureId: featureMap[featureName].id,
+                },
+            });
+        }
         console.log(`Processed plan: ${plan.title}`);
     }
 }
@@ -149,7 +156,7 @@ async function createSaleInTransaction(ctx, input) {
     for (const item of items) {
         totalAmount += item.quantity * item.unitPrice;
     }
-    const invoiceNumber = await (0, rra_ebm_service_1.generateInvoiceNumber)(orgId, branchId);
+    const { invoiceNumber, vsdcInvcNo } = await (0, rra_ebm_service_1.generateInvoiceNumber)(orgId, branchId);
     const taxSummary = await tax_service_1.TaxService.calculateSaleTax(orgId, items);
     return prisma.$transaction(async (tx) => {
         const saleItemsData = [];
@@ -196,6 +203,7 @@ async function createSaleInTransaction(ctx, input) {
             data: {
                 saleNumber,
                 invoiceNumber,
+                vsdcInvcNo,
                 customerId,
                 userId,
                 organizationId: orgId,

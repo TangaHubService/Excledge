@@ -10,7 +10,14 @@ const orgAccess = (0, organizationAccess_middleware_1.requireOrganizationAccess)
 router.get("/:organizationId", auth_middleware_1.authenticate, orgAccess, (0, auth_middleware_1.authorize)("ADMIN", "BRANCH_MANAGER"), user_controller_1.getUsers);
 router.get("/:id", auth_middleware_1.authenticate, user_controller_1.getUserById);
 router.post("/", auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)("ADMIN"), user_controller_1.createUser);
-router.put("/:organizationId/update/:id", auth_middleware_1.authenticate, orgAccess, (0, auth_middleware_1.authorize)("ADMIN", "BRANCH_MANAGER", "SELLER"), user_controller_1.updateUser);
+// Authorization here is intentionally NOT a single role list: this endpoint
+// is shared between "edit my own profile" (any authenticated org member) and
+// "an admin changes someone else's role/status" (Admin/System Owner only,
+// and never targeting another Admin/System Owner). Those rules depend on the
+// specific target user and fields being changed, so they are enforced inside
+// updateUser itself rather than via a coarse role gate here — see
+// user.controller.ts for the full authorization logic.
+router.put("/:organizationId/update/:id", auth_middleware_1.authenticate, orgAccess, user_controller_1.updateUser);
 // Profile image upload route with error handling
 router.put("/profile-image/:id", auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)("ADMIN", "BRANCH_MANAGER", "SELLER"), (req, res, next) => {
     upload_middleware_1.uploadSingle.single('profileImage')(req, res, (err) => {

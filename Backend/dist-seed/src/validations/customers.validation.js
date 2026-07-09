@@ -5,7 +5,7 @@ const zod_1 = require("zod");
 exports.createCustomerSchema = zod_1.z.object({
     body: zod_1.z.object({
         name: zod_1.z.string().min(1, 'Customer name required').max(255, 'Customer name too long'),
-        phone: zod_1.z.string().min(7, 'Phone number too short').max(15, 'Phone number too long'),
+        phone: zod_1.z.string().min(7, 'Phone number too short').max(15, 'Phone number too long').optional(),
         email: zod_1.z.string().email('Invalid email address').optional(),
         address: zod_1.z.string().optional(),
         customerType: zod_1.z.enum(['INDIVIDUAL', 'CORPORATE']).default('INDIVIDUAL'),

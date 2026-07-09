@@ -107,7 +107,8 @@ class TaxService {
     }
 }
 exports.TaxService = TaxService;
-/** Allowed tax codes for line items */
+/** Allowed tax codes for line items. E is reserved for internal RRA use only
+ *  and must never be assigned to a product or submitted on a sale. */
 TaxService.ALLOWED_TAX_CODES = new Set([
-    client_1.RraTaxCode.A, client_1.RraTaxCode.B, client_1.RraTaxCode.C, client_1.RraTaxCode.D, client_1.RraTaxCode.E,
+    client_1.RraTaxCode.A, client_1.RraTaxCode.B, client_1.RraTaxCode.C, client_1.RraTaxCode.D,
 ]);

@@ -3,37 +3,49 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAllPaymentHistory = exports.getOutstandingDebts = exports.getCustomerDebtPayments = exports.getSalePayments = exports.recordDebtPayment = void 0;
 const prisma_1 = require("../lib/prisma");
 const activity_log_middleware_1 = require("../middleware/activity-log.middleware");
+// DebtPayment has no branchId column of its own — it belongs to a branch via
+// its sale, so filtering goes through that relation.
+function saleBranchFilter(req) {
+    const id = req.selectedBranchId;
+    if (id !== null && id !== undefined) {
+        return { sale: { branchId: id } };
+    }
+    const ids = req.selectedBranchIds;
+    if (ids && ids.length > 0) {
+        return { sale: { branchId: { in: ids } } };
+    }
+    return {};
+}
 const recordDebtPayment = async (req, res) => {
     try {
         const saleId = parseInt(req.params.saleId);
         const organizationId = parseInt(req.params.organizationId);
         const { amount, paymentMethod = 'CASH', reference, notes } = req.body;
         const userId = parseInt(req.user?.userId);
+        // Only the single-branch case can be enforced inside the raw, row-locking
+        // query below; a multi-branch assignment (selectedBranchIds) falls back to
+        // organization-level scoping here — the app has no path today that grants
+        // a user more than one branch, so this is a defensive no-op in practice.
+        const branchId = req.selectedBranchId ?? null;
         if (!userId) {
             return res.status(401).json({ success: false, error: "Unauthorized" });
         }
         // Start a transaction
         const result = await prisma_1.prisma.$transaction(async (tx) => {
-            // 1. Get the sale with current debt
-            const sale = await tx.sale.findFirst({
-                where: {
-                    id: saleId,
-                    organizationId,
-                    OR: [
-                        { debtAmount: { gt: 0 } },
-                        { status: 'COMPLETED' }
-                    ]
-                },
-                include: {
-                    customer: true,
-                    saleItems: true
-                }
-            });
-            if (!sale) {
+            // 1. Lock the sale row first — concurrent partial payments on the same
+            // sale must serialize, or two requests can both read the same debt
+            // balance and each independently think their payment fits within it.
+            const [lockedSale] = await tx.$queryRaw `
+                SELECT id, "customerId", "debtAmount", status FROM sales
+                WHERE id = ${saleId} AND "organizationId" = ${organizationId}
+                  AND (${branchId}::int IS NULL OR "branchId" = ${branchId})
+                FOR UPDATE
+            `;
+            if (!lockedSale || (Number(lockedSale.debtAmount) <= 0 && lockedSale.status !== 'COMPLETED')) {
                 throw new Error("Sale not found or no debt to pay");
             }
             const paymentAmount = Number(amount);
-            const currentDebt = Number(sale.debtAmount);
+            const currentDebt = Number(lockedSale.debtAmount);
             if (isNaN(paymentAmount) || paymentAmount <= 0) {
                 throw new Error("Invalid payment amount");
             }
@@ -48,7 +60,7 @@ const recordDebtPayment = async (req, res) => {
             const payment = await tx.debtPayment.create({
                 data: {
                     saleId,
-                    customerId: sale.customerId,
+                    customerId: lockedSale.customerId,
                     organizationId,
                     amount: paymentAmount,
                     paymentMethod,
@@ -57,17 +69,17 @@ const recordDebtPayment = async (req, res) => {
                     recordedById: userId
                 }
             });
-            // 3. Update sale's debt amount
+            // 3. Update sale's debt amount atomically (safe now that the row is locked)
             await tx.sale.update({
                 where: { id: saleId },
                 data: {
-                    debtAmount: remainingDebt,
+                    debtAmount: { decrement: paymentAmount },
                     cashAmount: { increment: paymentAmount }
                 },
             });
             // 4. Update customer's balance
             await tx.customer.update({
-                where: { id: sale.customerId },
+                where: { id: lockedSale.customerId },
                 data: {
                     balance: { decrement: paymentAmount },
                 },
@@ -118,7 +130,8 @@ const getSalePayments = async (req, res) => {
         const payments = await prisma_1.prisma.debtPayment.findMany({
             where: {
                 saleId: Number(saleId),
-                organizationId
+                organizationId,
+                ...saleBranchFilter(req)
             },
             orderBy: { paymentDate: 'desc' },
             include: {
@@ -149,7 +162,8 @@ const getCustomerDebtPayments = async (req, res) => {
         const payments = await prisma_1.prisma.debtPayment.findMany({
             where: {
                 customerId: Number(customerId),
-                organizationId
+                organizationId,
+                ...saleBranchFilter(req)
             },
             orderBy: { paymentDate: 'desc' },
             include: {
@@ -214,6 +228,7 @@ const getAllPaymentHistory = async (req, res) => {
         const { paymentMethod, customerName, recordedByName, startDate, endDate } = req.query;
         const where = {
             organizationId,
+            ...saleBranchFilter(req),
             ...(paymentMethod && { paymentMethod }),
             ...(customerName && { customer: { name: { contains: customerName, mode: 'insensitive' } } }),
             ...(recordedByName && { recordedBy: { name: { contains: recordedByName, mode: 'insensitive' } } }),

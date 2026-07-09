@@ -9,7 +9,6 @@ exports.toRraTime = toRraTime;
 exports.toRraDateTime = toRraDateTime;
 exports.fix2 = fix2;
 exports.buildRraSendReceiptPayload = buildRraSendReceiptPayload;
-exports.buildSaleGatewayPayload = buildSaleGatewayPayload;
 exports.generateInvoiceNumber = generateInvoiceNumber;
 exports.submitInvoiceToEbm = submitInvoiceToEbm;
 exports.submitRefundToEbm = submitRefundToEbm;
@@ -101,8 +100,8 @@ function isMissingDatabaseObjectError(error, objectName) {
     return ((postgresCode === '42P01' || postgresCode === '42704') &&
         message.includes(`"${objectName}"`));
 }
-async function nextInvoiceSequenceFromCounterTable(organizationId, branchId) {
-    const rows = await prisma_1.prisma.$queryRaw `
+async function nextInvoiceSequenceFromCounterTable(organizationId, branchId, client = prisma_1.prisma) {
+    const rows = await client.$queryRaw `
     INSERT INTO "organization_invoice_counters" ("organizationId", "branchId", "nextSequence", "updatedAt")
     VALUES (${organizationId}, ${branchId}, 1, NOW())
     ON CONFLICT ("organizationId", "branchId") DO UPDATE
@@ -112,21 +111,21 @@ async function nextInvoiceSequenceFromCounterTable(organizationId, branchId) {
   `;
     return Number(rows[0]?.nextSequence ?? 0);
 }
-async function nextInvoiceSequenceFromLegacySequence() {
-    const rows = await prisma_1.prisma.$queryRaw `
+async function nextInvoiceSequenceFromLegacySequence(client = prisma_1.prisma) {
+    const rows = await client.$queryRaw `
     SELECT nextval('invoice_seq')::bigint AS "nextSequence"
   `;
     return Number(rows[0]?.nextSequence ?? 0);
 }
-async function allocateNextInvoiceSequence(organizationId, branchId) {
+async function allocateNextInvoiceSequence(organizationId, branchId, client = prisma_1.prisma) {
     if (invoiceSequenceMode === 'per_org') {
-        return nextInvoiceSequenceFromCounterTable(organizationId, branchId);
+        return nextInvoiceSequenceFromCounterTable(organizationId, branchId, client);
     }
     if (invoiceSequenceMode === 'legacy_sequence') {
-        return nextInvoiceSequenceFromLegacySequence();
+        return nextInvoiceSequenceFromLegacySequence(client);
     }
     try {
-        const sequence = await nextInvoiceSequenceFromCounterTable(organizationId, branchId);
+        const sequence = await nextInvoiceSequenceFromCounterTable(organizationId, branchId, client);
         invoiceSequenceMode = 'per_org';
         return sequence;
     }
@@ -136,7 +135,7 @@ async function allocateNextInvoiceSequence(organizationId, branchId) {
         }
     }
     try {
-        const sequence = await nextInvoiceSequenceFromLegacySequence();
+        const sequence = await nextInvoiceSequenceFromLegacySequence(client);
         invoiceSequenceMode = 'legacy_sequence';
         if (!loggedLegacyInvoiceFallback) {
             loggedLegacyInvoiceFallback = true;
@@ -210,38 +209,50 @@ function toRraDateTime(d) {
 function fix2(n) {
     return Math.round(n * 100) / 100;
 }
-function rcptLabelToRra(label) {
-    switch (label) {
-        case 'NR': return { rcptTyCd: 'R' };
-        case 'CS': return { rcptTyCd: 'CS' };
-        case 'CR': return { rcptTyCd: 'CR' };
-        case 'TS': return { rcptTyCd: 'TS' };
-        case 'TR': return { rcptTyCd: 'TR' };
-        case 'PS': return { rcptTyCd: 'P' };
-        default: return { rcptTyCd: 'S' }; // NS = Normal Sale
-    }
+/**
+ * VSDC §4.9 Sales Receipt Type only has two values: 'S' (Sale) and 'R' (Refund
+ * after Sale). The CIS-level NS/NR/CS/CR/TS/TR/PS distinction (rcptLabel) is
+ * used for the printed A/B/RT counter, not for this field — every label ends
+ * in 'S' or 'R', which is exactly the axis VSDC cares about here.
+ */
+function rcptTyCdFromLabel(label) {
+    return label?.endsWith('R') ? 'R' : 'S';
 }
+/** VSDC §4.10 Payment Method codes. */
 function pmtTypeCd(paymentType) {
     switch (paymentType) {
-        case 'CASH': return '01';
-        case 'CREDIT_CARD': return '02';
-        case 'MOBILE_MONEY': return '04';
-        case 'INSURANCE': return '05';
-        default: return '03'; // bank / other
+        case 'CASH': return '01'; // CASH
+        case 'CREDIT_CARD': return '05'; // DEBIT&CREDIT CARD
+        case 'MOBILE_MONEY': return '06'; // MOBILE MONEY
+        case 'INSURANCE': return '07'; // OTHER
+        default: return '03'; // CASH/CREDIT
     }
 }
+/** VSDC §4.1 Tax Type rates — static, RRA-defined: A 0%, B 18%, C 0%, D 0%. */
+const TAX_RATE_BY_SLOT = [0, 18, 0, 0];
 /**
- * C4: Build the RRA ALGO EBM API v8.2 /saveInvc payload.
- * Replaces the old buildSaleGatewayPayload which used wrong field names, ISO dates, and no tax slots.
+ * Build the RRA VSDC API v1.0.5 `/trnsSales/saveSales` payload
+ * (`TrnsSalesSaveWrReq`, §3.3.6.1). `tin`/`bhfId` are added by the caller from
+ * the VSDC envelope, not here.
+ *
+ * `opts` lets the same builder produce a refund submission: a refund is not a
+ * separate endpoint, it's another sales-transaction record referencing the
+ * original invoice via `orgInvcNo` with `rfdDt`/`rfdRsnCd` set.
  */
-function buildRraSendReceiptPayload(sale, _org) {
-    const { rcptTyCd } = rcptLabelToRra(sale.rcptLabel);
-    // Per-tax-code accumulators: slot 1=A(exempt), 2=B(VAT18%), 3=C(zero-rated), 4=D(non-taxable)
+function buildRraSendReceiptPayload(sale, org, opts = {}) {
+    const rcptTyCd = rcptTyCdFromLabel(sale.rcptLabel);
+    const isRefund = rcptTyCd === 'R';
+    const isVoid = !!opts.cnclDt;
+    // Per-tax-code accumulators: slot 0=A(exempt), 1=B(VAT18%), 2=C(zero-rated), 3=D(non-taxable)
     const taxblAmt = [0, 0, 0, 0];
     const taxAmt = [0, 0, 0, 0];
     const codeToSlot = { A: 0, B: 1, C: 2, D: 3 };
     const itemList = sale.saleItems.map((si, idx) => {
-        const slot = codeToSlot[(si.taxCode ?? 'A').toUpperCase()] ?? 0;
+        const rawCode = (si.taxCode ?? 'A').toUpperCase();
+        const slot = codeToSlot[rawCode];
+        if (slot === undefined) {
+            throw new Error(`Cannot submit sale ${sale.saleNumber ?? sale.id} to RRA: sale item ${idx + 1} has invalid tax code "${rawCode}". Only A, B, C, D are valid for line items.`);
+        }
         const tAmt = fix2(si.taxAmount.toNumber());
         const tbAmt = fix2(si.totalPrice.toNumber() - tAmt);
         taxblAmt[slot] = fix2(taxblAmt[slot] + tbAmt);
@@ -251,7 +262,6 @@ function buildRraSendReceiptPayload(sale, _org) {
             itemCd: si.product?.itemCd ?? `P${si.productId ?? idx + 1}`,
             itemClsCd: si.product?.itemClsCd ?? '5020230302',
             itemNm: si.product?.name ?? 'Item',
-            orgnNatCd: 'RW',
             pkg: si.quantity,
             pkgUnitCd: si.product?.pkgUnitCd ?? 'CT',
             qty: si.quantity,
@@ -260,7 +270,7 @@ function buildRraSendReceiptPayload(sale, _org) {
             splyAmt: fix2(tbAmt),
             dcRt: fix2(si.dcRate.toNumber()),
             dcAmt: fix2(si.dcAmt.toNumber()),
-            taxTyCd: (si.taxCode ?? 'A').toUpperCase(),
+            taxTyCd: rawCode,
             taxblAmt: fix2(tbAmt),
             taxAmt: fix2(tAmt),
             totAmt: fix2(si.totalPrice.toNumber()),
@@ -270,35 +280,60 @@ function buildRraSendReceiptPayload(sale, _org) {
     const totTaxblAmt = fix2(taxblAmt.reduce((s, v) => s + v, 0));
     const totAmt = fix2(sale.totalAmount.toNumber());
     const now = sale.createdAt;
+    const invcNo = sale.vsdcInvcNo ?? sale.id;
+    const regrNm = sale.user?.name ?? 'System';
+    const regrId = sale.user ? String(sale.user.id) : 'system';
     return {
-        invcNo: sale.invoiceNumber ?? sale.saleNumber,
-        orgInvcNo: 0,
+        invcNo,
+        orgInvcNo: opts.orgInvcNo ?? 0,
         custTin: sale.customer.TIN ?? '',
-        custMblNo: sale.customer.phone ?? '',
-        remark: '',
+        prcOrdCd: '', // known gap: not captured for BUSINESS customers today (§ purchase code)
+        custNm: sale.customer.name ?? '',
+        salesTyCd: 'N', // spec: "Send only 'N' type"
         rcptTyCd,
         pmtTyCd: pmtTypeCd(sale.paymentType),
+        salesSttsCd: isVoid ? '04' : isRefund ? '05' : '02', // §4.11: 04 Canceled, 05 Refunded, 02 Approved
+        cfmDt: toRraDateTime(now),
         salesDt: toRraDate(now),
         stockRlsDt: toRraDateTime(now),
+        cnclReqDt: opts.cnclDt ? toRraDateTime(opts.cnclDt) : null,
+        cnclDt: opts.cnclDt ? toRraDateTime(opts.cnclDt) : null,
+        rfdDt: opts.rfdDt ? toRraDateTime(opts.rfdDt) : null,
+        rfdRsnCd: opts.rfdRsnCd ?? null,
         totItemCnt: itemList.length,
-        taxblAmt1: taxblAmt[0],
-        taxblAmt2: taxblAmt[1],
-        taxblAmt3: taxblAmt[2],
-        taxblAmt4: taxblAmt[3],
-        taxAmt1: taxAmt[0],
-        taxAmt2: taxAmt[1],
-        taxAmt3: taxAmt[2],
-        taxAmt4: taxAmt[3],
+        taxblAmtA: taxblAmt[0],
+        taxblAmtB: taxblAmt[1],
+        taxblAmtC: taxblAmt[2],
+        taxblAmtD: taxblAmt[3],
+        taxRtA: TAX_RATE_BY_SLOT[0],
+        taxRtB: TAX_RATE_BY_SLOT[1],
+        taxRtC: TAX_RATE_BY_SLOT[2],
+        taxRtD: TAX_RATE_BY_SLOT[3],
+        taxAmtA: taxAmt[0],
+        taxAmtB: taxAmt[1],
+        taxAmtC: taxAmt[2],
+        taxAmtD: taxAmt[3],
         totTaxblAmt,
         totTaxAmt,
         totAmt,
         prchrAcptcYn: 'N',
+        remark: '',
+        regrNm,
+        regrId,
+        modrNm: regrNm,
+        modrId: regrId,
+        receipt: {
+            custTin: sale.customer.TIN ?? '',
+            custMblNo: sale.customer.phone ?? '',
+            rptNo: invcNo,
+            trdeNm: org.name,
+            adrs: org.address ?? '',
+            topMsg: '',
+            btmMsg: 'Thank you for your business',
+            prchrAcptcYn: 'N',
+        },
         itemList,
     };
-}
-/** @deprecated Use buildRraSendReceiptPayload instead. */
-function buildSaleGatewayPayload(sale, org) {
-    return buildRraSendReceiptPayload(sale, org);
 }
 async function enqueueSaleRetry(params) {
     const nextRetryMs = Math.min(60 * 60 * 1000, 5 * 60 * 1000 * Math.pow(2, params.retryCount ?? 0));
@@ -321,18 +356,27 @@ async function enqueueSaleRetry(params) {
 /**
  * Atomically allocate next invoice sequence for a branch (PostgreSQL upsert).
  * RRA requires per-branch (per-device) sequences, not per-organization.
+ *
+ * Returns both the human-readable, CIS-side invoice number (printed on the
+ * receipt, purely cosmetic) and the raw numeric sequence — VSDC's `invcNo` /
+ * `orgInvcNo` fields are typed NUMBER and must never receive the formatted
+ * string.
  */
-async function generateInvoiceNumber(organizationId, branchId) {
-    const sequence = (await allocateNextInvoiceSequence(organizationId, branchId))
-        .toString()
-        .padStart(6, '0');
-    const organization = await prisma_1.prisma.organization.findUnique({
+async function generateInvoiceNumber(organizationId, branchId, client = prisma_1.prisma) {
+    const vsdcInvcNo = await allocateNextInvoiceSequence(organizationId, branchId, client);
+    const sequence = vsdcInvcNo.toString().padStart(6, '0');
+    const organization = await client.organization.findUnique({
         where: { id: organizationId },
         select: { TIN: true },
     });
+    // TIN-derived code is cosmetic only — it is NOT guaranteed unique across
+    // organizations (many orgs have no TIN yet and all fall back to the same
+    // literal), and the sequence above resets per (organizationId, branchId).
+    // branchId is a global PK, so folding it in makes the whole string globally
+    // unique by construction, independent of TIN state or branch count per org.
     const orgCode = organization?.TIN?.replace(/\D/g, '').slice(-4) || 'ORG';
     const year = new Date().getFullYear();
-    return `INV-${orgCode}-${year}-${sequence}`;
+    return { invoiceNumber: `INV-${orgCode}-B${branchId}-${year}-${sequence}`, vsdcInvcNo };
 }
 /**
  * Submit a completed sale to the VSDC/EBM gateway (or mock). Idempotent if already SUCCESS.
@@ -352,6 +396,7 @@ async function submitInvoiceToEbm(params) {
             },
             customer: true,
             branch: true,
+            user: { select: { id: true, name: true } },
         },
     }));
     if (!sale) {
@@ -389,12 +434,18 @@ async function submitInvoiceToEbm(params) {
     }
     const org = await prisma_1.prisma.organization.findUnique({
         where: { id: params.organizationId },
-        select: { TIN: true, ebmDeviceId: true, ebmSerialNo: true, name: true },
+        select: { TIN: true, name: true, address: true },
     });
     if (!org) {
         return { success: false, error: 'Organization not found' };
     }
-    const payload = buildRraSendReceiptPayload(sale, org);
+    let payload;
+    try {
+        payload = buildRraSendReceiptPayload(sale, org);
+    }
+    catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Invalid sale payload' };
+    }
     let txRow = await prisma_1.prisma.ebmTransaction.findFirst({
         where: {
             saleId: sale.id,
@@ -453,25 +504,10 @@ async function submitInvoiceToEbm(params) {
             retryCount: txRow.retryCount,
         });
     };
-    if (config_1.config.ebm.useMock) {
-        const mockRef = `MOCK-EBM-${txRow.id}`;
-        await prisma_1.prisma.ebmTransaction.update({
-            where: { id: txRow.id },
-            data: {
-                submissionStatus: 'SUCCESS',
-                ebmInvoiceNumber: mockRef,
-                submittedAt: new Date(),
-                responseData: {
-                    mock: true,
-                    environment: config_1.config.ebm.environment,
-                    requestPayload: payload,
-                    normalized: { ebmInvoiceNumber: mockRef },
-                },
-            },
-        });
-        return { success: true, ebmInvoiceNumber: mockRef };
-    }
-    if (!config_1.config.ebm.apiUrl) {
+    // saveInvc() already handles config.ebm.useMock internally (mockResult()) and
+    // returns the real /trnsSales/saveSales response shape — no separate shortcut
+    // here, so mock mode exercises the same response-parsing path as production.
+    if (!config_1.config.ebm.useMock && !config_1.config.ebm.apiUrl) {
         await persistFailure('EBM_API_URL is not configured');
         return { success: false, error: 'EBM_API_URL is not configured' };
     }
@@ -499,6 +535,12 @@ async function submitInvoiceToEbm(params) {
                     ebmInvoiceNumber: vsdc.rcptNo,
                     submittedAt: new Date(),
                     sdcDateTime: vsdc.sdcDateTime ? new Date(vsdc.sdcDateTime) : null,
+                    sdcRcptNo: vsdc.rcptNo ? parseInt(vsdc.rcptNo, 10) || null : null,
+                    totalRcptNo: vsdc.totRcptNo ? parseInt(vsdc.totRcptNo, 10) || null : null,
+                    sdcId: vsdc.sdcId || null,
+                    internalData: vsdc.intrlData || null,
+                    receiptSignature: vsdc.vsdcSignature || null,
+                    rcptLabel: sale.rcptLabel ?? null,
                     responseData: {
                         raw: result.rawBody,
                         normalized: vsdc,
@@ -544,15 +586,24 @@ async function submitRefundToEbm(params) {
     const [originalSale, refundSale, org] = await Promise.all([
         prisma_1.prisma.sale.findFirst({
             where: { id: params.originalSaleId, organizationId: params.organizationId },
-            select: { invoiceNumber: true, saleNumber: true, totalAmount: true, vatAmount: true },
+            select: { invoiceNumber: true, saleNumber: true, vsdcInvcNo: true, totalAmount: true, vatAmount: true },
         }),
         prisma_1.prisma.sale.findFirst({
             where: { id: params.refundSaleId, organizationId: params.organizationId },
-            select: { saleNumber: true, totalAmount: true, vatAmount: true },
+            include: {
+                saleItems: {
+                    include: {
+                        product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true } },
+                    },
+                },
+                customer: true,
+                branch: true,
+                user: { select: { id: true, name: true } },
+            },
         }),
         prisma_1.prisma.organization.findUnique({
             where: { id: params.organizationId },
-            select: { TIN: true, ebmDeviceId: true, ebmSerialNo: true, name: true },
+            select: { TIN: true, name: true, address: true },
         }),
     ]);
     if (!originalSale || !refundSale || !org) {
@@ -576,35 +627,26 @@ async function submitRefundToEbm(params) {
             submissionStatus: 'PENDING',
         },
     });
-    const body = {
-        environment: config_1.config.ebm.environment,
-        operation: 'REFUND',
-        seller: {
-            tin: org.TIN ?? null,
-            deviceId: org.ebmDeviceId ?? null,
-            serialNo: org.ebmSerialNo ?? null,
-            name: org.name,
-        },
-        originalInvoiceNumber: originalSale.invoiceNumber,
-        originalEbmInvoiceNumber: origTx.ebmInvoiceNumber,
-        refundSaleId: params.refundSaleId,
-        refundSaleNumber: refundSale.saleNumber,
-        refundTotalAmount: refundSale.totalAmount.toNumber(),
-        reason: params.reason ?? null,
-    };
-    if (config_1.config.ebm.useMock) {
+    let payload;
+    try {
+        // §4.16 Refund Reason Code: '06' = Refund (the only generic code available
+        // from a free-text reason — the reason itself goes into `remark`).
+        payload = buildRraSendReceiptPayload(refundSale, org, {
+            orgInvcNo: originalSale.vsdcInvcNo ?? undefined,
+            rfdDt: new Date(),
+            rfdRsnCd: '06',
+        });
+        payload.remark = params.reason ?? '';
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : 'Invalid refund payload';
         await prisma_1.prisma.ebmTransaction.update({
             where: { id: refundRow.id },
-            data: {
-                submissionStatus: 'SUCCESS',
-                ebmInvoiceNumber: `MOCK-REFUND-${refundRow.id}`,
-                submittedAt: new Date(),
-                responseData: { mock: true, requestPayload: body },
-            },
+            data: { submissionStatus: 'FAILED', errorMessage: msg },
         });
-        return { success: true };
+        return { success: false, error: msg };
     }
-    if (!config_1.config.ebm.apiUrl) {
+    if (!config_1.config.ebm.useMock && !config_1.config.ebm.apiUrl) {
         await prisma_1.prisma.ebmTransaction.update({
             where: { id: refundRow.id },
             data: {
@@ -615,9 +657,8 @@ async function submitRefundToEbm(params) {
         return { success: false, error: 'EBM_API_URL is not configured' };
     }
     try {
-        const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(params.organizationId);
-        body.operation = 'REFUND';
-        const result = await (0, vsdc_api_service_1.saveInvc)(envelope, body);
+        const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(params.organizationId, refundSale.branchId);
+        const result = await (0, vsdc_api_service_1.saveInvc)(envelope, payload);
         if (!result.success) {
             const msg = result.error ?? 'Refund VSDC error';
             await prisma_1.prisma.ebmTransaction.update({
@@ -625,7 +666,7 @@ async function submitRefundToEbm(params) {
                 data: {
                     submissionStatus: 'FAILED',
                     errorMessage: msg,
-                    responseData: { vsdcResult: result, requestPayload: body },
+                    responseData: { vsdcResult: result, requestPayload: payload },
                 },
             });
             return { success: false, error: msg };
@@ -638,7 +679,13 @@ async function submitRefundToEbm(params) {
                 ebmInvoiceNumber: vsdc?.rcptNo ?? `REFUND-ACK-${refundRow.id}`,
                 submittedAt: new Date(),
                 sdcDateTime: vsdc?.sdcDateTime ? new Date(vsdc.sdcDateTime) : null,
-                responseData: { raw: result.rawBody, normalized: vsdc, requestPayload: body },
+                sdcRcptNo: vsdc?.rcptNo ? parseInt(vsdc.rcptNo, 10) || null : null,
+                totalRcptNo: vsdc?.totRcptNo ? parseInt(vsdc.totRcptNo, 10) || null : null,
+                sdcId: vsdc?.sdcId || null,
+                internalData: vsdc?.intrlData || null,
+                receiptSignature: vsdc?.vsdcSignature || null,
+                rcptLabel: refundSale.rcptLabel ?? null,
+                responseData: { raw: result.rawBody, normalized: vsdc, requestPayload: payload },
             },
         });
         return { success: true };
@@ -671,13 +718,22 @@ async function submitVoidToEbm(params) {
     if (!origTx?.ebmInvoiceNumber) {
         return { success: true };
     }
-    const sale = await prisma_1.prisma.sale.findFirst({
+    const sale = (await prisma_1.prisma.sale.findFirst({
         where: { id: params.saleId, organizationId: params.organizationId },
-        select: { invoiceNumber: true, saleNumber: true },
-    });
+        include: {
+            saleItems: {
+                include: {
+                    product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true } },
+                },
+            },
+            customer: true,
+            branch: true,
+            user: { select: { id: true, name: true } },
+        },
+    }));
     const org = await prisma_1.prisma.organization.findUnique({
         where: { id: params.organizationId },
-        select: { TIN: true, ebmDeviceId: true, ebmSerialNo: true, name: true },
+        select: { TIN: true, name: true, address: true },
     });
     if (!sale || !org) {
         return { success: false, error: 'Void EBM: missing sale or organization' };
@@ -691,33 +747,22 @@ async function submitVoidToEbm(params) {
             submissionStatus: 'PENDING',
         },
     });
-    const body = {
-        environment: config_1.config.ebm.environment,
-        operation: 'VOID',
-        seller: {
-            tin: org.TIN ?? null,
-            deviceId: org.ebmDeviceId ?? null,
-            serialNo: org.ebmSerialNo ?? null,
-            name: org.name,
-        },
-        internalInvoiceNumber: sale.invoiceNumber,
-        saleNumber: sale.saleNumber,
-        ebmInvoiceNumber: origTx.ebmInvoiceNumber,
-        reason: params.reason ?? null,
-    };
-    if (config_1.config.ebm.useMock) {
+    let payload;
+    try {
+        // A cancellation resubmits the SAME invoice number with cnclDt/cnclReqDt
+        // set and salesSttsCd='04' — it's not a new document, so orgInvcNo stays 0.
+        payload = buildRraSendReceiptPayload(sale, org, { cnclDt: new Date() });
+        payload.remark = params.reason ?? '';
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : 'Invalid void payload';
         await prisma_1.prisma.ebmTransaction.update({
             where: { id: voidRow.id },
-            data: {
-                submissionStatus: 'SUCCESS',
-                ebmInvoiceNumber: `MOCK-VOID-${voidRow.id}`,
-                submittedAt: new Date(),
-                responseData: { mock: true, requestPayload: body },
-            },
+            data: { submissionStatus: 'FAILED', errorMessage: msg },
         });
-        return { success: true };
+        return { success: false, error: msg };
     }
-    if (!config_1.config.ebm.apiUrl) {
+    if (!config_1.config.ebm.useMock && !config_1.config.ebm.apiUrl) {
         await prisma_1.prisma.ebmTransaction.update({
             where: { id: voidRow.id },
             data: {
@@ -728,9 +773,8 @@ async function submitVoidToEbm(params) {
         return { success: false, error: 'EBM_API_URL is not configured' };
     }
     try {
-        const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(params.organizationId);
-        body.operation = 'VOID';
-        const result = await (0, vsdc_api_service_1.saveInvc)(envelope, body);
+        const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(params.organizationId, sale.branchId);
+        const result = await (0, vsdc_api_service_1.saveInvc)(envelope, payload);
         if (!result.success) {
             const msg = result.error ?? 'Void VSDC error';
             await prisma_1.prisma.ebmTransaction.update({
@@ -738,7 +782,7 @@ async function submitVoidToEbm(params) {
                 data: {
                     submissionStatus: 'FAILED',
                     errorMessage: msg,
-                    responseData: { vsdcResult: result, requestPayload: body },
+                    responseData: { vsdcResult: result, requestPayload: payload },
                 },
             });
             return { success: false, error: msg };
@@ -751,7 +795,12 @@ async function submitVoidToEbm(params) {
                 ebmInvoiceNumber: vsdc?.rcptNo ?? `VOID-ACK-${voidRow.id}`,
                 submittedAt: new Date(),
                 sdcDateTime: vsdc?.sdcDateTime ? new Date(vsdc.sdcDateTime) : null,
-                responseData: { raw: result.rawBody, normalized: vsdc, requestPayload: body },
+                sdcRcptNo: vsdc?.rcptNo ? parseInt(vsdc.rcptNo, 10) || null : null,
+                totalRcptNo: vsdc?.totRcptNo ? parseInt(vsdc.totRcptNo, 10) || null : null,
+                sdcId: vsdc?.sdcId || null,
+                internalData: vsdc?.intrlData || null,
+                receiptSignature: vsdc?.vsdcSignature || null,
+                responseData: { raw: result.rawBody, normalized: vsdc, requestPayload: payload },
             },
         });
         return { success: true };

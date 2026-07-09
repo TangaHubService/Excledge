@@ -34,7 +34,6 @@ async function createSaleWithOutbox(input) {
     const { organizationId, branchId, userId, customerId, items, paymentType, cashAmount, insuranceAmount, debtAmount, } = input;
     const totalAmount = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
     const saleNumber = `SALE-${Date.now()}`;
-    const invoiceNumber = await (0, rra_ebm_service_1.generateInvoiceNumber)(organizationId, branchId);
     const operation = 'SALE';
     const sale = await prisma_1.prisma.$transaction(async (tx) => {
         // 1. Validate stock with row-level locking
@@ -72,10 +71,14 @@ async function createSaleWithOutbox(input) {
                 product: { connect: { id: item.productId } },
             };
         });
+        // Allocate the RRA invoice sequence inside the transaction so a rollback
+        // (bad stock, tax mismatch, etc.) also rolls back the sequence increment.
+        const { invoiceNumber, vsdcInvcNo } = await (0, rra_ebm_service_1.generateInvoiceNumber)(organizationId, branchId, tx);
         const newSale = await tx.sale.create({
             data: {
                 saleNumber,
                 invoiceNumber,
+                vsdcInvcNo,
                 customerId,
                 userId,
                 organizationId,
@@ -256,6 +259,7 @@ async function processEbmOutboxBatch(limit = 25) {
                 },
                 customer: true,
                 branch: true,
+                user: { select: { id: true, name: true } },
             },
         }));
         if (!sale) {
@@ -278,7 +282,7 @@ async function processEbmOutboxBatch(limit = 25) {
         }
         const org = await prisma_1.prisma.organization.findUnique({
             where: { id: row.organizationId },
-            select: { TIN: true, ebmDeviceId: true, ebmSerialNo: true, name: true },
+            select: { TIN: true, name: true, address: true },
         });
         if (!org) {
             await prisma_1.prisma.ebmOutbox.update({
@@ -291,7 +295,19 @@ async function processEbmOutboxBatch(limit = 25) {
         // Build gateway payload based on operation type
         let payload;
         if (row.operation === 'SALE') {
-            payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org);
+            try {
+                payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org);
+            }
+            catch (e) {
+                // A bad tax code on this sale should not block the rest of the batch —
+                // dead-letter this row only, it will never succeed on retry either.
+                await prisma_1.prisma.ebmOutbox.update({
+                    where: { id: row.id },
+                    data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid sale payload' },
+                });
+                failed += 1;
+                continue;
+            }
             payload['idempotencyKey'] = row.idempotencyKey;
         }
         else if (row.operation === 'REFUND') {
@@ -322,20 +338,27 @@ async function processEbmOutboxBatch(limit = 25) {
                 continue;
             }
             const originalSale = originalSaleId
-                ? await prisma_1.prisma.sale.findFirst({ where: { id: originalSaleId }, select: { invoiceNumber: true, totalAmount: true } })
+                ? await prisma_1.prisma.sale.findFirst({ where: { id: originalSaleId }, select: { invoiceNumber: true, vsdcInvcNo: true, totalAmount: true } })
                 : null;
-            payload = {
-                environment: config_1.config.ebm.environment,
-                operation: 'REFUND',
-                idempotencyKey: row.idempotencyKey,
-                seller: { tin: org.TIN ?? null, deviceId: org.ebmDeviceId ?? null, serialNo: org.ebmSerialNo ?? null, name: org.name },
-                originalInvoiceNumber: originalSale?.invoiceNumber ?? null,
-                originalEbmInvoiceNumber: origTx.ebmInvoiceNumber,
-                refundSaleId: sale.id,
-                refundSaleNumber: sale.saleNumber,
-                refundTotalAmount: Math.abs(Number(sale.totalAmount)),
-                reason: row.payload?.reason ?? null,
-            };
+            try {
+                // §4.16 Refund Reason Code: '06' = Refund (generic — the free-text
+                // reason from the outbox row payload goes into `remark` instead).
+                payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org, {
+                    orgInvcNo: originalSale?.vsdcInvcNo ?? undefined,
+                    rfdDt: new Date(),
+                    rfdRsnCd: '06',
+                });
+                payload.remark = row.payload?.reason ?? '';
+                payload.idempotencyKey = row.idempotencyKey;
+            }
+            catch (e) {
+                await prisma_1.prisma.ebmOutbox.update({
+                    where: { id: row.id },
+                    data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid refund payload' },
+                });
+                failed += 1;
+                continue;
+            }
         }
         else {
             // VOID: only fire if original was fiscalized
@@ -352,17 +375,21 @@ async function processEbmOutboxBatch(limit = 25) {
                 succeeded += 1;
                 continue;
             }
-            payload = {
-                environment: config_1.config.ebm.environment,
-                operation: 'VOID',
-                idempotencyKey: row.idempotencyKey,
-                seller: { tin: org.TIN ?? null, deviceId: org.ebmDeviceId ?? null, serialNo: org.ebmSerialNo ?? null, name: org.name },
-                originalInvoiceNumber: sale.invoiceNumber,
-                originalEbmInvoiceNumber: origTx.ebmInvoiceNumber,
-                saleId: sale.id,
-                saleNumber: sale.saleNumber,
-                reason: row.payload?.reason ?? null,
-            };
+            try {
+                // A cancellation resubmits the SAME invoice number with cnclDt/cnclReqDt
+                // set and salesSttsCd='04' — it's not a new document.
+                payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org, { cnclDt: new Date() });
+                payload.remark = row.payload?.reason ?? '';
+                payload.idempotencyKey = row.idempotencyKey;
+            }
+            catch (e) {
+                await prisma_1.prisma.ebmOutbox.update({
+                    where: { id: row.id },
+                    data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid void payload' },
+                });
+                failed += 1;
+                continue;
+            }
         }
         // ── Mark in-flight ──
         await prisma_1.prisma.ebmOutbox.update({
@@ -438,11 +465,14 @@ async function processEbmOutboxBatch(limit = 25) {
                         ebmInvoiceNumber: vsdc.rcptNo,
                         submittedAt: new Date(),
                         sdcDateTime: sdcDateTime,
-                        // B1 dedicated columns
+                        // B1 dedicated columns — sdcRcptNo/totalRcptNo are the "A"/"B" halves
+                        // of the required A/B RT receipt counter (§7.24.4/7.25); VSDC does not
+                        // return a QR payload — the CIS builds the QR string itself (qrCode.ts).
                         sdcRcptNo: vsdc.rcptNo ? parseInt(vsdc.rcptNo, 10) || null : null,
+                        totalRcptNo: vsdc.totRcptNo ? parseInt(vsdc.totRcptNo, 10) || null : null,
+                        sdcId: vsdc.sdcId || null,
                         internalData: vsdc.intrlData || null,
                         receiptSignature: vsdc.vsdcSignature || null,
-                        qrPayload: vsdc.qrPayload || null,
                         rcptLabel: rcptLabel,
                         // C8 electronic journal
                         journalText: ejText,

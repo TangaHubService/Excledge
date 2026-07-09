@@ -100,8 +100,7 @@ const requestPasswordReset = async (req, res) => {
             where: { email },
         });
         if (!user) {
-            // For security, don't reveal if the email exists or not
-            return res.json({ message: "If an account exists with this email, a password reset link has been sent" });
+            return res.status(404).json({ error: "No account found with this email address" });
         }
         // Generate password reset token (opaque random token)
         const { token, expires } = (0, token_utils_1.generatePasswordResetToken)();

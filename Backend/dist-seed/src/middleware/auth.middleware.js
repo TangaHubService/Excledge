@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireSystemOwner = exports.authorize = exports.authenticate = void 0;
+exports.requireSystemOwner = exports.restrictRoles = exports.authorize = exports.authenticate = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const authenticate = (req, res, next) => {
     try {
@@ -41,6 +41,32 @@ const authorize = (...roles) => {
     };
 };
 exports.authorize = authorize;
+/**
+ * Deny-list middleware — blocks the request if the user's role is in the
+ * provided list. Use this for "everyone EXCEPT these roles" scenarios.
+ *
+ * Respects per-organization role from requireOrganizationAccess just like
+ * authorize() does.
+ *
+ * @example
+ * router.get("/subscriptions", authenticate, restrictRoles("SELLER"), ...);
+ */
+const restrictRoles = (...roles) => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ error: "Unauthorized" });
+        }
+        const orgRole = req.organizationRole;
+        const effectiveRole = orgRole ?? req.user.role;
+        if (roles.includes(effectiveRole)) {
+            return res.status(403).json({
+                error: "Forbidden: You do not have permission to access this resource",
+            });
+        }
+        next();
+    };
+};
+exports.restrictRoles = restrictRoles;
 const requireSystemOwner = (req, res, next) => {
     if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });

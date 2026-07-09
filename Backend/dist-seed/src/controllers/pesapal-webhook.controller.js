@@ -8,7 +8,8 @@ const prisma_1 = require("../lib/prisma");
 const socket_1 = require("../utils/socket");
 const getAcessToken_1 = require("../utils/getAcessToken");
 const axios_1 = __importDefault(require("axios"));
-const PESAPAL_API_URL = process.env.PESAPAL_API_URL;
+const paypack_1 = require("../lib/paypack");
+const PESAPAL_API_URL = paypack_1.pesapalConfig.baseUrl;
 const logWebhook = (message, data) => {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] PESAPAL WEBHOOK: ${message}`, data || '');
@@ -99,6 +100,18 @@ async function handleCompletedTransaction(transactionStatus) {
             return;
         }
         logWebhook('Subscription found', { id: subscription.id, status: subscription.status });
+        // Idempotency guard: this endpoint can be replayed by anyone who has seen
+        // the orderTrackingId (e.g. via the browser redirect URL), so make sure we
+        // don't extend the subscription again for a transaction already recorded.
+        const existingPayment = await prisma_1.prisma.payment.findFirst({
+            where: { paymentId: transactionStatus.order_tracking_id },
+        });
+        if (existingPayment) {
+            logWebhook('Payment for this order already processed. Skipping.', {
+                orderTrackingId: transactionStatus.order_tracking_id,
+            });
+            return;
+        }
         // Map Pesapal status to internal PaymentStatus
         const mapPesapalStatusToPaymentStatus = (status) => {
             const statusMap = {
