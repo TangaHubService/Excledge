@@ -6,6 +6,8 @@ import { UserRole } from '@prisma/client';
 
 export interface BranchAuthRequest extends AuthRequest {
     selectedBranchId?: number | null;
+    /** Set instead of `selectedBranchId` when a LIMITED user has more than one assigned branch and did not request a specific one. */
+    selectedBranchIds?: number[] | null;
     branchIds?: number[];
     branchScope?: 'ALL' | 'LIMITED';
 }
@@ -100,11 +102,34 @@ export const branchAuth = async (
             }
         }
 
-        // If no branchId specified, allow (returns all data for admins, or org-level data)
+        // If no branchId specified:
+        // - Users with 'ALL' scope (SYSTEM_OWNER, or org-owning ADMIN) see everything.
+        // - LIMITED users (BRANCH_MANAGER, ACCOUNTANT, SELLER, or branch-restricted ADMIN)
+        //   MUST NOT fall through to unfiltered data — default them to their own
+        //   assigned branch(es). This is the authoritative fix for branch isolation:
+        //   omitting ?branchId must never be usable to see other branches' data.
         if (branchId === null) {
+            if (canAccessAll) {
+                req.selectedBranchId = null;
+                // Run without branch scope – all data visible
+                return withBranchScope(undefined, () => next());
+            }
+
+            if (userBranchIds.length === 0) {
+                // LIMITED user with no branch assignment at all: fail closed, not open.
+                req.selectedBranchId = -1;
+                return withBranchScope(-1, () => next());
+            }
+
+            if (userBranchIds.length === 1) {
+                req.selectedBranchId = userBranchIds[0];
+                return withBranchScope(userBranchIds[0], () => next());
+            }
+
+            // Multiple assigned branches: scope to the union of assigned branches.
             req.selectedBranchId = null;
-            // Run without branch scope – all data visible
-            return withBranchScope(undefined, () => next());
+            req.selectedBranchIds = userBranchIds;
+            return withBranchScope(userBranchIds, () => next());
         }
 
         // If branchId specified, validate access
@@ -134,13 +159,19 @@ export const branchAuth = async (
 export function buildBranchFilter(req: BranchAuthRequest) {
     const branchId = req.selectedBranchId;
 
-    // No branchId = return all data
-    if (branchId === null || branchId === undefined) {
-        return {};
+    // Specific branchId = return branch data only (branchId is required)
+    if (branchId !== null && branchId !== undefined) {
+        return { branchId };
     }
 
-    // Specific branchId = return branch data only (branchId is required)
-    return { branchId };
+    // LIMITED user with multiple assigned branches and no branch selected:
+    // scope to the set of branches they're allowed to see.
+    if (req.selectedBranchIds && req.selectedBranchIds.length > 0) {
+        return { branchId: { in: req.selectedBranchIds } };
+    }
+
+    // No branchId = return all data (only reachable for 'ALL' scope users)
+    return {};
 }
 /**
  * Helper function to get branch ID for write operations

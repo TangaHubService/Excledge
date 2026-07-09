@@ -18,8 +18,6 @@ export const getCustomers = async (req: BranchAuthRequest, res: Response) => {
     const pageNum = Math.max(Number.parseInt(page as string) || 1, 1)
     const skip = (pageNum - 1) * limitNum
 
-    const branchFilter = buildBranchFilter(req)
-
     const where: any = { organizationId, deletedAt: null }
 
     if (showInactive !== "true") {
@@ -38,15 +36,12 @@ export const getCustomers = async (req: BranchAuthRequest, res: Response) => {
       where.balance = { gt: 0 }
     }
 
-    // When a branch is selected, scope customers to those with sales in that branch
-    if (branchFilter.branchId !== undefined) {
-      where.sales = {
-        some: {
-          branchId: branchFilter.branchId,
-        },
-      }
-    }
-
+    // Customers are organization-wide records (the Customer model has no
+    // branchId column), so no branch filter is applied here. Filtering by
+    // `sales.some({branchId})` was previously attempted, but that hid every
+    // customer that had not yet made a purchase in the selected branch,
+    // including newly created customers — the same root-cause bug as
+    // suppliers (see supplier.controller.ts getSuppliers).
     const customers = await prisma.customer.findMany({
       where,
       select: {
@@ -95,17 +90,13 @@ export const getCustomerById = async (req: BranchAuthRequest, res: Response) => 
       return res.status(400).json({ error: "Organization ID is required" })
     }
 
+    // Customers themselves are org-wide (see getCustomers), but their sales
+    // history is branch-scoped data — a branch-restricted user must only see
+    // the sales that happened in their own branch(es).
     const branchFilter = buildBranchFilter(req)
 
     const customer = await prisma.customer.findFirst({
-      where: {
-        id,
-        organizationId,
-        deletedAt: null,
-        ...(branchFilter.branchId !== undefined
-          ? { sales: { some: { branchId: branchFilter.branchId } } }
-          : {}),
-      },
+      where: { id, organizationId, deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -117,6 +108,7 @@ export const getCustomerById = async (req: BranchAuthRequest, res: Response) => 
         balance: true,
         isActive: true,
         sales: {
+          where: branchFilter.branchId !== undefined ? { branchId: branchFilter.branchId } : undefined,
           select: {
             id: true,
             saleNumber: true,
