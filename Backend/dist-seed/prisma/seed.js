@@ -121,8 +121,8 @@ async function seedSubscriptionPlans() {
                 price: plan.price,
                 currency: "RWF",
                 billingCycle: plan.period,
-                isActive: plan.isActive !== undefined ? plan.isActive : true,
-                maxUsers: plan.maxUsers !== undefined ? plan.maxUsers : extractMaxUsers(plan.features),
+                isActive: plan.isActive,
+                maxUsers: extractMaxUsers(plan.features),
             },
             create: {
                 name: plan.title,
@@ -130,8 +130,8 @@ async function seedSubscriptionPlans() {
                 price: plan.price,
                 currency: "RWF",
                 billingCycle: plan.period,
-                isActive: plan.isActive !== undefined ? plan.isActive : true,
-                maxUsers: plan.maxUsers !== undefined ? plan.maxUsers : extractMaxUsers(plan.features),
+                isActive: plan.isActive,
+                maxUsers: extractMaxUsers(plan.features),
                 features: {
                     create: plan.features.map((featureName) => ({
                         feature: { connect: { key: featureMap[featureName].key } },
