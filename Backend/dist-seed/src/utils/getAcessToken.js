@@ -15,8 +15,7 @@ const getAccessToken = async () => {
 };
 exports.getAccessToken = getAccessToken;
 const pesapalToken = async () => {
-    const tokenUrl = process.env.PESAPAL_API_URL;
-    const { data } = await axios_1.default.post(`${tokenUrl}/api/Auth/RequestToken`, {
+    const { data } = await axios_1.default.post(`${paypack_1.pesapalConfig.baseUrl}/api/Auth/RequestToken`, {
         consumer_key: paypack_1.pesapalConfig.consumerKey,
         consumer_secret: paypack_1.pesapalConfig.consumerSecret,
     }, {

@@ -39,24 +39,22 @@ const auditLogger_1 = require("../utils/auditLogger");
 const XLSX = __importStar(require("xlsx"));
 const import_validation_service_1 = require("../services/import-validation.service");
 const preview_session_service_1 = require("../services/preview-session.service");
-const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
 // Get all suppliers for an organization
 const getSuppliers = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
         const { showInactive } = req.query;
-        const branchFilter = (0, branchAuth_middleware_1.buildBranchFilter)(req);
+        // Suppliers are organization-wide records (the Supplier model has no
+        // branchId column) — they are not owned by a single branch, so no
+        // branch filter is applied here. Filtering by `purchaseOrders.some({branchId})`
+        // was previously attempted, but that hides suppliers that have not yet
+        // had a purchase order raised against them in the selected branch,
+        // including every newly created supplier. Branch isolation for
+        // suppliers is unnecessary since the data itself is org-scoped, not
+        // branch-scoped; access is still limited to members of the organization.
         const where = { organizationId };
         if (showInactive !== 'true') {
             where.isActive = true;
-        }
-        // When a branch is selected, scope suppliers to those with purchase orders in that branch
-        if (branchFilter.branchId !== undefined) {
-            where.purchaseOrders = {
-                some: {
-                    branchId: branchFilter.branchId,
-                },
-            };
         }
         const suppliers = await prisma_1.prisma.supplier.findMany({
             where,
@@ -75,15 +73,9 @@ const getSupplier = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
         const id = parseInt(req.params.id);
-        const branchFilter = (0, branchAuth_middleware_1.buildBranchFilter)(req);
+        // See getSuppliers: suppliers are org-scoped, not branch-scoped.
         const supplier = await prisma_1.prisma.supplier.findFirst({
-            where: {
-                id,
-                organizationId,
-                ...(branchFilter.branchId !== undefined
-                    ? { purchaseOrders: { some: { branchId: branchFilter.branchId } } }
-                    : {}),
-            },
+            where: { id, organizationId },
         });
         if (!supplier) {
             return res.status(404).json({ message: "Supplier not found" });

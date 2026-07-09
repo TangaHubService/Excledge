@@ -4,11 +4,25 @@ exports.completeStockTransfer = exports.rejectStockTransfer = exports.approveSto
 const prisma_1 = require("../lib/prisma");
 const inventory_ledger_service_1 = require("../services/inventory-ledger.service");
 const apiResponse_1 = require("../utils/apiResponse");
+// StockTransfer spans two branches (fromBranchId/toBranchId), so it can't use
+// the generic single-column BRANCH_AWARE_MODELS auto-injection — a transfer
+// "belongs" to a branch if that branch is on either side of it.
+function branchInvolvementFilter(req) {
+    const id = req.selectedBranchId;
+    if (id !== null && id !== undefined) {
+        return { OR: [{ fromBranchId: id }, { toBranchId: id }] };
+    }
+    const ids = req.selectedBranchIds;
+    if (ids && ids.length > 0) {
+        return { OR: [{ fromBranchId: { in: ids } }, { toBranchId: { in: ids } }] };
+    }
+    return {};
+}
 const listStockTransfers = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
         const transfers = await prisma_1.prisma.stockTransfer.findMany({
-            where: { organizationId },
+            where: { organizationId, ...branchInvolvementFilter(req) },
             include: {
                 items: {
                     include: { product: { select: { id: true, name: true, sku: true } } },
@@ -31,7 +45,7 @@ const getStockTransfer = async (req, res) => {
         const organizationId = parseInt(req.params.organizationId);
         const id = parseInt(req.params.id);
         const t = await prisma_1.prisma.stockTransfer.findFirst({
-            where: { id, organizationId },
+            where: { id, organizationId, ...branchInvolvementFilter(req) },
             include: {
                 items: { include: { product: true } },
                 fromBranch: true,

@@ -9,7 +9,7 @@ exports.branchStorage = new async_hooks_1.AsyncLocalStorage();
 /**
  * Run a callback inside a branch-scoped context.
  * Every Prisma query within the callback will automatically be filtered
- * to the given branchId on models that support it.
+ * to the given branchId (or set of branchIds) on models that support it.
  */
 function withBranchScope(branchId, fn) {
     return exports.branchStorage.run({ branchId }, fn);
@@ -21,6 +21,12 @@ function getCurrentBranchId() {
     return exports.branchStorage.getStore()?.branchId;
 }
 // ── Models that have a `branchId` field ──────────────────────────────────
+// NOTE: keep this in sync with prisma/schema.prisma. `Notification` was
+// listed here previously but the `notifications` table has no `branchId`
+// column — injecting one would throw P2022 ("column does not exist") the
+// moment branch scoping became active for that model. Notifications are
+// org-wide by design today; adding real per-branch notifications requires
+// a schema migration (a nullable `branchId` column) before re-adding it here.
 const BRANCH_AWARE_MODELS = new Set([
     'Sale',
     'Batch',
@@ -30,7 +36,7 @@ const BRANCH_AWARE_MODELS = new Set([
     'InventoryLedger',
     'ActivityLog',
     'PurchaseOrder',
-    'Notification',
+    'SupplierInvoice',
 ]);
 // Prisma operations where we can inject `branchId` into the `where` clause.
 const BRANCH_FILTERABLE_OPS = new Set([
@@ -79,20 +85,24 @@ prisma.$use(async (params, next) => {
     }
     // ── FILTER operations (findMany, findFirst, update, delete, etc.) ──
     if (BRANCH_FILTERABLE_OPS.has(params.action)) {
+        const branchWhere = Array.isArray(branchId) ? { in: branchId } : branchId;
         const args = params.args;
         if (!args) {
-            params.args = { where: { branchId } };
+            params.args = { where: { branchId: branchWhere } };
         }
         else {
             const existingWhere = args.where ?? {};
             // Only inject if branchId is not already specified (avoid override)
             if (existingWhere.branchId === undefined) {
-                args.where = { ...existingWhere, branchId };
+                args.where = { ...existingWhere, branchId: branchWhere };
             }
         }
     }
     // ── CREATE operations – inject branchId into data ──
-    if (BRANCH_CREATE_OPS.has(params.action)) {
+    // Only for a single resolved branch: a multi-branch (array) context can't
+    // determine which one branch a new record belongs to, so creates rely on
+    // the explicit, already-validated branchId in the request body instead.
+    if (BRANCH_CREATE_OPS.has(params.action) && !Array.isArray(branchId)) {
         const args = params.args;
         if (args?.data) {
             if (Array.isArray(args.data)) {

@@ -45,6 +45,7 @@ const ebm_outbox_job_1 = require("./jobs/ebm-outbox.job");
 const vsdc_heartbeat_job_1 = require("./jobs/vsdc-heartbeat.job");
 const pesapal_route_1 = __importDefault(require("./routes/pesapal.route"));
 const upload_route_1 = __importDefault(require("./routes/upload.route"));
+const supplier_invoice_routes_1 = __importDefault(require("./routes/supplier-invoice.routes"));
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app);
 const PORT = process.env.PORT || 5000;
@@ -125,6 +126,7 @@ app.use("/api/expenses", expense_routes_1.default);
 app.use("/api/supplier-payments", supplier_payment_routes_1.default);
 app.use("/api/stock-transfers", stock_transfer_routes_1.default);
 app.use("/api/organizations", ebm_outbox_routes_1.default);
+app.use("/api/supplier-invoices", supplier_invoice_routes_1.default);
 // Serve uploaded files statically
 app.use('/uploads', express_1.default.static('uploads'));
 /* ----------------------------------

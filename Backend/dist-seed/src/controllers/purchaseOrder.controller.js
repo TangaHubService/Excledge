@@ -65,6 +65,26 @@ const createPurchaseOrder = async (req, res) => {
         const userId = req.user.userId;
         const { supplierId, items, notes, expectedDate } = req.body;
         const branchId = (0, branchAuth_middleware_1.getBranchIdForOperation)(req);
+        // Cross-tenant guard: supplierId/productId are caller-supplied IDs and must
+        // belong to this organization, or another tenant's records could silently
+        // get attached to this PO.
+        const supplier = await prisma_1.prisma.supplier.findFirst({
+            where: { id: supplierId, organizationId },
+            select: { id: true },
+        });
+        if (!supplier) {
+            return res.status(400).json({ message: "Supplier not found for this organization" });
+        }
+        const requestedProductIds = [...new Set(items.map((item) => item.productId).filter((id) => id != null))];
+        if (requestedProductIds.length > 0) {
+            const ownedProducts = await prisma_1.prisma.product.findMany({
+                where: { id: { in: requestedProductIds }, organizationId },
+                select: { id: true },
+            });
+            if (ownedProducts.length !== requestedProductIds.length) {
+                return res.status(400).json({ message: "One or more products do not belong to this organization" });
+            }
+        }
         // Calculate total amount
         const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
         // Generate order number
@@ -87,8 +107,8 @@ const createPurchaseOrder = async (req, res) => {
                         let taxCode;
                         let taxRate;
                         if (item.productId) {
-                            const product = await prisma_1.prisma.product.findUnique({
-                                where: { id: item.productId },
+                            const product = await prisma_1.prisma.product.findFirst({
+                                where: { id: item.productId, organizationId },
                                 select: { taxCode: true, taxCategory: true },
                             });
                             if (product) {
@@ -178,18 +198,33 @@ const updatePurchaseOrderStatus = async (req, res) => {
         if (!order) {
             return res.status(404).json({ message: "Purchase order not found" });
         }
+        // Once received, a PO is terminal — re-running this (retry, double-click,
+        // resubmission) would re-run the stock-receiving loop below and create a
+        // second batch + double-add the received quantity to inventory.
+        if (order.status === 'COMPLETED') {
+            return res.status(400).json({ message: "This purchase order has already been completed and received" });
+        }
         const userId = req.user.userId;
         const effectiveBranchId = branchId ? parseInt(String(branchId)) : null;
         if (status === 'COMPLETED' && !effectiveBranchId) {
             return res.status(400).json({ message: "branchId is required to complete a purchase order" });
         }
         const updatedOrder = await prisma_1.prisma.$transaction(async (tx) => {
-            const po = await tx.purchaseOrder.update({
-                where: { id: order.id },
+            // Conditional update guards against two concurrent requests both completing
+            // this PO: only the request that finds status still != COMPLETED at the DB
+            // level (row-locked by this UPDATE) succeeds; the loser gets count === 0.
+            const updateResult = await tx.purchaseOrder.updateMany({
+                where: { id: order.id, status: { not: 'COMPLETED' } },
                 data: {
                     status,
                     receivedAt: status === "COMPLETED" ? new Date() : order.receivedAt,
                 },
+            });
+            if (updateResult.count === 0) {
+                throw new Error("This purchase order has already been completed and received");
+            }
+            const po = await tx.purchaseOrder.findUniqueOrThrow({
+                where: { id: order.id },
                 include: {
                     supplier: true,
                     items: true,
@@ -296,6 +331,10 @@ const updatePurchaseOrderStatus = async (req, res) => {
     }
     catch (error) {
         console.error("Error updating purchase order:", error);
+        if (error?.message === "This purchase order has already been completed and received" ||
+            error?.message === "Invalid or inactive branch for receiving") {
+            return res.status(400).json({ message: error.message });
+        }
         res.status(500).json({ message: "Failed to update purchase order" });
     }
 };

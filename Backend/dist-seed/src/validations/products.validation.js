@@ -12,7 +12,8 @@ exports.createProductSchema = zod_1.z.object({
         description: zod_1.z.string().optional(),
         minStock: zod_1.z.coerce.number().nonnegative('Minimum stock cannot be negative').default(10),
         taxCategory: zod_1.z.enum(['STANDARD', 'ZERO_RATED', 'EXEMPT']).default('STANDARD'),
-        taxCode: zod_1.z.enum(['A', 'B', 'C', 'D', 'E']).optional(),
+        // E is reserved for RRA internal use only and must never be assignable to a product.
+        taxCode: zod_1.z.enum(['A', 'B', 'C', 'D']).optional(),
         measurementUnit: zod_1.z.enum(['PCS', 'KG', 'LTR', 'MTR', 'BOX', 'PAIR', 'DOZEN', 'GRAM', 'ML', 'OTHER']).default('PCS'),
         itemType: zod_1.z.enum(['PRODUCT', 'SERVICE']).default('PRODUCT'),
         expiryDate: zod_1.z.string().datetime().optional(),
@@ -31,7 +32,8 @@ exports.updateProductSchema = zod_1.z.object({
         description: zod_1.z.string().optional(),
         minStock: zod_1.z.coerce.number().nonnegative('Minimum stock cannot be negative').optional(),
         taxCategory: zod_1.z.enum(['STANDARD', 'ZERO_RATED', 'EXEMPT']).optional(),
-        taxCode: zod_1.z.enum(['A', 'B', 'C', 'D', 'E']).optional(),
+        // E is reserved for RRA internal use only and must never be assignable to a product.
+        taxCode: zod_1.z.enum(['A', 'B', 'C', 'D']).optional(),
         measurementUnit: zod_1.z.enum(['PCS', 'KG', 'LTR', 'MTR', 'BOX', 'PAIR', 'DOZEN', 'GRAM', 'ML', 'OTHER']).optional(),
         itemType: zod_1.z.enum(['PRODUCT', 'SERVICE']).optional(),
         expiryDate: zod_1.z.string().datetime().optional().nullable(),

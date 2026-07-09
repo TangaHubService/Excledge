@@ -4,11 +4,13 @@ const express_1 = require("express");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
 const organizationAccess_middleware_1 = require("../middleware/organizationAccess.middleware");
+const feature_access_middleware_1 = require("../middleware/feature-access.middleware");
 const batch_controller_1 = require("../controllers/batch.controller");
 const router = (0, express_1.Router)();
 // All routes require authentication
 router.use(auth_middleware_1.authenticate);
 router.use((0, organizationAccess_middleware_1.requireOrganizationAccess)());
+router.use('/:organizationId', (0, feature_access_middleware_1.requireActiveSubscription)());
 router.use(branchAuth_middleware_1.branchAuth);
 // Get batches for a product
 router.get('/:organizationId/product/:productId', batch_controller_1.getProductBatches);

@@ -20,17 +20,16 @@ const handlePaypackWebhook = async (req, res) => {
         }
         // Get raw body for signature verification
         const rawBody = req.body.toString();
-        if (signature) {
-            const hash = crypto_1.default
-                .createHmac("sha256", secret)
-                .update(rawBody)
-                .digest("base64");
-            if (hash !== signature) {
-                return res.status(401).send('Invalid signature');
-            }
-        }
-        else {
+        if (!signature) {
             console.warn('Missing X-Paypack-Signature header');
+            return res.status(401).send('Missing signature');
+        }
+        const hash = crypto_1.default
+            .createHmac("sha256", secret)
+            .update(rawBody)
+            .digest("base64");
+        if (hash !== signature) {
+            return res.status(401).send('Invalid signature');
         }
         // Parse the JSON payload
         let payload;

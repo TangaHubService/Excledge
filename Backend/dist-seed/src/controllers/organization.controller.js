@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateOrganizationAvatar = exports.removeUserFromOrganization = exports.getOrganizationUsers = exports.acceptInvitation = exports.declineInvitation = exports.getInvitationDetails = exports.cancelInvitation = exports.bulkInviteUsers = exports.inviteUser = exports.deleteOrganization = exports.updateOrganization = exports.createOrganization = exports.getOrganizationById = exports.getUserOrganizations = void 0;
+exports.updateOrganizationAvatar = exports.removeUserFromOrganization = exports.getOrganizationUsers = exports.acceptInvitation = exports.declineInvitation = exports.getInvitationDetails = exports.cancelInvitation = exports.bulkInviteUsers = exports.inviteUser = exports.deleteOrganization = exports.updateOrgSettings = exports.getOrgSettings = exports.updateOrganization = exports.createOrganization = exports.getOrganizationById = exports.getUserOrganizations = void 0;
 const prisma_1 = require("../lib/prisma");
 const XLSX = __importStar(require("xlsx"));
 const crypto_1 = __importDefault(require("crypto"));
@@ -46,6 +46,7 @@ const generatePassword_1 = require("../utils/generatePassword");
 const auditLogger_1 = require("../utils/auditLogger");
 const cloudinary_1 = require("../config/cloudinary");
 const subscription_service_1 = require("../services/subscription.service");
+const organization_settings_service_1 = require("../services/organization-settings.service");
 const getUserOrganizations = async (req, res) => {
     try {
         //@ts-ignore
@@ -302,6 +303,62 @@ const updateOrganization = async (req, res) => {
     }
 };
 exports.updateOrganization = updateOrganization;
+/** Any org member may read settings — the client needs them to render the sidebar/flags. */
+const getOrgSettings = async (req, res) => {
+    try {
+        const organizationId = parseInt(req.params.id);
+        const settings = await (0, organization_settings_service_1.getOrganizationSettings)(organizationId);
+        res.json({ settings });
+    }
+    catch (error) {
+        console.error("Error fetching organization settings:", error);
+        res.status(500).json({ error: "Failed to fetch organization settings" });
+    }
+};
+exports.getOrgSettings = getOrgSettings;
+function isPlainPatchObject(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+/** Only admins may change workspace-shaping settings; SYSTEM_OWNER bypasses via the route middleware. */
+const updateOrgSettings = async (req, res) => {
+    try {
+        const organizationId = parseInt(req.params.id);
+        //@ts-ignore
+        const userId = parseInt(req.user?.userId);
+        const userOrganization = await prisma_1.prisma.userOrganization.findFirst({
+            where: { userId, organizationId, role: "ADMIN" },
+        });
+        if (!userOrganization) {
+            return res
+                .status(403)
+                .json({ error: "Only admins can update organization settings" });
+        }
+        const { sidebarConfig, featureFlags, preferences } = req.body ?? {};
+        const patch = {};
+        for (const [key, value] of Object.entries({ sidebarConfig, featureFlags, preferences })) {
+            if (value === undefined)
+                continue;
+            if (!isPlainPatchObject(value)) {
+                return res.status(400).json({ error: `${key} must be an object` });
+            }
+            patch[key] = value;
+        }
+        const settings = await (0, organization_settings_service_1.upsertOrganizationSettings)(organizationId, patch);
+        await auditLogger_1.auditLogger.system(req, {
+            type: "SETTINGS_UPDATE",
+            description: `Organization settings updated`,
+            entityType: "OrganizationSetting",
+            entityId: organizationId,
+            metadata: { patch },
+        });
+        res.json({ message: "Organization settings updated successfully", settings });
+    }
+    catch (error) {
+        console.error("Error updating organization settings:", error);
+        res.status(500).json({ error: "Failed to update organization settings" });
+    }
+};
+exports.updateOrgSettings = updateOrgSettings;
 const deleteOrganization = async (req, res) => {
     try {
         const id = parseInt(req.params.id);

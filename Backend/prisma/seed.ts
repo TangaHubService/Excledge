@@ -115,7 +115,7 @@ async function seedSubscriptionPlans() {
     plan.features.forEach((feature) => allFeatures.add(feature))
   })
 
-  const featureMap: Record<string, { key: string }> = {}
+  const featureMap: Record<string, { id: number; key: string }> = {}
   for (const featureName of allFeatures) {
     const key = featureName.toLowerCase().replace(/\s+/g, "_")
     const feature = await prisma.feature.upsert({
@@ -131,7 +131,7 @@ async function seedSubscriptionPlans() {
   }
 
   for (const plan of subscriptionPlans) {
-    await prisma.subscriptionPlan.upsert({
+    const dbPlan = await prisma.subscriptionPlan.upsert({
       where: { name: plan.title },
       update: {
         description: plan.description,
@@ -149,13 +149,21 @@ async function seedSubscriptionPlans() {
         billingCycle: plan.period,
         isActive: plan.isActive,
         maxUsers: extractMaxUsers(plan.features),
-        features: {
-          create: plan.features.map((featureName) => ({
-            feature: { connect: { key: featureMap[featureName].key } },
-          })),
-        },
       },
     })
+
+    // Re-sync features in array order on every run (create AND update), since
+    // upsert's update branch doesn't touch relations and row order otherwise
+    // reflects whenever the plan was first seeded rather than the array above.
+    await prisma.planFeature.deleteMany({ where: { planId: dbPlan.id } })
+    for (const featureName of plan.features) {
+      await prisma.planFeature.create({
+        data: {
+          planId: dbPlan.id,
+          featureId: featureMap[featureName].id,
+        },
+      })
+    }
     console.log(`Processed plan: ${plan.title}`)
   }
 }

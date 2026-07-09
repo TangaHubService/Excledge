@@ -77,9 +77,11 @@ const createSale = async (req, res) => {
             // Only cash, no other payments, and no payment type specified
             finalPaymentType = 'CASH';
         }
-        // Generate sale number and invoice number (per-branch sequence per RRA requirement)
+        // Sale number now; invoice number is allocated inside the transaction below so
+        // that a rollback (e.g. insufficient stock, tax mismatch) also rolls back the
+        // sequence increment — otherwise a failed sale permanently burns an RRA invoice
+        // number, leaving a gap in the mandated gapless sequence.
         const saleNumber = `SALE-${Date.now()}`;
-        const invoiceNumber = await (0, rra_ebm_service_1.generateInvoiceNumber)(organizationId, branchId);
         // C6: determine receipt type label (NS/TS/PS)
         const org = await prisma_1.prisma.organization.findUnique({
             where: { id: organizationId },
@@ -122,12 +124,6 @@ const createSale = async (req, res) => {
             const computedTotal = taxSummary.items.reduce((sum, ti) => sum + Number(ti.taxableAmount) + Number(ti.taxAmount), 0);
             if (Math.abs(computedTotal - clientTotal) > 0.01) {
                 throw new Error(`Total amount mismatch: server computed ${computedTotal.toFixed(2)}, client submitted ${clientTotal.toFixed(2)}`);
-            }
-            // Reconcile server-computed VAT vs what TaxService returned
-            const computedVat = Number(taxSummary.vatAmount);
-            const clientVat = items.reduce((s, i) => s + Number(i.taxAmount || 0), 0);
-            if (Math.abs(computedVat - clientVat) > 0.01) {
-                throw new Error(`VAT amount mismatch: server computed ${computedVat.toFixed(2)}, client submitted ${clientVat.toFixed(2)}`);
             }
             // 3. Select batches and calculate costs for PRODUCT items only
             const inventoryMethod = req.body.inventoryMethod || 'FIFO';
@@ -200,11 +196,14 @@ const createSale = async (req, res) => {
                     ...(batchId !== null ? { batch: { connect: { id: batchId } } } : {}),
                 });
             }
-            // 4. Create sale with server-computed values
+            // 4. Allocate the RRA invoice sequence number and create the sale together,
+            // so a rollback of this transaction also rolls back the sequence increment.
+            const { invoiceNumber, vsdcInvcNo } = await (0, rra_ebm_service_1.generateInvoiceNumber)(organizationId, branchId, tx);
             const newSale = await tx.sale.create({
                 data: {
                     saleNumber,
                     invoiceNumber,
+                    vsdcInvcNo,
                     customerId: parseInt(customerId),
                     userId: userId,
                     organizationId: organizationId,

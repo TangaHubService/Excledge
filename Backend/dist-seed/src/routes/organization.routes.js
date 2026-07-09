@@ -14,6 +14,8 @@ router.post("/", auth_middleware_1.authenticate, organization_controller_1.creat
 router.put("/:id", auth_middleware_1.authenticate, orgAccessById, organization_controller_1.updateOrganization);
 router.put("/avatar/:id", auth_middleware_1.authenticate, orgAccessById, upload_middleware_1.uploadSingle.single("avatar"), organization_controller_1.updateOrganizationAvatar);
 router.delete("/:id", auth_middleware_1.authenticate, orgAccessById, organization_controller_1.deleteOrganization);
+router.get("/:id/settings", auth_middleware_1.authenticate, orgAccessById, organization_controller_1.getOrgSettings);
+router.patch("/:id/settings", auth_middleware_1.authenticate, orgAccessById, organization_controller_1.updateOrgSettings);
 router.post("/:organizationId/invite", auth_middleware_1.authenticate, orgAccess, organization_controller_1.inviteUser);
 router.post("/:organizationId/bulk-invite", auth_middleware_1.authenticate, orgAccess, organization_controller_1.bulkInviteUsers);
 router.post("/accept-invitation/:token", organization_controller_1.acceptInvitation);

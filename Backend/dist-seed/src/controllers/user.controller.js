@@ -156,34 +156,101 @@ const createUser = async (req, res) => {
     }
 };
 exports.createUser = createUser;
+// Roles assignable to an organization member through the update-user endpoint.
+// SYSTEM_OWNER is a platform-level role, not something granted within an
+// organization, so it is intentionally excluded here.
+const ASSIGNABLE_ROLES = ["ADMIN", "BRANCH_MANAGER", "ACCOUNTANT", "SELLER"];
+// Roles that only a SYSTEM_OWNER may ever modify (role or account status).
+const PROTECTED_TARGET_ROLES = ["ADMIN", "SYSTEM_OWNER"];
 const updateUser = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const organizationId = parseInt(req.params.organizationId);
-        const { role, ...updateData } = req.body;
+        const requesterId = parseInt(String(req.user.userId));
+        // `organizations` is a client-side convenience field on some payloads; never persisted.
+        const { organizations, ...updateData } = req.body;
         const userOrganization = await prisma_1.prisma.userOrganization.findFirst({
             where: { userId: id, organizationId: organizationId, user: { deletedAt: null } },
         });
         if (!userOrganization) {
             return res.status(404).json({ error: "User not found" });
         }
-        // Update user data
-        const { organizations, ...userUpdateData } = updateData;
-        if (Object.keys(userUpdateData).length > 0) {
+        const isSystemOwner = req.user.role === "SYSTEM_OWNER";
+        // Authoritative actor role for this organization — never trust a stale JWT role
+        // for cross-checking permissions inside a specific org.
+        const actorMembership = isSystemOwner
+            ? null
+            : await prisma_1.prisma.userOrganization.findFirst({
+                where: { userId: requesterId, organizationId: organizationId },
+                select: { role: true },
+            });
+        const actorRole = isSystemOwner ? "SYSTEM_OWNER" : actorMembership?.role;
+        const isAdmin = isSystemOwner || actorRole === "ADMIN";
+        const isSelf = requesterId === id;
+        // Server-side authorization — never trust the frontend's hidden/disabled form fields.
+        // Non-admins may only ever touch their own record, and only non-sensitive fields.
+        if (!isSelf && !isAdmin) {
+            return res.status(403).json({ error: "Forbidden: you don't have permission to update this user" });
+        }
+        const changingRole = Object.prototype.hasOwnProperty.call(updateData, "role");
+        const changingStatus = Object.prototype.hasOwnProperty.call(updateData, "isActive");
+        if (changingRole || changingStatus) {
+            // Only admins/system owner may change roles or account status — ever.
+            if (!isAdmin) {
+                return res.status(403).json({ error: "Forbidden: only administrators can change roles or account status" });
+            }
+            // Prevent privilege escalation: an org Admin (not SYSTEM_OWNER) may never
+            // modify another Admin's or a System Owner's role/status.
+            if (!isSystemOwner && PROTECTED_TARGET_ROLES.includes(userOrganization.role)) {
+                return res.status(403).json({ error: "Forbidden: only a System Owner can modify an Admin's role or account status" });
+            }
+            // Disallow self-service role/status changes to prevent self-escalation or self-lockout.
+            if (isSelf) {
+                return res.status(403).json({ error: "Forbidden: you cannot change your own role or account status" });
+            }
+            if (changingRole && !ASSIGNABLE_ROLES.includes(updateData.role)) {
+                return res.status(400).json({ error: "Invalid role" });
+            }
+        }
+        const { role: newRole, isActive, ...userFields } = updateData;
+        if (Object.keys(userFields).length > 0) {
             await prisma_1.prisma.user.update({
                 where: { id },
-                data: { ...userUpdateData },
+                data: { ...userFields, ...(changingStatus ? { isActive } : {}) },
             });
         }
-        await auditLogger_1.auditLogger.users(req, {
-            type: 'USER_ROLE_UPDATE',
-            description: `User "${userOrganization.userId}" roles/data updated`,
-            entityType: 'User',
-            entityId: id,
-            metadata: {
-                updates: updateData,
-            }
-        });
+        else if (changingStatus) {
+            await prisma_1.prisma.user.update({ where: { id }, data: { isActive } });
+        }
+        if (changingRole && newRole !== userOrganization.role) {
+            await prisma_1.prisma.userOrganization.update({
+                where: { id: userOrganization.id },
+                data: { role: newRole },
+            });
+        }
+        if (changingRole || changingStatus) {
+            await auditLogger_1.auditLogger.users(req, {
+                type: changingRole ? 'USER_ROLE_UPDATE' : (isActive ? 'USER_ACCOUNT_ENABLED' : 'USER_ACCOUNT_DISABLED'),
+                description: `User ${id} ${changingRole ? `role changed from "${userOrganization.role}" to "${newRole}"` : `account ${isActive ? 'enabled' : 'disabled'}`} by user ${requesterId}`,
+                entityType: 'User',
+                entityId: id,
+                metadata: {
+                    previousRole: userOrganization.role,
+                    newRole: changingRole ? newRole : undefined,
+                    isActive: changingStatus ? isActive : undefined,
+                    actorId: requesterId,
+                },
+            });
+        }
+        else if (Object.keys(userFields).length > 0) {
+            await auditLogger_1.auditLogger.users(req, {
+                type: 'OTHER',
+                description: `User "${id}" profile updated`,
+                entityType: 'User',
+                entityId: id,
+                metadata: { updates: userFields },
+            });
+        }
         res.json({ message: "User updated successfully" });
     }
     catch (error) {
@@ -196,11 +263,19 @@ const deleteUser = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const organizationId = parseInt(req.params.organizationId);
+        const requesterId = parseInt(String(req.user.userId));
         const userOrganization = await prisma_1.prisma.userOrganization.findFirst({
             where: { userId: id, organizationId, user: { deletedAt: null } },
         });
         if (!userOrganization) {
             return res.status(404).json({ error: "User not found" });
+        }
+        if (requesterId === id) {
+            return res.status(400).json({ error: "You cannot disable your own account" });
+        }
+        const isSystemOwner = req.user.role === "SYSTEM_OWNER";
+        if (!isSystemOwner && PROTECTED_TARGET_ROLES.includes(userOrganization.role)) {
+            return res.status(403).json({ error: "Forbidden: only a System Owner can disable an Admin's account" });
         }
         await prisma_1.prisma.user.update({
             where: { id },
@@ -208,9 +283,10 @@ const deleteUser = async (req, res) => {
         });
         await auditLogger_1.auditLogger.users(req, {
             type: 'USER_ACCOUNT_DISABLED',
-            description: `User account disabled: ${id}`,
+            description: `User account disabled: ${id} by user ${requesterId}`,
             entityType: 'User',
             entityId: id,
+            metadata: { actorId: requesterId },
         });
         res.json({ message: "User deleted successfully" });
     }
