@@ -14,7 +14,7 @@ import {
     getPaymentHistory,
     updateAutoRenew,
 } from '../controllers/subscription.controller';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, restrictRoles } from '../middleware/auth.middleware';
 import { requireOrganizationAccess } from '../middleware/organizationAccess.middleware';
 import { initiatePaypackPayment } from '../controllers/paypack.controller';
 import { initiatePesapalPayment } from '../controllers/pesapalIntergration.controller';
@@ -36,6 +36,7 @@ susbscriptionRoutes.post(
 susbscriptionRoutes.post(
     '/organizations/:organizationId/checkout',
     authenticate,
+    restrictRoles('SELLER'),
     orgAccess,
     createCheckout
 );
@@ -43,6 +44,7 @@ susbscriptionRoutes.post(
 susbscriptionRoutes.get(
     '/organizations/:organizationId/verify',
     authenticate,
+    restrictRoles('SELLER'),
     orgAccess,
     verifyPayment
 );
@@ -50,6 +52,7 @@ susbscriptionRoutes.get(
 susbscriptionRoutes.get(
     '/organizations/:organizationId/subscriptions',
     authenticate,
+    restrictRoles('SELLER'),
     orgAccess,
     getUserSubscriptions
 );
@@ -57,6 +60,7 @@ susbscriptionRoutes.get(
 susbscriptionRoutes.get(
     '/organizations/:organizationId/subscriptions/:id',
     authenticate,
+    restrictRoles('SELLER'),
     orgAccess,
     getSubscriptionById
 );
@@ -64,6 +68,7 @@ susbscriptionRoutes.get(
 susbscriptionRoutes.post(
     '/organizations/:organizationId/subscriptions/:id/cancel',
     authenticate,
+    restrictRoles('SELLER'),
     orgAccess,
     cancelSubscription
 );
@@ -71,6 +76,7 @@ susbscriptionRoutes.post(
 susbscriptionRoutes.post(
     '/organizations/:organizationId/subscriptions/:id/reactivate',
     authenticate,
+    restrictRoles('SELLER'),
     orgAccess,
     reactivateSubscription
 );
@@ -78,6 +84,7 @@ susbscriptionRoutes.post(
 susbscriptionRoutes.post(
     '/organizations/:organizationId/subscriptions/:id/renew',
     authenticate,
+    restrictRoles('SELLER'),
     orgAccess,
     renewSubscription
 );
@@ -85,6 +92,7 @@ susbscriptionRoutes.post(
 susbscriptionRoutes.patch(
     '/organizations/:organizationId/subscriptions/:id/auto-renew',
     authenticate,
+    restrictRoles('SELLER'),
     orgAccess,
     updateAutoRenew
 );
@@ -92,6 +100,7 @@ susbscriptionRoutes.patch(
 susbscriptionRoutes.get(
     '/organizations/:organizationId/stats',
     authenticate,
+    restrictRoles('SELLER'),
     orgAccess,
     getSubscriptionStats
 );
@@ -99,6 +108,7 @@ susbscriptionRoutes.get(
 susbscriptionRoutes.get(
     '/organizations/:organizationId/payments',
     authenticate,
+    restrictRoles('SELLER'),
     orgAccess,
     getPaymentHistory
 );

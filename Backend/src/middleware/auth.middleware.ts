@@ -76,6 +76,33 @@ export const authorize = (...roles: string[]) => {
   };
 };
 
+/**
+ * Deny-list middleware — blocks the request if the user's role is in the
+ * provided list. Use this for "everyone EXCEPT these roles" scenarios.
+ *
+ * Respects per-organization role from requireOrganizationAccess just like
+ * authorize() does.
+ *
+ * @example
+ * router.get("/subscriptions", authenticate, restrictRoles("SELLER"), ...);
+ */
+export const restrictRoles = (...roles: string[]) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    const orgRole = (req as { organizationRole?: string }).organizationRole;
+    const effectiveRole = orgRole ?? req.user.role;
+
+    if (roles.includes(effectiveRole)) {
+      return res.status(403).json({
+        error: "Forbidden: You do not have permission to access this resource",
+      });
+    }
+    next();
+  };
+};
+
 export const requireSystemOwner = (
   req: AuthRequest,
   res: Response,

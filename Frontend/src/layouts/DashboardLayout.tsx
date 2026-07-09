@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Outlet, useNavigate, useLocation, Navigate } from "react-router-dom";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { Sidebar } from "../components/Sidebar";
@@ -12,6 +12,21 @@ import { ToastContainer } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 import { cn } from "../lib/utils";
 
+const SELLER_RESTRICTED_PATHS = [
+  "stock-transfers",
+  "warehouses",
+  "users",
+  "subscription",
+  "history",
+];
+
+function getDashboardSegment(pathname: string): string | null {
+  const segments = pathname.split("/").filter(Boolean);
+  const dashIdx = segments.indexOf("dashboard");
+  if (dashIdx === -1 || dashIdx + 1 >= segments.length) return null;
+  return segments[dashIdx + 1];
+}
+
 export function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -19,7 +34,12 @@ export function DashboardLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const { organization } = useOrganization();
-  const { isSystemOwner, isAuthenticated, isLoading } = useAuth();
+  const { user, isSystemOwner, isAuthenticated, isLoading } = useAuth();
+
+  const dashboardSegment = useMemo(
+    () => getDashboardSegment(location.pathname),
+    [location.pathname],
+  );
 
   const hasOrganization =
     organization !== null || localStorage.getItem('current_organization_id') !== null;
@@ -31,6 +51,14 @@ export function DashboardLayout() {
     const timer = setTimeout(() => setAuthReady(true), 100);
     return () => clearTimeout(timer);
   }, [isAuthenticated]);
+
+  /* Redirect SELLER away from restricted routes */
+  useEffect(() => {
+    if (!authReady) return;
+    if (user?.role === "SELLER" && dashboardSegment && SELLER_RESTRICTED_PATHS.includes(dashboardSegment)) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [authReady, user?.role, dashboardSegment, navigate]);
 
   useEffect(() => {
     if (!authReady) return;
