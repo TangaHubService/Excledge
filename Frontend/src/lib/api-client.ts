@@ -6,7 +6,9 @@ const REFRESH_TOKEN_KEY = 'refresh_token';
 const isPublicAuthPage = (): boolean => {
   if (typeof window === 'undefined') return false;
   const path = window.location.pathname;
-  return path === '/login' ||
+  return path === '/' ||
+    path === '/landing' ||
+    path === '/login' ||
     path === '/reset-password' ||
     path === '/forgot-password' ||
     path === '/signup' ||

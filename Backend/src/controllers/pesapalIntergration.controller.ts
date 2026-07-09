@@ -5,10 +5,11 @@ import axios from "axios";
 import { prisma } from "../lib/prisma";
 import { SubscriptionStatus } from "@prisma/client";
 import { convertUsdToRwf } from "../utils/currencyConverter";
+import { pesapalConfig } from "../lib/paypack";
 
 import { config } from "../config";
 
-const PESAPAL_API_URL = process.env.PESAPAL_API_URL;
+const PESAPAL_API_URL = pesapalConfig.baseUrl;
 
 // Helper function to get transaction status
 const getTransactionStatus = async (orderTrackingId: string) => {

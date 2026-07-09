@@ -4,8 +4,9 @@ import { getIO } from '../utils/socket';
 import { PaymentStatus } from '@prisma/client';
 import { pesapalToken } from '../utils/getAcessToken';
 import axios from 'axios';
+import { pesapalConfig } from '../lib/paypack';
 
-const PESAPAL_API_URL = process.env.PESAPAL_API_URL;
+const PESAPAL_API_URL = pesapalConfig.baseUrl;
 
 interface PesapalTransactionStatus {
     payment_method: string;

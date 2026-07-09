@@ -21,10 +21,8 @@ export const getAccessToken = async (): Promise<PaypackToken> => {
 
 
 export const pesapalToken = async () => {
-    const tokenUrl = process.env.PESAPAL_API_URL;
-
     const { data } = await axios.post(
-        `${tokenUrl}/api/Auth/RequestToken`,
+        `${pesapalConfig.baseUrl}/api/Auth/RequestToken`,
         {
             consumer_key: pesapalConfig.consumerKey,
             consumer_secret: pesapalConfig.consumerSecret,
