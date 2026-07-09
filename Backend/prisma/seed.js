@@ -8,6 +8,7 @@ const subscriptionPlans = [
         description: 'More power for growing teams — daily backups, priority features, and room to scale.',
         price: 15000,
         period: 'MONTHLY',
+        isActive: true,
         popular: true,
         features: [
             '1 user account',
@@ -22,6 +23,7 @@ const subscriptionPlans = [
         description: 'Everything you need to get started with inventory, sales, and reporting.',
         price: 40000,
         period: 'MONTHLY',
+        isActive: true,
         features: [
             '4 user accounts',
             'Inventory Management',
@@ -37,6 +39,7 @@ const subscriptionPlans = [
         description: 'Everything you need to get started with inventory, sales, and reporting.',
         price: 100000,
         period: 'MONTHLY',
+        isActive: true,
         features: [
             '10 user accounts',
             'Inventory Management',
@@ -53,6 +56,7 @@ const subscriptionPlans = [
         description: 'Everything you need to get started with inventory, sales, and reporting.',
         price: 500000,
         period: 'MONTHLY',
+        isActive: true,
         features: [
             'Unlimited user accounts',
             'Inventory Management',
