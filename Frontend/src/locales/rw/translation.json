@@ -1144,6 +1144,8 @@
         "subscriptionExpiredMessage": "Ifatabuguzi ryawe ryarangiye. Ongera kwiyandikisha nonaha kugira ngo uhabwe uburenganzira bwose.",
         "noActiveSubscriptionMessage": "Kwiyandikisha nonaha kugira ngo uhabwe uburenganzira bwose no gukomeza gukoresha sisitemu.",
         "subscriptionExpiringSoonMessage": "Ifatabuguzi ryawe rizata igihe mu minsi {{count}}. Ongera kwiyandikisha nonaha kugira ngo utazindirwe.",
+        "subscriptionRequiredMessage": "Ifatabuguzi ryawe ryarangiye cyangwa nta fatabuguzi rikoreshwa ryabonetse.",
+        "subscriptionRequiredCta": "Kugira ngo ukomeze gukoresha ibikorwa byose bya sisitemu, nyamuneka fata ifatabuguzi.",
         "trialPeriod": "Igihe cy'igeragezwa",
         "trialMessage": "Ubu uri gukoresha igihe cy'igeragezwa ry'ubuntu. Bizarangira ku wa {{date}}. Gura abonema ubu kugira ngo ukomeze kubona amakuru yawe n'ibindi byose."
     },

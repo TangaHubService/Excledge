@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useLocation, Navigate } from "react-router-dom";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { Sidebar } from "../components/Sidebar";
 import { Header } from "../components/Header";
-import { SubscriptionAlert } from "../components/SubscriptionAlert";
+import { SubscriptionRequiredModal } from "../components/SubscriptionRequiredModal";
 import { VsdcStatusBanner } from "../components/VsdcStatusBanner";
 import { AppShellSkeleton } from "../components/ui/app-shell-skeleton";
 import { useOrganization } from "../context/OrganizationContext";
@@ -88,13 +88,14 @@ export function DashboardLayout() {
           className="mt-14"
         />
 
-        {/* Subscription & status banners */}
-        <SubscriptionAlert
+        {/* Status banners */}
+        <VsdcStatusBanner />
+
+        {/* Subscription-required modal (replaces the old inline banner) */}
+        <SubscriptionRequiredModal
           hasActiveSubscription={organization?.hasActiveSubscription}
           subscriptionStatus={organization?.subscriptionStatus}
-          subscriptionEndDate={organization?.subscriptionEndDate}
         />
-        <VsdcStatusBanner />
 
         {/* ── Scrollable content area ─────────────────── */}
         <main
