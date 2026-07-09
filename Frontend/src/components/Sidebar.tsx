@@ -46,6 +46,8 @@ import { apiClient } from "../lib/api-client";
 
 /* ─── Types ─────────────────────────────────────────── */
 
+type Role = "ADMIN" | "BRANCH_MANAGER" | "ACCOUNTANT" | "SELLER";
+
 interface SubNavItem {
   id: string;
   name: string;
@@ -60,6 +62,10 @@ interface NavItem {
   icon?: LucideIcon;
   type?: "header";
   submenu?: SubNavItem[];
+  /** If set, only these roles see the item (denylist below is ignored). */
+  allowedRoles?: Role[];
+  /** If set, every role except these sees the item. */
+  restrictedRoles?: Role[];
 }
 
 interface SidebarProps {
@@ -92,8 +98,8 @@ const baseNavigation: NavItem[] = [
   { id: "expired", name: "nav.expiredProducts", href: "expired", icon: AlertTriangle },
   { id: "ledger-history", name: "nav.ledgerHistory", href: "ledger-history", icon: History },
   { id: "inventory-summary", name: "nav.inventorySummary", href: "inventory-summary", icon: BarChart3 },
-  { id: "stock-transfers", name: "nav.stockTransfers", href: "stock-transfers", icon: GitBranch },
-  { id: "warehouses", name: "nav.warehouses", href: "warehouses", icon: Building2 },
+  { id: "stock-transfers", name: "nav.stockTransfers", href: "stock-transfers", icon: GitBranch, restrictedRoles: ["SELLER"] },
+  { id: "warehouses", name: "nav.warehouses", href: "warehouses", icon: Building2, restrictedRoles: ["SELLER"] },
 
   { id: "orders-header", name: "nav.ordersHeader", href: "", type: "header" },
   { id: "orders", name: "nav.orders", href: "orders", icon: ShoppingCart },
@@ -130,6 +136,24 @@ const systemOwnerNav: NavItem[] = [
   { id: "system-payments", name: "nav.payments", href: "/dashboard/system-owner/payments", icon: Receipt },
   { id: "system-analytics", name: "nav.analytics", href: "/dashboard/system-owner/analytics", icon: BarChart3 },
 ];
+
+/* ─── Role-based filtering ──────────────────────────── */
+
+function isVisibleForRole(item: NavItem, role?: string): boolean {
+  if (item.allowedRoles) return !!role && item.allowedRoles.includes(role as Role);
+  if (item.restrictedRoles) return !role || !item.restrictedRoles.includes(role as Role);
+  return true;
+}
+
+/** Filters a flat nav list by role, dropping any header left with no items under it. */
+function filterNavByRole(items: NavItem[], role?: string): NavItem[] {
+  const kept = items.filter(item => item.type === "header" || isVisibleForRole(item, role));
+  return kept.filter((item, idx) => {
+    if (item.type !== "header") return true;
+    const next = kept[idx + 1];
+    return !!next && next.type !== "header";
+  });
+}
 
 /* ─── Navigation resolver ───────────────────────────── */
 
@@ -170,7 +194,7 @@ function resolveNavigation(
     );
   }
 
-  return items;
+  return filterNavByRole(items, userRole);
 }
 
 /* ─── Component ─────────────────────────────────────── */
