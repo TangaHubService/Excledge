@@ -3,84 +3,79 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
 const subscriptionPlans = [
-    // Free Trial Plan
     {
         title: 'Free Trial',
-        description: '7-day free trial with full access to all features',
+        description: '24-hour free trial with full access to all features',
         price: 0,
         period: 'MONTHLY',
         isActive: true,
         maxUsers: 5,
-        features: [
-            'Inventory Management',
-            'Sales Tracking',
-            'Basic Reports'
-        ]
+        features: ['Inventory Management', 'Sales Tracking', 'Basic Reports'],
     },
     {
         title: 'Simple Starter',
-        description: 'Simple Starter plan',
-        price: 50000,
+        description: 'Perfect for sole traders and micro-businesses',
+        price: 15000,
         period: 'MONTHLY',
         features: [
+            '1 user account',
             'Inventory Management',
-            'Sells & POS',
-            '24/7 support',
+            'Sales & POS',
             'Purchase order',
-            '2 user account'
-        ]
+            '24/7 support',
+        ],
     },
     {
         title: 'Essential',
-        description: 'Essential plan',
-        price: 100000,
+        description: 'Great for growing small teams',
+        price: 40000,
         period: 'MONTHLY',
         features: [
+            '4 user accounts',
             'Inventory Management',
-            'Sells & POS',
-            '24/7 support',
+            'Sales & POS',
             'Purchase order',
-            '5 user account',
+            'Tax declaration service',
             'Quarterly visit',
-            'Tax declaration service'
-        ]
+            '24/7 support',
+        ],
     },
     {
         title: 'Professional',
-        description: 'Professional plan',
-        price: 300000,
+        description: 'Advanced tools for established businesses',
+        price: 100000,
         period: 'MONTHLY',
         popular: true,
         features: [
+            '10 user accounts',
             'Inventory Management',
-            'Sells & POS',
-            '24/7 support',
+            'Sales & POS',
             'Purchase order',
-            '10 user account',
-            'Monthly visit',
+            'Payroll management',
             'Tax declaration service',
-            'Payroll management'
-        ]
+            'Monthly visit',
+            '24/7 support',
+        ],
     },
     {
         title: 'Advanced',
-        description: 'Advanced plan',
+        description: 'Complete operational, accounting, and compliance control',
         price: 500000,
         period: 'MONTHLY',
         features: [
+            'Unlimited user accounts',
             'Inventory Management',
-            'Sells & POS',
-            '24/7 support',
+            'Sales & POS',
             'Purchase order',
-            'Unlimited user account',
-            '2 visit a month',
-            'Tax declaration service',
             'Payroll management',
+            'Tax declaration service',
+            '2 visits a month',
             'Accounting service',
             'Compliance advisory',
-            'Quick book Async'
-        ]
-    }
+            'QuickBooks Async',
+            '24/7 support',
+        ],
+    },
 ];
 // Helper to extract number of users from feature string
 function extractMaxUsers(features) {
