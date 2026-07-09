@@ -1164,6 +1164,8 @@
         "subscriptionExpiredMessage": "Your subscription has expired. Renew now to restore access to all features.",
         "noActiveSubscriptionMessage": "Subscribe now to access all features and continue using the platform.",
         "subscriptionExpiringSoonMessage": "Your subscription will expire in {{count}} day(s). Renew now to avoid any interruption.",
+        "subscriptionRequiredMessage": "Your subscription has expired or no active subscription was found.",
+        "subscriptionRequiredCta": "To continue using all platform features, please activate a subscription.",
         "renewSubscription": "Renew Subscription",
         "subscribeNow": "Subscribe Now",
         "paymentError": "Payment Error",

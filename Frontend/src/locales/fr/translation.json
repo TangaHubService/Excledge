@@ -1164,6 +1164,8 @@
         "subscriptionExpiredMessage": "Votre abonnement a expiré. Renouvelez maintenant pour restaurer l'accès à toutes les fonctionnalités.",
         "noActiveSubscriptionMessage": "Abonnez-vous maintenant pour accéder à toutes les fonctionnalités et continuer à utiliser la plateforme.",
         "subscriptionExpiringSoonMessage": "Votre abonnement expirera dans {{count}} jour(s). Renouvelez maintenant pour éviter toute interruption.",
+        "subscriptionRequiredMessage": "Votre abonnement a expiré ou aucun abonnement actif n'a été trouvé.",
+        "subscriptionRequiredCta": "Pour continuer à utiliser toutes les fonctionnalités de la plateforme, veuillez activer un abonnement.",
         "trialPeriod": "Période d'essai gratuite",
         "trialMessage": "Vous utilisez actuellement un essai gratuit. Il se terminera le {{date}}. Abonnez-vous maintenant pour conserver vos données et accéder à toutes les fonctionnalités."
     },

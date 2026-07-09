@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { isTokenValid } from '../utils/jwtValidation';
 import { apiClient } from '../lib/api-client';
+import { resetSubscriptionModalDismissal } from '../utils/subscriptionModalDismissal';
 
 type User = {
     id: string;
@@ -119,6 +120,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setIsAuthenticated(true);
             localStorage.setItem('user', JSON.stringify(userData));
             localStorage.setItem('token', userData.token);
+            // A fresh login should always re-evaluate the subscription-required modal,
+            // even if it was dismissed earlier in a previous session.
+            resetSubscriptionModalDismissal();
         }
     };
 

@@ -1176,6 +1176,8 @@
         "subscriptionExpiredMessage": "Usajili wako umeisha muda. Rejesha sasa ili kurejesha ufikiaji wa vipengele vyote.",
         "noActiveSubscriptionMessage": "Jisajili sasa ili kufikia vipengele vyote na kuendelea kutumia jukwaa.",
         "subscriptionExpiringSoonMessage": "Usajili wako utaisha muda katika siku {{count}}. Rejesha sasa ili kuepuka usumbufu wowote.",
+        "subscriptionRequiredMessage": "Usajili wako umeisha muda au hakuna usajili unaofanya kazi uliopatikana.",
+        "subscriptionRequiredCta": "Ili kuendelea kutumia vipengele vyote vya jukwaa, tafadhali wezesha usajili.",
         "trialPeriod": "Kipindi cha Jaribio la Bure",
         "trialMessage": "Unatumia jaribio la bure kwa sasa. Litaisha mnamo {{date}}. Jisajili sasa ili kuhifadhi data yako na kupata vipengele vyote."
     },
