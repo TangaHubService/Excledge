@@ -113,6 +113,7 @@
         "noDataToPreview": "Hakuna data ya kuonyesha"
     },
     "nav": {
+        "home": "Nyumbani",
         "dashboard": "Dashibodi",
         "inventory": "Hesabu",
         "sales": "Mauzo",
