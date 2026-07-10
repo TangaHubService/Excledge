@@ -15,75 +15,69 @@ const prisma = new client_1.PrismaClient();
 /** Demo login password for all seeded users (development only). */
 exports.DEMO_PASSWORD = "TestDemo#123";
 const DEMO_ADMIN_EMAIL = "demo.admin@exceledge.test";
+const baseFeatures = [
+    "Inventory Management",
+    "Sales & POS",
+    "Purchase order",
+    "24/7 support",
+];
 const subscriptionPlans = [
     {
         title: "Simple Starter",
-        description: "More power for growing teams — daily backups, priority features, and room to scale.",
         price: 15000,
         period: "MONTHLY",
         isActive: true,
         popular: true,
+        description: "More power for growing teams — daily backups, priority features, and room to scale.",
         features: [
             "1 user account",
-            "Inventory Management",
-            "Sales & POS",
-            "Purchase order",
-            "24/7 support"
+            ...baseFeatures,
         ],
     },
     {
         title: "Essential",
-        description: "Everything you need to get started with inventory, sales, and reporting.",
         price: 40000,
         period: "MONTHLY",
         isActive: true,
+        description: "Everything you need to get started with inventory, sales, and reporting.",
         features: [
             "4 user accounts",
-            "Inventory Management",
-            "Sales & POS",
-            "Purchase order",
-            "24/7 support",
+            ...baseFeatures,
             "Tax declaration service",
-            "Quarterly visit"
+            "Quarterly visit",
         ],
     },
     {
         title: "Professional",
-        description: "Everything you need to get started with inventory, sales, and reporting.",
         price: 100000,
         period: "MONTHLY",
         isActive: true,
+        description: "Everything you need to get started with inventory, sales, and reporting.",
         features: [
             "10 user accounts",
-            "Inventory Management",
-            "Sales & POS",
-            "Purchase order",
-            "24/7 support",
+            ...baseFeatures,
             "Payroll management",
             "Tax declaration service",
-            "Monthly visit"
+            "Monthly visit",
         ],
     },
     {
         title: "Advanced",
-        description: "Everything you need to get started with inventory, sales, and reporting.",
         price: 500000,
         period: "MONTHLY",
         isActive: true,
+        description: "Everything you need to get started with inventory, sales, and reporting.",
         features: [
             "Unlimited user accounts",
-            "Inventory Management",
-            "Sales & POS",
-            "Purchase order",
-            "24/7 support",
+            ...baseFeatures,
             "Payroll management",
+            "Tax declaration service",
             "QuickBooks Async",
             "Accounting service",
-            "Tax declaration service",
             "Compliance advisory",
-            "2 visits a month"
+            "2 visits a month",
         ],
-    }
+    },
 ];
 function extractMaxUsers(features) {
     const userFeature = features.find((f) => /user account/i.test(f));
