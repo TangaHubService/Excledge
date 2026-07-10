@@ -87,9 +87,6 @@ export const PricingCard = ({
             <span className="leading-snug">{feature}</span>
           </li>
         ))}
-        {extraFeatures.length > 0 && (
-          <li className="my-1 border-t border-gray-100 dark:border-zinc-800" aria-hidden />
-        )}
         {extraFeatures.map((feature, index) => (
           <li key={index} className="flex gap-3 text-sm text-gray-600 dark:text-zinc-300">
             <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
