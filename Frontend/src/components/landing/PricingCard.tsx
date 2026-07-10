@@ -64,7 +64,7 @@ export const PricingCard = ({
         </p>
       </div>
 
-      <div className="mt-6 flex flex-wrap items-end gap-x-1 gap-y-0 border-b border-gray-100 pb-6 dark:border-zinc-800">
+      <div className="mt-6 flex flex-wrap items-end gap-x-1 gap-y-0 pb-6">
         <span className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white">
           {price}
         </span>
