@@ -205,25 +205,25 @@ export const CashFlowReport = () => {
     };
 
     return (
-        <div className="space-y-6 p-6">
+        <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
+                <div className="min-w-0">
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('cashFlowReport.title')}</h1>
                     <p className="text-gray-600 dark:text-gray-400">{t('cashFlowReport.description')}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-3 shrink-0">
                     <Button
                         onClick={() => setIsExpenseModalOpen(true)}
-                        className="bg-red-600 hover:bg-red-700 text-white flex items-center gap-2"
+                        className="bg-red-600 hover:bg-red-700 text-white shadow-sm"
                     >
-                        <PlusCircle size={20} />
+                        <PlusCircle className="size-4" />
                         {t('cashFlowReport.recordExpense')}
                     </Button>
                     <Button
                         onClick={openPaymentModal}
-                        className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
                     >
-                        <Receipt size={20} />
+                        <Receipt className="size-4" />
                         {t('cashFlowReport.recordSupplierPayment')}
                     </Button>
                 </div>
@@ -231,26 +231,23 @@ export const CashFlowReport = () => {
 
             {/* Balance Verification Alert */}
             {verification && !verification.balanced && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
-                    <AlertTriangle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={20} />
-                    <div className="flex-1">
-                        <h3 className="text-red-800 dark:text-red-200 font-semibold">Balance Mismatch Detected!</h3>
-                        <p className="text-red-700 dark:text-red-300 text-sm mt-1">
-                            Formula: {verification.formula}
-                        </p>
-                        <p className="text-red-700 dark:text-red-300 text-sm">
-                            Calculated: {formatCurrency(verification.calculated)} | Actual: {formatCurrency(verification.actual)}
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-5 py-4 flex items-center gap-4">
+                    <AlertTriangle className="text-red-600 dark:text-red-400 shrink-0 size-5" />
+                    <div className="min-w-0">
+                        <h3 className="text-red-800 dark:text-red-200 font-semibold text-sm">Balance Mismatch Detected!</h3>
+                        <p className="text-red-700 dark:text-red-300 text-sm leading-relaxed">
+                            {verification.formula}: Calculated {formatCurrency(verification.calculated)} &middot; Actual {formatCurrency(verification.actual)}
                         </p>
                     </div>
                 </div>
             )}
 
             {verification && verification.balanced && (
-                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-start gap-3">
-                    <CheckCircle className="text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" size={20} />
-                    <div className="flex-1">
-                        <h3 className="text-green-800 dark:text-green-200 font-semibold">Balance Verified ✓</h3>
-                        <p className="text-green-700 dark:text-green-300 text-sm">
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-5 py-4 flex items-center gap-4">
+                    <CheckCircle className="text-green-600 dark:text-green-400 shrink-0 size-5" />
+                    <div className="min-w-0">
+                        <h3 className="text-green-800 dark:text-green-200 font-semibold text-sm">Balance Verified</h3>
+                        <p className="text-green-700 dark:text-green-300 text-sm leading-relaxed">
                             {verification.formula} = {formatCurrency(verification.calculated)}
                         </p>
                     </div>
@@ -258,37 +255,29 @@ export const CashFlowReport = () => {
             )}
 
             {/* Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        {t('common.startDate')}
-                    </label>
-                    <input
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="space-y-1.5">
+                    <Label className="text-gray-700 dark:text-gray-300">{t('common.startDate')}</Label>
+                    <Input
                         type="date"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-800 dark:text-white"
                     />
                 </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        {t('common.endDate')}
-                    </label>
-                    <input
+                <div className="space-y-1.5">
+                    <Label className="text-gray-700 dark:text-gray-300">{t('common.endDate')}</Label>
+                    <Input
                         type="date"
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white"
                     />
                 </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Payment Method
-                    </label>
+                <div className="space-y-1.5">
+                    <Label className="text-gray-700 dark:text-gray-300">Payment Method</Label>
                     <select
                         value={transactionType}
                         onChange={(e) => setTransactionType(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white"
+                        className="h-9 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800/50 px-3 py-1 text-sm text-gray-900 dark:text-gray-100 shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-blue-500 focus-visible:ring-blue-500/30 focus-visible:ring-[3px]"
                     >
                         <option value="ALL">All Methods</option>
                         <option value="CASH">Cash</option>
@@ -296,14 +285,12 @@ export const CashFlowReport = () => {
                         <option value="BANK">Bank/Card</option>
                     </select>
                 </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Category
-                    </label>
+                <div className="space-y-1.5">
+                    <Label className="text-gray-700 dark:text-gray-300">Category</Label>
                     <select
                         value={categoryFilter}
                         onChange={(e) => setCategoryFilter(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white"
+                        className="h-9 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800/50 px-3 py-1 text-sm text-gray-900 dark:text-gray-100 shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-blue-500 focus-visible:ring-blue-500/30 focus-visible:ring-[3px]"
                     >
                         <option value="ALL">All Categories</option>
                         <option value="Sales">Sales</option>
@@ -316,66 +303,56 @@ export const CashFlowReport = () => {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-purple-50 dark:bg-purple-900/30 rounded-lg text-purple-600 dark:text-purple-400">
-                            <DollarSign size={20} />
-                        </div>
-                        <div>
-                            <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{t('cashFlowReport.openingBalance')}</p>
-                            <p className="text-lg font-semibold text-gray-900 dark:text-white">{formatCurrency(summary.openingBalance)}</p>
-                        </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                <div className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-card border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow flex items-center gap-4 min-h-[88px]">
+                    <div className="size-12 flex items-center justify-center shrink-0 rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+                        <DollarSign className="size-5" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{t('cashFlowReport.openingBalance')}</p>
+                        <p className="text-lg font-semibold text-gray-900 dark:text-white truncate">{formatCurrency(summary.openingBalance)}</p>
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-green-50 dark:bg-green-900/30 rounded-lg text-green-600 dark:text-green-400">
-                            <TrendingUp size={20} />
-                        </div>
-                        <div>
-                            <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{t('cashFlowReport.totalInflows')}</p>
-                            <p className="text-lg font-semibold text-green-600 dark:text-green-400">{formatCurrency(summary.totalInflows)}</p>
-                        </div>
+                <div className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-card border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow flex items-center gap-4 min-h-[88px]">
+                    <div className="size-12 flex items-center justify-center shrink-0 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                        <TrendingUp className="size-5" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{t('cashFlowReport.totalInflows')}</p>
+                        <p className="text-lg font-semibold text-green-600 dark:text-green-400 truncate">{formatCurrency(summary.totalInflows)}</p>
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-red-50 dark:bg-red-900/30 rounded-lg text-red-600 dark:text-red-400">
-                            <TrendingDown size={20} />
-                        </div>
-                        <div>
-                            <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{t('cashFlowReport.totalOutflows')}</p>
-                            <p className="text-lg font-semibold text-red-600 dark:text-red-400">{formatCurrency(summary.totalOutflows)}</p>
-                        </div>
+                <div className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-card border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow flex items-center gap-4 min-h-[88px]">
+                    <div className="size-12 flex items-center justify-center shrink-0 rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                        <TrendingDown className="size-5" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{t('cashFlowReport.totalOutflows')}</p>
+                        <p className="text-lg font-semibold text-red-600 dark:text-red-400 truncate">{formatCurrency(summary.totalOutflows)}</p>
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
-                            <Activity size={20} />
-                        </div>
-                        <div>
-                            <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{t('cashFlowReport.netCashFlow')}</p>
-                            <p className={`text-lg font-semibold ${summary.netCashFlow >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                {formatCurrency(summary.netCashFlow)}
-                            </p>
-                        </div>
+                <div className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-card border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow flex items-center gap-4 min-h-[88px]">
+                    <div className="size-12 flex items-center justify-center shrink-0 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                        <Activity className="size-5" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{t('cashFlowReport.netCashFlow')}</p>
+                        <p className={`text-lg font-semibold truncate ${summary.netCashFlow >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {formatCurrency(summary.netCashFlow)}
+                        </p>
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-blue-600 rounded-lg text-white shadow-lg shadow-blue-200 dark:shadow-none">
-                            <DollarSign size={20} />
-                        </div>
-                        <div>
-                            <p className="text-blue-600 dark:text-blue-400 text-xs font-bold uppercase tracking-wider">{t('cashFlowReport.closingBalance')}</p>
-                            <p className="text-xl font-bold text-gray-900 dark:text-white leading-tight">{formatCurrency(summary.closingBalance)}</p>
-                        </div>
+                <div className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-card border border-blue-200 dark:border-blue-800 hover:shadow-md transition-shadow flex items-center gap-4 min-h-[88px] ring-1 ring-blue-100 dark:ring-blue-900/50">
+                    <div className="size-12 flex items-center justify-center shrink-0 rounded-xl bg-blue-600 text-white shadow-sm">
+                        <DollarSign className="size-5" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-blue-600 dark:text-blue-400 text-xs font-semibold uppercase tracking-wider">{t('cashFlowReport.closingBalance')}</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white truncate">{formatCurrency(summary.closingBalance)}</p>
                     </div>
                 </div>
             </div>
