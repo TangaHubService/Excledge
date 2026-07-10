@@ -29,9 +29,9 @@ const subscriptionPlans = [
             'Inventory Management',
             'Sales & POS',
             'Purchase order',
+            '24/7 support',
             'Tax declaration service',
-            'Quarterly visit',
-            '24/7 support'
+            'Quarterly visit'
         ],
     },
     {
@@ -45,10 +45,10 @@ const subscriptionPlans = [
             'Inventory Management',
             'Sales & POS',
             'Purchase order',
+            '24/7 support',
             'Payroll management',
             'Tax declaration service',
-            'Monthly visit',
-            '24/7 support'
+            'Monthly visit'
         ],
     },
     {
@@ -62,13 +62,13 @@ const subscriptionPlans = [
             'Inventory Management',
             'Sales & POS',
             'Purchase order',
+            '24/7 support',
             'Payroll management',
             'QuickBooks Async',
             'Accounting service',
             'Tax declaration service',
             'Compliance advisory',
-            '2 visits a month',
-            '24/7 support'
+            '2 visits a month'
         ],
     },
 ];

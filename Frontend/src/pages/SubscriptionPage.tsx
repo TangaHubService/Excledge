@@ -333,14 +333,14 @@ const SubscriptionPage = ({ showPlanHeader = true }: SubscriptionPageProps) => {
                                 : "mx-auto grid max-w-7xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8"
                         }
                     >
-                        {plans.slice(1).map((plan: any, index: number) => (
+                        {plans.map((plan: any, index: number) => (
                             <PricingCard
                                 key={plan.id}
                                 title={plan.name}
                                 price={plan.price.toLocaleString()}
                                 period={plan.billingCycle}
                                 features={plan.features.map((f: any) => f.name)}
-                                popular={index === 0}
+                                popular={index === 1}
                                 onSelect={() => handleSelectPlan(plan)}
                                 isProcessing={
                                     isProcessing && selectedPlan?.id === plan.id
