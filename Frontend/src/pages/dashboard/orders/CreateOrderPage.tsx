@@ -21,7 +21,7 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
+import { SearchableSelect } from '../../../components/ui/SearchableSelect';
 import { apiClient } from '../../../lib/api-client';
 import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response';
 import { useTheme } from '../../../context/ThemeContext';
@@ -291,21 +291,15 @@ export const CreateOrderPage: React.FC = () => {
                                             <User className="h-3 w-3" />
                                             {t('purchaseOrders.supplier')} <span className="text-red-500">*</span>
                                         </Label>
-                                        <Select
+                                        <SearchableSelect
                                             value={selectedSupplier?.id || ''}
-                                            onValueChange={(val) => setSelectedSupplier(suppliers.find(s => s.id === val) || null)}
-                                        >
-                                            <SelectTrigger className="h-9 rounded-md focus:ring-blue-500/20 border-gray-200 dark:border-gray-700 text-sm">
-                                                <SelectValue placeholder={t('purchaseOrders.selectSupplier')} />
-                                            </SelectTrigger>
-                                            <SelectContent className="rounded-md border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
-                                                {suppliers.map(s => (
-                                                    <SelectItem key={s.id} value={s.id} className="py-2 rounded-md text-sm">
-                                                        {s.name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                            onChange={(val) => setSelectedSupplier(suppliers.find(s => s.id === val) || null)}
+                                            placeholder={t('purchaseOrders.selectSupplier')}
+                                            searchPlaceholder={t('purchaseOrders.searchSupplier') || 'Search suppliers...'}
+                                            emptyText={t('purchaseOrders.noSuppliersFound') || 'No suppliers found.'}
+                                            className="h-9 rounded-md focus:ring-blue-500/20 border-gray-200 dark:border-gray-700 text-sm"
+                                            options={suppliers.map(s => ({ value: s.id, label: s.name, sublabel: s.phone }))}
+                                        />
                                     </div>
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
@@ -347,24 +341,18 @@ export const CreateOrderPage: React.FC = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                                     <div className="md:col-span-5 space-y-1.5">
                                         <Label className="text-xs font-semibold text-gray-600 dark:text-gray-400">{t('purchaseOrders.productName')} <span className="text-red-500">*</span></Label>
-                                        <Select
+                                        <SearchableSelect
                                             value={selectedProduct?.id || 'custom'}
-                                            onValueChange={(val) => val === 'custom' ? setSelectedProduct(null) : handleProductSelect(val)}
-                                        >
-                                            <SelectTrigger className="h-9 rounded-md border-gray-200 dark:border-gray-700 text-sm">
-                                                <SelectValue placeholder={t('common.select')} />
-                                            </SelectTrigger>
-                                            <SelectContent className="max-h-60 rounded-md bg-white dark:bg-gray-800 shadow-lg">
-                                                <SelectItem value="custom" className="font-bold text-blue-600 dark:text-blue-400 py-2 rounded-md text-sm">
-                                                    + {t('common.add')}
-                                                </SelectItem>
-                                                {products.map(p => (
-                                                    <SelectItem key={p.id} value={p.id} className="py-2 rounded-md text-sm">
-                                                        {p.name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                            onChange={(val) => val === 'custom' ? setSelectedProduct(null) : handleProductSelect(val)}
+                                            placeholder={t('common.select')}
+                                            searchPlaceholder={t('purchaseOrders.searchProduct') || 'Search products...'}
+                                            emptyText={t('purchaseOrders.noProductsFound') || 'No products found.'}
+                                            className="h-9 rounded-md border-gray-200 dark:border-gray-700 text-sm"
+                                            options={[
+                                                { value: 'custom', label: `+ ${t('common.add')}`, emphasized: true },
+                                                ...products.map(p => ({ value: p.id, label: p.name })),
+                                            ]}
+                                        />
                                         {!selectedProduct && (
                                             <Input
                                                 placeholder={t('purchaseOrders.productNameRequired')}
