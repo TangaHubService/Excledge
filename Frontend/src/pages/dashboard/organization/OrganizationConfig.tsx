@@ -284,6 +284,15 @@ export function OrganizationConfig() {
         setSettings(prev => prev ? { ...prev, sidebarConfig: { ...prev.sidebarConfig, [key]: !prev.sidebarConfig[key] } } : prev);
     };
 
+    const setSidebarSection = (keys: (keyof ISidebarConfig)[], value: boolean) => {
+        if (!isAuthorized) return;
+        setSettings(prev => {
+            if (!prev) return prev;
+            const patch = Object.fromEntries(keys.map(key => [key, value])) as Partial<ISidebarConfig>;
+            return { ...prev, sidebarConfig: { ...prev.sidebarConfig, ...patch } };
+        });
+    };
+
     const toggleFeatureFlag = (key: keyof IFeatureFlags) => {
         if (!isAuthorized) return;
         setSettings(prev => prev ? { ...prev, featureFlags: { ...prev.featureFlags, [key]: !prev.featureFlags[key] } } : prev);
@@ -648,11 +657,28 @@ export function OrganizationConfig() {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="p-6 space-y-6">
-                                    {SIDEBAR_SECTIONS.map((section) => (
+                                    {SIDEBAR_SECTIONS.map((section) => {
+                                        const sectionKeys = section.items.map(i => i.key);
+                                        const allOn = sectionKeys.every(key => settings.sidebarConfig[key]);
+                                        return (
                                         <div key={section.label} className="space-y-3">
-                                            <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                                                {section.label}
-                                            </h4>
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                                                    {section.label}
+                                                </h4>
+                                                <div className="flex items-center gap-2">
+                                                    <Label htmlFor={`sidebar-section-${section.label}`} className="text-xs font-medium text-gray-400 dark:text-gray-500 cursor-pointer">
+                                                        {allOn ? 'All shown' : 'Show all'}
+                                                    </Label>
+                                                    <Switch
+                                                        id={`sidebar-section-${section.label}`}
+                                                        checked={allOn}
+                                                        onCheckedChange={(value) => setSidebarSection(sectionKeys, value)}
+                                                        disabled={!isAuthorized || isSavingSettings}
+                                                        className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300 dark:data-[state=unchecked]:bg-gray-600"
+                                                    />
+                                                </div>
+                                            </div>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                                 {section.items.map(({ key, label }) => (
                                                     <div
@@ -673,7 +699,8 @@ export function OrganizationConfig() {
                                                 ))}
                                             </div>
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </CardContent>
                             </Card>
 
