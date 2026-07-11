@@ -4,24 +4,42 @@
  * and defensively merged with DEFAULT_SETTINGS — never trust a raw row.
  */
 
-/** Controls which sections of the app shell a workspace can see. Keying by
- *  module id keeps this extensible: a new module ships with a new optional
- *  key and no migration, and any org missing the key falls back to `visible`. */
+/** Controls which individual sidebar links a workspace can see — one key per
+ *  nav item (not per section), so an org can hide e.g. just "Scan Invoice"
+ *  without losing the rest of Orders. Keying by nav id keeps this extensible:
+ *  a new nav item ships with a new optional key and no migration, and any org
+ *  missing the key falls back to `visible`. */
 export interface ISidebarConfig {
+  home: boolean;
   dashboard: boolean;
+  executiveDashboard: boolean;
   pos: boolean;
-  inventory: boolean;
-  purchaseOrders: boolean;
-  suppliers: boolean;
+  sales: boolean;
   customers: boolean;
-  hr: boolean;
-  accounting: boolean;
+  debtManagement: boolean;
+  inventoryAll: boolean;
+  lowStock: boolean;
+  expiredProducts: boolean;
+  stockMovementHistory: boolean;
+  inventorySummary: boolean;
+  stockTransfers: boolean;
+  warehouses: boolean;
+  orders: boolean;
+  suppliers: boolean;
+  supplierInvoices: boolean;
+  scanInvoice: boolean;
   expenses: boolean;
-  reports: boolean;
+  organizations: boolean;
   users: boolean;
   activityLogs: boolean;
-  billing: boolean;
-  organizations: boolean;
+  ebmOutbox: boolean;
+  subscription: boolean;
+  billingHistory: boolean;
+  salesReports: boolean;
+  inventoryReports: boolean;
+  stockReports: boolean;
+  debtPaymentsReport: boolean;
+  cashFlowReport: boolean;
 }
 
 /** Global operational switches that change business logic, not just UI. */
@@ -57,20 +75,36 @@ export interface IOrganizationSettings {
  *  existed — so the rest of the app can treat settings as fully populated. */
 export const DEFAULT_SETTINGS: IOrganizationSettings = {
   sidebarConfig: {
+    home: true,
     dashboard: true,
+    executiveDashboard: true,
     pos: true,
-    inventory: true,
-    purchaseOrders: true,
-    suppliers: true,
+    sales: true,
     customers: true,
-    hr: false,
-    accounting: false,
+    debtManagement: true,
+    inventoryAll: true,
+    lowStock: true,
+    expiredProducts: true,
+    stockMovementHistory: true,
+    inventorySummary: true,
+    stockTransfers: true,
+    warehouses: true,
+    orders: true,
+    suppliers: true,
+    supplierInvoices: true,
+    scanInvoice: true,
     expenses: true,
-    reports: true,
+    organizations: true,
     users: true,
     activityLogs: true,
-    billing: true,
-    organizations: true,
+    ebmOutbox: true,
+    subscription: true,
+    billingHistory: true,
+    salesReports: true,
+    inventoryReports: true,
+    stockReports: true,
+    debtPaymentsReport: true,
+    cashFlowReport: true,
   },
   featureFlags: {
     allowNegativeStock: false,
