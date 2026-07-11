@@ -84,7 +84,7 @@ export const CreateOrderPage: React.FC = () => {
                     apiClient.getProducts({ organizationId, limit: 1000 })
                 ]);
                 
-                setSuppliers(Array.isArray(suppliersData) ? suppliersData : []);
+                setSuppliers(Array.isArray(suppliersData) ? suppliersData : (suppliersData?.suppliers || []));
                 setProducts(parseInventoryGetProductsResponse(productsData).items as Product[]);
                 
                 // Generate a temporary order number
