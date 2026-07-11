@@ -10,6 +10,7 @@ import {
 } from "../services/inventory-ledger.service"
 import { syncProductToRraAsync } from "../services/product-sync.service"
 import { success, error as apiError } from "../utils/apiResponse"
+import { getOrganizationSettings } from "../services/organization-settings.service"
 
 export const getProducts = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -735,6 +736,10 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
     const organizationId = parseInt(req.params.organizationId)
     const { limit = "10", page = "1", search, status } = req.query
 
+    // Org-wide fallback threshold for products that don't set their own minStock.
+    const orgSettings = await getOrganizationSettings(organizationId)
+    const overrideThreshold = orgSettings.preferences.lowStockThresholdOverride
+
     const branchId: number | undefined =
       req.selectedBranchId !== null && req.selectedBranchId !== undefined
         ? req.selectedBranchId
@@ -751,7 +756,9 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
       isActive: true,
       deletedAt: null,
       itemType: { not: 'SERVICE' },
-      minStock: { gt: 0 },
+      // When an org-wide fallback threshold is configured, also consider
+      // products that haven't set their own minStock (0/unset).
+      ...(overrideThreshold && overrideThreshold > 0 ? {} : { minStock: { gt: 0 } }),
     }
     if (searchVal) {
       where.OR = [
@@ -786,23 +793,24 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
 
     // Compute effective stock and apply low-stock + status filters in JS
     // (Prisma can't express column-to-column comparisons in where clauses)
-    type Candidate = typeof candidates[number] & { effectiveStock: number }
+    type Candidate = typeof candidates[number] & { effectiveStock: number; effectiveMinStock: number }
 
     let filtered: Candidate[] = candidates
       .map(p => {
         const effectiveStock = branchId !== undefined
           ? ((p as any).batches as Array<{ quantity: number }>).reduce((s, b) => s + b.quantity, 0)
           : p.quantity
-        return { ...p, effectiveStock }
+        const effectiveMinStock = p.minStock > 0 ? p.minStock : (overrideThreshold ?? 0)
+        return { ...p, effectiveStock, effectiveMinStock }
       })
-      .filter(p => p.effectiveStock <= p.minStock) as Candidate[]
+      .filter(p => p.effectiveMinStock > 0 && p.effectiveStock <= p.effectiveMinStock) as Candidate[]
 
     if (statusVal === 'critical') {
-      filtered = filtered.filter(p => p.effectiveStock <= p.minStock * 0.25)
+      filtered = filtered.filter(p => p.effectiveStock <= p.effectiveMinStock * 0.25)
     } else if (statusVal === 'low') {
-      filtered = filtered.filter(p => p.effectiveStock > p.minStock * 0.25 && p.effectiveStock <= p.minStock * 0.50)
+      filtered = filtered.filter(p => p.effectiveStock > p.effectiveMinStock * 0.25 && p.effectiveStock <= p.effectiveMinStock * 0.50)
     } else if (statusVal === 'warning') {
-      filtered = filtered.filter(p => p.effectiveStock > p.minStock * 0.50)
+      filtered = filtered.filter(p => p.effectiveStock > p.effectiveMinStock * 0.50)
     }
 
     filtered.sort((a, b) => a.effectiveStock - b.effectiveStock)
@@ -817,7 +825,7 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
       barcode: p.barcode,
       batchNumber: p.batchNumber,
       unitPrice: Number(p.unitPrice),   // Prisma Decimal → plain number
-      minStock: p.minStock,
+      minStock: p.effectiveMinStock,
       category: p.category,
       expiryDate: p.expiryDate,
       measurementUnit: p.measurementUnit,

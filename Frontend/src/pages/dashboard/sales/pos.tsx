@@ -23,6 +23,7 @@ import { offlineQueue } from '../../../utils/offlineQueue'
 import { PaymentModal } from '../../../components/pos/PaymentModal'
 import { useVsdcOnlineStatus } from '../../../hooks/useVsdcOnlineStatus'
 import { useBranch } from '../../../context/BranchContext'
+import { useOrganizationSettings } from '../../../context/OrganizationSettingsContext'
 import { cn } from '../../../lib/utils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -117,12 +118,13 @@ const ProductCard = memo(({ product, onAddToCart }: { product: Product; onAddToC
 // ── CartItemRow ───────────────────────────────────────────────────────────────
 
 const CartItemRow = memo(({
-  item, onRemove, onUpdateQuantity, onUpdatePrice,
+  item, onRemove, onUpdateQuantity, onUpdatePrice, priceEditable = true,
 }: {
   item: CartItem
   onRemove: (id: string) => void
   onUpdateQuantity: (id: string, qty: number) => void
   onUpdatePrice: (id: string, price: number | string) => void
+  priceEditable?: boolean
 }) => {
   const [quantityInput, setQuantityInput] = useState(String(item.quantity))
   const [editingQty, setEditingQty] = useState(false)
@@ -219,12 +221,18 @@ const CartItemRow = memo(({
           min={0}
           value={item.unitPrice === null ? '' : item.unitPrice}
           onChange={e => {
+            if (!priceEditable) return
             const v = e.target.value
             if (v === '') { onUpdatePrice(item.product.id, ''); return }
             const n = parseFloat(v)
             if (!isNaN(n) && n >= 0) onUpdatePrice(item.product.id, n)
           }}
-          className="w-20 text-right text-xs border rounded px-1.5 py-0.5 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+          readOnly={!priceEditable}
+          title={priceEditable ? undefined : 'Manual price overrides are disabled for this organization'}
+          className={cn(
+            'w-20 text-right text-xs border rounded px-1.5 py-0.5 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500',
+            !priceEditable && 'opacity-60 cursor-not-allowed bg-gray-100 dark:bg-gray-900',
+          )}
         />
         <p className="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{lineTotal} RWF</p>
         <button
@@ -355,6 +363,7 @@ const AddCustomerDrawer = memo(({
 export default function SalesForm() {
   const { t } = useTranslation()
   const { selectedBranchId } = useBranch()
+  const { settings: orgSettings } = useOrganizationSettings()
   useVsdcOnlineStatus() // keeps VSDC status alive in context
 
   const [cart, setCart] = useState<CartItem[]>([])
@@ -512,18 +521,19 @@ export default function SalesForm() {
 
   // Cart helpers
   const addToCart = useCallback((product: Product) => {
-    if (!product.quantity || product.quantity < 1) { toast.error(t('pos.outOfStock')); return }
+    const allowNegativeStock = orgSettings.featureFlags.allowNegativeStock
+    if (!allowNegativeStock && (!product.quantity || product.quantity < 1)) { toast.error(t('pos.outOfStock')); return }
     setCart(prev => {
       const ex = prev.find(i => i.product.id === product.id)
       if (ex) {
         const nq = ex.quantity + 1
-        if (nq > product.quantity) { toast.error(t('pos.lowStockWarning', { count: product.quantity })); return prev }
+        if (!allowNegativeStock && nq > product.quantity) { toast.error(t('pos.lowStockWarning', { count: product.quantity })); return prev }
         return prev.map(i => i.product.id === product.id ? { ...i, quantity: nq } : i)
       }
       return [...prev, { product, quantity: 1, unitPrice: product.unitPrice ?? product.price ?? 0 }]
     })
     toast.success(t('messages.productAdded'))
-  }, [t])
+  }, [t, orgSettings.featureFlags.allowNegativeStock])
 
   const removeFromCart = useCallback((id: string) => {
     setCart(prev => prev.filter(i => i.product.id !== id))
@@ -533,14 +543,17 @@ export default function SalesForm() {
     if (qty < 1) return
     setCart(prev => prev.map(i => {
       if (i.product.id !== id) return i
-      if (qty > i.product.quantity) { toast.error(t('pos.lowStockWarning', { count: i.product.quantity })); return i }
+      if (!orgSettings.featureFlags.allowNegativeStock && qty > i.product.quantity) {
+        toast.error(t('pos.lowStockWarning', { count: i.product.quantity })); return i
+      }
       return { ...i, quantity: qty }
     }))
-  }, [t])
+  }, [t, orgSettings.featureFlags.allowNegativeStock])
 
   const updatePrice = useCallback((id: string, price: number | string) => {
+    if (!orgSettings.featureFlags.allowManualDiscounts) return
     setCart(prev => prev.map(i => i.product.id === id ? { ...i, unitPrice: price as number } : i))
-  }, [])
+  }, [orgSettings.featureFlags.allowManualDiscounts])
 
   const handleCustomerAdded = useCallback((c: Customer) => {
     setCustomers(prev => [...prev, c])
@@ -825,6 +838,7 @@ export default function SalesForm() {
                 onRemove={removeFromCart}
                 onUpdateQuantity={updateQuantity}
                 onUpdatePrice={updatePrice}
+                priceEditable={orgSettings.featureFlags.allowManualDiscounts}
               />
             ))}
           </div>

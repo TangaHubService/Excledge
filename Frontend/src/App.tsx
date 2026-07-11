@@ -10,6 +10,7 @@ import { InventoryManagement } from "./pages/dashboard/InventoryManagement";
 import { ThemeProvider } from "./context/ThemeContext";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { OrganizationProvider } from "./context/OrganizationContext";
+import { OrganizationSettingsProvider } from "./context/OrganizationSettingsContext";
 import { BranchProvider } from "./context/BranchContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import SelectOrganization from "./pages/auth/SelectOrganization";
@@ -81,6 +82,7 @@ function App() {
     <ThemeProvider>
       <AuthProvider>
         <OrganizationProvider>
+          <OrganizationSettingsProvider>
           <BranchProvider>
             <SubscriptionProvider>
               <BrowserRouter>
@@ -180,6 +182,7 @@ function App() {
               </BrowserRouter>
             </SubscriptionProvider>
           </BranchProvider>
+          </OrganizationSettingsProvider>
         </OrganizationProvider>
       </AuthProvider>
     </ThemeProvider>

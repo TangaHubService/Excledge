@@ -72,7 +72,11 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
   },
   featureFlags: {
     allowNegativeStock: false,
-    ebmIntegrationEnabled: false,
+    // Defaults to true: this must match the pre-existing always-on behavior
+    // (gated only by the global config.ebm.enabled flag) for every org that
+    // hasn't explicitly visited Settings, or EBM/RRA submission would silently
+    // stop for organizations that never touched this toggle.
+    ebmIntegrationEnabled: true,
     requireStockAdjustmentApproval: false,
     allowManualDiscounts: true,
     stockTransfersEnabled: true,
