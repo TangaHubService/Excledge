@@ -212,7 +212,7 @@ function resolveNavigation(
   if (userRole === "ADMIN") {
     items.push(
       { id: "admin-header", name: "nav.admin", href: "", type: "header" as const },
-      { id: "organizations", name: "nav.organizations", href: "organizations", icon: Building2 },
+      { id: "organizations", name: "nav.organizations", href: "organizations", icon: Building2, moduleKey: "organizations" },
       ...adminNav,
     );
   }

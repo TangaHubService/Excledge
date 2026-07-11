@@ -21,6 +21,7 @@ export interface ISidebarConfig {
   users: boolean;
   activityLogs: boolean;
   billing: boolean;
+  organizations: boolean;
 }
 
 /** Global operational switches that change business logic, not just UI. */
@@ -69,6 +70,7 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
     users: true,
     activityLogs: true,
     billing: true,
+    organizations: true,
   },
   featureFlags: {
     allowNegativeStock: false,

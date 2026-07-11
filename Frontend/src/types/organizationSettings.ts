@@ -14,6 +14,7 @@ export interface ISidebarConfig {
     users: boolean;
     activityLogs: boolean;
     billing: boolean;
+    organizations: boolean;
 }
 
 export interface IFeatureFlags {
@@ -53,6 +54,7 @@ export const DEFAULT_ORGANIZATION_SETTINGS: IOrganizationSettings = {
         users: true,
         activityLogs: true,
         billing: true,
+        organizations: true,
     },
     featureFlags: {
         allowNegativeStock: false,
@@ -85,4 +87,5 @@ export const MODULE_ROUTES: Record<keyof ISidebarConfig, string> = {
     users: '/dashboard/users',
     activityLogs: '/dashboard/activity-logs',
     billing: '/dashboard/subscription',
+    organizations: '/dashboard/organizations',
 };

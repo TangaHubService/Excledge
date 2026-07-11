@@ -83,6 +83,7 @@ const SIDEBAR_MODULE_LABELS: Record<keyof ISidebarConfig, string> = {
     users: 'Users',
     activityLogs: 'Activity Logs',
     billing: 'Billing',
+    organizations: 'Organizations',
 };
 
 const FEATURE_FLAG_LABELS: Record<keyof IFeatureFlags, { label: string; description: string }> = {
