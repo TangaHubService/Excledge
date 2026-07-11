@@ -20,6 +20,7 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Badge } from '../../../components/ui/badge';
+import { AppToggle } from '../../../components/ui/AppToggle';
 import {
   Drawer,
   DrawerContent,
@@ -48,6 +49,7 @@ export default function WarehouseManagement() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
   const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -157,15 +159,18 @@ export default function WarehouseManagement() {
   };
 
   const handleToggleActive = async (warehouse: Warehouse) => {
+    setTogglingId(warehouse.id);
     try {
       await apiClient.updateWarehouse(warehouse.id, {
         isActive: !warehouse.isActive,
       });
       toast.success(t('inventory.warehouseUpdated') || 'Warehouse updated successfully');
-      fetchWarehouses();
+      await fetchWarehouses();
     } catch (err: any) {
       console.error('Error updating warehouse:', err);
       toast.error(err.message || 'Failed to update warehouse');
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -230,14 +235,18 @@ export default function WarehouseManagement() {
                         {warehouse.address || '-'}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          className={warehouse.isActive 
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                            : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-                          }
-                        >
-                          {warehouse.isActive ? t('common.active') : t('common.inactive')}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <AppToggle
+                            checked={warehouse.isActive}
+                            onChange={() => handleToggleActive(warehouse)}
+                            loading={togglingId === warehouse.id}
+                            size="small"
+                            aria-label={warehouse.isActive ? t('common.deactivate') : t('common.activate')}
+                          />
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            {warehouse.isActive ? t('common.active') : t('common.inactive')}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell>
                         {warehouse.isDefault && (
@@ -248,15 +257,6 @@ export default function WarehouseManagement() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleToggleActive(warehouse)}
-                            className="h-8 w-8 p-0"
-                            title={warehouse.isActive ? t('common.deactivate') : t('common.activate')}
-                          >
-                            {warehouse.isActive ? '✓' : '✗'}
-                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -344,12 +344,11 @@ export default function WarehouseManagement() {
               </div>
 
               <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
+                <AppToggle
                   id="isDefault"
+                  size="small"
                   checked={formData.isDefault}
-                  onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
-                  className="rounded"
+                  onChange={(checked) => setFormData({ ...formData, isDefault: checked })}
                 />
                 <Label htmlFor="isDefault" className="cursor-pointer">
                   {t('inventory.setAsDefault') || 'Set as default warehouse'}

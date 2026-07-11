@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CheckCircle, XCircle, Phone, Mail, Building2 } from 'lucide-react';
 import type { Organization } from '../../services/systemOwnerService';
+import { AppToggle } from '../ui/AppToggle';
 
 interface OrganizationsProps {
   organizations: Organization[];
@@ -15,11 +16,16 @@ const Organizations: React.FC<OrganizationsProps> = ({
   error,
   onStatusChange,
 }) => {
+  const [togglingId, setTogglingId] = useState<string | number | null>(null);
+
   const handleStatusToggle = async (id: string | number, currentStatus: boolean) => {
+    setTogglingId(id);
     try {
       await onStatusChange(id, !currentStatus);
     } catch (err) {
       console.error('Failed to update organization status:', err);
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -70,15 +76,12 @@ const Organizations: React.FC<OrganizationsProps> = ({
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                   Subscription
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                  Actions
-                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {organizations.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-4 text-gray-500 dark:text-gray-400">
+                  <td colSpan={4} className="text-center py-4 text-gray-500 dark:text-gray-400">
                     No organizations found
                   </td>
                 </tr>
@@ -115,14 +118,23 @@ const Organizations: React.FC<OrganizationsProps> = ({
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${org.isActive
-                          ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
-                          : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
-                          }`}
-                      >
-                        {org.isActive ? 'Active' : 'Inactive'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <AppToggle
+                          checked={org.isActive}
+                          onChange={() => handleStatusToggle(org.id, org.isActive)}
+                          loading={togglingId === org.id}
+                          size="small"
+                          aria-label={org.isActive ? 'Deactivate organization' : 'Activate organization'}
+                        />
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${org.isActive
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
+                            : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
+                            }`}
+                        >
+                          {org.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       {org.subscription ? (
@@ -138,17 +150,6 @@ const Organizations: React.FC<OrganizationsProps> = ({
                       ) : (
                         <span className="text-sm text-gray-500 dark:text-gray-400">No active subscription</span>
                       )}
-                    </td>
-                    <td className="px-6 py-4 text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleStatusToggle(org.id, org.isActive)}
-                        className={`${org.isActive
-                          ? 'text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300'
-                          : 'text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300'
-                          }`}
-                      >
-                        {org.isActive ? 'Deactivate' : 'Activate'}
-                      </button>
                     </td>
                   </tr>
                 ))
