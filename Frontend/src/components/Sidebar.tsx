@@ -88,30 +88,30 @@ type NavBlock =
 /* ─── Navigation configuration ──────────────────────── */
 
 const baseNavigation: NavItem[] = [
-  { id: "home", name: "nav.home", href: "/", icon: Home },
+  { id: "home", name: "nav.home", href: "/", icon: Home, moduleKey: "home" },
   { id: "dashboard", name: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard, moduleKey: "dashboard" },
-  { id: "executive", name: "Executive Dashboard", href: "executive", icon: LineChart, moduleKey: "dashboard" },
+  { id: "executive", name: "Executive Dashboard", href: "executive", icon: LineChart, moduleKey: "executiveDashboard" },
 
   { id: "sales-header", name: "nav.salesHeader", href: "", type: "header" },
   { id: "pos", name: "nav.pos", href: "pos", icon: ShoppingCart, moduleKey: "pos" },
-  { id: "sales", name: "nav.sales", href: "sales", icon: Receipt, moduleKey: "pos" },
+  { id: "sales", name: "nav.sales", href: "sales", icon: Receipt, moduleKey: "sales" },
   { id: "customers", name: "nav.customers", href: "customers", icon: User, moduleKey: "customers" },
-  { id: "debt-management", name: "nav.debtManagement", href: "debt", icon: Receipt, moduleKey: "customers" },
+  { id: "debt-management", name: "nav.debtManagement", href: "debt", icon: Receipt, moduleKey: "debtManagement" },
 
   { id: "inventory-header", name: "nav.inventoryHeader", href: "", type: "header" },
-  { id: "inventory-all", name: "nav.allInventory", href: "inventory-all", icon: Package, moduleKey: "inventory" },
-  { id: "low-stock", name: "nav.lowStock", href: "low-stock", icon: AlertTriangle, moduleKey: "inventory" },
-  { id: "expired", name: "nav.expiredProducts", href: "expired", icon: AlertTriangle, moduleKey: "inventory" },
-  { id: "ledger-history", name: "nav.ledgerHistory", href: "ledger-history", icon: History, moduleKey: "inventory" },
-  { id: "inventory-summary", name: "nav.inventorySummary", href: "inventory-summary", icon: BarChart3, moduleKey: "inventory" },
-  { id: "stock-transfers", name: "nav.stockTransfers", href: "stock-transfers", icon: GitBranch, restrictedRoles: ["SELLER"], moduleKey: "inventory", featureFlag: "stockTransfersEnabled" },
-  { id: "warehouses", name: "nav.warehouses", href: "warehouses", icon: Building2, restrictedRoles: ["SELLER"], moduleKey: "inventory", featureFlag: "stockTransfersEnabled" },
+  { id: "inventory-all", name: "nav.allInventory", href: "inventory-all", icon: Package, moduleKey: "inventoryAll" },
+  { id: "low-stock", name: "nav.lowStock", href: "low-stock", icon: AlertTriangle, moduleKey: "lowStock" },
+  { id: "expired", name: "nav.expiredProducts", href: "expired", icon: AlertTriangle, moduleKey: "expiredProducts" },
+  { id: "ledger-history", name: "nav.ledgerHistory", href: "ledger-history", icon: History, moduleKey: "stockMovementHistory" },
+  { id: "inventory-summary", name: "nav.inventorySummary", href: "inventory-summary", icon: BarChart3, moduleKey: "inventorySummary" },
+  { id: "stock-transfers", name: "nav.stockTransfers", href: "stock-transfers", icon: GitBranch, restrictedRoles: ["SELLER"], moduleKey: "stockTransfers", featureFlag: "stockTransfersEnabled" },
+  { id: "warehouses", name: "nav.warehouses", href: "warehouses", icon: Building2, restrictedRoles: ["SELLER"], moduleKey: "warehouses", featureFlag: "stockTransfersEnabled" },
 
   { id: "orders-header", name: "nav.ordersHeader", href: "", type: "header" },
-  { id: "orders", name: "nav.orders", href: "orders", icon: ShoppingCart, moduleKey: "purchaseOrders" },
+  { id: "orders", name: "nav.orders", href: "orders", icon: ShoppingCart, moduleKey: "orders" },
   { id: "suppliers", name: "nav.suppliers", href: "suppliers", icon: Users, moduleKey: "suppliers" },
-  { id: "supplier-invoices", name: "Supplier Invoices", href: "supplier-invoices", icon: FileText, moduleKey: "suppliers" },
-  { id: "scan-invoice", name: "Scan Invoice", href: "scan-invoice", icon: ScanLine, moduleKey: "suppliers" },
+  { id: "supplier-invoices", name: "Supplier Invoices", href: "supplier-invoices", icon: FileText, moduleKey: "supplierInvoices" },
+  { id: "scan-invoice", name: "Scan Invoice", href: "scan-invoice", icon: ScanLine, moduleKey: "scanInvoice" },
 
   { id: "finance-header", name: "nav.financeHeader", href: "", type: "header" },
   { id: "expenses", name: "nav.expenses", href: "expenses", icon: Wallet, moduleKey: "expenses" },
@@ -120,18 +120,18 @@ const baseNavigation: NavItem[] = [
 const adminNav: NavItem[] = [
   { id: "users", name: "nav.users", href: "users", icon: Users, moduleKey: "users" },
   { id: "activity-logs", name: "nav.activityLogs", href: "activity-logs", icon: Activity, moduleKey: "activityLogs" },
-  { id: "ebm-outbox", name: "EBM Outbox", href: "ebm-outbox", icon: Wifi, featureFlag: "ebmIntegrationEnabled" },
+  { id: "ebm-outbox", name: "EBM Outbox", href: "ebm-outbox", icon: Wifi, moduleKey: "ebmOutbox", featureFlag: "ebmIntegrationEnabled" },
 
   { id: "billing-header", name: "nav.billing", href: "", type: "header" },
-  { id: "subscription", name: "nav.subscription", href: "subscription", icon: CreditCard, moduleKey: "billing" },
-  { id: "billing-history", name: "nav.billingHistory", href: "history", icon: Receipt, moduleKey: "billing" },
+  { id: "subscription", name: "nav.subscription", href: "subscription", icon: CreditCard, moduleKey: "subscription" },
+  { id: "billing-history", name: "nav.billingHistory", href: "history", icon: Receipt, moduleKey: "billingHistory" },
 
   { id: "reports-header", name: "nav.reportsHeader", href: "", type: "header" },
-  { id: "sales-report", name: "nav.salesReports", href: "sales-reports", icon: TrendingUp, moduleKey: "reports" },
-  { id: "inventory-report", name: "nav.inventoryReports", href: "inventory-reports", icon: BarChart3, moduleKey: "reports" },
-  { id: "stock-reports", name: "nav.stockReports", href: "stock-reports", icon: Package, moduleKey: "reports" },
-  { id: "debt-payments-report", name: "nav.debtPayments", href: "debt-payments-report", icon: Receipt, moduleKey: "reports" },
-  { id: "cash-flow-report", name: "nav.cashFlow", href: "cash-flow-report", icon: TrendingUp, moduleKey: "reports" },
+  { id: "sales-report", name: "nav.salesReports", href: "sales-reports", icon: TrendingUp, moduleKey: "salesReports" },
+  { id: "inventory-report", name: "nav.inventoryReports", href: "inventory-reports", icon: BarChart3, moduleKey: "inventoryReports" },
+  { id: "stock-reports", name: "nav.stockReports", href: "stock-reports", icon: Package, moduleKey: "stockReports" },
+  { id: "debt-payments-report", name: "nav.debtPayments", href: "debt-payments-report", icon: Receipt, moduleKey: "debtPaymentsReport" },
+  { id: "cash-flow-report", name: "nav.cashFlow", href: "cash-flow-report", icon: TrendingUp, moduleKey: "cashFlowReport" },
 ];
 
 const systemOwnerNav: NavItem[] = [

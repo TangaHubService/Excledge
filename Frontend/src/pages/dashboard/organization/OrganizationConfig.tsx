@@ -30,7 +30,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerDescription } from '../../../components/ui/drawer';
 import { Badge } from '../../../components/ui/badge';
 import { Switch } from '../../../components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import PhoneInputWithCountryCode from '../../../components/PhoneInputWithCountryCode';
 import { apiClient } from '../../../lib/api-client';
 import { toast } from 'react-toastify';
@@ -38,6 +38,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { useOrganization } from '../../../context/OrganizationContext';
 import { useOrganizationSettings } from '../../../context/OrganizationSettingsContext';
 import { useBranch } from '../../../context/BranchContext';
+import { SIDEBAR_SECTIONS } from '../../../types/organizationSettings';
 import type {
     ISidebarConfig,
     IFeatureFlags,
@@ -68,23 +69,6 @@ interface Branch {
     location?: string;
     status: 'ACTIVE' | 'INACTIVE';
 }
-
-const SIDEBAR_MODULE_LABELS: Record<keyof ISidebarConfig, string> = {
-    dashboard: 'Dashboard',
-    pos: 'Point of Sale',
-    inventory: 'Inventory',
-    purchaseOrders: 'Purchase Orders',
-    suppliers: 'Suppliers',
-    customers: 'Customers',
-    hr: 'HR',
-    accounting: 'Accounting',
-    expenses: 'Expenses',
-    reports: 'Reports',
-    users: 'Users',
-    activityLogs: 'Activity Logs',
-    billing: 'Billing',
-    organizations: 'Organizations',
-};
 
 const FEATURE_FLAG_LABELS: Record<keyof IFeatureFlags, { label: string; description: string }> = {
     allowNegativeStock: {
@@ -663,26 +647,33 @@ export function OrganizationConfig() {
                                         Choose which sections appear in the navigation for this workspace.
                                     </CardDescription>
                                 </CardHeader>
-                                <CardContent className="p-6">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {(Object.keys(SIDEBAR_MODULE_LABELS) as (keyof ISidebarConfig)[]).map((key) => (
-                                            <div
-                                                key={key}
-                                                className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-700 px-4 py-3"
-                                            >
-                                                <Label htmlFor={`sidebar-${key}`} className="cursor-pointer">
-                                                    {SIDEBAR_MODULE_LABELS[key]}
-                                                </Label>
-                                                <Switch
-                                                    id={`sidebar-${key}`}
-                                                    checked={settings.sidebarConfig[key]}
-                                                    onCheckedChange={() => toggleSidebarModule(key)}
-                                                    disabled={!isAuthorized || isSavingSettings}
-                                                    className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300 dark:data-[state=unchecked]:bg-gray-600"
-                                                />
+                                <CardContent className="p-6 space-y-6">
+                                    {SIDEBAR_SECTIONS.map((section) => (
+                                        <div key={section.label} className="space-y-3">
+                                            <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                                                {section.label}
+                                            </h4>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {section.items.map(({ key, label }) => (
+                                                    <div
+                                                        key={key}
+                                                        className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-700 px-4 py-3"
+                                                    >
+                                                        <Label htmlFor={`sidebar-${key}`} className="cursor-pointer">
+                                                            {label}
+                                                        </Label>
+                                                        <Switch
+                                                            id={`sidebar-${key}`}
+                                                            checked={settings.sidebarConfig[key]}
+                                                            onCheckedChange={() => toggleSidebarModule(key)}
+                                                            disabled={!isAuthorized || isSavingSettings}
+                                                            className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300 dark:data-[state=unchecked]:bg-gray-600"
+                                                        />
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
+                                        </div>
+                                    ))}
                                 </CardContent>
                             </Card>
 
@@ -798,10 +789,15 @@ export function OrganizationConfig() {
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {(Object.keys(SIDEBAR_MODULE_LABELS) as (keyof ISidebarConfig)[]).map((key) => (
-                                                        <SelectItem key={key} value={key}>
-                                                            {SIDEBAR_MODULE_LABELS[key]}
-                                                        </SelectItem>
+                                                    {SIDEBAR_SECTIONS.map((section) => (
+                                                        <SelectGroup key={section.label}>
+                                                            <SelectLabel>{section.label}</SelectLabel>
+                                                            {section.items.map(({ key, label }) => (
+                                                                <SelectItem key={key} value={key}>
+                                                                    {label}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectGroup>
                                                     ))}
                                                 </SelectContent>
                                             </Select>
