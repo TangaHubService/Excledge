@@ -4,6 +4,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from ".
 import { apiClient } from "../../../lib/api-client";
 import { toast } from "react-toastify";
 import { TableSkeleton } from "../../../components/ui/TableSkeleton";
+import { AppToggle } from "../../../components/ui/AppToggle";
 import { useTranslation } from "react-i18next";
 
 interface User {
@@ -405,26 +406,20 @@ export const UserManagement = () => {
                             )}
                           </div>
 
-                          <div className="relative group">
-                            <button
-                              onClick={() => canDisable(user?.id, user.role) && handleDisableUser(user?.id)}
-                              disabled={disablingUserId === user.id || !canDisable(user?.id, user.role)}
-                              className={`px-3 py-1 text-sm rounded-lg transition-colors ${disablingUserId === user.id
-                                ? 'text-gray-500 cursor-not-allowed opacity-60'
-                                : canDisable(user?.id, user.role)
-                                  ? 'text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                  : 'text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60'
-                                }`}
-                            >
-                              {disablingUserId === user.id ? (
-                                <span className="flex items-center gap-2">
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                  {user?.isActive ? t('userManagement.disabling') : t('userManagement.enabling')}
-                                </span>
-                              ) : (
-                                user?.isActive ? t('userManagement.disable') : t('userManagement.enable')
-                              )}
-                            </button>
+                          <div className="relative group flex items-center gap-2 px-1">
+                            <AppToggle
+                              checked={!!user?.isActive}
+                              onChange={() => canDisable(user?.id, user.role) && handleDisableUser(user?.id)}
+                              disabled={!canDisable(user?.id, user.role)}
+                              loading={disablingUserId === user.id}
+                              size="small"
+                              aria-label={user?.isActive ? t('userManagement.disable') : t('userManagement.enable')}
+                            />
+                            <span className="text-sm text-gray-500 dark:text-gray-400">
+                              {disablingUserId === user.id
+                                ? (user?.isActive ? t('userManagement.disabling') : t('userManagement.enabling'))
+                                : (user?.isActive ? t('userManagement.disable') : t('userManagement.enable'))}
+                            </span>
                             {!canDisable(user?.id, user.role) && disablingUserId !== user.id && (
                               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
                                 {isCurrentUser(user.id)

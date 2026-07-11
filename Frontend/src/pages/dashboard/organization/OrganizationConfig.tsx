@@ -30,6 +30,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerDescription } from '../../../components/ui/drawer';
 import { Badge } from '../../../components/ui/badge';
 import { Switch } from '../../../components/ui/switch';
+import { AppToggle } from '../../../components/ui/AppToggle';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import PhoneInputWithCountryCode from '../../../components/PhoneInputWithCountryCode';
 import { apiClient } from '../../../lib/api-client';
@@ -121,6 +122,7 @@ export function OrganizationConfig() {
     // Branch dialog state
     const [branchDialogOpen, setBranchDialogOpen] = useState(false);
     const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+    const [togglingBranchId, setTogglingBranchId] = useState<number | null>(null);
     const [branchFormData, setBranchFormData] = useState({
         name: '',
         code: '',
@@ -258,13 +260,16 @@ export function OrganizationConfig() {
 
     const handleBranchToggleStatus = async (branch: Branch) => {
         const newStatus = branch.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+        setTogglingBranchId(branch.id);
         try {
             await apiClient.updateBranch(branch.id, { ...branch, status: newStatus });
             toast.success(`Branch ${newStatus === 'ACTIVE' ? 'activated' : 'deactivated'} successfully`);
-            fetchData();
+            await fetchData();
             refreshBranches();
         } catch (error: any) {
             toast.error(error.message || 'Failed to update branch status');
+        } finally {
+            setTogglingBranchId(null);
         }
     };
 
@@ -593,12 +598,22 @@ export function OrganizationConfig() {
                                                 </TableCell>
                                                 <TableCell>{branch.location || 'Not specified'}</TableCell>
                                                 <TableCell>
-                                                    <Badge
-                                                        variant={branch.status === 'ACTIVE' ? "default" : "outline"}
-                                                        className="rounded-full"
-                                                    >
-                                                        {branch.status}
-                                                    </Badge>
+                                                    <div className="flex items-center gap-2">
+                                                        <AppToggle
+                                                            checked={branch.status === 'ACTIVE'}
+                                                            onChange={() => handleBranchToggleStatus(branch)}
+                                                            loading={togglingBranchId === branch.id}
+                                                            disabled={!isAuthorized}
+                                                            size="small"
+                                                            aria-label={branch.status === 'ACTIVE' ? 'Deactivate branch' : 'Activate branch'}
+                                                        />
+                                                        <Badge
+                                                            variant={branch.status === 'ACTIVE' ? "default" : "outline"}
+                                                            className="rounded-full"
+                                                        >
+                                                            {branch.status}
+                                                        </Badge>
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell className="text-right pr-6">
                                                     <div className="flex justify-end gap-2">
@@ -612,15 +627,6 @@ export function OrganizationConfig() {
                                                                     className="text-amber-500 hover:text-amber-600 hover:bg-amber-50"
                                                                 >
                                                                     <Star className="h-4 w-4" />
-                                                                </Button>
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    onClick={() => handleBranchToggleStatus(branch)}
-                                                                    title={branch.status === 'ACTIVE' ? "Deactivate" : "Activate"}
-                                                                    className={branch.status === 'ACTIVE' ? "text-slate-400 hover:text-amber-600" : "text-green-600"}
-                                                                >
-                                                                    <ShieldCheck className="h-4 w-4" />
                                                                 </Button>
                                                                 <Button variant="ghost" size="sm" onClick={() => handleBranchEdit(branch)} className="text-blue-600 hover:bg-blue-50">
                                                                     <Edit className="h-4 w-4" />
@@ -675,7 +681,7 @@ export function OrganizationConfig() {
                                                         checked={allOn}
                                                         onCheckedChange={(value) => setSidebarSection(sectionKeys, value)}
                                                         disabled={!isAuthorized || isSavingSettings}
-                                                        className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300 dark:data-[state=unchecked]:bg-gray-600"
+                                                        size="small"
                                                     />
                                                 </div>
                                             </div>
@@ -693,7 +699,6 @@ export function OrganizationConfig() {
                                                             checked={settings.sidebarConfig[key]}
                                                             onCheckedChange={() => toggleSidebarModule(key)}
                                                             disabled={!isAuthorized || isSavingSettings}
-                                                            className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300 dark:data-[state=unchecked]:bg-gray-600"
                                                         />
                                                     </div>
                                                 ))}
@@ -734,7 +739,6 @@ export function OrganizationConfig() {
                                                     checked={settings.featureFlags[key]}
                                                     onCheckedChange={() => toggleFeatureFlag(key)}
                                                     disabled={!isAuthorized || isSavingSettings}
-                                                    className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300 dark:data-[state=unchecked]:bg-gray-600"
                                                 />
                                             </div>
                                         ))}
