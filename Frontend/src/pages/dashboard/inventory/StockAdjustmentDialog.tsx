@@ -19,6 +19,8 @@ import {
 } from "../../../components/ui/select";
 import { useTheme } from "../../../context/ThemeContext";
 import { useBranch } from "../../../context/BranchContext";
+import { useAuth } from "../../../context/AuthContext";
+import { useOrganizationSettings } from "../../../context/OrganizationSettingsContext";
 import { apiClient } from "../../../lib/api-client";
 import { toast } from "react-toastify";
 import { cn } from "../../../lib/utils";
@@ -96,6 +98,13 @@ export default function StockAdjustmentDialog({
 }: StockAdjustmentDialogProps) {
   const { theme } = useTheme();
   const { selectedBranchId, userBranches, primaryBranch } = useBranch();
+  const { user } = useAuth();
+  const { settings: orgSettings } = useOrganizationSettings();
+
+  const canAdjustDirectly =
+    !orgSettings.featureFlags.requireStockAdjustmentApproval ||
+    user?.role === 'ADMIN' ||
+    user?.role === 'BRANCH_MANAGER';
 
   const [quantity, setQuantity] = useState<string>('');
   const [reason, setReason] = useState<AdjustmentReason | ''>('');
@@ -127,7 +136,7 @@ export default function StockAdjustmentDialog({
   const newStock = isValidQty && currentStock !== undefined ? currentStock + qtyNum : undefined;
   const isNegative = qtyNum < 0;
   const wouldGoNegative = isNegative && currentStock !== undefined && currentStock + qtyNum < 0;
-  const canSubmit = isValidQty && reason !== '' && !wouldGoNegative && !loading;
+  const canSubmit = isValidQty && reason !== '' && !wouldGoNegative && !loading && canAdjustDirectly;
 
   /* ── Step adjustment ─────────────────────────────────── */
   const adjustBy = useCallback(
@@ -232,6 +241,14 @@ export default function StockAdjustmentDialog({
         {/* ── Step 1: Adjustment form ────────────────── */}
         {!confirmStep && (
           <div className="space-y-5 px-6 py-2">
+            {!canAdjustDirectly && (
+              <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  This organization requires manager approval for stock adjustments. Ask an admin or branch manager to make this change.
+                </p>
+              </div>
+            )}
             {/* Current stock */}
             {currentStock !== undefined && (
               <div className="flex items-center justify-between rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20 dark:border dark:border-blue-800">

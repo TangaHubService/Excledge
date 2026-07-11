@@ -7,6 +7,7 @@ import { apiClient } from "../../lib/api-client";
 import { LoginSchema } from "../../schema/auth";
 import { useAuth } from "../../context/AuthContext";
 import { useOrganization } from "../../context/OrganizationContext";
+import { resolveLandingPath } from "../../lib/landingPage";
 
 export default function LoginPage() {
     const navigate = useNavigate();
@@ -94,7 +95,8 @@ export default function LoginPage() {
                 setOrganization(org);
                 showToast(`Welcome back ${result?.user.name}!`, "success");
                 apiClient.switchOrganization({ organizationId: org.id });
-                setTimeout(() => navigate("/dashboard"), 2000);
+                const landingPath = await resolveLandingPath(org.id);
+                setTimeout(() => navigate(landingPath), 2000);
                 return;
             }
 

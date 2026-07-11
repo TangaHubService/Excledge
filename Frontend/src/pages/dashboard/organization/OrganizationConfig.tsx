@@ -36,7 +36,14 @@ import { apiClient } from '../../../lib/api-client';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../../context/AuthContext';
 import { useOrganization } from '../../../context/OrganizationContext';
+import { useOrganizationSettings } from '../../../context/OrganizationSettingsContext';
 import { useBranch } from '../../../context/BranchContext';
+import type {
+    ISidebarConfig,
+    IFeatureFlags,
+    IPreferences,
+    IOrganizationSettings,
+} from '../../../types/organizationSettings';
 
 type OrganizationData = {
     id: number;
@@ -60,44 +67,6 @@ interface Branch {
     address?: string;
     location?: string;
     status: 'ACTIVE' | 'INACTIVE';
-}
-
-interface ISidebarConfig {
-    dashboard: boolean;
-    pos: boolean;
-    inventory: boolean;
-    purchaseOrders: boolean;
-    suppliers: boolean;
-    customers: boolean;
-    hr: boolean;
-    accounting: boolean;
-    expenses: boolean;
-    reports: boolean;
-    users: boolean;
-    activityLogs: boolean;
-    billing: boolean;
-}
-
-interface IFeatureFlags {
-    allowNegativeStock: boolean;
-    ebmIntegrationEnabled: boolean;
-    requireStockAdjustmentApproval: boolean;
-    allowManualDiscounts: boolean;
-    stockTransfersEnabled: boolean;
-}
-
-interface IPreferences {
-    language: string;
-    timezone: string;
-    dateFormat: string;
-    defaultLandingPage: string;
-    lowStockThresholdOverride: number | null;
-}
-
-interface IOrganizationSettings {
-    sidebarConfig: ISidebarConfig;
-    featureFlags: IFeatureFlags;
-    preferences: IPreferences;
 }
 
 const SIDEBAR_MODULE_LABELS: Record<keyof ISidebarConfig, string> = {
@@ -152,6 +121,7 @@ export function OrganizationConfig() {
     const { t } = useTranslation();
     const { user } = useAuth();
     const { setOrganization: updateGlobalOrg } = useOrganization();
+    const { refreshSettings } = useOrganizationSettings();
     const { refreshBranches } = useBranch();
 
     const [organization, setOrganization] = useState<OrganizationData | null>(null);
@@ -350,6 +320,7 @@ export function OrganizationConfig() {
             if (response?.settings) {
                 setSettings(response.settings);
             }
+            await refreshSettings();
             toast.success('Organization settings updated');
         } catch (error: any) {
             toast.error(error.message || 'Failed to update organization settings');

@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useOrganization } from '../../context/OrganizationContext';
+import { resolveLandingPath } from '../../lib/landingPage';
 
 export default function SelectOrganization() {
     const [isClient, setIsClient] = useState(false);
@@ -90,7 +91,8 @@ export default function SelectOrganization() {
             localStorage.setItem('organization', JSON.stringify(orgData));
             setOrganization(orgData);
             showToast('Organization switched successfully!', 'success');
-            navigate('/dashboard');
+            const landingPath = await resolveLandingPath(selectedOrganizationId as unknown as number);
+            navigate(landingPath);
         } catch (err: any) {
             console.error('Failed to switch organization:', err);
             showToast('Failed to switch organization. Please try again.', 'error');

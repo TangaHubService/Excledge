@@ -11,6 +11,9 @@ import {
   recalculateProductStock,
 } from '../services/inventory-ledger.service';
 import { InventoryMovementType } from '@prisma/client';
+import { getOrganizationSettings } from '../services/organization-settings.service';
+
+const STOCK_ADJUSTMENT_APPROVER_ROLES = ['ADMIN', 'BRANCH_MANAGER'];
 
 /**
  * POST /inventory/in
@@ -193,6 +196,19 @@ export const adjustInventoryStock = async (req: AuthRequest, res: Response) => {
     if (!req.body.branchId) {
       return res.status(400).json({
         error: 'branchId is required for stock adjustments',
+      });
+    }
+
+    // When the org requires approval, only managers may apply an adjustment
+    // directly — there's no pending-approval queue, so other roles are
+    // simply blocked and must ask a manager to perform it themselves.
+    const orgSettings = await getOrganizationSettings(organizationId);
+    if (
+      orgSettings.featureFlags.requireStockAdjustmentApproval &&
+      !STOCK_ADJUSTMENT_APPROVER_ROLES.includes(req.user?.role as string)
+    ) {
+      return res.status(403).json({
+        error: 'Stock adjustments require manager approval. Ask an admin or branch manager to make this adjustment.',
       });
     }
 
