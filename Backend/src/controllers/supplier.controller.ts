@@ -2,7 +2,7 @@ import type { Response } from "express"
 import { prisma } from "../lib/prisma"
 import { auditLogger } from "../utils/auditLogger"
 import * as XLSX from "xlsx"
-import { validateSupplierRow } from "../services/import-validation.service"
+import { validateSupplierRow, validateEmail } from "../services/import-validation.service"
 import { createPreviewSession, getPreviewSession, deletePreviewSession } from "../services/preview-session.service"
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 
@@ -65,6 +65,17 @@ export const createSupplier = async (req: BranchAuthRequest, res: Response) => {
         const organizationId = parseInt(req.params.organizationId)
         const { name, email, phone, address, contactPerson } = req.body
 
+        if (!name || String(name).trim() === "") {
+            return res.status(400).json({ message: "Supplier name is required" })
+        }
+        if (!email || String(email).trim() === "") {
+            return res.status(400).json({ message: "Supplier email is required" })
+        }
+        const emailValidation = validateEmail(email)
+        if (!emailValidation.isValid) {
+            return res.status(400).json({ message: "Invalid email format" })
+        }
+
         const supplier = await prisma.supplier.create({
             data: {
                 name,
@@ -104,6 +115,16 @@ export const updateSupplier = async (req: BranchAuthRequest, res: Response) => {
 
         if (!existingSupplier) {
             return res.status(404).json({ message: "Supplier not found" })
+        }
+
+        if (email !== undefined) {
+            if (String(email).trim() === "") {
+                return res.status(400).json({ message: "Supplier email is required" })
+            }
+            const emailValidation = validateEmail(email)
+            if (!emailValidation.isValid) {
+                return res.status(400).json({ message: "Invalid email format" })
+            }
         }
 
         const supplier = await prisma.supplier.update({

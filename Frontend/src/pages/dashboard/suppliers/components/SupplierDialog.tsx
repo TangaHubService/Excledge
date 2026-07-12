@@ -29,7 +29,9 @@ export const SupplierDialog: React.FC<SupplierDialogProps> = ({
             newErrors.name = 'Supplier name is required';
         }
 
-        if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        if (!formData.email.trim()) {
+            newErrors.email = 'Email is required';
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
             newErrors.email = 'Please enter a valid email address';
         }
 
@@ -96,11 +98,12 @@ export const SupplierDialog: React.FC<SupplierDialogProps> = ({
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
-                            Email
+                            Email <span className="text-red-500">*</span>
                         </label>
                         <input
                             type="email"
                             name="email"
+                            required
                             value={formData.email}
                             onChange={handleChange}
                             className={`w-full px-3 py-1.5 border rounded-md ${errors.email ? 'border-red-500' : 'border-gray-300'
