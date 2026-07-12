@@ -83,6 +83,8 @@
         "completed": "Imekamilika",
         "filters": "Vichujio",
         "fromDate": "Kuanzia Tarehe",
+        "from": "Kutoka",
+        "product": "Bidhaa",
         "default": "Chaguo-msingi",
         "create": "Tengeneza",
         "processing": "Inashughulikia...",
@@ -346,7 +348,14 @@
         "totalIn": "Jumla ya Kuingia",
         "totalOut": "Jumla ya Kutoka",
         "viewHistory": "Angalia historia",
-        "failedToLoadHistory": "Imeshindwa kupakia historia ya hesabu"
+        "failedToLoadHistory": "Imeshindwa kupakia historia ya hesabu",
+        "branch": "Tawi",
+        "enterBranchId": "Ingiza ID ya tawi (hiari)",
+        "mainBranch": "Tawi Kuu",
+        "movements": "Mienendo",
+        "byType": "Kwa Aina",
+        "totalCost": "Gharama Jumla",
+        "noSummaryData": "Hakuna muhtasari wa data uliopatikana"
     },
     "logs": {
         "activityLogs": "Kumbukumbu za Shughuli",

@@ -19,7 +19,8 @@ import {
     Settings as SettingsIcon,
     LayoutGrid,
     ToggleLeft,
-    SlidersHorizontal
+    SlidersHorizontal,
+    ChevronDown
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
@@ -103,6 +104,10 @@ const LANGUAGE_OPTIONS = [
 
 const DATE_FORMAT_OPTIONS = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'];
 
+// Two rows at the widest (3-column) grid layout — sections with more items
+// than this collapse behind a "Show more" toggle instead of growing tall.
+const VISIBLE_ITEMS_CAP = 6;
+
 export function OrganizationConfig() {
     const { t } = useTranslation();
     const { user } = useAuth();
@@ -118,6 +123,7 @@ export function OrganizationConfig() {
     const [previewAvatar, setPreviewAvatar] = useState<string | null>(null);
     const [settings, setSettings] = useState<IOrganizationSettings | null>(null);
     const [isSavingSettings, setIsSavingSettings] = useState(false);
+    const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
     // Branch dialog state
     const [branchDialogOpen, setBranchDialogOpen] = useState(false);
@@ -666,6 +672,9 @@ export function OrganizationConfig() {
                                     {SIDEBAR_SECTIONS.map((section) => {
                                         const sectionKeys = section.items.map(i => i.key);
                                         const allOn = sectionKeys.every(key => settings.sidebarConfig[key]);
+                                        const isExpanded = expandedSections[section.label] ?? false;
+                                        const hasMore = section.items.length > VISIBLE_ITEMS_CAP;
+                                        const visibleItems = isExpanded ? section.items : section.items.slice(0, VISIBLE_ITEMS_CAP);
                                         return (
                                         <div key={section.label} className="space-y-3">
                                             <div className="flex items-center justify-between">
@@ -686,10 +695,10 @@ export function OrganizationConfig() {
                                                 </div>
                                             </div>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                {section.items.map(({ key, label }) => (
+                                                {visibleItems.map(({ key, label }) => (
                                                     <div
                                                         key={key}
-                                                        className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-700 px-4 py-3"
+                                                        className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-gray-600 px-4 py-3"
                                                     >
                                                         <Label htmlFor={`sidebar-${key}`} className="cursor-pointer">
                                                             {label}
@@ -703,6 +712,16 @@ export function OrganizationConfig() {
                                                     </div>
                                                 ))}
                                             </div>
+                                            {hasMore && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setExpandedSections(prev => ({ ...prev, [section.label]: !isExpanded }))}
+                                                    className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                                                >
+                                                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                                    {isExpanded ? 'Show less' : `Show ${section.items.length - VISIBLE_ITEMS_CAP} more`}
+                                                </button>
+                                            )}
                                         </div>
                                         );
                                     })}
@@ -724,7 +743,7 @@ export function OrganizationConfig() {
                                         {(Object.keys(FEATURE_FLAG_LABELS) as (keyof IFeatureFlags)[]).map((key) => (
                                             <div
                                                 key={key}
-                                                className="flex items-center justify-between gap-4 rounded-xl border border-gray-100 dark:border-gray-700 px-4 py-3"
+                                                className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 dark:border-gray-600 px-4 py-3"
                                             >
                                                 <div className="space-y-0.5">
                                                     <Label htmlFor={`flag-${key}`} className="cursor-pointer">

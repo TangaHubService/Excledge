@@ -314,21 +314,26 @@ function isPlainPatchObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Only admins may change workspace-shaping settings; SYSTEM_OWNER bypasses via the route middleware. */
+/** Only admins may change workspace-shaping settings; SYSTEM_OWNER bypasses this check
+ *  (their global role, not a per-org membership, grants access). */
 export const updateOrgSettings = async (req: Request, res: Response) => {
   try {
     const organizationId = parseInt(req.params.id);
     //@ts-ignore
     const userId = parseInt(req.user?.userId as string);
+    //@ts-ignore
+    const isSystemOwner = req.user?.role === "SYSTEM_OWNER";
 
-    const userOrganization = await prisma.userOrganization.findFirst({
-      where: { userId, organizationId, role: "ADMIN" },
-    });
+    if (!isSystemOwner) {
+      const userOrganization = await prisma.userOrganization.findFirst({
+        where: { userId, organizationId, role: "ADMIN" },
+      });
 
-    if (!userOrganization) {
-      return res
-        .status(403)
-        .json({ error: "Only admins can update organization settings" });
+      if (!userOrganization) {
+        return res
+          .status(403)
+          .json({ error: "Only admins can update organization settings" });
+      }
     }
 
     const { sidebarConfig, featureFlags, preferences } = req.body ?? {};

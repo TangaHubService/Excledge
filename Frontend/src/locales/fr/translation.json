@@ -83,6 +83,8 @@
         "completed": "Terminé",
         "filters": "Filtres",
         "fromDate": "Date de début",
+        "from": "Depuis",
+        "product": "Produit",
         "default": "Par défaut",
         "create": "Créer",
         "processing": "Traitement...",
@@ -343,7 +345,14 @@
         "totalIn": "Total Entrant",
         "totalOut": "Total Sortant",
         "viewHistory": "Voir l'historique",
-        "failedToLoadHistory": "Échec du chargement de l'historique des stocks"
+        "failedToLoadHistory": "Échec du chargement de l'historique des stocks",
+        "branch": "Succursale",
+        "enterBranchId": "Entrer l'ID de la succursale (optionnel)",
+        "mainBranch": "Succursale principale",
+        "movements": "Mouvements",
+        "byType": "Par type",
+        "totalCost": "Coût total",
+        "noSummaryData": "Aucune donnée de résumé trouvée"
     },
     "logs": {
         "activityLogs": "Journaux d'activité",

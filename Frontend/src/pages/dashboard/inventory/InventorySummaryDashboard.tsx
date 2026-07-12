@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from '../../../context/ThemeContext';
 import { apiClient } from '../../../lib/api-client';
 import {
   Card,
@@ -39,7 +38,6 @@ interface InventorySummaryResponse {
 
 export default function InventorySummaryDashboard() {
   const { t } = useTranslation();
-  const { theme } = useTheme();
   const [summaryData, setSummaryData] = useState<InventorySummaryResponse | null>(null);
   const [products, setProducts] = useState<Map<number, { name: string; sku?: string }>>(new Map());
   const [branches, setBranches] = useState<Map<number, { name: string; code?: string }>>(new Map());
@@ -168,19 +166,19 @@ export default function InventorySummaryDashboard() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className={`text-2xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
           {t('inventory.inventorySummary') || 'Inventory Summary Dashboard'}
         </h1>
       </div>
 
       {/* Filters */}
-      <Card className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>
-        <CardHeader>
-          <CardTitle className={theme === 'dark' ? 'text-white' : ''}>
+      <Card className="border-none shadow-lg bg-white dark:bg-gray-800 overflow-hidden">
+        <CardHeader className="border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-blue-600/5 to-indigo-600/5">
+          <CardTitle className="text-gray-900 dark:text-white">
             {t('common.filters') || 'Filters'}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>{t('inventory.productId') || 'Product ID'}</Label>
@@ -189,7 +187,6 @@ export default function InventorySummaryDashboard() {
                 value={productId}
                 onChange={(e) => setProductId(e.target.value)}
                 placeholder={t('inventory.enterProductId') || 'Enter product ID (optional)'}
-                className={theme === 'dark' ? 'bg-gray-700 border-gray-600' : ''}
               />
             </div>
             <div className="space-y-2">
@@ -199,7 +196,6 @@ export default function InventorySummaryDashboard() {
                 value={branchId}
                 onChange={(e) => setBranchId(e.target.value)}
                 placeholder={t('inventory.enterBranchId') || 'Enter branch ID (optional)'}
-                className={theme === 'dark' ? 'bg-gray-700 border-gray-600' : ''}
               />
             </div>
             <div className="space-y-2">
@@ -209,9 +205,8 @@ export default function InventorySummaryDashboard() {
                 value={fromDate === 'inception' ? '' : fromDate}
                 onChange={(e) => setFromDate(e.target.value || 'inception')}
                 placeholder={t('inventory.fromInception') || 'From inception'}
-                className={theme === 'dark' ? 'bg-gray-700 border-gray-600' : ''}
               />
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 {t('inventory.leaveEmptyForInception') || 'Leave empty for "from inception"'}
               </p>
             </div>
@@ -230,57 +225,65 @@ export default function InventorySummaryDashboard() {
           {/* Summary Cards */}
           {totals && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>
+              <Card className="border-none shadow-lg bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/40 dark:to-gray-800 ring-1 ring-emerald-100 dark:ring-emerald-900/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <CardTitle className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
                     {t('inventory.totalStockIn') || 'Total Stock IN'}
                   </CardTitle>
-                  <TrendingUp className="h-4 w-4 text-green-500" />
+                  <div className="rounded-full bg-emerald-100 dark:bg-emerald-900/50 p-2">
+                    <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
                     {formatNumber(totals.totalIn)}
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>
+              <Card className="border-none shadow-lg bg-gradient-to-br from-rose-50 to-white dark:from-rose-950/40 dark:to-gray-800 ring-1 ring-rose-100 dark:ring-rose-900/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <CardTitle className="text-sm font-medium text-rose-700 dark:text-rose-400">
                     {t('inventory.totalStockOut') || 'Total Stock OUT'}
                   </CardTitle>
-                  <TrendingDown className="h-4 w-4 text-red-500" />
+                  <div className="rounded-full bg-rose-100 dark:bg-rose-900/50 p-2">
+                    <TrendingDown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
                     {formatNumber(totals.totalOut)}
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>
+              <Card className="border-none shadow-lg bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/40 dark:to-gray-800 ring-1 ring-purple-100 dark:ring-purple-900/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-400">
                     {t('inventory.currentStock') || 'Current Stock'}
                   </CardTitle>
-                  <Package className="h-4 w-4 text-purple-500" />
+                  <div className="rounded-full bg-purple-100 dark:bg-purple-900/50 p-2">
+                    <Package className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
                     {formatNumber(totals.totalStock)}
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>
+              <Card className="border-none shadow-lg bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/40 dark:to-gray-800 ring-1 ring-blue-100 dark:ring-blue-900/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-400">
                     {t('inventory.totalCost') || 'Total Cost'}
                   </CardTitle>
-                  <DollarSign className="h-4 w-4 text-blue-500" />
+                  <div className="rounded-full bg-blue-100 dark:bg-blue-900/50 p-2">
+                    <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
                     {formatCurrency(totals.totalCost)}
                   </div>
                 </CardContent>
@@ -289,22 +292,22 @@ export default function InventorySummaryDashboard() {
           )}
 
           {/* Summary Table */}
-          <Card className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>
-            <CardHeader>
-              <CardTitle className={theme === 'dark' ? 'text-white' : ''}>
+          <Card className="border-none shadow-lg bg-white dark:bg-gray-800 overflow-hidden">
+            <CardHeader className="border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-indigo-600/5 to-purple-600/5">
+              <CardTitle className="text-gray-900 dark:text-white">
                 {t('inventory.inventorySummary') || 'Inventory Summary by Product & Branch'}
                 {summaryData.fromDate && summaryData.fromDate !== 'inception' && (
-                  <span className="text-sm font-normal text-gray-500 ml-2">
-                    ({t('common.from')} {summaryData.fromDate})
+                  <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">
+                    ({t('common.from') || 'From'} {summaryData.fromDate})
                   </span>
                 )}
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow className={theme === 'dark' ? 'border-gray-700' : ''}>
+                    <TableRow className="border-gray-100 dark:border-gray-700">
                       <TableHead>{t('common.product') || 'Product'}</TableHead>
                       <TableHead>{t('inventory.branch') || 'Branch'}</TableHead>
                       <TableHead className="text-right">{t('inventory.totalIn') || 'Total IN'}</TableHead>
@@ -330,24 +333,24 @@ export default function InventorySummaryDashboard() {
                         return (
                           <TableRow
                             key={`${item.productId}-${item.branchId}-${index}`}
-                            className={theme === 'dark' ? 'border-gray-700 hover:bg-gray-800' : 'hover:bg-gray-50'}
+                            className="border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50"
                           >
                             <TableCell className="font-medium">
                               {product?.name || `Product #${item.productId}`}
                               {product?.sku && (
-                                <div className="text-xs text-gray-500">SKU: {product.sku}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">SKU: {product.sku}</div>
                               )}
                             </TableCell>
                             <TableCell>
                               {branch ? branch.name : item.branchId === null ? (t('inventory.mainBranch') || 'Main Branch') : `Branch #${item.branchId}`}
                               {branch?.code && (
-                                <div className="text-xs text-gray-500">{branch.code}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">{branch.code}</div>
                               )}
                             </TableCell>
-                            <TableCell className="text-right text-green-600 dark:text-green-400 font-mono">
+                            <TableCell className="text-right text-emerald-600 dark:text-emerald-400 font-mono">
                               +{formatNumber(item.totalIn)}
                             </TableCell>
-                            <TableCell className="text-right text-red-600 dark:text-red-400 font-mono">
+                            <TableCell className="text-right text-rose-600 dark:text-rose-400 font-mono">
                               -{formatNumber(item.totalOut)}
                             </TableCell>
                             <TableCell className="text-right font-semibold font-mono">
@@ -358,10 +361,10 @@ export default function InventorySummaryDashboard() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="space-y-1">
-                                <div className="text-xs text-green-600 dark:text-green-400">
+                                <div className="text-xs text-emerald-600 dark:text-emerald-400">
                                   IN: {item.movements.IN}
                                 </div>
-                                <div className="text-xs text-red-600 dark:text-red-400">
+                                <div className="text-xs text-rose-600 dark:text-rose-400">
                                   OUT: {item.movements.OUT}
                                 </div>
                               </div>
@@ -370,10 +373,10 @@ export default function InventorySummaryDashboard() {
                               <div className="space-y-1 max-w-xs">
                                 {Object.entries(item.byType || {}).map(([type, stats]) => (
                                   <div key={type} className="text-xs">
-                                    <Badge variant="outline" className="mr-1">
+                                    <Badge variant="outline" className="mr-1 border-purple-200 text-purple-700 dark:border-purple-800 dark:text-purple-300">
                                       {type.replace(/_/g, ' ')}
                                     </Badge>
-                                    <span className="text-gray-500">
+                                    <span className="text-gray-500 dark:text-gray-400">
                                       {stats.count} × {formatNumber(stats.quantity)}
                                     </span>
                                   </div>
