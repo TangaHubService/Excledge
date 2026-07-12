@@ -83,6 +83,8 @@
         "completed": "Byarangiye",
         "filters": "Shungura",
         "fromDate": "Kuva Itariki",
+        "from": "Kuva",
+        "product": "Igicuruzwa",
         "default": "Bisanzwe",
         "create": "Kora",
         "processing": "Iratunganya...",
@@ -342,7 +344,14 @@
         "totalIn": "Igiteranyo cyinjira",
         "totalOut": "Igiteranyo cyasohotse",
         "viewHistory": "Reba amateka",
-        "failedToLoadHistory": "Gushaka amateka y'ibicuruzwa ntibyagenze neza"
+        "failedToLoadHistory": "Gushaka amateka y'ibicuruzwa ntibyagenze neza",
+        "branch": "Ishami",
+        "enterBranchId": "Andika ID y'ishami (bihari)",
+        "mainBranch": "Ishami Nyamukuru",
+        "movements": "Impinduka",
+        "byType": "Ku bwoko",
+        "totalCost": "Igiciro Cyose",
+        "noSummaryData": "Nta makuru y'incamake abonetse"
     },
     "logs": {
         "activityLogs": "Ibyakozwe",

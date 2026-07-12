@@ -83,6 +83,8 @@
         "completed": "Completed",
         "filters": "Filters",
         "fromDate": "From Date",
+        "from": "From",
+        "product": "Product",
         "default": "Default",
         "create": "Create",
         "processing": "Processing...",
@@ -362,7 +364,14 @@
         "enterMovementType": "e.g., PURCHASE, SALE",
         "totalIn": "Total In",
         "totalOut": "Total Out",
-        "viewHistory": "View History"
+        "viewHistory": "View History",
+        "branch": "Branch",
+        "enterBranchId": "Enter branch ID (optional)",
+        "mainBranch": "Main Branch",
+        "movements": "Movements",
+        "byType": "By Type",
+        "totalCost": "Total Cost",
+        "noSummaryData": "No summary data found"
     },
     "logs": {
         "activityLogs": "Activity Logs",
