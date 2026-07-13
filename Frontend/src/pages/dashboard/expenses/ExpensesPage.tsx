@@ -76,6 +76,7 @@ interface Expense {
 
 interface ExpenseForm {
   category: string
+  otherCategory: string
   amount: string
   paymentMethod: string
   description: string
@@ -86,6 +87,7 @@ interface ExpenseForm {
 
 const EMPTY_FORM: ExpenseForm = {
   category: '',
+  otherCategory: '',
   amount: '',
   paymentMethod: 'CASH',
   description: '',
@@ -125,9 +127,12 @@ function ExpenseFormDialog({
     if (errors[k]) setErrors(p => ({ ...p, [k]: '' }))
   }
 
+  const isOtherCategory = form.category === 'OTHER'
+
   const validate = () => {
     const e: Partial<ExpenseForm> = {}
     if (!form.category) e.category = 'Required'
+    if (isOtherCategory && !form.otherCategory.trim()) e.otherCategory = 'Please specify the category'
     if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0) e.amount = 'Enter a valid amount'
     if (!form.paymentMethod) e.paymentMethod = 'Required'
     if (!form.description.trim()) e.description = 'Required'
@@ -170,6 +175,17 @@ function ExpenseFormDialog({
                 </SelectContent>
               </Select>
               {errors.category && <p className="text-xs text-red-500">{errors.category}</p>}
+              {isOtherCategory && (
+                <>
+                  <Input
+                    value={form.otherCategory}
+                    onChange={e => set('otherCategory', e.target.value)}
+                    placeholder="Specify the category"
+                    className={cn('mt-1.5', errors.otherCategory && 'border-red-400')}
+                  />
+                  {errors.otherCategory && <p className="text-xs text-red-500">{errors.otherCategory}</p>}
+                </>
+              )}
             </div>
 
             {/* Amount */}
@@ -348,6 +364,9 @@ export default function ExpensesPage() {
   })
 
   const handleSave = useCallback(async (form: ExpenseForm) => {
+    const notes = form.category === 'OTHER' && form.otherCategory.trim()
+      ? `[Other category: ${form.otherCategory.trim()}] ${form.notes}`.trim()
+      : form.notes
     const payload = {
       category: form.category,
       amount: parseFloat(form.amount),
@@ -355,7 +374,7 @@ export default function ExpensesPage() {
       description: form.description,
       reference: form.reference || undefined,
       expenseDate: form.expenseDate,
-      notes: form.notes || undefined,
+      notes: notes || undefined,
       ...(selectedBranchId && { branchId: selectedBranchId }),
     }
     if (editingExpense) {

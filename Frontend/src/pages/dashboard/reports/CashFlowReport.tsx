@@ -70,6 +70,7 @@ export const CashFlowReport = () => {
     // Form states
     const [expenseForm, setExpenseForm] = useState({
         category: 'OTHER',
+        otherCategory: '',
         amount: '',
         paymentMethod: 'CASH',
         description: '',
@@ -148,10 +149,18 @@ export const CashFlowReport = () => {
 
     const handleCreateExpense = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (expenseForm.category === 'OTHER' && !expenseForm.otherCategory.trim()) {
+            toast.error(t('expenses.specifyCategory'));
+            return;
+        }
         try {
             setIsSubmitting(true);
+            const { otherCategory, ...rest } = expenseForm;
             await apiClient.createExpense({
-                ...expenseForm,
+                ...rest,
+                description: expenseForm.category === 'OTHER' && otherCategory.trim()
+                    ? `[${otherCategory.trim()}] ${expenseForm.description}`.trim()
+                    : expenseForm.description,
                 amount: parseFloat(expenseForm.amount)
             });
             toast.success(t('expenses.success'));
@@ -159,6 +168,7 @@ export const CashFlowReport = () => {
             fetchCashFlow();
             setExpenseForm({
                 category: 'OTHER',
+                otherCategory: '',
                 amount: '',
                 paymentMethod: 'CASH',
                 description: '',
@@ -467,6 +477,15 @@ export const CashFlowReport = () => {
                                         <SelectItem value="OTHER">{t('expenses.categories.OTHER')}</SelectItem>
                                     </SelectContent>
                                 </Select>
+                                {expenseForm.category === 'OTHER' && (
+                                    <Input
+                                        required
+                                        value={expenseForm.otherCategory}
+                                        onChange={(e) => setExpenseForm({ ...expenseForm, otherCategory: e.target.value })}
+                                        placeholder={t('expenses.specifyCategory')}
+                                        className="bg-white dark:bg-gray-800 mt-2"
+                                    />
+                                )}
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="amount">{t('expenses.amount')} (RWF)</Label>
