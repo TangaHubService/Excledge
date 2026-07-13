@@ -14,13 +14,13 @@ const PESAPAL_API_URL = pesapalConfig.baseUrl;
 // Helper function to get transaction status
 const getTransactionStatus = async (orderTrackingId: string) => {
     try {
-        const { token } = await pesapalToken();
+        const tokenData = await pesapalToken();
         const response = await axios.get(
             `${PESAPAL_API_URL}/api/Transactions/GetTransactionStatus?orderTrackingId=${orderTrackingId}`,
             {
                 headers: {
                     "Accept": "application/json",
-                    "Authorization": `Bearer ${token}`
+                    "Authorization": `Bearer ${tokenData.token}`
                 }
             }
         );
@@ -120,7 +120,8 @@ export const pesapalIpnController = async (req: Request, res: Response) => {
 
 export const pesapalOrderRequest = async (req: Request, res: Response) => {
     try {
-        const { token } = await pesapalToken();
+        const tokenData = await pesapalToken();
+        const token = tokenData.token;
         const planId = Number(req.body.planId);
         const organizationId = Number(req.body.organizationId);
         const { user } = req.body;
@@ -188,19 +189,22 @@ export const pesapalOrderRequest = async (req: Request, res: Response) => {
             amountInRwf = await convertUsdToRwf(plan.price);
         }
 
-        const orderData = {
+        const ipnId = process.env.PESAPAL_IPN_ID;
+        const orderData: Record<string, any> = {
             id: pesapalUniqueRef,
             currency: "RWF",
             amount: Math.round(amountInRwf),
             description: `Subscription for ${plan.name} (${plan.billingCycle})`,
             callback_url: `${config.primaryFrontendUrl}/subscription/callback?planId=${planId}`,
-            notification_id: process.env.PESAPAL_IPN_ID,
             billing_address: {
                 email_address: user.email,
                 phone_number: user.phoneNumber.slice(-10),
                 first_name: user.firstName,
             }
         };
+        if (ipnId && !ipnId.startsWith('your_')) {
+            orderData.notification_id = ipnId;
+        }
 
         const response = await axios.post(
             `${PESAPAL_API_URL}/api/Transactions/SubmitOrderRequest`,
@@ -224,12 +228,14 @@ export const pesapalOrderRequest = async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        console.error("Error creating Pesapal order:", error.response?.data || error);
+        const errorDetail = error.response?.data || error;
+        console.error("Error creating Pesapal order:", errorDetail);
 
-        res.status(500).json({
+        const pesapalError = errorDetail?.error || errorDetail;
+        res.status(error.response?.status || 500).json({
             success: false,
-            message: "Failed to create Pesapal order",
-            error: error.response?.data || error.message
+            message: pesapalError?.message || "Failed to create Pesapal order",
+            error: errorDetail
         });
     }
 };
@@ -263,11 +269,13 @@ export const requestRefund = async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        console.error("Error requesting refund:", error.response?.data || error);
-        res.status(500).json({
+        const errorDetail = error.response?.data || error;
+        const pesapalError = errorDetail?.error || errorDetail;
+        console.error("Error requesting refund:", errorDetail);
+        res.status(error.response?.status || 500).json({
             success: false,
-            message: "Failed to process refund request",
-            error: error.response?.data || error.message
+            message: pesapalError?.message || "Failed to process refund request",
+            error: errorDetail
         });
     }
 };
@@ -275,7 +283,8 @@ export const requestRefund = async (req: Request, res: Response) => {
 export const cancelOrder = async (req: Request, res: Response) => {
     try {
         const { orderTrackingId } = req.params;
-        const { token } = await pesapalToken();
+        const tokenData = await pesapalToken();
+        const token = tokenData.token;
 
         const response = await axios.post(
             `${PESAPAL_API_URL}/api/Transactions/CancelOrder`,
@@ -296,11 +305,13 @@ export const cancelOrder = async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        console.error("Error cancelling order:", error.response?.data || error);
-        res.status(500).json({
+        const errorDetail = error.response?.data || error;
+        const pesapalError = errorDetail?.error || errorDetail;
+        console.error("Error cancelling order:", errorDetail);
+        res.status(error.response?.status || 500).json({
             success: false,
-            message: "Failed to cancel order",
-            error: error.response?.data || error.message
+            message: pesapalError?.message || "Failed to cancel order",
+            error: errorDetail
         });
     }
 };
