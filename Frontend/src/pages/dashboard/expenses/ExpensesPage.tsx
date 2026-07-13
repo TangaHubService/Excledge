@@ -110,6 +110,7 @@ function ExpenseFormDialog({
     initial
       ? {
           category: initial.category,
+          otherCategory: '',
           amount: String(initial.amount),
           paymentMethod: initial.paymentMethod,
           description: initial.description,
