@@ -302,6 +302,7 @@ class EmailService {
     totalAmount: number,
     notes?: string,
     expectedDate?: Date,
+    creatorEmail?: string,
   ) {
     const itemsList = items
       .map(
@@ -319,6 +320,7 @@ class EmailService {
     await this.sendMail({
       from: config.email.from,
       to: supplierEmail,
+      ...(creatorEmail ? { replyTo: creatorEmail } : {}),
       subject: `New Purchase Order ${orderNumber} from ${organizationName}`,
       html: `
         <h2>New Purchase Order</h2>
@@ -396,6 +398,80 @@ class EmailService {
 
         <p>You can view the full order details in your dashboard.</p>
         <a href="${config.primaryFrontendUrl}/dashboard/orders" style="background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">View Purchase Orders</a>
+      `,
+    })
+  }
+
+  async sendPurchaseOrderCreatedNotification(
+    organizationEmail: string,
+    organizationName: string,
+    orderNumber: string,
+    supplierName: string,
+    totalAmount: number,
+    createdByName: string,
+    createdAt: Date,
+    createdByEmail?: string,
+  ) {
+    const viewUrl = `${config.primaryFrontendUrl}/dashboard/orders`
+
+    await this.sendMail({
+      from: config.email.from,
+      to: organizationEmail,
+      ...(createdByEmail ? { replyTo: createdByEmail } : {}),
+      subject: `Purchase Order Created - ${orderNumber}`,
+      html: `
+        <h2>Purchase Order Created</h2>
+        <p>A new purchase order has been created for <strong>${organizationName}</strong>.</p>
+
+        <ul>
+          <li><strong>Organization:</strong> ${organizationName}</li>
+          <li><strong>Purchase Order Number:</strong> ${orderNumber}</li>
+          <li><strong>Supplier:</strong> ${supplierName}</li>
+          <li><strong>Total Amount:</strong> ${totalAmount.toFixed(2)} Frw</li>
+          <li><strong>Created By:</strong> ${createdByName}</li>
+          <li><strong>Date:</strong> ${createdAt.toLocaleString()}</li>
+        </ul>
+
+        <a href="${viewUrl}" style="background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">View Purchase Order</a>
+      `,
+    })
+  }
+
+  async sendPurchaseOrderUpdatedNotification(
+    organizationEmail: string,
+    organizationName: string,
+    orderNumber: string,
+    supplierName: string,
+    updatedByName: string,
+    updatedAt: Date,
+    status: string,
+    changesSummary: string,
+    creatorEmail?: string,
+  ) {
+    const viewUrl = `${config.primaryFrontendUrl}/dashboard/orders`
+
+    await this.sendMail({
+      from: config.email.from,
+      to: organizationEmail,
+      ...(creatorEmail ? { replyTo: creatorEmail } : {}),
+      subject: `Purchase Order Updated - ${orderNumber}`,
+      html: `
+        <h2>Purchase Order Updated</h2>
+        <p>Purchase order <strong>${orderNumber}</strong> for <strong>${organizationName}</strong> has been updated.</p>
+
+        <ul>
+          <li><strong>Organization:</strong> ${organizationName}</li>
+          <li><strong>Purchase Order Number:</strong> ${orderNumber}</li>
+          <li><strong>Supplier:</strong> ${supplierName}</li>
+          <li><strong>Updated By:</strong> ${updatedByName}</li>
+          <li><strong>Update Time:</strong> ${updatedAt.toLocaleString()}</li>
+          <li><strong>Current Status:</strong> <span style="color: ${status === "COMPLETED" ? "#10b981" : status === "CANCELLED" || status === "REJECTED" ? "#ef4444" : "#3b82f6"
+        }; font-weight: bold;">${status}</span></li>
+        </ul>
+
+        <p><strong>Summary of changes:</strong> ${changesSummary}</p>
+
+        <a href="${viewUrl}" style="background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">View Purchase Order</a>
       `,
     })
   }

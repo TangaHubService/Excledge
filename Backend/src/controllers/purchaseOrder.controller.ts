@@ -148,6 +148,8 @@ export const createPurchaseOrder = async (req: BranchAuthRequest, res: Response)
             },
         })
 
+        const creatorEmail = (req as any).user.email
+
         try {
             const orderAny = order as any;
             await emailService.sendPurchaseOrderToSupplier(
@@ -159,9 +161,31 @@ export const createPurchaseOrder = async (req: BranchAuthRequest, res: Response)
                 Number(orderAny.totalAmount),
                 orderAny.notes || undefined,
                 orderAny.expectedDate || undefined,
+                creatorEmail,
             )
         } catch (emailError) {
             console.error("Failed to send email to supplier:", emailError)
+        }
+
+        try {
+            const orderAny = order as any;
+            const organizationEmail = orderAny.organization.email
+            if (organizationEmail) {
+                await emailService.sendPurchaseOrderCreatedNotification(
+                    organizationEmail,
+                    orderAny.organization.name,
+                    orderAny.orderNumber,
+                    orderAny.supplier.name,
+                    Number(orderAny.totalAmount),
+                    (req as any).user.name || creatorEmail,
+                    orderAny.createdAt,
+                    creatorEmail,
+                )
+            } else {
+                console.warn(`Purchase order ${orderAny.orderNumber}: organization ${organizationId} has no configured email, skipping creation notification`)
+            }
+        } catch (emailError) {
+            console.error("Failed to send purchase order creation notification to organization:", emailError)
         }
 
         await auditLogger.purchaseOrders(req, {
@@ -339,6 +363,27 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
             )
         } catch (emailError) {
             console.error("Failed to send status update email:", emailError)
+        }
+
+        try {
+            const organizationEmail = order.organization.email
+            if (organizationEmail) {
+                await emailService.sendPurchaseOrderUpdatedNotification(
+                    organizationEmail,
+                    order.organization.name,
+                    order.orderNumber,
+                    order.supplier.name,
+                    (req as any).user.name || (req as any).user.email,
+                    new Date(),
+                    status,
+                    `Status changed from ${order.status} to ${status}`,
+                    order.user.email,
+                )
+            } else {
+                console.warn(`Purchase order ${order.orderNumber}: organization ${order.organizationId} has no configured email, skipping update notification`)
+            }
+        } catch (emailError) {
+            console.error("Failed to send purchase order update notification to organization:", emailError)
         }
 
         // Map status to specific ActivityType if possible
