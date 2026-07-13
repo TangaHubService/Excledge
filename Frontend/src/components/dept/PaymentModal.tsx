@@ -26,8 +26,10 @@ export function PaymentModal({ sale, onClose, onPaymentSuccess }: PaymentModalPr
     const { t } = useTranslation();
     const [amount, setAmount] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('CASH');
+    const [otherPaymentMethod, setOtherPaymentMethod] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { toast } = useToast();
+    const isOtherMethod = paymentMethod === 'OTHER';
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -50,11 +52,21 @@ export function PaymentModal({ sale, onClose, onPaymentSuccess }: PaymentModalPr
             return;
         }
 
+        if (isOtherMethod && !otherPaymentMethod.trim()) {
+            toast({
+                title: t('common.error'),
+                description: t('debtManagement.specifyPaymentMethod'),
+                variant: 'destructive',
+            });
+            return;
+        }
+
         try {
             setIsSubmitting(true);
             await apiClient.recordDebtPayment(sale.id, {
                 amount: parseFloat(amount),
                 paymentMethod,
+                notes: isOtherMethod ? `Payment method: ${otherPaymentMethod.trim()}` : undefined,
             });
 
             toast({
@@ -124,6 +136,16 @@ export function PaymentModal({ sale, onClose, onPaymentSuccess }: PaymentModalPr
                                 <SelectItem value="OTHER">Other</SelectItem>
                             </SelectContent>
                         </Select>
+                        {isOtherMethod && (
+                            <Input
+                                id="otherPaymentMethod"
+                                value={otherPaymentMethod}
+                                onChange={(e) => setOtherPaymentMethod(e.target.value)}
+                                placeholder={t('debtManagement.specifyPaymentMethod')}
+                                required
+                                disabled={isSubmitting}
+                            />
+                        )}
                     </div>
                 </form>
 
@@ -139,7 +161,7 @@ export function PaymentModal({ sale, onClose, onPaymentSuccess }: PaymentModalPr
                     <Button
                         type="submit"
                         onClick={handleSubmit}
-                        disabled={isSubmitting || !amount}
+                        disabled={isSubmitting || !amount || (isOtherMethod && !otherPaymentMethod.trim())}
                         className="bg-blue-600 hover:bg-blue-700 text-white"
                     >
                         {isSubmitting ? (

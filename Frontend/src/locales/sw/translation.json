@@ -920,6 +920,7 @@
         "noPaymentHistoryFound": "Hakuna historia ya malipo yaliyopatikana",
         "invalidAmount": "Tafadhali ingiza kiasi sahihi",
         "amountExceedsDebt": "Kiasi hakiwezi kuzidi {{amount}} Rwf",
+        "specifyPaymentMethod": "Tafadhali eleza njia ya malipo",
         "failedToRecordPayment": "Imeshindwa kurekodi malipo. Tafadhali jaribu tena.",
         "maximum": "Kiwango cha juu",
         "due": "inadaiwa",
@@ -1009,6 +1010,7 @@
         "reference": "Rejeleo",
         "success": "Gharama imerekodiwa kwa mafanikio",
         "error": "Imeshindwa kurekodi gharama",
+        "specifyCategory": "Tafadhali eleza kategoria",
         "categories": {
             "SALARIES": "Mishahara",
             "RENT": "Kodi",

@@ -989,6 +989,7 @@
         "noPaymentHistoryFound": "Aucun historique de paiement trouvé",
         "invalidAmount": "Veuillez entrer un montant valide",
         "amountExceedsDebt": "Le montant ne peut pas dépasser {{amount}} Rwf",
+        "specifyPaymentMethod": "Veuillez préciser le mode de paiement",
         "failedToRecordPayment": "Échec de l'enregistrement du paiement. Veuillez réessayer.",
         "maximum": "Maximum",
         "due": "dû",
@@ -1034,6 +1035,7 @@
         "reference": "Référence",
         "success": "Dépense enregistrée avec succès",
         "error": "Échec de l'enregistrement de la dépense",
+        "specifyCategory": "Veuillez préciser la catégorie",
         "categories": {
             "SALARIES": "Salaires",
             "RENT": "Loyer",

@@ -108,6 +108,7 @@ export default function StockAdjustmentDialog({
 
   const [quantity, setQuantity] = useState<string>('');
   const [reason, setReason] = useState<AdjustmentReason | ''>('');
+  const [otherReason, setOtherReason] = useState('');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [confirmStep, setConfirmStep] = useState(false);
@@ -125,6 +126,7 @@ export default function StockAdjustmentDialog({
     if (open) {
       setQuantity('');
       setReason('');
+      setOtherReason('');
       setNote('');
       setConfirmStep(false);
     }
@@ -136,7 +138,9 @@ export default function StockAdjustmentDialog({
   const newStock = isValidQty && currentStock !== undefined ? currentStock + qtyNum : undefined;
   const isNegative = qtyNum < 0;
   const wouldGoNegative = isNegative && currentStock !== undefined && currentStock + qtyNum < 0;
-  const canSubmit = isValidQty && reason !== '' && !wouldGoNegative && !loading && canAdjustDirectly;
+  const isOtherReason = reason === 'OTHER';
+  const isReasonValid = reason !== '' && (!isOtherReason || otherReason.trim() !== '');
+  const canSubmit = isValidQty && isReasonValid && !wouldGoNegative && !loading && canAdjustDirectly;
 
   /* ── Step adjustment ─────────────────────────────────── */
   const adjustBy = useCallback(
@@ -159,11 +163,12 @@ export default function StockAdjustmentDialog({
 
     try {
       setLoading(true);
+      const reasonLabel = isOtherReason ? `OTHER: ${otherReason.trim()}` : reason;
       await apiClient.adjustInventoryStock({
         productId,
         quantity: qtyNum,
         branchId: targetBranch?.id ?? undefined,
-        note: `[${reason}] ${note}`.trim(),
+        note: `[${reasonLabel}] ${note}`.trim(),
         reference: `ADJ-${productId}-${Date.now()}`,
         referenceType: 'ADJUSTMENT',
       });
@@ -172,13 +177,14 @@ export default function StockAdjustmentDialog({
         <div>
           <p className="font-medium">Stock adjusted</p>
           <p className="text-xs opacity-80">
-            {isNegative ? '-' : '+'}{Math.abs(qtyNum)} units · {ADJUSTMENT_REASONS.find(r => r.value === reason)?.label ?? reason}
+            {isNegative ? '-' : '+'}{Math.abs(qtyNum)} units · {isOtherReason ? otherReason.trim() : ADJUSTMENT_REASONS.find(r => r.value === reason)?.label ?? reason}
           </p>
         </div>,
       );
 
       setQuantity('');
       setReason('');
+      setOtherReason('');
       setNote('');
       setConfirmStep(false);
       onOpenChange(false);
@@ -208,6 +214,7 @@ export default function StockAdjustmentDialog({
     if (!loading) {
       setQuantity('');
       setReason('');
+      setOtherReason('');
       setNote('');
       setConfirmStep(false);
       onOpenChange(false);
@@ -411,6 +418,20 @@ export default function StockAdjustmentDialog({
               {reason === '' && quantity && (
                 <p className="text-caption text-amber-600">Select a reason before confirming</p>
               )}
+              {isOtherReason && (
+                <div className="space-y-1">
+                  <Input
+                    id="otherReason"
+                    value={otherReason}
+                    onChange={e => setOtherReason(e.target.value)}
+                    placeholder="Please specify the reason…"
+                    className={cn('h-11', theme === 'dark' ? 'bg-gray-800 border-gray-700' : '')}
+                  />
+                  {otherReason.trim() === '' && (
+                    <p className="text-caption text-amber-600">Please specify the reason</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Note (optional) */}
@@ -466,7 +487,7 @@ export default function StockAdjustmentDialog({
               />
               <SummaryRow
                 label="Reason"
-                value={ADJUSTMENT_REASONS.find(r => r.value === reason)?.label ?? reason}
+                value={isOtherReason ? otherReason.trim() : ADJUSTMENT_REASONS.find(r => r.value === reason)?.label ?? reason}
               />
               {note && <SummaryRow label="Note" value={note} />}
             </div>

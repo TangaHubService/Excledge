@@ -970,6 +970,7 @@
         "noPaymentHistoryFound": "Nta mateka y'kwishyura yabonetse",
         "invalidAmount": "Andika agaciro nyako",
         "amountExceedsDebt": "Agaciro ntishobora kurenza {{amount}} Rwf",
+        "specifyPaymentMethod": "Sobanura uburyo bwo kwishyura",
         "failedToRecordPayment": "Kwishyura ntibyanditswe. Ongera ugerageze.",
         "maximum": "Ikinini",
         "due": "igomba kwishyurwa",
@@ -1014,6 +1015,7 @@
         "reference": "Icyerekezo",
         "success": "Imikoreshereze yanditswe neza",
         "error": "Ikosa mu kwandika imikoreshereze",
+        "specifyCategory": "Sobanura icyiciro",
         "categories": {
             "SALARIES": "Imishahara",
             "RENT": "Ubukode",

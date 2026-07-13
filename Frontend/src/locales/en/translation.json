@@ -1004,6 +1004,7 @@
         "noPaymentHistoryFound": "No payment history found",
         "invalidAmount": "Please enter a valid amount",
         "amountExceedsDebt": "Amount cannot exceed {{amount}} Rwf",
+        "specifyPaymentMethod": "Please specify the payment method",
         "failedToRecordPayment": "Failed to record payment. Please try again.",
         "maximum": "Maximum",
         "due": "due",
@@ -1048,6 +1049,7 @@
         "reference": "Reference",
         "success": "Expense recorded successfully",
         "error": "Failed to record expense",
+        "specifyCategory": "Please specify the category",
         "categories": {
             "SALARIES": "Salaries",
             "RENT": "Rent",

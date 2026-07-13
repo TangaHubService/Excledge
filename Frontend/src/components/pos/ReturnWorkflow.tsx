@@ -118,6 +118,7 @@ export function ReturnWorkflow({
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null)
   const [returnItems, setReturnItems] = useState<ReturnItem[]>([])
   const [reason, setReason] = useState('')
+  const [otherReason, setOtherReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -130,6 +131,7 @@ export function ReturnWorkflow({
       setSelectedSale(null)
       setReturnItems([])
       setReason('')
+      setOtherReason('')
       setError(null)
     }
   }, [open])
@@ -198,6 +200,9 @@ export function ReturnWorkflow({
     return { totalRefund: refund, totalItems: count }
   }, [returnItems])
 
+  const isOtherReason = reason === 'OTHER'
+  const isReasonValid = reason !== '' && (!isOtherReason || otherReason.trim() !== '')
+
   /* ── Submit ────────────────────────────────────────────── */
   const handleSubmit = useCallback(async () => {
     if (!selectedSale) return
@@ -206,7 +211,7 @@ export function ReturnWorkflow({
     try {
       await onSubmitReturn({
         saleId: selectedSale.id,
-        reason,
+        reason: isOtherReason ? otherReason.trim() : reason,
         items: returnItems
           .filter(item => item.quantity > 0)
           .map(item => ({
@@ -221,7 +226,7 @@ export function ReturnWorkflow({
     } finally {
       setSubmitting(false)
     }
-  }, [selectedSale, reason, returnItems, onSubmitReturn])
+  }, [selectedSale, reason, otherReason, isOtherReason, returnItems, onSubmitReturn])
 
   /* ── Close ────────────────────────────────────────────── */
   const handleClose = () => {
@@ -489,6 +494,14 @@ export function ReturnWorkflow({
                     <SelectItem value="OTHER">Other</SelectItem>
                   </SelectContent>
                 </Select>
+                {isOtherReason && (
+                  <Input
+                    value={otherReason}
+                    onChange={e => setOtherReason(e.target.value)}
+                    placeholder="Please specify the reason…"
+                    className="h-11"
+                  />
+                )}
               </div>
             </div>
           )}
@@ -568,7 +581,7 @@ export function ReturnWorkflow({
 
               {/* Reason summary */}
               <p className="text-sm text-gray-500">
-                Reason: <span className="font-medium text-gray-700 dark:text-gray-300">{reason}</span>
+                Reason: <span className="font-medium text-gray-700 dark:text-gray-300">{isOtherReason ? otherReason.trim() : reason}</span>
               </p>
             </div>
           )}
@@ -614,7 +627,7 @@ export function ReturnWorkflow({
             <Button
               type="button"
               onClick={() => setStep('confirm')}
-              disabled={totalItems === 0 || !reason}
+              disabled={totalItems === 0 || !isReasonValid}
               className="h-11 gap-1.5"
             >
               Review Return
