@@ -144,36 +144,37 @@ export const InventoryManagement = () => {
 
   const getExpiryStatus = (expiryDate: string) => {
     const daysRemaining = getDaysRemaining(expiryDate);
+    const daysLabel = `${Number.isNaN(daysRemaining) ? "N/A" : daysRemaining}d left`;
+
     if (daysRemaining < 0)
       return {
         label: t('inventory.expired'),
-        variant: "destructive",
-
-        color: "text-red-600",
+        color: "text-red-600 dark:text-red-400",
+        badgeColor: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+      };
+    if (daysRemaining <= 7)
+      return {
+        label: daysLabel,
+        color: "text-red-600 dark:text-red-400 font-semibold",
+        badgeColor: "bg-red-500 text-white dark:bg-red-600",
       };
     if (daysRemaining <= 30)
       return {
-        label: `${Number.isNaN(daysRemaining) ? "N/A" : daysRemaining}d left`,
-        variant: "default",
-        color: "text-orange-600",
+        label: daysLabel,
+        color: "text-orange-600 dark:text-orange-400",
+        badgeColor: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
       };
     if (daysRemaining <= 90)
       return {
-        label: `${Number.isNaN(daysRemaining) ? "N/A" : daysRemaining}d left`,
-        variant: "secondary",
-        color: "text-yellow-600",
+        label: daysLabel,
+        color: "text-yellow-600 dark:text-yellow-400",
+        badgeColor: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
       };
     return {
-      label: `${Number.isNaN(daysRemaining) ? "N/A" : daysRemaining}d left`,
-      variant: "outline",
-      color: "text-gray-600",
+      label: daysLabel,
+      color: "text-emerald-600 dark:text-emerald-400",
+      badgeColor: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
     };
-  };
-
-  const badgeColorMap: Record<string, string> = {
-    Expired: "bg-red-500 text-white",
-    "Low Stock": "bg-yellow-500 text-white",
-    Default: "bg-gray-200 text-gray-800",
   };
 
   const handlePageChange = (newPage: number) => {
@@ -826,12 +827,7 @@ export const InventoryManagement = () => {
                                     : "text-gray-900"
                                 }
                               >
-                                <Badge
-                                  className={
-                                    badgeColorMap[status.label] ??
-                                    badgeColorMap["Default"]
-                                  }
-                                >
+                                <Badge className={status.badgeColor}>
                                   {status.label === " " ? "N/A" : status.label}
                                 </Badge>
                               </TableCell>
