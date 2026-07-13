@@ -88,13 +88,13 @@ export const handlePesapalWebhook = async (req: Request, res: Response) => {
  */
 async function getTransactionStatus(orderTrackingId: string): Promise<PesapalTransactionStatus> {
     try {
-        const { token } = await pesapalToken();
+        const tokenData = await pesapalToken();
         const response = await axios.get(
             `${PESAPAL_API_URL}/api/Transactions/GetTransactionStatus?orderTrackingId=${orderTrackingId}`,
             {
                 headers: {
                     "Accept": "application/json",
-                    "Authorization": `Bearer ${token}`
+                    "Authorization": `Bearer ${tokenData.token}`
                 }
             }
         );

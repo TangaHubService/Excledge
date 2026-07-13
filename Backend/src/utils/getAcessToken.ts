@@ -21,6 +21,10 @@ export const getAccessToken = async (): Promise<PaypackToken> => {
 
 
 export const pesapalToken = async () => {
+    if (!pesapalConfig.consumerKey || !pesapalConfig.consumerSecret) {
+        throw new Error("Pesapal consumer key or secret not configured");
+    }
+
     const { data } = await axios.post(
         `${pesapalConfig.baseUrl}/api/Auth/RequestToken`,
         {
@@ -34,6 +38,10 @@ export const pesapalToken = async () => {
             }
         }
     );
+
+    if (!data.token) {
+        throw new Error(`Pesapal token request failed: ${data.error?.message || JSON.stringify(data)}`);
+    }
 
     return data;
 };
