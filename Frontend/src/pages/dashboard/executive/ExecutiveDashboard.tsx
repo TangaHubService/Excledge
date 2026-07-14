@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { RefreshCw, ChevronDown, Calendar, Building2 } from 'lucide-react'
@@ -43,6 +43,7 @@ function BranchSelector({
   onToggle: (id: number) => void
 }) {
   const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
   const allSelected = selected.size === 0
 
   const label = allSelected
@@ -51,8 +52,19 @@ function BranchSelector({
     ? branches.find(b => selected.has(b.id))?.name ?? '1 branch'
     : `${selected.size} branches`
 
+  useEffect(() => {
+    if (!open) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
