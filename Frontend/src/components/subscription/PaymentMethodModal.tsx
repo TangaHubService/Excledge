@@ -7,6 +7,7 @@ import { Loader2, CreditCard, CheckCircle2, XCircle, ArrowLeft } from 'lucide-re
 import mtn from "../../assets/mtn.jpg";
 import aitel from "../../assets/aitel.jpg";
 import { PesapalPaymentForm } from './PesaplPaymentForm';
+import { DurationSelector, calculateDurationTotal, type DurationValue } from './DurationSelector';
 
 type PaymentStatus = 'idle' | 'processing' | 'pending' | 'success' | 'error';
 
@@ -15,11 +16,14 @@ interface PaymentMethodModalProps {
     onClose: () => void;
     planId: string;
     planName: string;
+    /** Monthly price for the plan — the server-authoritative total is Monthly Price x Number of Months (or the discounted yearly rate). */
     price: number;
-    onPaymentInitiated: (paymentMethod: string, phoneNumber?: string) => void;
+    onPaymentInitiated: (paymentMethod: string, phoneNumber?: string, duration?: DurationValue) => void;
     isProcessing: boolean;
     paymentStatus?: PaymentStatus;
     error?: { title: string; message: string } | null;
+    /** Current subscription's end date when this is a renewal — see DurationSelector. */
+    currentExpiryDate?: Date | null;
 }
 
 type PaymentMethod = 'MTN' | 'AIRTEL' | 'CARD' | null;
@@ -34,12 +38,15 @@ export const PaymentMethodModal = ({
     isProcessing,
     paymentStatus = 'idle',
     error: propError,
+    currentExpiryDate = null,
 }: PaymentMethodModalProps) => {
     const [error, setError] = useState<{ title: string; message: string } | null>(null);
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>(null);
     const [phoneNumber, setPhoneNumber] = useState('07');
+    const [duration, setDuration] = useState<DurationValue>({ months: 1, billingMode: 'MONTHLY' });
     const [localPaymentStatus, setLocalPaymentStatus] = useState<PaymentStatus>(paymentStatus);
     const [isLocalProcessing, setIsLocalProcessing] = useState(isProcessing);
+    const total = calculateDurationTotal({ monthlyPrice: price, months: duration.months, billingMode: duration.billingMode });
 
     // Update local state when props change
     useEffect(() => {
@@ -85,10 +92,10 @@ export const PaymentMethodModal = ({
     const handlePayment = () => {
         if (selectedMethod === 'CARD') {
             setIsLocalProcessing(true);
-            onPaymentInitiated('CARD');
+            onPaymentInitiated('CARD', undefined, duration);
         } else if (selectedMethod && phoneNumber) {
             setIsLocalProcessing(true);
-            onPaymentInitiated(selectedMethod, phoneNumber);
+            onPaymentInitiated(selectedMethod, phoneNumber, duration);
         }
     };
 
@@ -109,6 +116,7 @@ export const PaymentMethodModal = ({
         if (!isOpen) {
             setSelectedMethod(null);
             setPhoneNumber('07');
+            setDuration({ months: 1, billingMode: 'MONTHLY' });
             setError(null);
         }
     }, [isOpen]);
@@ -205,7 +213,9 @@ export const PaymentMethodModal = ({
                     </Button>
                     <PesapalPaymentForm
                         planId={planId}
-                        amount={price}
+                        amount={total}
+                        months={duration.months}
+                        billingMode={duration.billingMode}
                         onSuccess={() => {
                             setLocalPaymentStatus('success');
                         }}
@@ -224,18 +234,18 @@ export const PaymentMethodModal = ({
         return (
             <div className="space-y-3 py-2">
                 {/* Plan Summary */}
-                <div className="text-center p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
-                    <div className="inline-flex items-center justify-center w-10 h-10 bg-indigo-600 rounded-full mb-2">
-                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                    </div>
-                    <h3 className="font-semibold text-base text-gray-900 mb-1">{planName}</h3>
-                    <p className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                        {price.toLocaleString()} RWF
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">per month</p>
+                <div className="text-center p-3 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
+                    <h3 className="font-semibold text-base text-gray-900">{planName}</h3>
                 </div>
+
+                {/* Duration + live total/date preview */}
+                <DurationSelector
+                    monthlyPrice={price}
+                    value={duration}
+                    onChange={setDuration}
+                    disabled={isProcessing}
+                    currentExpiryDate={currentExpiryDate}
+                />
 
                 {/* Payment Methods */}
                 <div className="space-y-3">
@@ -337,7 +347,7 @@ export const PaymentMethodModal = ({
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                 </svg>
-                                Pay {price.toLocaleString()} RWF Securely
+                                Pay {total.toLocaleString()} RWF Securely
                             </div>
                         )}
                     </Button>

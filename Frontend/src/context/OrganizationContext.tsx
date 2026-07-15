@@ -20,6 +20,11 @@ interface Organization {
     hasActiveSubscription?: boolean;
     subscriptionStatus?: string | null;
     subscriptionEndDate?: string | null;
+    daysUntilExpiry?: number | null;
+    graceDaysRemaining?: number | null;
+    graceDayLabel?: string | null;
+    subscriptionWarningLevel?: string | null;
+    subscriptionWarningMessage?: string | null;
     role?: string;
     isOwner?: boolean;
 }

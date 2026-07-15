@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SubscriptionService = void 0;
 const stripe_1 = __importDefault(require("stripe"));
 const email_service_1 = require("./email.service");
+const config_1 = require("../config");
 class SubscriptionService {
     /**
      * Verifies a Stripe webhook event using the provided payload, signature, and secret
@@ -18,6 +19,278 @@ class SubscriptionService {
         this.stripe = new stripe_1.default(process.env.STRIPE_SECRET_KEY || '', {
             apiVersion: '2025-11-17.clover',
         });
+    }
+    /**
+     * Server-authoritative total for a purchase/renewal. MONTHLY is a flat
+     * monthlyPrice * months; YEARLY only accepts whole years (months must be a
+     * multiple of 12) and applies the configured discount per year.
+     */
+    calculateTotal(params) {
+        const { monthlyPrice, months, billingMode } = params;
+        if (!Number.isInteger(months) || months < 1) {
+            throw new Error('Months must be a whole number greater than or equal to 1');
+        }
+        if (billingMode === 'YEARLY') {
+            if (months % 12 !== 0) {
+                throw new Error('Yearly billing requires months to be a whole number of years (a multiple of 12)');
+            }
+            const years = months / 12;
+            const discount = config_1.config.subscription.yearlyDiscountPercent / 100;
+            const pricePerYear = monthlyPrice * 12 * (1 - discount);
+            return Math.round(pricePerYear * years * 100) / 100;
+        }
+        if (billingMode !== 'MONTHLY') {
+            throw new Error('billingMode must be MONTHLY or YEARLY');
+        }
+        return Math.round(monthlyPrice * months * 100) / 100;
+    }
+    /**
+     * Renewal-vs-fresh rule: if the current subscription's endDate is still in
+     * the future, extend from that endDate (startDate is unchanged). Otherwise
+     * (already past endDate, whether EXPIRED or mid grace period) the new term
+     * starts from now. This single rule reproduces both worked examples in the
+     * spec without needing a separate branch for "in grace period".
+     */
+    resolveValidityWindow(params) {
+        const now = params.now ?? new Date();
+        const existing = params.existingSubscription;
+        const stillActive = !!existing?.endDate && existing.endDate.getTime() > now.getTime();
+        const startDate = stillActive && existing?.startDate ? existing.startDate : now;
+        const baseDate = stillActive && existing?.endDate ? existing.endDate : now;
+        const endDate = new Date(baseDate);
+        endDate.setMonth(endDate.getMonth() + params.months);
+        const gracePeriodEndsAt = new Date(endDate);
+        gracePeriodEndsAt.setDate(gracePeriodEndsAt.getDate() + params.gracePeriodDays);
+        return { startDate, endDate, gracePeriodEndsAt };
+    }
+    /**
+     * Validates the purchase request, computes the server-side total, and
+     * records the pending purchase intent on the subscription row so the
+     * payment-gateway completion handler (finalizeSubscriptionPurchase) can
+     * apply it once payment is confirmed. Never trusts a client-supplied total.
+     */
+    async preparePurchase(params) {
+        const { organizationId, planId, months, billingMode, userId } = params;
+        const plan = await this.prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+        if (!plan || !plan.isActive) {
+            throw new Error('Subscription plan not found or inactive');
+        }
+        const totalAmount = this.calculateTotal({ monthlyPrice: plan.price, months, billingMode });
+        const gracePeriodDays = config_1.config.subscription.gracePeriodDays;
+        const ref = `SUB-${Date.now()}`;
+        const pendingIntent = {
+            ref,
+            months,
+            billingMode,
+            monthlyPriceAtPurchase: plan.price,
+            totalAmount,
+            status: 'PENDING',
+        };
+        // The row we mutate in place for this org+plan lineage (existing pattern
+        // used by pesapalOrderRequest/initiatePaypackPayment) — reused rather than
+        // creating a new row per purchase/renewal.
+        const existingForPlan = await this.prisma.subscription.findFirst({
+            where: {
+                organizationId,
+                planId,
+                status: { notIn: ['CANCELLED', 'CANCELED'] },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+        let subscription;
+        if (existingForPlan) {
+            subscription = await this.prisma.subscription.update({
+                where: { id: existingForPlan.id },
+                data: {
+                    monthsPurchased: months,
+                    billingMode,
+                    monthlyPrice: plan.price,
+                    totalAmount,
+                    gracePeriodDays,
+                    createdById: existingForPlan.createdById ?? userId,
+                    paymentDetails: {
+                        ...existingForPlan.paymentDetails,
+                        ...pendingIntent,
+                    },
+                },
+            });
+        }
+        else {
+            // Only when a genuinely new row is created do we record renewal lineage,
+            // pointing at the organization's immediately-prior subscription (if any).
+            const latestForOrg = await this.prisma.subscription.findFirst({
+                where: { organizationId },
+                orderBy: { createdAt: 'desc' },
+            });
+            subscription = await this.prisma.subscription.create({
+                data: {
+                    organizationId,
+                    planId,
+                    status: 'PENDING',
+                    monthsPurchased: months,
+                    billingMode,
+                    monthlyPrice: plan.price,
+                    totalAmount,
+                    gracePeriodDays,
+                    createdById: userId,
+                    renewedFromSubscriptionId: latestForOrg?.id,
+                    paymentDetails: pendingIntent,
+                },
+            });
+        }
+        return { subscription, totalAmount, monthlyPrice: plan.price, ref };
+    }
+    /**
+     * Single completion path shared by every payment rail's webhook/IPN
+     * handler. Idempotent on paymentId — safe to call more than once for the
+     * same transaction (Pesapal in particular can fire both an IPN and a
+     * browser callback for the same payment).
+     */
+    async finalizeSubscriptionPurchase(params) {
+        const { subscriptionId, paymentId, amount, currency, paymentMethod, metadata, processedAt } = params;
+        const existingPayment = await this.prisma.payment.findFirst({ where: { paymentId } });
+        if (existingPayment) {
+            return null;
+        }
+        const subscription = await this.prisma.subscription.findUnique({ where: { id: subscriptionId } });
+        if (!subscription) {
+            throw new Error('Subscription not found');
+        }
+        const pendingIntent = subscription.paymentDetails || {};
+        const months = pendingIntent.months ?? subscription.monthsPurchased ?? 1;
+        const billingMode = (pendingIntent.billingMode ?? subscription.billingMode);
+        const monthlyPrice = pendingIntent.monthlyPriceAtPurchase ?? subscription.monthlyPrice ?? 0;
+        const totalAmount = pendingIntent.totalAmount ?? amount;
+        const resolvedProcessedAt = processedAt ?? new Date();
+        const { startDate, endDate, gracePeriodEndsAt } = this.resolveValidityWindow({
+            existingSubscription: { startDate: subscription.startDate, endDate: subscription.endDate },
+            months,
+            gracePeriodDays: subscription.gracePeriodDays || config_1.config.subscription.gracePeriodDays,
+            now: resolvedProcessedAt,
+        });
+        const updatedSubscription = await this.prisma.subscription.update({
+            where: { id: subscriptionId },
+            data: {
+                status: 'ACTIVE',
+                startDate,
+                endDate,
+                gracePeriodEndsAt,
+                paymentMethod,
+                monthsPurchased: months,
+                billingMode,
+                monthlyPrice,
+                totalAmount,
+                paymentDetails: {
+                    ...pendingIntent,
+                    status: 'COMPLETED',
+                    processedAt: resolvedProcessedAt.toISOString(),
+                },
+            },
+            include: {
+                plan: true,
+                payments: true,
+                organization: {
+                    include: {
+                        userOrganizations: { include: { user: true } },
+                    },
+                },
+            },
+        });
+        await this.prisma.organization.update({
+            where: { id: subscription.organizationId },
+            data: { isActive: true },
+        });
+        const payment = await this.prisma.payment.create({
+            data: {
+                subscriptionId,
+                amount,
+                currency,
+                paymentMethod,
+                paymentId,
+                status: 'COMPLETED',
+                processedAt: resolvedProcessedAt,
+                metadata,
+            },
+        });
+        const owner = updatedSubscription.organization.userOrganizations.find((uo) => uo.isOwner)?.user
+            ?? updatedSubscription.organization.userOrganizations[0]?.user;
+        if (owner) {
+            try {
+                await email_service_1.emailService.sendPaymentConfirmation(owner.email, updatedSubscription.organization.name, amount, billingMode === 'YEARLY' ? 'year' : 'month');
+            }
+            catch (err) {
+                console.error('Failed to send payment confirmation email:', err);
+            }
+        }
+        return { ...updatedSubscription, payments: [payment, ...updatedSubscription.payments] };
+    }
+    /**
+     * Single source of truth for "does this org currently have access" plus the
+     * human-facing warning copy from spec section 11. Replaces the
+     * hasActiveSubscription/subscriptionStatus/subscriptionEndDate computation
+     * that used to be duplicated across auth.controller.ts and organization.controller.ts.
+     */
+    computeSubscriptionSummary(subscription, now = new Date()) {
+        if (!subscription) {
+            return {
+                hasActiveSubscription: false,
+                subscriptionStatus: null,
+                subscriptionEndDate: null,
+                daysUntilExpiry: null,
+                graceDaysRemaining: null,
+                graceDayLabel: null,
+                warningLevel: 'none',
+                warningMessage: null,
+            };
+        }
+        const msPerDay = 1000 * 60 * 60 * 24;
+        const daysUntilExpiry = subscription.endDate
+            ? Math.ceil((subscription.endDate.getTime() - now.getTime()) / msPerDay)
+            : null;
+        const isGrace = subscription.status === 'GRACE_PERIOD';
+        const isActive = subscription.status === 'ACTIVE' || subscription.status === 'TRIALING';
+        const isExpired = subscription.status === 'EXPIRED';
+        let graceDaysRemaining = null;
+        let graceDayLabel = null;
+        if (isGrace && subscription.gracePeriodEndsAt) {
+            graceDaysRemaining = Math.max(0, Math.ceil((subscription.gracePeriodEndsAt.getTime() - now.getTime()) / msPerDay));
+            const totalGraceDays = subscription.gracePeriodDays || config_1.config.subscription.gracePeriodDays;
+            const dayNumber = Math.min(totalGraceDays, Math.max(1, totalGraceDays - graceDaysRemaining + 1));
+            graceDayLabel = `Grace Day ${dayNumber} of ${totalGraceDays}`;
+        }
+        let warningLevel = 'none';
+        let warningMessage = null;
+        if (isExpired) {
+            warningLevel = 'expired';
+            warningMessage = 'Your subscription has expired. Please renew your subscription to continue using the system.';
+        }
+        else if (isGrace || (isActive && daysUntilExpiry !== null && daysUntilExpiry <= 0)) {
+            warningLevel = 'red';
+            const daysAgo = daysUntilExpiry !== null ? Math.abs(daysUntilExpiry) : 0;
+            const expiryPhrase = daysAgo === 0 ? 'expired today' : daysAgo === 1 ? 'expired yesterday' : `expired ${daysAgo} days ago`;
+            const remaining = graceDaysRemaining ?? (subscription.gracePeriodDays || config_1.config.subscription.gracePeriodDays);
+            warningMessage = `Your subscription ${expiryPhrase}. You have ${remaining} grace day${remaining === 1 ? '' : 's'} remaining.`;
+        }
+        else if (isActive && daysUntilExpiry !== null) {
+            if (daysUntilExpiry <= 3) {
+                warningLevel = 'orange';
+                warningMessage = `Your subscription expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? '' : 's'}.`;
+            }
+            else if (daysUntilExpiry <= 7) {
+                warningLevel = 'yellow';
+                warningMessage = `Your subscription expires in ${daysUntilExpiry} days.`;
+            }
+        }
+        return {
+            hasActiveSubscription: isActive || isGrace,
+            subscriptionStatus: subscription.status,
+            subscriptionEndDate: subscription.endDate,
+            daysUntilExpiry,
+            graceDaysRemaining,
+            graceDayLabel,
+            warningLevel,
+            warningMessage,
+        };
     }
     // Get all available subscription plans with features
     async getPlans() {
@@ -43,10 +316,7 @@ class SubscriptionService {
             where: {
                 organizationId,
                 status: {
-                    in: ['ACTIVE', 'TRIALING']
-                },
-                endDate: {
-                    gt: new Date(),
+                    in: ['ACTIVE', 'TRIALING', 'GRACE_PERIOD']
                 },
             },
             include: {
@@ -74,10 +344,7 @@ class SubscriptionService {
             where: {
                 organizationId,
                 status: {
-                    in: ['ACTIVE', 'TRIALING']
-                },
-                endDate: {
-                    gt: new Date(),
+                    in: ['ACTIVE', 'TRIALING', 'GRACE_PERIOD']
                 },
                 plan: {
                     features: {

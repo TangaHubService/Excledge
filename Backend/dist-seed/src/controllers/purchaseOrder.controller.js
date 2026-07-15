@@ -137,12 +137,26 @@ const createPurchaseOrder = async (req, res) => {
                 organization: true,
             },
         });
+        const creatorEmail = req.user.email;
         try {
             const orderAny = order;
-            await email_service_1.emailService.sendPurchaseOrderToSupplier(orderAny.supplier.email, orderAny.supplier.name, orderAny.organization.name, orderAny.orderNumber, orderAny.items, Number(orderAny.totalAmount), orderAny.notes || undefined, orderAny.expectedDate || undefined);
+            await email_service_1.emailService.sendPurchaseOrderToSupplier(orderAny.supplier.email, orderAny.supplier.name, orderAny.organization.name, orderAny.orderNumber, orderAny.items, Number(orderAny.totalAmount), orderAny.notes || undefined, orderAny.expectedDate || undefined, creatorEmail);
         }
         catch (emailError) {
             console.error("Failed to send email to supplier:", emailError);
+        }
+        try {
+            const orderAny = order;
+            const organizationEmail = orderAny.organization.email;
+            if (organizationEmail) {
+                await email_service_1.emailService.sendPurchaseOrderCreatedNotification(organizationEmail, orderAny.organization.name, orderAny.orderNumber, orderAny.supplier.name, Number(orderAny.totalAmount), req.user.name || creatorEmail, orderAny.createdAt, creatorEmail);
+            }
+            else {
+                console.warn(`Purchase order ${orderAny.orderNumber}: organization ${organizationId} has no configured email, skipping creation notification`);
+            }
+        }
+        catch (emailError) {
+            console.error("Failed to send purchase order creation notification to organization:", emailError);
         }
         await auditLogger_1.auditLogger.purchaseOrders(req, {
             type: 'PURCHASE_ORDER_CREATE',
@@ -297,6 +311,18 @@ const updatePurchaseOrderStatus = async (req, res) => {
         }
         catch (emailError) {
             console.error("Failed to send status update email:", emailError);
+        }
+        try {
+            const organizationEmail = order.organization.email;
+            if (organizationEmail) {
+                await email_service_1.emailService.sendPurchaseOrderUpdatedNotification(organizationEmail, order.organization.name, order.orderNumber, order.supplier.name, req.user.name || req.user.email, new Date(), status, `Status changed from ${order.status} to ${status}`, order.user.email);
+            }
+            else {
+                console.warn(`Purchase order ${order.orderNumber}: organization ${order.organizationId} has no configured email, skipping update notification`);
+            }
+        }
+        catch (emailError) {
+            console.error("Failed to send purchase order update notification to organization:", emailError);
         }
         // Map status to specific ActivityType if possible
         let activityType = 'PURCHASE_ORDER_UPDATE';

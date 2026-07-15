@@ -5,6 +5,7 @@ import { useSubscription } from "../context/SubscriptionContext";
 import { PricingCard } from "../components/landing/PricingCard";
 import { subscriptionService } from "../services/subscriptionService";
 import { PaymentMethodModal } from "../components/subscription/PaymentMethodModal";
+import type { DurationValue } from "../components/subscription/DurationSelector";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "../components/ui/drawer";
 import { io, Socket } from "socket.io-client";
 import { toast } from "react-toastify";
@@ -12,9 +13,19 @@ import { toast } from "react-toastify";
 type SubscriptionPageProps = {
     /** When false, only the plan grid is shown (e.g. landing page already has a title). */
     showPlanHeader?: boolean;
+    /**
+     * When set, auto-opens the payment modal for this plan on mount — used by
+     * the Renew action on SubscriptionManagementPage so renewal reuses the
+     * exact same duration + payment flow as a new purchase (the backend's
+     * preparePurchase already treats "buy more months for a plan you already
+     * have" as a renewal-in-place, so no separate renewal codepath is needed).
+     */
+    preselectedPlanId?: string | number | null;
+    /** The current subscription's end date, shown in the duration preview as "Current Expiry -> New Expiry" instead of "Start -> End" when renewing. */
+    renewalCurrentExpiryDate?: string | Date | null;
 };
 
-const SubscriptionPage = ({ showPlanHeader = true }: SubscriptionPageProps) => {
+const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, renewalCurrentExpiryDate = null }: SubscriptionPageProps) => {
     const { t } = useTranslation();
     const { plans, isLoading, refreshSubscription } = useSubscription();
     const [selectedPlan, setSelectedPlan] = useState<any>(null);
@@ -155,12 +166,23 @@ const SubscriptionPage = ({ showPlanHeader = true }: SubscriptionPageProps) => {
         setShowPaymentModal(true);
     };
 
+    // Auto-open the payment modal for a renewal triggered from SubscriptionManagementPage.
+    useEffect(() => {
+        if (!preselectedPlanId || isLoading || !plans.length) return;
+        const plan = plans.find((p: any) => String(p.id) === String(preselectedPlanId));
+        if (plan) {
+            handleSelectPlan(plan);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [preselectedPlanId, isLoading, plans]);
+
     // -----------------------------------------------------
     // 🟣 Initiate Payment (Mobile & Card)
     // -----------------------------------------------------
     const handlePaymentInitiated = async (
         paymentMethod: string,
-        phoneNumber?: string
+        phoneNumber?: string,
+        duration?: DurationValue
     ) => {
         if (!selectedPlan || !organizationId) {
             toast.error("Please select a plan first.");
@@ -172,18 +194,9 @@ const SubscriptionPage = ({ showPlanHeader = true }: SubscriptionPageProps) => {
 
         try {
             // -------------------------------------------------
-            // 💳 CARD PAYMENT
+            // 💳 CARD PAYMENT (handled entirely inside PesapalPaymentForm)
             // -------------------------------------------------
             if (paymentMethod === "CARD") {
-                const res = await subscriptionService.initiateCardPayment({
-                    organizationId,
-                    planId: selectedPlan.id,
-                });
-
-                if (res.checkoutUrl) {
-                    window.location.href = res.checkoutUrl;
-                }
-
                 return;
             }
 
@@ -199,6 +212,8 @@ const SubscriptionPage = ({ showPlanHeader = true }: SubscriptionPageProps) => {
                 planId: selectedPlan.id,
                 phoneNumber,
                 provider: paymentMethod as "MTN" | "AIRTEL",
+                months: duration?.months ?? 1,
+                billingMode: duration?.billingMode ?? 'MONTHLY',
             });
 
             // If Paypack returns checkoutUrl → redirect user
@@ -368,6 +383,7 @@ const SubscriptionPage = ({ showPlanHeader = true }: SubscriptionPageProps) => {
                     onPaymentInitiated={handlePaymentInitiated}
                     isProcessing={isProcessing}
                     paymentStatus={paymentStatus}
+                    currentExpiryDate={renewalCurrentExpiryDate ? new Date(renewalCurrentExpiryDate) : null}
                 />
             )}
 

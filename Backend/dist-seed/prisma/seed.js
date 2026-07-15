@@ -143,6 +143,36 @@ async function seedSubscriptionPlans() {
         console.log(`Processed plan: ${plan.title}`);
     }
 }
+const SUPER_ADMIN_EMAIL = "admin@example.com";
+/**
+ * Idempotent by email: only creates the Super Admin account the first time
+ * this seed runs. Reuses the existing SYSTEM_OWNER role (rather than a new
+ * SUPER_ADMIN enum value) — SYSTEM_OWNER already bypasses every org-scoped
+ * check in the app (see requireSystemOwner / requireOrganizationAccess /
+ * requireActiveSubscription), so it needs no organization membership.
+ */
+async function seedSuperAdmin() {
+    const existing = await prisma.user.findUnique({ where: { email: SUPER_ADMIN_EMAIL } });
+    if (existing) {
+        console.log(`Super Admin already exists (${SUPER_ADMIN_EMAIL}), skipping.`);
+        return;
+    }
+    // NOTE: the User model has no separate "username" column — email is the
+    // sole login identifier throughout this app (see auth.controller.ts login),
+    // so the spec's "Username: superadmin" is captured via the display name only.
+    const hashedPassword = await bcryptjs_1.default.hash("ChangeMe123!", 10);
+    await prisma.user.create({
+        data: {
+            email: SUPER_ADMIN_EMAIL,
+            password: hashedPassword,
+            name: "Super Admin",
+            role: "SYSTEM_OWNER",
+            isActive: true,
+            isEmailVerified: true,
+        },
+    });
+    console.log(`Created Super Admin account (${SUPER_ADMIN_EMAIL})`);
+}
 async function createSaleInTransaction(ctx, input) {
     const { saleNumber, customerId, userId, branchId, paymentType, cashAmount, insuranceAmount, debtAmount, items, isProforma, } = input;
     const { orgId } = ctx;
@@ -910,6 +940,7 @@ async function seedDemoDataset() {
 }
 async function main() {
     console.log("Starting database seeding...");
+    await seedSuperAdmin();
     await seedSubscriptionPlans();
     await seedDemoDataset();
     console.log("✅ Database seeding completed successfully");

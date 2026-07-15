@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.recalculateStock = exports.getProductInventoryHistory = exports.getCurrentStockLevel = exports.getInventorySummaryReport = exports.getInventoryLedger = exports.adjustInventoryStock = exports.removeStockFromInventory = exports.addStockToInventory = void 0;
 const inventory_ledger_service_1 = require("../services/inventory-ledger.service");
+const organization_settings_service_1 = require("../services/organization-settings.service");
+const STOCK_ADJUSTMENT_APPROVER_ROLES = ['ADMIN', 'BRANCH_MANAGER'];
 /**
  * POST /inventory/in
  * Add stock to inventory (Stock IN)
@@ -140,6 +142,16 @@ const adjustInventoryStock = async (req, res) => {
         if (!req.body.branchId) {
             return res.status(400).json({
                 error: 'branchId is required for stock adjustments',
+            });
+        }
+        // When the org requires approval, only managers may apply an adjustment
+        // directly — there's no pending-approval queue, so other roles are
+        // simply blocked and must ask a manager to perform it themselves.
+        const orgSettings = await (0, organization_settings_service_1.getOrganizationSettings)(organizationId);
+        if (orgSettings.featureFlags.requireStockAdjustmentApproval &&
+            !STOCK_ADJUSTMENT_APPROVER_ROLES.includes(req.user?.role)) {
+            return res.status(403).json({
+                error: 'Stock adjustments require manager approval. Ask an admin or branch manager to make this adjustment.',
             });
         }
         // Parse quantity - can be positive or negative for adjustments

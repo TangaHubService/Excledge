@@ -3,22 +3,23 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.expireSubscriptionsJob = exports.subscriptionReminderJob = void 0;
+exports.subscriptionStatusTransitionJob = exports.subscriptionReminderJob = void 0;
 const node_cron_1 = __importDefault(require("node-cron"));
 const prisma_1 = require("../lib/prisma");
 const email_service_1 = require("../services/email.service");
+const subscription_service_1 = require("../services/subscription.service");
+const config_1 = require("../config");
+const subscriptionService = new subscription_service_1.SubscriptionService(prisma_1.prisma);
 exports.subscriptionReminderJob = node_cron_1.default.schedule("0 9 * * *", async () => {
     console.log("Running subscription reminder job...");
     const sevenDaysFromNow = new Date();
     sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-    const threeDaysFromNow = new Date();
-    threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
     const expiringSubscriptions = await prisma_1.prisma.subscription.findMany({
         where: {
             status: "ACTIVE",
             endDate: {
                 lte: sevenDaysFromNow,
-                gte: new Date(),
+                gt: new Date(),
             },
         },
         include: {
@@ -32,45 +33,110 @@ exports.subscriptionReminderJob = node_cron_1.default.schedule("0 9 * * *", asyn
             },
         },
     });
+    let sent = 0;
     for (const subscription of expiringSubscriptions) {
-        const daysLeft = Math.ceil((subscription.endDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+        // Reuse the same warning-level computation the API/frontend use, so the
+        // 7-day/3-day thresholds can never drift out of sync with what's shown
+        // in the UI.
+        const summary = subscriptionService.computeSubscriptionSummary(subscription);
+        if (summary.warningLevel !== "yellow" && summary.warningLevel !== "orange")
+            continue;
         const owner = subscription.organization.userOrganizations[0]?.user;
-        if (owner) {
-            await email_service_1.emailService.sendSubscriptionReminder(owner.email, subscription.organization.name, daysLeft);
+        if (owner && summary.daysUntilExpiry !== null) {
+            await email_service_1.emailService.sendSubscriptionReminder(owner.email, subscription.organization.name, summary.daysUntilExpiry);
+            sent++;
         }
     }
-    console.log(`Sent ${expiringSubscriptions.length} subscription reminders`);
+    console.log(`Sent ${sent} subscription reminders`);
 });
-exports.expireSubscriptionsJob = node_cron_1.default.schedule("0 22 * * *", async () => {
-    console.log("Running subscription expiry job...");
-    const expiredSubscriptions = await prisma_1.prisma.subscription.updateMany({
-        where: {
-            status: "ACTIVE",
-            endDate: {
-                lt: new Date(),
+/**
+ * Hourly status-transition job — the single place that flips subscriptions
+ * ACTIVE -> GRACE_PERIOD -> EXPIRED as their dates pass, and deactivates the
+ * organization once the grace window is fully spent. requireActiveSubscription
+ * and every other consumer trust `status` alone (not endDate), so this job is
+ * what keeps that status honest.
+ */
+exports.subscriptionStatusTransitionJob = node_cron_1.default.schedule("0 * * * *", async () => {
+    const now = new Date();
+    // ACTIVE -> GRACE_PERIOD
+    const enteringGrace = await prisma_1.prisma.subscription.findMany({
+        where: { status: "ACTIVE", endDate: { lte: now } },
+        include: {
+            organization: {
+                include: { userOrganizations: { where: { isOwner: true }, include: { user: true } } },
             },
         },
-        data: {
-            status: "EXPIRED",
-        },
     });
-    const expiredOrganizations = await prisma_1.prisma.subscription.findMany({
-        where: {
-            status: "EXPIRED",
-        },
-        select: {
-            organizationId: true,
-        },
-    });
-    await prisma_1.prisma.organization.updateMany({
-        where: {
-            id: {
-                in: expiredOrganizations.map((s) => s.organizationId),
+    for (const subscription of enteringGrace) {
+        const gracePeriodDays = subscription.gracePeriodDays || config_1.config.subscription.gracePeriodDays;
+        // gracePeriodEndsAt is normally already set at purchase time, but fall
+        // back to computing it here for older rows (e.g. trial subscriptions)
+        // that predate this column being populated.
+        const gracePeriodEndsAt = subscription.gracePeriodEndsAt && subscription.gracePeriodEndsAt.getTime() > (subscription.endDate ?? now).getTime()
+            ? subscription.gracePeriodEndsAt
+            : (() => {
+                const d = new Date(subscription.endDate ?? now);
+                d.setDate(d.getDate() + gracePeriodDays);
+                return d;
+            })();
+        await prisma_1.prisma.subscription.update({
+            where: { id: subscription.id },
+            data: { status: "GRACE_PERIOD", gracePeriodEndsAt },
+        });
+        const owner = subscription.organization.userOrganizations[0]?.user;
+        if (owner) {
+            try {
+                await email_service_1.emailService.sendSubscriptionStatusUpdate(owner.email, subscription.organization.name, "Your subscription has expired", `Your subscription for ${subscription.organization.name} has expired and you're now in a ${gracePeriodDays}-day grace period. Please renew soon to avoid losing access.`);
+            }
+            catch (err) {
+                console.error("Failed to send grace-period email:", err);
+            }
+        }
+    }
+    if (enteringGrace.length) {
+        console.log(`Moved ${enteringGrace.length} subscription(s) into GRACE_PERIOD`);
+    }
+    // GRACE_PERIOD -> EXPIRED (+ deactivate the org, but only if it has no
+    // other still-valid subscription — a latent bug in the old daily job
+    // deactivated unconditionally, which would be wrong for a multi-subscription org).
+    const expiring = await prisma_1.prisma.subscription.findMany({
+        where: { status: "GRACE_PERIOD", gracePeriodEndsAt: { lte: now } },
+        include: {
+            organization: {
+                include: { userOrganizations: { where: { isOwner: true }, include: { user: true } } },
             },
         },
-        data: {
-            isActive: false,
-        },
     });
-    console.log(`Expired ${expiredSubscriptions.count} subscriptions`);
+    for (const subscription of expiring) {
+        await prisma_1.prisma.subscription.update({
+            where: { id: subscription.id },
+            data: { status: "EXPIRED" },
+        });
+        const otherValidSubscription = await prisma_1.prisma.subscription.findFirst({
+            where: {
+                organizationId: subscription.organizationId,
+                id: { not: subscription.id },
+                status: { in: ["ACTIVE", "TRIALING", "GRACE_PERIOD"] },
+            },
+            select: { id: true },
+        });
+        if (!otherValidSubscription) {
+            await prisma_1.prisma.organization.update({
+                where: { id: subscription.organizationId },
+                data: { isActive: false },
+            });
+        }
+        const owner = subscription.organization.userOrganizations[0]?.user;
+        if (owner) {
+            try {
+                await email_service_1.emailService.sendSubscriptionStatusUpdate(owner.email, subscription.organization.name, "Your subscription has expired", "Your subscription has expired. Please renew your subscription to continue using the system.");
+            }
+            catch (err) {
+                console.error("Failed to send expiry email:", err);
+            }
+        }
+    }
+    if (expiring.length) {
+        console.log(`Expired ${expiring.length} subscription(s)`);
+    }
 });

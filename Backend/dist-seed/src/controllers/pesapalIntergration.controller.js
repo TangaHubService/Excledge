@@ -7,19 +7,20 @@ exports.initiatePesapalPayment = exports.checkTransactionStatus = exports.cancel
 const getAcessToken_1 = require("../utils/getAcessToken");
 const axios_1 = __importDefault(require("axios"));
 const prisma_1 = require("../lib/prisma");
-const client_1 = require("@prisma/client");
 const currencyConverter_1 = require("../utils/currencyConverter");
 const paypack_1 = require("../lib/paypack");
+const subscription_service_1 = require("../services/subscription.service");
 const config_1 = require("../config");
 const PESAPAL_API_URL = paypack_1.pesapalConfig.baseUrl;
+const subscriptionService = new subscription_service_1.SubscriptionService(prisma_1.prisma);
 // Helper function to get transaction status
 const getTransactionStatus = async (orderTrackingId) => {
     try {
-        const { token } = await (0, getAcessToken_1.pesapalToken)();
+        const tokenData = await (0, getAcessToken_1.pesapalToken)();
         const response = await axios_1.default.get(`${PESAPAL_API_URL}/api/Transactions/GetTransactionStatus?orderTrackingId=${orderTrackingId}`, {
             headers: {
                 "Accept": "application/json",
-                "Authorization": `Bearer ${token}`
+                "Authorization": `Bearer ${tokenData.token}`
             }
         });
         return response.data;
@@ -31,65 +32,41 @@ const getTransactionStatus = async (orderTrackingId) => {
 };
 const pesapalIpnController = async (req, res) => {
     try {
-        const organizationId = Number(req.params.organizationId);
-        const planId = Number(req.params.planId);
         const { OrderTrackingId, OrderNotificationType, OrderMerchantReference } = req.body;
         if (OrderNotificationType === 'IPNCHANGE') {
             // Get transaction status
             const transaction = await getTransactionStatus(OrderTrackingId);
-            // Update subscription based on payment status
+            // Update subscription based on payment status. Look up by the merchant
+            // reference stored on the subscription (same as the browser callback
+            // handler) rather than by organizationId/planId + status:'ACTIVE' —
+            // that older lookup could never find a brand-new PENDING subscription,
+            // so a purchase confirmed only via IPN (no browser callback) would
+            // never activate.
             if (transaction.payment_status_description === 'Completed') {
-                // Idempotency guard: this endpoint can be replayed by anyone who has
-                // seen the orderTrackingId, so don't reprocess a transaction we've
-                // already recorded a payment for.
-                const existingPayment = await prisma_1.prisma.payment.findFirst({
-                    where: { paymentId: OrderTrackingId },
-                });
-                if (existingPayment) {
-                    return res.status(200).json({
-                        orderNotificationType: "IPNCHANGE",
-                        orderTrackingId: OrderTrackingId,
-                        orderMerchantReference: OrderMerchantReference,
-                        status: 200
-                    });
-                }
-                // Find the subscription by the merchant reference
                 const subscription = await prisma_1.prisma.subscription.findFirst({
                     where: {
-                        organizationId: Number(organizationId),
-                        planId: Number(planId),
-                        status: 'ACTIVE'
+                        paymentDetails: {
+                            path: ['ref'],
+                            equals: OrderMerchantReference,
+                        },
                     },
-                    include: { plan: true }
                 });
                 if (subscription) {
-                    const now = new Date();
-                    const endDate = new Date(now);
-                    endDate.setMonth(now.getMonth() + (subscription.plan.billingCycle === 'MONTHLY' ? 1 : 12));
-                    await prisma_1.prisma.subscription.update({
-                        where: { id: subscription.id },
-                        data: {
-                            status: client_1.SubscriptionStatus.ACTIVE,
-                            startDate: now,
-                            endDate,
-                        }
+                    await subscriptionService.finalizeSubscriptionPurchase({
+                        subscriptionId: subscription.id,
+                        paymentId: OrderTrackingId,
+                        amount: transaction.amount,
+                        currency: transaction.currency,
+                        paymentMethod: 'PESAPA',
+                        metadata: {
+                            payment_method: transaction.payment_method,
+                            confirmation_code: transaction.confirmation_code,
+                        },
+                        processedAt: new Date(transaction.created_date),
                     });
-                    // Record payment
-                    await prisma_1.prisma.payment.create({
-                        data: {
-                            amount: transaction.amount,
-                            currency: transaction.currency,
-                            paymentMethod: 'PESAPA',
-                            status: 'COMPLETED',
-                            paymentId: OrderTrackingId,
-                            subscription: {
-                                connect: {
-                                    id: subscription.id
-                                }
-                            },
-                            createdAt: new Date(transaction.created_date)
-                        }
-                    });
+                }
+                else {
+                    console.warn('No subscription found for merchant reference:', OrderMerchantReference);
                 }
             }
             // Acknowledge IPN
@@ -110,81 +87,46 @@ const pesapalIpnController = async (req, res) => {
 exports.pesapalIpnController = pesapalIpnController;
 const pesapalOrderRequest = async (req, res) => {
     try {
-        const { token } = await (0, getAcessToken_1.pesapalToken)();
+        const tokenData = await (0, getAcessToken_1.pesapalToken)();
+        const token = tokenData.token;
         const planId = Number(req.body.planId);
         const organizationId = Number(req.body.organizationId);
-        const { user } = req.body;
-        // Get plan details
-        const plan = await prisma_1.prisma.subscriptionPlan.findUnique({
-            where: { id: Number(planId) }
+        const { user, months, billingMode } = req.body;
+        //@ts-ignore
+        const userId = req.user?.userId ? Number(req.user.userId) : undefined;
+        const { subscription, totalAmount, ref: pesapalUniqueRef } = await subscriptionService.preparePurchase({
+            organizationId,
+            planId,
+            months: months !== undefined ? Number(months) : 1,
+            billingMode: billingMode === 'YEARLY' ? 'YEARLY' : 'MONTHLY',
+            userId,
         });
-        if (!plan) {
-            return res.status(404).json({
-                success: false,
-                message: "Subscription plan not found"
-            });
-        }
-        // Check for existing active subscription
-        const activeSubscription = await prisma_1.prisma.subscription.findFirst({
-            where: {
-                organizationId: Number(organizationId),
-                planId: Number(planId),
-                status: 'ACTIVE'
-            }
+        await prisma_1.prisma.subscription.update({
+            where: { id: subscription.id },
+            data: { paymentMethod: 'PESAPA' },
         });
-        let subscription;
-        const pesapalUniqueRef = `SUB-${Date.now()}`;
-        if (activeSubscription) {
-            // Update existing subscription
-            subscription = activeSubscription;
-            await prisma_1.prisma.subscription.update({
-                where: { id: activeSubscription.id },
-                data: {
-                    paymentMethod: 'PESAPA',
-                    paymentDetails: {
-                        ref: pesapalUniqueRef,
-                        amount: plan.price,
-                        currency: plan.currency,
-                        status: 'PENDING'
-                    }
-                }
-            });
-        }
-        else {
-            // Create new subscription
-            subscription = await prisma_1.prisma.subscription.create({
-                data: {
-                    planId: Number(planId),
-                    organizationId: Number(organizationId),
-                    status: client_1.SubscriptionStatus.PENDING,
-                    paymentMethod: 'PESAPA',
-                    paymentDetails: {
-                        ref: pesapalUniqueRef,
-                        amount: plan.price,
-                        currency: plan.currency,
-                        status: 'PENDING'
-                    }
-                }
-            });
-        }
+        const plan = await prisma_1.prisma.subscriptionPlan.findUnique({ where: { id: planId } });
         // Prepare order data for PesaPal
-        let amountInRwf = plan.price;
+        let amountInRwf = totalAmount;
         if (plan.currency.toUpperCase() === 'USD') {
-            amountInRwf = await (0, currencyConverter_1.convertUsdToRwf)(plan.price);
+            amountInRwf = await (0, currencyConverter_1.convertUsdToRwf)(totalAmount);
         }
+        const ipnId = process.env.PESAPAL_IPN_ID;
         const orderData = {
             id: pesapalUniqueRef,
             currency: "RWF",
             amount: Math.round(amountInRwf),
-            description: `Subscription for ${plan.name} (${plan.billingCycle})`,
+            description: `Subscription for ${plan.name} (${months || 1} month${(months || 1) === 1 ? '' : 's'})`,
             callback_url: `${config_1.config.primaryFrontendUrl}/subscription/callback?planId=${planId}`,
-            notification_id: process.env.PESAPAL_IPN_ID,
             billing_address: {
                 email_address: user.email,
                 phone_number: user.phoneNumber.slice(-10),
                 first_name: user.firstName,
             }
         };
+        if (ipnId && !ipnId.startsWith('your_')) {
+            orderData.notification_id = ipnId;
+        }
         const response = await axios_1.default.post(`${PESAPAL_API_URL}/api/Transactions/SubmitOrderRequest`, orderData, {
             headers: {
                 "Content-Type": "application/json",
@@ -202,11 +144,19 @@ const pesapalOrderRequest = async (req, res) => {
         });
     }
     catch (error) {
-        console.error("Error creating Pesapal order:", error.response?.data || error);
-        res.status(500).json({
+        if (!error.response && typeof error.message === 'string') {
+            const status = /not found or inactive/i.test(error.message) ? 404
+                : /months must|billingMode must|requires months/i.test(error.message) ? 400
+                    : 500;
+            return res.status(status).json({ success: false, message: error.message });
+        }
+        const errorDetail = error.response?.data || error;
+        console.error("Error creating Pesapal order:", errorDetail);
+        const pesapalError = errorDetail?.error || errorDetail;
+        res.status(error.response?.status || 500).json({
             success: false,
-            message: "Failed to create Pesapal order",
-            error: error.response?.data || error.message
+            message: pesapalError?.message || "Failed to create Pesapal order",
+            error: errorDetail
         });
     }
 };
@@ -234,11 +184,13 @@ const requestRefund = async (req, res) => {
         });
     }
     catch (error) {
-        console.error("Error requesting refund:", error.response?.data || error);
-        res.status(500).json({
+        const errorDetail = error.response?.data || error;
+        const pesapalError = errorDetail?.error || errorDetail;
+        console.error("Error requesting refund:", errorDetail);
+        res.status(error.response?.status || 500).json({
             success: false,
-            message: "Failed to process refund request",
-            error: error.response?.data || error.message
+            message: pesapalError?.message || "Failed to process refund request",
+            error: errorDetail
         });
     }
 };
@@ -246,7 +198,8 @@ exports.requestRefund = requestRefund;
 const cancelOrder = async (req, res) => {
     try {
         const { orderTrackingId } = req.params;
-        const { token } = await (0, getAcessToken_1.pesapalToken)();
+        const tokenData = await (0, getAcessToken_1.pesapalToken)();
+        const token = tokenData.token;
         const response = await axios_1.default.post(`${PESAPAL_API_URL}/api/Transactions/CancelOrder`, { order_tracking_id: orderTrackingId }, {
             headers: {
                 "Content-Type": "application/json",
@@ -261,11 +214,13 @@ const cancelOrder = async (req, res) => {
         });
     }
     catch (error) {
-        console.error("Error cancelling order:", error.response?.data || error);
-        res.status(500).json({
+        const errorDetail = error.response?.data || error;
+        const pesapalError = errorDetail?.error || errorDetail;
+        console.error("Error cancelling order:", errorDetail);
+        res.status(error.response?.status || 500).json({
             success: false,
-            message: "Failed to cancel order",
-            error: error.response?.data || error.message
+            message: pesapalError?.message || "Failed to cancel order",
+            error: errorDetail
         });
     }
 };

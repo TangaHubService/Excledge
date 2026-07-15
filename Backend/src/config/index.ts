@@ -29,6 +29,8 @@ export const config = {
     monthly: Number.parseFloat(process.env.MONTHLY_PRICE || "29.99"),
     quarterly: Number.parseFloat(process.env.QUARTERLY_PRICE || "79.99"),
     yearly: Number.parseFloat(process.env.YEARLY_PRICE || "299.99"),
+    gracePeriodDays: Number.parseInt(process.env.SUBSCRIPTION_GRACE_PERIOD_DAYS || "3", 10),
+    yearlyDiscountPercent: Number.parseFloat(process.env.SUBSCRIPTION_YEARLY_DISCOUNT_PERCENT || "20"),
   },
   inventory: {
     // Applied when auto-creating a product from a scanned supplier invoice and

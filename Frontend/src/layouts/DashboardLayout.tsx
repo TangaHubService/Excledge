@@ -4,6 +4,7 @@ import { Breadcrumbs } from "../components/Breadcrumbs";
 import { Sidebar } from "../components/Sidebar";
 import { Header } from "../components/Header";
 import { SubscriptionRequiredModal } from "../components/SubscriptionRequiredModal";
+import { SubscriptionStatusBanner } from "../components/subscription/SubscriptionStatusBanner";
 import { VsdcStatusBanner } from "../components/VsdcStatusBanner";
 import { AppShellSkeleton } from "../components/ui/app-shell-skeleton";
 import { useOrganization } from "../context/OrganizationContext";
@@ -118,6 +119,11 @@ export function DashboardLayout() {
 
         {/* Status banners */}
         <VsdcStatusBanner />
+        <SubscriptionStatusBanner
+          warningLevel={organization?.subscriptionWarningLevel}
+          warningMessage={organization?.subscriptionWarningMessage}
+          graceDayLabel={organization?.graceDayLabel}
+        />
 
         {/* Subscription-required modal (replaces the old inline banner) */}
         <SubscriptionRequiredModal

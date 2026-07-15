@@ -3,11 +3,16 @@ import { SubscriptionService } from '../services/subscription.service';
 import { prisma } from '../lib/prisma';
 
 /**
- * Blocks the request unless the organization has a subscription that is
- * currently ACTIVE or TRIALING and not past its endDate. SYSTEM_OWNER bypasses,
- * same as requireOrganizationAccess. Apply this on operational (paid-feature)
- * routes — never on auth, organization-creation, subscription-management, or
- * system-owner routes, or an org with a lapsed subscription could never renew.
+ * Blocks the request unless the organization has a subscription whose status
+ * is ACTIVE, TRIALING, or GRACE_PERIOD. SYSTEM_OWNER bypasses, same as
+ * requireOrganizationAccess. `status` is the single source of truth for
+ * access here (not endDate) — the hourly status-transition job in
+ * subscription.job.ts is what keeps ACTIVE -> GRACE_PERIOD -> EXPIRED honest,
+ * so a GRACE_PERIOD row (whose endDate has already passed) still grants
+ * access for its configured grace window. Apply this on operational
+ * (paid-feature) routes — never on auth, organization-creation,
+ * subscription-management, or system-owner routes, or an org with a lapsed
+ * subscription could never renew.
  */
 export const requireActiveSubscription = () => {
     return async (req: Request, res: Response, next: NextFunction) => {
@@ -25,15 +30,14 @@ export const requireActiveSubscription = () => {
             const subscription = await prisma.subscription.findFirst({
                 where: {
                     organizationId,
-                    status: { in: ['ACTIVE', 'TRIALING'] },
-                    endDate: { gt: new Date() },
+                    status: { in: ['ACTIVE', 'TRIALING', 'GRACE_PERIOD'] },
                 },
                 select: { id: true },
             });
 
             if (!subscription) {
                 return res.status(403).json({
-                    error: 'Your subscription is inactive or has expired. Please renew to continue.',
+                    error: 'Your subscription has expired. Please renew your subscription to continue using the system.',
                     code: 'SUBSCRIPTION_INACTIVE',
                 });
             }
