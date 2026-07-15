@@ -15,6 +15,8 @@ import type { OrganizationSettingsPatch } from "../types/organization-settings.t
 
 import type { Request, Response } from "express";
 
+const subscriptionService = new SubscriptionService(prisma);
+
 export const getUserOrganizations = async (req: Request, res: Response) => {
   try {
     //@ts-ignore
@@ -96,23 +98,26 @@ export const getOrganizationById = async (req: Request, res: Response) => {
       },
     });
 
-    // Check subscription status
-    const now = new Date();
-    const activeSubscription = organization.subscriptions.find(sub =>
-      (sub.status === 'ACTIVE' || sub.status === 'TRIALING') &&
-      (!sub.endDate || new Date(sub.endDate) > now)
-    );
+    // Check subscription status — the most recently-ending subscription that's
+    // still ACTIVE/TRIALING/GRACE_PERIOD (grace-period rows have an endDate in
+    // the past by definition, so this intentionally doesn't filter on endDate).
+    const relevantSubscription = organization.subscriptions
+      .filter(sub => sub.status === 'ACTIVE' || sub.status === 'TRIALING' || sub.status === 'GRACE_PERIOD')
+      .sort((a, b) => (b.endDate?.getTime() ?? 0) - (a.endDate?.getTime() ?? 0))[0] ?? null;
 
-    const hasActiveSubscription = !!activeSubscription;
-    const subscriptionStatus = activeSubscription?.status || null;
-    const subscriptionEndDate = activeSubscription?.endDate || null;
+    const subscriptionSummary = subscriptionService.computeSubscriptionSummary(relevantSubscription);
 
     res.json({
       organization: {
         ...organization,
-        hasActiveSubscription,
-        subscriptionStatus,
-        subscriptionEndDate,
+        hasActiveSubscription: subscriptionSummary.hasActiveSubscription,
+        subscriptionStatus: subscriptionSummary.subscriptionStatus,
+        subscriptionEndDate: subscriptionSummary.subscriptionEndDate,
+        daysUntilExpiry: subscriptionSummary.daysUntilExpiry,
+        graceDaysRemaining: subscriptionSummary.graceDaysRemaining,
+        graceDayLabel: subscriptionSummary.graceDayLabel,
+        subscriptionWarningLevel: subscriptionSummary.warningLevel,
+        subscriptionWarningMessage: subscriptionSummary.warningMessage,
         role: userOrganization.role,
         isOwner: userOrganization.isOwner,
       },
@@ -184,7 +189,6 @@ export const createOrganization = async (req: Request, res: Response) => {
       if (!freeTrialPlan) {
         return res.status(400).json({ error: 'Free Trial plan not found. Please contact support.' });
       } else {
-        const subscriptionService = new SubscriptionService(prisma);
         await subscriptionService.createTrial(organization.id, freeTrialPlan.id);
       }
     } catch (subscriptionError) {

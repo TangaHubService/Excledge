@@ -75,6 +75,8 @@ export const subscriptionService = {
         planId: string;
         phoneNumber: string;
         provider: 'MTN' | 'AIRTEL';
+        months?: number;
+        billingMode?: 'MONTHLY' | 'YEARLY';
     }) => {
         try {
             // Format phone number to remove any non-digit characters
@@ -85,7 +87,9 @@ export const subscriptionService = {
                 {
                     method: 'POST',
                     body: JSON.stringify({
-                        phoneNumber: formattedPhone
+                        phoneNumber: formattedPhone,
+                        months: params.months ?? 1,
+                        billingMode: params.billingMode ?? 'MONTHLY',
                     }),
                 }
             );

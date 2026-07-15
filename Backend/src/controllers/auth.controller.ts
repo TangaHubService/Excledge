@@ -8,6 +8,9 @@ import { auditLogger } from "../utils/auditLogger"
 import { emailService } from "../services/email.service"
 import { generateVerificationToken } from "../utils/token.utils"
 import { generateTokenPair, generateAccessToken, getRefreshTokenExpiry, verifyToken } from "../services/token.service"
+import { SubscriptionService } from "../services/subscription.service"
+
+const subscriptionService = new SubscriptionService(prisma)
 
 export const signup = async (req: Request, res: Response) => {
   try {
@@ -135,11 +138,11 @@ export const login = async (req: Request, res: Response) => {
       const activeSubscription = await prisma.subscription.findFirst({
         where: {
           organizationId: uo.organization.id,
-          status: { in: ['ACTIVE', 'TRIALING'] },
-          endDate: { gte: new Date() }
+          status: { in: ['ACTIVE', 'TRIALING', 'GRACE_PERIOD'] },
         },
         orderBy: { endDate: 'desc' }
       });
+      const subscriptionSummary = subscriptionService.computeSubscriptionSummary(activeSubscription);
 
       return {
         id: uo.organization.id,
@@ -150,9 +153,14 @@ export const login = async (req: Request, res: Response) => {
         businessType: uo.organization.businessType,
         role: uo.role,
         isOwner: uo.isOwner,
-        hasActiveSubscription: !!activeSubscription,
-        subscriptionStatus: activeSubscription?.status || (uo.organization.isActive ? 'INACTIVE' : 'EXPIRED'),
-        subscriptionEndDate: activeSubscription?.endDate,
+        hasActiveSubscription: subscriptionSummary.hasActiveSubscription,
+        subscriptionStatus: subscriptionSummary.subscriptionStatus || (uo.organization.isActive ? 'INACTIVE' : 'EXPIRED'),
+        subscriptionEndDate: subscriptionSummary.subscriptionEndDate,
+        daysUntilExpiry: subscriptionSummary.daysUntilExpiry,
+        graceDaysRemaining: subscriptionSummary.graceDaysRemaining,
+        graceDayLabel: subscriptionSummary.graceDayLabel,
+        subscriptionWarningLevel: subscriptionSummary.warningLevel,
+        subscriptionWarningMessage: subscriptionSummary.warningMessage,
       };
     }))
 
@@ -583,11 +591,11 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
       const activeSubscription = await prisma.subscription.findFirst({
         where: {
           organizationId: uo.organization.id,
-          status: { in: ['ACTIVE', 'TRIALING'] },
-          endDate: { gte: new Date() }
+          status: { in: ['ACTIVE', 'TRIALING', 'GRACE_PERIOD'] },
         },
         orderBy: { endDate: 'desc' }
       });
+      const subscriptionSummary = subscriptionService.computeSubscriptionSummary(activeSubscription);
 
       // Fetch branch assignments for this organization
       const userBranches = await prisma.userBranch.findMany({
@@ -607,9 +615,14 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
         businessType: uo.organization.businessType,
         role: uo.role,
         isOwner: uo.isOwner,
-        hasActiveSubscription: !!activeSubscription,
-        subscriptionStatus: activeSubscription?.status || (uo.organization.isActive ? 'INACTIVE' : 'EXPIRED'),
-        subscriptionEndDate: activeSubscription?.endDate,
+        hasActiveSubscription: subscriptionSummary.hasActiveSubscription,
+        subscriptionStatus: subscriptionSummary.subscriptionStatus || (uo.organization.isActive ? 'INACTIVE' : 'EXPIRED'),
+        subscriptionEndDate: subscriptionSummary.subscriptionEndDate,
+        daysUntilExpiry: subscriptionSummary.daysUntilExpiry,
+        graceDaysRemaining: subscriptionSummary.graceDaysRemaining,
+        graceDayLabel: subscriptionSummary.graceDayLabel,
+        subscriptionWarningLevel: subscriptionSummary.warningLevel,
+        subscriptionWarningMessage: subscriptionSummary.warningMessage,
         branchIds,
         activeBranchId: primaryBranch?.branchId ?? null,
       };

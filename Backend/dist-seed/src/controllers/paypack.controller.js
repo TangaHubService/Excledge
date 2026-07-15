@@ -9,56 +9,26 @@ const axios_1 = __importDefault(require("axios"));
 const paypack_1 = require("../lib/paypack");
 const prisma_1 = require("../lib/prisma");
 const socket_1 = require("../utils/socket");
+const subscription_service_1 = require("../services/subscription.service");
+const subscriptionService = new subscription_service_1.SubscriptionService(prisma_1.prisma);
 const initiatePaypackPayment = async (req, res) => {
     try {
         const organizationId = Number(req.params.organizationId);
         const planId = Number(req.params.planId);
-        const { phoneNumber } = req.body;
-        const plan = await prisma_1.prisma.subscriptionPlan.findUnique({
-            where: {
-                id: Number(planId)
-            }
+        const { phoneNumber, months, billingMode } = req.body;
+        //@ts-ignore
+        const userId = req.user?.userId ? Number(req.user.userId) : undefined;
+        const { subscription, totalAmount } = await subscriptionService.preparePurchase({
+            organizationId,
+            planId,
+            months: months !== undefined ? Number(months) : 1,
+            billingMode: billingMode === 'YEARLY' ? 'YEARLY' : 'MONTHLY',
+            userId,
         });
-        if (!plan) {
-            return res.status(404).json({
-                success: false,
-                message: 'Plan not found'
-            });
-        }
-        const activeSubscription = await prisma_1.prisma.subscription.findFirst({
-            where: {
-                organizationId: Number(organizationId),
-                status: 'ACTIVE'
-            }
-        });
-        let subscription;
-        if (activeSubscription) {
-            subscription = activeSubscription;
-            await prisma_1.prisma.subscription.update({
-                where: { id: activeSubscription.id },
-                data: {
-                    paymentDetails: {
-                        ref: null,
-                        amount: plan.price,
-                        currency: "RWF",
-                        status: "PENDING"
-                    }
-                }
-            });
-        }
-        else {
-            subscription = await prisma_1.prisma.subscription.create({
-                data: {
-                    organizationId: Number(organizationId),
-                    planId: Number(planId),
-                    status: 'PENDING',
-                }
-            });
-        }
         const initiatePayment = async ({ phoneNumber }) => {
             const { access } = await (0, getAcessToken_1.getAccessToken)();
             const response = await axios_1.default.post(`${paypack_1.paypackConfig.baseUrl}/transactions/cashin`, {
-                amount: plan.price,
+                amount: totalAmount,
                 number: phoneNumber,
             }, {
                 headers: {
@@ -68,19 +38,20 @@ const initiatePaypackPayment = async (req, res) => {
                     'X-Webhook-Mode': 'development'
                 }
             });
-            // Update subscription with payment reference if needed
+            // Paypack assigns its own transaction ref, which is what the webhook
+            // looks up subscriptions by — overwrite our placeholder ref with it
+            // while preserving the months/billingMode/totalAmount already stored.
             if (response.data?.ref) {
                 await prisma_1.prisma.subscription.update({
                     where: { id: subscription.id },
                     data: {
                         paymentDetails: {
+                            ...subscription.paymentDetails,
                             ref: response.data.ref,
-                            amount: plan.price,
+                            amount: totalAmount,
                             currency: 'RWF',
                             status: 'PENDING'
                         },
-                        // Only update status if subscription was newly created
-                        ...(activeSubscription ? {} : { status: 'PENDING' })
                     }
                 });
             }
@@ -101,14 +72,18 @@ const initiatePaypackPayment = async (req, res) => {
         }
         res.json({
             success: true,
-            data: result
+            data: { ...result, totalAmount, subscriptionId: subscription.id }
         });
     }
     catch (error) {
         console.error('Error initiating Paypack payment:', error);
-        res.status(500).json({
+        const message = error.message || 'Failed to initiate payment';
+        const status = /not found or inactive/i.test(message) ? 404
+            : /months must|billingMode must|requires months/i.test(message) ? 400
+                : 500;
+        res.status(status).json({
             success: false,
-            message: error.message || 'Failed to initiate payment'
+            message
         });
     }
 };

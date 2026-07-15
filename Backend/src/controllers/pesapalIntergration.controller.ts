@@ -3,13 +3,14 @@ import { Request, Response } from "express";
 import { pesapalToken } from "../utils/getAcessToken";
 import axios from "axios";
 import { prisma } from "../lib/prisma";
-import { SubscriptionStatus } from "@prisma/client";
 import { convertUsdToRwf } from "../utils/currencyConverter";
 import { pesapalConfig } from "../lib/paypack";
+import { SubscriptionService } from "../services/subscription.service";
 
 import { config } from "../config";
 
 const PESAPAL_API_URL = pesapalConfig.baseUrl;
+const subscriptionService = new SubscriptionService(prisma);
 
 // Helper function to get transaction status
 const getTransactionStatus = async (orderTrackingId: string) => {
@@ -33,72 +34,43 @@ const getTransactionStatus = async (orderTrackingId: string) => {
 
 export const pesapalIpnController = async (req: Request, res: Response) => {
     try {
-        const organizationId = Number(req.params.organizationId);
-        const planId = Number(req.params.planId);
         const { OrderTrackingId, OrderNotificationType, OrderMerchantReference } = req.body;
 
         if (OrderNotificationType === 'IPNCHANGE') {
             // Get transaction status
             const transaction = await getTransactionStatus(OrderTrackingId);
 
-            // Update subscription based on payment status
+            // Update subscription based on payment status. Look up by the merchant
+            // reference stored on the subscription (same as the browser callback
+            // handler) rather than by organizationId/planId + status:'ACTIVE' —
+            // that older lookup could never find a brand-new PENDING subscription,
+            // so a purchase confirmed only via IPN (no browser callback) would
+            // never activate.
             if (transaction.payment_status_description === 'Completed') {
-                // Idempotency guard: this endpoint can be replayed by anyone who has
-                // seen the orderTrackingId, so don't reprocess a transaction we've
-                // already recorded a payment for.
-                const existingPayment = await prisma.payment.findFirst({
-                    where: { paymentId: OrderTrackingId },
-                });
-
-                if (existingPayment) {
-                    return res.status(200).json({
-                        orderNotificationType: "IPNCHANGE",
-                        orderTrackingId: OrderTrackingId,
-                        orderMerchantReference: OrderMerchantReference,
-                        status: 200
-                    });
-                }
-
-                // Find the subscription by the merchant reference
                 const subscription = await prisma.subscription.findFirst({
                     where: {
-                        organizationId: Number(organizationId),
-                        planId: Number(planId),
-                        status: 'ACTIVE'
+                        paymentDetails: {
+                            path: ['ref'],
+                            equals: OrderMerchantReference,
+                        },
                     },
-                    include: { plan: true }
                 });
 
                 if (subscription) {
-                    const now = new Date();
-                    const endDate = new Date(now);
-                    endDate.setMonth(now.getMonth() + (subscription.plan.billingCycle === 'MONTHLY' ? 1 : 12));
-
-                    await prisma.subscription.update({
-                        where: { id: subscription.id },
-                        data: {
-                            status: SubscriptionStatus.ACTIVE,
-                            startDate: now,
-                            endDate,
-                        }
+                    await subscriptionService.finalizeSubscriptionPurchase({
+                        subscriptionId: subscription.id,
+                        paymentId: OrderTrackingId,
+                        amount: transaction.amount,
+                        currency: transaction.currency,
+                        paymentMethod: 'PESAPA',
+                        metadata: {
+                            payment_method: transaction.payment_method,
+                            confirmation_code: transaction.confirmation_code,
+                        },
+                        processedAt: new Date(transaction.created_date),
                     });
-
-                    // Record payment
-                    await prisma.payment.create({
-                        data: {
-                            amount: transaction.amount,
-                            currency: transaction.currency,
-                            paymentMethod: 'PESAPA',
-                            status: 'COMPLETED',
-                            paymentId: OrderTrackingId,
-                            subscription: {
-                                connect: {
-                                    id: subscription.id
-                                }
-                            },
-                            createdAt: new Date(transaction.created_date)
-                        }
-                    });
+                } else {
+                    console.warn('No subscription found for merchant reference:', OrderMerchantReference);
                 }
             }
 
@@ -124,69 +96,29 @@ export const pesapalOrderRequest = async (req: Request, res: Response) => {
         const token = tokenData.token;
         const planId = Number(req.body.planId);
         const organizationId = Number(req.body.organizationId);
-        const { user } = req.body;
+        const { user, months, billingMode } = req.body;
+        //@ts-ignore
+        const userId = req.user?.userId ? Number(req.user.userId) : undefined;
 
-        // Get plan details
-        const plan = await prisma.subscriptionPlan.findUnique({
-            where: { id: Number(planId) }
+        const { subscription, totalAmount, ref: pesapalUniqueRef } = await subscriptionService.preparePurchase({
+            organizationId,
+            planId,
+            months: months !== undefined ? Number(months) : 1,
+            billingMode: billingMode === 'YEARLY' ? 'YEARLY' : 'MONTHLY',
+            userId,
         });
 
-        if (!plan) {
-            return res.status(404).json({
-                success: false,
-                message: "Subscription plan not found"
-            });
-        }
-
-        // Check for existing active subscription
-        const activeSubscription = await prisma.subscription.findFirst({
-            where: {
-                organizationId: Number(organizationId),
-                planId: Number(planId),
-                status: 'ACTIVE'
-            }
+        await prisma.subscription.update({
+            where: { id: subscription.id },
+            data: { paymentMethod: 'PESAPA' },
         });
 
-        let subscription;
-        const pesapalUniqueRef = `SUB-${Date.now()}`;
-
-        if (activeSubscription) {
-            // Update existing subscription
-            subscription = activeSubscription;
-            await prisma.subscription.update({
-                where: { id: activeSubscription.id },
-                data: {
-                    paymentMethod: 'PESAPA',
-                    paymentDetails: {
-                        ref: pesapalUniqueRef,
-                        amount: plan.price,
-                        currency: plan.currency,
-                        status: 'PENDING'
-                    }
-                }
-            });
-        } else {
-            // Create new subscription
-            subscription = await prisma.subscription.create({
-                data: {
-                    planId: Number(planId),
-                    organizationId: Number(organizationId),
-                    status: SubscriptionStatus.PENDING,
-                    paymentMethod: 'PESAPA',
-                    paymentDetails: {
-                        ref: pesapalUniqueRef,
-                        amount: plan.price,
-                        currency: plan.currency,
-                        status: 'PENDING'
-                    }
-                }
-            });
-        }
+        const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
 
         // Prepare order data for PesaPal
-        let amountInRwf = plan.price;
-        if (plan.currency.toUpperCase() === 'USD') {
-            amountInRwf = await convertUsdToRwf(plan.price);
+        let amountInRwf = totalAmount;
+        if (plan!.currency.toUpperCase() === 'USD') {
+            amountInRwf = await convertUsdToRwf(totalAmount);
         }
 
         const ipnId = process.env.PESAPAL_IPN_ID;
@@ -194,7 +126,7 @@ export const pesapalOrderRequest = async (req: Request, res: Response) => {
             id: pesapalUniqueRef,
             currency: "RWF",
             amount: Math.round(amountInRwf),
-            description: `Subscription for ${plan.name} (${plan.billingCycle})`,
+            description: `Subscription for ${plan!.name} (${months || 1} month${(months || 1) === 1 ? '' : 's'})`,
             callback_url: `${config.primaryFrontendUrl}/subscription/callback?planId=${planId}`,
             billing_address: {
                 email_address: user.email,
@@ -228,6 +160,13 @@ export const pesapalOrderRequest = async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
+        if (!error.response && typeof error.message === 'string') {
+            const status = /not found or inactive/i.test(error.message) ? 404
+                : /months must|billingMode must|requires months/i.test(error.message) ? 400
+                : 500;
+            return res.status(status).json({ success: false, message: error.message });
+        }
+
         const errorDetail = error.response?.data || error;
         console.error("Error creating Pesapal order:", errorDetail);
 

@@ -9,6 +9,8 @@ import { apiClient } from '../../lib/api-client';
 interface PesapalPaymentFormProps {
     planId: string;
     amount: number;
+    months?: number;
+    billingMode?: 'MONTHLY' | 'YEARLY';
     onSuccess: (data: any) => void;
     onError: (error: string) => void;
     onBack: () => void;
@@ -17,6 +19,8 @@ interface PesapalPaymentFormProps {
 export const PesapalPaymentForm = ({
     planId,
     amount,
+    months = 1,
+    billingMode = 'MONTHLY',
     onSuccess,
     onError,
     onBack,
@@ -30,7 +34,7 @@ export const PesapalPaymentForm = ({
         setIsLoading(true);
 
         try {
-            const response = await apiClient.initiatePesapalPayment(planId);
+            const response = await apiClient.initiatePesapalPayment(planId, { months, billingMode });
             if (response.success && response.data.redirect_url) {
                 setIframeUrl(response.data.redirect_url);
             } else {

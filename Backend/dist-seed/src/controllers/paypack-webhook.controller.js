@@ -7,6 +7,8 @@ exports.handlePaypackWebhook = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const prisma_1 = require("../lib/prisma");
 const socket_1 = require("../utils/socket");
+const subscription_service_1 = require("../services/subscription.service");
+const subscriptionService = new subscription_service_1.SubscriptionService(prisma_1.prisma);
 const logWebhook = (message, data) => {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] WEBHOOK: ${message}`, data || '');
@@ -82,6 +84,52 @@ async function handleProcessedTransaction(payload) {
             console.warn('No subscription found for payment reference:', data.ref);
             return;
         }
+        /** -------------------------------------------
+         *   PAYMENT SUCCESS → NEW ACTIVATION OR RENEWAL
+         *   via the shared, gateway-agnostic completion path.
+         *  ------------------------------------------- */
+        if (data.status === "successful") {
+            const result = await subscriptionService.finalizeSubscriptionPurchase({
+                subscriptionId: subscription.id,
+                paymentId: data.ref,
+                amount: data.amount,
+                currency: 'RWF',
+                paymentMethod: 'PAYPACK',
+                metadata: {
+                    provider: data.provider,
+                    fee: data.fee,
+                    client: data.client,
+                    processedAt: data.processed_at,
+                    merchant: data.merchant,
+                },
+                processedAt: new Date(data.processed_at),
+            });
+            if (!result) {
+                console.log(`Payment for ref ${data.ref} already processed. Skipping.`);
+                return;
+            }
+            const payment = result.payments[0];
+            const io = (0, socket_1.getIO)();
+            io.to(`trx-${data.ref}`).emit('transactionUpdate', {
+                event: 'payment:processed',
+                status: data.status,
+                subscription: {
+                    id: result.id,
+                    status: result.status,
+                    plan: result.planId,
+                    endDate: result.endDate
+                },
+                payment: {
+                    id: payment.id,
+                    amount: payment.amount,
+                    currency: payment.currency,
+                    reference: payment.paymentId,
+                    status: payment.status,
+                    timestamp: new Date().toISOString()
+                }
+            });
+            return;
+        }
         // Map Paypack → internal status
         const mapPaypackStatusToPaymentStatus = (status) => {
             const map = {
@@ -133,32 +181,6 @@ async function handleProcessedTransaction(payload) {
                 transactionRef: data.ref
             }
         };
-        /** -------------------------------------------
-         *   PAYMENT SUCCESS → NEW ACTIVATION OR RENEWAL
-         *  ------------------------------------------- */
-        if (data.status === "successful") {
-            const now = new Date();
-            if (subscription.status === "ACTIVE") {
-                /** ---------------------------
-                 * 🔁 RENEWAL LOGIC
-                 * ----------------------------*/
-                const currentEnd = subscription.endDate ?? now;
-                const newEndDate = new Date(currentEnd);
-                newEndDate.setMonth(newEndDate.getMonth() + 1);
-                updateData.endDate = newEndDate;
-                updateData.status = "ACTIVE";
-            }
-            else {
-                /** ---------------------------
-                 * 🆕 NEW SUBSCRIPTION ACTIVATION
-                 * ----------------------------*/
-                updateData.status = "ACTIVE";
-                updateData.startDate = now;
-                const endDate = new Date(now);
-                endDate.setMonth(endDate.getMonth() + 1);
-                updateData.endDate = endDate;
-            }
-        }
         /** -------------------------------------------
          *   PAYMENT FAILED → DO NOT CANCEL subscription
          * ------------------------------------------- */

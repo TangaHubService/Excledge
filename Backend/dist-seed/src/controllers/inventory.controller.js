@@ -7,6 +7,7 @@ const auditLogger_1 = require("../utils/auditLogger");
 const inventory_ledger_service_1 = require("../services/inventory-ledger.service");
 const product_sync_service_1 = require("../services/product-sync.service");
 const apiResponse_1 = require("../utils/apiResponse");
+const organization_settings_service_1 = require("../services/organization-settings.service");
 const getProducts = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -678,6 +679,9 @@ const getLowStockProducts = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
         const { limit = "10", page = "1", search, status } = req.query;
+        // Org-wide fallback threshold for products that don't set their own minStock.
+        const orgSettings = await (0, organization_settings_service_1.getOrganizationSettings)(organizationId);
+        const overrideThreshold = orgSettings.preferences.lowStockThresholdOverride;
         const branchId = req.selectedBranchId !== null && req.selectedBranchId !== undefined
             ? req.selectedBranchId
             : undefined;
@@ -691,7 +695,9 @@ const getLowStockProducts = async (req, res) => {
             isActive: true,
             deletedAt: null,
             itemType: { not: 'SERVICE' },
-            minStock: { gt: 0 },
+            // When an org-wide fallback threshold is configured, also consider
+            // products that haven't set their own minStock (0/unset).
+            ...(overrideThreshold && overrideThreshold > 0 ? {} : { minStock: { gt: 0 } }),
         };
         if (searchVal) {
             where.OR = [
@@ -727,17 +733,18 @@ const getLowStockProducts = async (req, res) => {
             const effectiveStock = branchId !== undefined
                 ? p.batches.reduce((s, b) => s + b.quantity, 0)
                 : p.quantity;
-            return { ...p, effectiveStock };
+            const effectiveMinStock = p.minStock > 0 ? p.minStock : (overrideThreshold ?? 0);
+            return { ...p, effectiveStock, effectiveMinStock };
         })
-            .filter(p => p.effectiveStock <= p.minStock);
+            .filter(p => p.effectiveMinStock > 0 && p.effectiveStock <= p.effectiveMinStock);
         if (statusVal === 'critical') {
-            filtered = filtered.filter(p => p.effectiveStock <= p.minStock * 0.25);
+            filtered = filtered.filter(p => p.effectiveStock <= p.effectiveMinStock * 0.25);
         }
         else if (statusVal === 'low') {
-            filtered = filtered.filter(p => p.effectiveStock > p.minStock * 0.25 && p.effectiveStock <= p.minStock * 0.50);
+            filtered = filtered.filter(p => p.effectiveStock > p.effectiveMinStock * 0.25 && p.effectiveStock <= p.effectiveMinStock * 0.50);
         }
         else if (statusVal === 'warning') {
-            filtered = filtered.filter(p => p.effectiveStock > p.minStock * 0.50);
+            filtered = filtered.filter(p => p.effectiveStock > p.effectiveMinStock * 0.50);
         }
         filtered.sort((a, b) => a.effectiveStock - b.effectiveStock);
         const totalCount = filtered.length;
@@ -749,7 +756,7 @@ const getLowStockProducts = async (req, res) => {
             barcode: p.barcode,
             batchNumber: p.batchNumber,
             unitPrice: Number(p.unitPrice), // Prisma Decimal → plain number
-            minStock: p.minStock,
+            minStock: p.effectiveMinStock,
             category: p.category,
             expiryDate: p.expiryDate,
             measurementUnit: p.measurementUnit,

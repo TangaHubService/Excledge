@@ -12,6 +12,8 @@ const auditLogger_1 = require("../utils/auditLogger");
 const email_service_1 = require("../services/email.service");
 const token_utils_1 = require("../utils/token.utils");
 const token_service_1 = require("../services/token.service");
+const subscription_service_1 = require("../services/subscription.service");
+const subscriptionService = new subscription_service_1.SubscriptionService(prisma_1.prisma);
 const signup = async (req, res) => {
     try {
         const { email, password, name, phone } = req.body;
@@ -122,11 +124,11 @@ const login = async (req, res) => {
             const activeSubscription = await prisma_1.prisma.subscription.findFirst({
                 where: {
                     organizationId: uo.organization.id,
-                    status: { in: ['ACTIVE', 'TRIALING'] },
-                    endDate: { gte: new Date() }
+                    status: { in: ['ACTIVE', 'TRIALING', 'GRACE_PERIOD'] },
                 },
                 orderBy: { endDate: 'desc' }
             });
+            const subscriptionSummary = subscriptionService.computeSubscriptionSummary(activeSubscription);
             return {
                 id: uo.organization.id,
                 name: uo.organization.name,
@@ -136,9 +138,14 @@ const login = async (req, res) => {
                 businessType: uo.organization.businessType,
                 role: uo.role,
                 isOwner: uo.isOwner,
-                hasActiveSubscription: !!activeSubscription,
-                subscriptionStatus: activeSubscription?.status || (uo.organization.isActive ? 'INACTIVE' : 'EXPIRED'),
-                subscriptionEndDate: activeSubscription?.endDate,
+                hasActiveSubscription: subscriptionSummary.hasActiveSubscription,
+                subscriptionStatus: subscriptionSummary.subscriptionStatus || (uo.organization.isActive ? 'INACTIVE' : 'EXPIRED'),
+                subscriptionEndDate: subscriptionSummary.subscriptionEndDate,
+                daysUntilExpiry: subscriptionSummary.daysUntilExpiry,
+                graceDaysRemaining: subscriptionSummary.graceDaysRemaining,
+                graceDayLabel: subscriptionSummary.graceDayLabel,
+                subscriptionWarningLevel: subscriptionSummary.warningLevel,
+                subscriptionWarningMessage: subscriptionSummary.warningMessage,
             };
         }));
         const sortedUo = [...user.userOrganizations].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -521,11 +528,11 @@ const getCurrentUser = async (req, res) => {
             const activeSubscription = await prisma_1.prisma.subscription.findFirst({
                 where: {
                     organizationId: uo.organization.id,
-                    status: { in: ['ACTIVE', 'TRIALING'] },
-                    endDate: { gte: new Date() }
+                    status: { in: ['ACTIVE', 'TRIALING', 'GRACE_PERIOD'] },
                 },
                 orderBy: { endDate: 'desc' }
             });
+            const subscriptionSummary = subscriptionService.computeSubscriptionSummary(activeSubscription);
             // Fetch branch assignments for this organization
             const userBranches = await prisma_1.prisma.userBranch.findMany({
                 where: { userId: user.id },
@@ -543,9 +550,14 @@ const getCurrentUser = async (req, res) => {
                 businessType: uo.organization.businessType,
                 role: uo.role,
                 isOwner: uo.isOwner,
-                hasActiveSubscription: !!activeSubscription,
-                subscriptionStatus: activeSubscription?.status || (uo.organization.isActive ? 'INACTIVE' : 'EXPIRED'),
-                subscriptionEndDate: activeSubscription?.endDate,
+                hasActiveSubscription: subscriptionSummary.hasActiveSubscription,
+                subscriptionStatus: subscriptionSummary.subscriptionStatus || (uo.organization.isActive ? 'INACTIVE' : 'EXPIRED'),
+                subscriptionEndDate: subscriptionSummary.subscriptionEndDate,
+                daysUntilExpiry: subscriptionSummary.daysUntilExpiry,
+                graceDaysRemaining: subscriptionSummary.graceDaysRemaining,
+                graceDayLabel: subscriptionSummary.graceDayLabel,
+                subscriptionWarningLevel: subscriptionSummary.warningLevel,
+                subscriptionWarningMessage: subscriptionSummary.warningMessage,
                 branchIds,
                 activeBranchId: primaryBranch?.branchId ?? null,
             };

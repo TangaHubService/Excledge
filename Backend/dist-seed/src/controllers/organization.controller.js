@@ -47,6 +47,7 @@ const auditLogger_1 = require("../utils/auditLogger");
 const cloudinary_1 = require("../config/cloudinary");
 const subscription_service_1 = require("../services/subscription.service");
 const organization_settings_service_1 = require("../services/organization-settings.service");
+const subscriptionService = new subscription_service_1.SubscriptionService(prisma_1.prisma);
 const getUserOrganizations = async (req, res) => {
     try {
         //@ts-ignore
@@ -122,19 +123,24 @@ const getOrganizationById = async (req, res) => {
                 },
             },
         });
-        // Check subscription status
-        const now = new Date();
-        const activeSubscription = organization.subscriptions.find(sub => (sub.status === 'ACTIVE' || sub.status === 'TRIALING') &&
-            (!sub.endDate || new Date(sub.endDate) > now));
-        const hasActiveSubscription = !!activeSubscription;
-        const subscriptionStatus = activeSubscription?.status || null;
-        const subscriptionEndDate = activeSubscription?.endDate || null;
+        // Check subscription status — the most recently-ending subscription that's
+        // still ACTIVE/TRIALING/GRACE_PERIOD (grace-period rows have an endDate in
+        // the past by definition, so this intentionally doesn't filter on endDate).
+        const relevantSubscription = organization.subscriptions
+            .filter(sub => sub.status === 'ACTIVE' || sub.status === 'TRIALING' || sub.status === 'GRACE_PERIOD')
+            .sort((a, b) => (b.endDate?.getTime() ?? 0) - (a.endDate?.getTime() ?? 0))[0] ?? null;
+        const subscriptionSummary = subscriptionService.computeSubscriptionSummary(relevantSubscription);
         res.json({
             organization: {
                 ...organization,
-                hasActiveSubscription,
-                subscriptionStatus,
-                subscriptionEndDate,
+                hasActiveSubscription: subscriptionSummary.hasActiveSubscription,
+                subscriptionStatus: subscriptionSummary.subscriptionStatus,
+                subscriptionEndDate: subscriptionSummary.subscriptionEndDate,
+                daysUntilExpiry: subscriptionSummary.daysUntilExpiry,
+                graceDaysRemaining: subscriptionSummary.graceDaysRemaining,
+                graceDayLabel: subscriptionSummary.graceDayLabel,
+                subscriptionWarningLevel: subscriptionSummary.warningLevel,
+                subscriptionWarningMessage: subscriptionSummary.warningMessage,
                 role: userOrganization.role,
                 isOwner: userOrganization.isOwner,
             },
@@ -204,7 +210,6 @@ const createOrganization = async (req, res) => {
                 return res.status(400).json({ error: 'Free Trial plan not found. Please contact support.' });
             }
             else {
-                const subscriptionService = new subscription_service_1.SubscriptionService(prisma_1.prisma);
                 await subscriptionService.createTrial(organization.id, freeTrialPlan.id);
             }
         }
@@ -319,19 +324,24 @@ exports.getOrgSettings = getOrgSettings;
 function isPlainPatchObject(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-/** Only admins may change workspace-shaping settings; SYSTEM_OWNER bypasses via the route middleware. */
+/** Only admins may change workspace-shaping settings; SYSTEM_OWNER bypasses this check
+ *  (their global role, not a per-org membership, grants access). */
 const updateOrgSettings = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.id);
         //@ts-ignore
         const userId = parseInt(req.user?.userId);
-        const userOrganization = await prisma_1.prisma.userOrganization.findFirst({
-            where: { userId, organizationId, role: "ADMIN" },
-        });
-        if (!userOrganization) {
-            return res
-                .status(403)
-                .json({ error: "Only admins can update organization settings" });
+        //@ts-ignore
+        const isSystemOwner = req.user?.role === "SYSTEM_OWNER";
+        if (!isSystemOwner) {
+            const userOrganization = await prisma_1.prisma.userOrganization.findFirst({
+                where: { userId, organizationId, role: "ADMIN" },
+            });
+            if (!userOrganization) {
+                return res
+                    .status(403)
+                    .json({ error: "Only admins can update organization settings" });
+            }
         }
         const { sidebarConfig, featureFlags, preferences } = req.body ?? {};
         const patch = {};

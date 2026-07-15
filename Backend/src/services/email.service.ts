@@ -220,6 +220,24 @@ class EmailService {
     });
   }
 
+  async sendSubscriptionStatusUpdate(
+    email: string,
+    organizationName: string,
+    subject: string,
+    message: string
+  ) {
+    await this.sendMail({
+      from: config.email.from,
+      to: email,
+      subject: `${subject} - ${organizationName}`,
+      html: `
+        <h2>${subject}</h2>
+        <p>${message}</p>
+        <a href="${config.primaryFrontendUrl}/subscription" style="background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Renew Subscription</a>
+      `,
+    });
+  }
+
   async sendPaymentConfirmation(
     email: string,
     organizationName: string,

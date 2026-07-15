@@ -141,7 +141,7 @@ app.use(error_middleware_1.errorHandler);
 ------------------------------------- */
 if (process.env.RUN_JOBS !== "false") {
     subscription_job_1.subscriptionReminderJob.start();
-    subscription_job_1.expireSubscriptionsJob.start();
+    subscription_job_1.subscriptionStatusTransitionJob.start();
     product_expiry_job_1.productExpiryAlertJob.start();
     product_expiry_job_1.dailyReportJob.start();
     ebm_queue_job_1.ebmQueueJob.start();

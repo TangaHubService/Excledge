@@ -249,6 +249,7 @@ model User {
   userBranches             UserBranch[] // NEW: Branch assignments
   createdInvoices          SupplierInvoice[]
   invoiceImportLogs        InvoiceImportLog[]
+  createdSubscriptions     Subscription[]           @relation("SubscriptionCreatedBy")
 
   @@index([deletedAt])
   @@index([passwordResetToken])
@@ -341,26 +342,38 @@ model PlanFeature {
 }
 
 model Subscription {
-  status         SubscriptionStatus @default(PENDING)
-  startDate      DateTime?
-  endDate        DateTime?
-  autoRenew      Boolean            @default(true)
-  paymentMethod  PaymentMethodType  @default(STRIPE)
-  paymentId      String?            @unique
-  paymentDetails Json?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  cancelledAt    DateTime?
-  id             Int                @id @default(autoincrement())
-  organizationId Int
-  planId         Int
-  payments       Payment[]
-  organization   Organization       @relation("OrganizationSubscriptions", fields: [organizationId], references: [id])
-  plan           SubscriptionPlan   @relation(fields: [planId], references: [id])
+  status                    SubscriptionStatus @default(PENDING)
+  startDate                 DateTime?
+  endDate                   DateTime?
+  autoRenew                 Boolean            @default(true)
+  paymentMethod             PaymentMethodType  @default(STRIPE)
+  paymentId                 String?            @unique
+  paymentDetails            Json?
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+  cancelledAt               DateTime?
+  id                        Int                @id @default(autoincrement())
+  organizationId            Int
+  planId                    Int
+  monthsPurchased           Int?
+  billingMode               String             @default("MONTHLY")
+  monthlyPrice              Float?
+  totalAmount               Float?
+  gracePeriodDays           Int                @default(3)
+  gracePeriodEndsAt         DateTime?
+  createdById               Int?
+  renewedFromSubscriptionId Int?
+  payments                  Payment[]
+  organization              Organization       @relation("OrganizationSubscriptions", fields: [organizationId], references: [id])
+  plan                      SubscriptionPlan   @relation(fields: [planId], references: [id])
+  createdBy                 User?              @relation("SubscriptionCreatedBy", fields: [createdById], references: [id])
+  renewedFrom               Subscription?      @relation("SubscriptionRenewal", fields: [renewedFromSubscriptionId], references: [id])
+  renewals                  Subscription[]     @relation("SubscriptionRenewal")
 
   @@index([organizationId])
   @@index([status])
   @@index([endDate])
+  @@index([gracePeriodEndsAt])
   @@map("subscriptions")
 }
 
@@ -1035,6 +1048,7 @@ enum SubscriptionStatus {
   TRIALING
   UNPAID
   CANCELLED
+  GRACE_PERIOD
 }
 
 enum PaymentStatus {

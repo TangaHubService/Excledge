@@ -93,6 +93,16 @@ const createSupplier = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
         const { name, email, phone, address, contactPerson } = req.body;
+        if (!name || String(name).trim() === "") {
+            return res.status(400).json({ message: "Supplier name is required" });
+        }
+        if (!email || String(email).trim() === "") {
+            return res.status(400).json({ message: "Supplier email is required" });
+        }
+        const emailValidation = (0, import_validation_service_1.validateEmail)(email);
+        if (!emailValidation.isValid) {
+            return res.status(400).json({ message: "Invalid email format" });
+        }
         const supplier = await prisma_1.prisma.supplier.create({
             data: {
                 name,
@@ -129,6 +139,15 @@ const updateSupplier = async (req, res) => {
         });
         if (!existingSupplier) {
             return res.status(404).json({ message: "Supplier not found" });
+        }
+        if (email !== undefined) {
+            if (String(email).trim() === "") {
+                return res.status(400).json({ message: "Supplier email is required" });
+            }
+            const emailValidation = (0, import_validation_service_1.validateEmail)(email);
+            if (!emailValidation.isValid) {
+                return res.status(400).json({ message: "Invalid email format" });
+            }
         }
         const supplier = await prisma_1.prisma.supplier.update({
             where: { id: existingSupplier.id },

@@ -10,6 +10,7 @@ const cost_price_service_1 = require("../services/cost-price.service");
 const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
 const apiResponse_1 = require("../utils/apiResponse");
 const tax_service_1 = require("../services/tax.service");
+const organization_settings_service_1 = require("../services/organization-settings.service");
 const createSale = async (req, res) => {
     try {
         const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma } = req.body;
@@ -17,6 +18,7 @@ const createSale = async (req, res) => {
         const userId = parseInt(req.user?.userId);
         const organizationId = parseInt(req.params.organizationId);
         const branchId = (0, branchAuth_middleware_1.getBranchIdForOperation)(req);
+        const orgSettings = await (0, organization_settings_service_1.getOrganizationSettings)(organizationId);
         // Validate items
         if (!items || items.length === 0) {
             return res.status(400).json((0, apiResponse_1.error)("Sale must have at least one item"));
@@ -43,6 +45,20 @@ const createSale = async (req, res) => {
             })
             : [];
         const productMap = new Map(products.map(p => [p.id, p]));
+        // When the org disallows manual discounts, sellers may not submit a unit
+        // price below the catalog price — the POS UI already locks the price
+        // field in that case, but the API must not trust the client either.
+        if (!orgSettings.featureFlags.allowManualDiscounts) {
+            for (const item of productItems) {
+                const product = productMap.get(parseInt(item.productId));
+                if (!product)
+                    continue;
+                const catalogPrice = Number(product.unitPrice);
+                if (Number(item.unitPrice) < catalogPrice - 0.01) {
+                    return res.status(400).json((0, apiResponse_1.error)(`Manual price overrides are disabled for this organization. "${product.name}" must be sold at ${catalogPrice}.`));
+                }
+            }
+        }
         // Automatically determine paymentType if multiple payment methods are used
         let finalPaymentType = paymentType;
         const hasCash = (cashAmount || 0) > 0;
@@ -108,7 +124,7 @@ const createSale = async (req, res) => {
                 const inQty = stockAggregates.find(a => a.direction === 'IN')?._sum.quantity || 0;
                 const outQty = stockAggregates.find(a => a.direction === 'OUT')?._sum.quantity || 0;
                 const currentStock = inQty - outQty;
-                if (currentStock < item.quantity) {
+                if (currentStock < item.quantity && !orgSettings.featureFlags.allowNegativeStock) {
                     throw new Error(`Insufficient stock for product ${product.name}. Available: ${currentStock}, Requested: ${item.quantity}`);
                 }
             }
@@ -254,7 +270,7 @@ const createSale = async (req, res) => {
                 });
             }
             // 7. Write transactional outbox entry (atomic with the sale)
-            if ((0, rra_ebm_service_1.isEbmEnabled)()) {
+            if ((0, rra_ebm_service_1.isEbmEnabled)() && orgSettings.featureFlags.ebmIntegrationEnabled) {
                 const operation = 'SALE';
                 const idempotencyKey = `ebm-${operation}-${organizationId}-${newSale.id}`;
                 await tx.ebmOutbox.create({
@@ -509,10 +525,11 @@ const executeWithRetry = async (fn, retries = 0) => {
 };
 const refundSale = async (req, res) => {
     try {
+        const id = parseInt(req.params.id);
+        const organizationId = parseInt(req.params.organizationId);
+        const orgSettings = await (0, organization_settings_service_1.getOrganizationSettings)(organizationId);
         const result = await executeWithRetry(async () => {
             return await prisma_1.prisma.$transaction(async (prisma) => {
-                const id = parseInt(req.params.id);
-                const organizationId = parseInt(req.params.organizationId);
                 const { reason, items: refundItems } = req.body;
                 const userId = req.user?.userId;
                 // Get the sale with items
@@ -675,7 +692,7 @@ const refundSale = async (req, res) => {
                 });
                 // Write EBM outbox entry for REFUND atomically with the transaction.
                 // This ensures the RRA is notified even if the process crashes after commit.
-                if ((0, rra_ebm_service_1.isEbmEnabled)()) {
+                if ((0, rra_ebm_service_1.isEbmEnabled)() && orgSettings.featureFlags.ebmIntegrationEnabled) {
                     const refundIdempotencyKey = `ebm-REFUND-${organizationId}-${refundSale.id}`;
                     await prisma.ebmOutbox.create({
                         data: {
@@ -831,6 +848,7 @@ const cancelSale = async (req, res) => {
     try {
         const saleId = parseInt(req.params.saleId);
         const organizationId = parseInt(req.params.organizationId);
+        const orgSettings = await (0, organization_settings_service_1.getOrganizationSettings)(organizationId);
         const { reason } = req.body;
         const userId = req.user?.userId;
         // Get the sale with items
@@ -929,7 +947,7 @@ const cancelSale = async (req, res) => {
             });
             // Write EBM outbox entry for VOID atomically with the transaction.
             // The outbox worker will notify RRA; this survives process crashes.
-            if ((0, rra_ebm_service_1.isEbmEnabled)()) {
+            if ((0, rra_ebm_service_1.isEbmEnabled)() && orgSettings.featureFlags.ebmIntegrationEnabled) {
                 const voidIdempotencyKey = `ebm-VOID-${organizationId}-${saleId}`;
                 await prisma.ebmOutbox.create({
                     data: {

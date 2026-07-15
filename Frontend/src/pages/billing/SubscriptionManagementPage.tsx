@@ -29,9 +29,10 @@ import SubscriptionPage from '../SubscriptionPage';
 
 interface Subscription {
     id: string;
-    status: 'ACTIVE' | 'TRIALING' | 'PAST_DUE' | 'CANCELED' | 'UNPAID' | 'INCOMPLETE' | 'EXPIRED' | 'PENDING';
+    status: 'ACTIVE' | 'TRIALING' | 'GRACE_PERIOD' | 'PAST_DUE' | 'CANCELED' | 'CANCELLED' | 'UNPAID' | 'INCOMPLETE' | 'EXPIRED' | 'PENDING';
     startDate: string;
     endDate: string | null;
+    gracePeriodEndsAt?: string | null;
     planId: string;
     plan: {
         id: string;
@@ -86,6 +87,7 @@ const getStatusBadge = (status: string, t: any) => {
     const statusMap: Record<string, { text: string; color: string }> = {
         ACTIVE: { text: t('common.active'), color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
         TRIALING: { text: t('billing.trial'), color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
+        GRACE_PERIOD: { text: t('billing.gracePeriod') || 'Grace Period', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
         PAST_DUE: { text: t('billing.pastDue'), color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' },
         CANCELED: { text: t('billing.canceled'), color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
         UNPAID: { text: t('billing.unpaid'), color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
@@ -107,6 +109,7 @@ const SubscriptionManagementPage = () => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [subscriptionToCancel, setSubscriptionToCancel] = useState<string | null>(null);
+    const [renewTarget, setRenewTarget] = useState<{ planId: string; currentExpiryDate: string | null } | null>(null);
 
     useEffect(() => {
         const fetchSubscriptions = async () => {
@@ -170,23 +173,13 @@ const SubscriptionManagementPage = () => {
         }
     };
 
-    const handleRenewSubscription = async (subscriptionId: string) => {
-        if (isUpdating) return;
-        try {
-            setIsUpdating(true);
-            await apiClient.renewSubscription(subscriptionId);
-            // Refresh subscriptions after renewal
-            const response = await apiClient.getOrganizationSubscriptions();
-            const subs = Array.isArray(response.data.subscriptions)
-                ? response.data.subscriptions
-                : [response.data.subscriptions];
-            setSubscriptions(subs);
-        } catch (err: any) {
-            console.error(err);
-            setError(err.response?.data?.message || t('billing.renewError') || 'Failed to renew subscription.');
-        } finally {
-            setIsUpdating(false);
-        }
+    // Renewal reuses the exact same duration-selection + payment flow as a new
+    // purchase (rendered below via <SubscriptionPage preselectedPlanId .../>):
+    // the backend already treats "buy more months for a plan you already have"
+    // as a renewal-in-place, extending from the current endDate when it's
+    // still in the future.
+    const handleRenewSubscription = (subscription: Subscription) => {
+        setRenewTarget({ planId: subscription.plan.id, currentExpiryDate: subscription.endDate });
     };
 
     if (isLoading) {
@@ -222,7 +215,7 @@ const SubscriptionManagementPage = () => {
     const otherSubscriptions = sortedSubscriptions.slice(1);
 
     const renderSubscriptionCard = (subscription: Subscription) => {
-        const isActive = subscription.status === 'ACTIVE' || subscription.status === 'TRIALING';
+        const isActive = subscription.status === 'ACTIVE' || subscription.status === 'TRIALING' || subscription.status === 'GRACE_PERIOD';
         const currentPlan = subscription.plan ? {
             id: subscription.plan.id,
             name: subscription.plan.name,
@@ -255,15 +248,15 @@ const SubscriptionManagementPage = () => {
                                 >
                                     {isUpdating ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : t('billing.reactivate')}
                                 </Button>
-                            ) : subscription.status === 'EXPIRED' || subscription.status === 'CANCELED' ? (
+                            ) : (
                                 <Button
-                                    onClick={() => handleRenewSubscription(subscription.id)}
+                                    onClick={() => handleRenewSubscription(subscription)}
                                     disabled={isUpdating}
                                     className="bg-blue-600 hover:bg-blue-700 flex-1 md:flex-none text-white shadow-sm"
                                 >
-                                    {isUpdating ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : t('billing.renew')}
+                                    {t('billing.renew')}
                                 </Button>
-                            ) : null}
+                            )}
                         </div>
                     </div>
 
@@ -394,7 +387,10 @@ const SubscriptionManagementPage = () => {
             <div>
                 <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">{t('billing.availablePlans')}</h2>
 
-                <SubscriptionPage />
+                <SubscriptionPage
+                    preselectedPlanId={renewTarget?.planId ?? null}
+                    renewalCurrentExpiryDate={renewTarget?.currentExpiryDate ?? null}
+                />
             </div>
 
             {/* Billing History */}

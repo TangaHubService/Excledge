@@ -39,7 +39,7 @@ import { errorHandler } from "./middleware/error.middleware";
 import webhookRoutes from "./routes/paypack-webhook.routes";
 import {
   subscriptionReminderJob,
-  expireSubscriptionsJob,
+  subscriptionStatusTransitionJob,
 } from "./jobs/subscription.job";
 
 import {
@@ -165,7 +165,7 @@ app.use(errorHandler);
 
 if (process.env.RUN_JOBS !== "false") {
   subscriptionReminderJob.start();
-  expireSubscriptionsJob.start();
+  subscriptionStatusTransitionJob.start();
   productExpiryAlertJob.start();
   dailyReportJob.start();
   ebmQueueJob.start();

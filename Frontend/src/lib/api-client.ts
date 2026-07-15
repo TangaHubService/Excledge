@@ -1,3 +1,5 @@
+import { toast } from 'react-toastify';
+
 const API_URL = (import.meta.env.VITE_PUBLIC_API_URL || 'http://localhost:5000') + '/api';
 
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -33,6 +35,19 @@ const handleTokenExpiration = () => {
   keysToRemove.forEach(key => localStorage.removeItem(key));
   // Redirect to login page
   window.location.href = '/login';
+};
+
+// A lapsed subscription past its grace period returns 403 SUBSCRIPTION_INACTIVE
+// on operational routes (see requireActiveSubscription middleware). There was
+// previously no frontend handling of this code at all — requests just failed
+// silently wherever they were called. Surface it once and send the user to
+// the renewal page instead.
+const handleSubscriptionInactive = (errorData: any) => {
+  if (errorData?.code !== 'SUBSCRIPTION_INACTIVE') return;
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname.includes('/subscription')) return;
+  toast.error(errorData.error || errorData.message || 'Your subscription has expired. Please renew your subscription to continue using the system.');
+  window.location.href = '/dashboard/subscription';
 };
 
 /** Backend returns accessToken + refreshToken on login; older flows used token (e.g. switch-organization). */
@@ -203,6 +218,9 @@ class ApiClient {
       const errorData = await response
         .json()
         .catch(() => ({ error: "An error occurred" }));
+      if (response.status === 403) {
+        handleSubscriptionInactive(errorData);
+      }
       const error = new Error(errorData.message || errorData.error || "An error occurred");
       // Attach response data for better error handling
       (error as any).response = {
@@ -270,6 +288,9 @@ class ApiClient {
       const errorData = await response
         .json()
         .catch(() => ({ error: "An error occurred" }));
+      if (response.status === 403) {
+        handleSubscriptionInactive(errorData);
+      }
       const error = new Error(errorData.message || errorData.error || "An error occurred");
       // Attach response data for better error handling
       (error as any).response = {
@@ -874,9 +895,16 @@ class ApiClient {
     });
   }
 
-  async renewSubscription(id: string) {
-    return this.request(`/subscriptions/${id}/renew`, {
+  async renewSubscription(id: string, params?: { months?: number; billingMode?: "MONTHLY" | "YEARLY" }) {
+    // NOTE: this hits the Stripe-only renewal path (subscription.controller.ts),
+    // which isn't reachable from the app's real payment rails (Pesapal/Paypack).
+    // The subscription-management renewal UI uses the Pesapal/Paypack initiate
+    // endpoints instead (see initiatePesapalPayment / initiateMobilePayment),
+    // which already treat "buy more months for an existing plan" as a renewal.
+    const organizationId = this.getOrganizationId();
+    return this.request(`/subscriptions/organizations/${organizationId}/subscriptions/${id}/renew`, {
       method: "POST",
+      body: JSON.stringify(params || {}),
     });
   }
 
@@ -1104,10 +1132,11 @@ class ApiClient {
     return response;
   };
 
-  async initiatePesapalPayment(planId: string) {
+  async initiatePesapalPayment(planId: string, params?: { months?: number; billingMode?: "MONTHLY" | "YEARLY" }) {
     const organizationId = this.getOrganizationId();
     return this.request(`/subscriptions/organizations/${organizationId}/plans/${planId}/pesapal/initiate`, {
       method: "POST",
+      body: JSON.stringify(params || {}),
     });
   };
 

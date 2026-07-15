@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { getIO } from '../utils/socket';
-import { PaymentStatus } from '@prisma/client';
 import { pesapalToken } from '../utils/getAcessToken';
 import axios from 'axios';
 import { pesapalConfig } from '../lib/paypack';
+import { SubscriptionService } from '../services/subscription.service';
 
 const PESAPAL_API_URL = pesapalConfig.baseUrl;
+const subscriptionService = new SubscriptionService(prisma);
 
 interface PesapalTransactionStatus {
     payment_method: string;
@@ -123,9 +124,6 @@ async function handleCompletedTransaction(transactionStatus: PesapalTransactionS
                     path: ['ref'],
                     equals: transactionStatus.merchant_reference
                 }
-            },
-            include: {
-                plan: true
             }
         });
 
@@ -136,123 +134,45 @@ async function handleCompletedTransaction(transactionStatus: PesapalTransactionS
 
         logWebhook('Subscription found', { id: subscription.id, status: subscription.status });
 
-        // Idempotency guard: this endpoint can be replayed by anyone who has seen
-        // the orderTrackingId (e.g. via the browser redirect URL), so make sure we
-        // don't extend the subscription again for a transaction already recorded.
-        const existingPayment = await prisma.payment.findFirst({
-            where: { paymentId: transactionStatus.order_tracking_id },
+        if (transactionStatus.payment_status_description !== 'Completed') {
+            logWebhook('Transaction not completed, no subscription changes made', {
+                status: transactionStatus.payment_status_description
+            });
+            return;
+        }
+
+        /** -------------------------------------------
+         *   PAYMENT SUCCESS → NEW ACTIVATION OR RENEWAL
+         *   via the shared, gateway-agnostic completion path
+         *   (idempotency guard lives inside this call).
+         *  ------------------------------------------- */
+        const result = await subscriptionService.finalizeSubscriptionPurchase({
+            subscriptionId: subscription.id,
+            paymentId: transactionStatus.order_tracking_id,
+            amount: transactionStatus.amount,
+            currency: transactionStatus.currency,
+            paymentMethod: 'PESAPA',
+            metadata: {
+                payment_method: transactionStatus.payment_method,
+                confirmation_code: transactionStatus.confirmation_code,
+                payment_account: transactionStatus.payment_account,
+                description: transactionStatus.description,
+                status_code: transactionStatus.status_code
+            },
+            processedAt: new Date(transactionStatus.created_date),
         });
 
-        if (existingPayment) {
+        if (!result) {
             logWebhook('Payment for this order already processed. Skipping.', {
                 orderTrackingId: transactionStatus.order_tracking_id,
             });
             return;
         }
 
-        // Map Pesapal status to internal PaymentStatus
-        const mapPesapalStatusToPaymentStatus = (status: string): PaymentStatus => {
-            const statusMap: Record<string, PaymentStatus> = {
-                'completed': 'COMPLETED',
-                'failed': 'FAILED',
-                'pending': 'PENDING',
-                'invalid': 'FAILED',
-                'reversed': 'REFUNDED'
-            };
-            return statusMap[status.toLowerCase()] || 'FAILED';
-        };
-
-        // Create payment record
-        const payment = await prisma.payment.create({
-            data: {
-                amount: transactionStatus.amount,
-                currency: transactionStatus.currency,
-                status: mapPesapalStatusToPaymentStatus(transactionStatus.payment_status_description),
-                paymentMethod: 'PESAPA',
-                paymentId: transactionStatus.order_tracking_id,
-                subscriptionId: subscription.id,
-                metadata: {
-                    payment_method: transactionStatus.payment_method,
-                    confirmation_code: transactionStatus.confirmation_code,
-                    payment_account: transactionStatus.payment_account,
-                    description: transactionStatus.description,
-                    status_code: transactionStatus.status_code
-                }
-            }
-        });
-
-        logWebhook('Payment record created', { paymentId: payment.id });
-
-        // Prepare subscription update
-        const updateData: any = {
-            paymentDetails: {
-                ...(subscription.paymentDetails as object),
-                status: transactionStatus.payment_status_description,
-                processedAt: new Date(transactionStatus.created_date),
-                amount: transactionStatus.amount,
-                transactionRef: transactionStatus.order_tracking_id,
-                confirmationCode: transactionStatus.confirmation_code,
-                paymentMethod: transactionStatus.payment_method
-            }
-        };
-
-        /** -------------------------------------------
-         *   PAYMENT SUCCESS → NEW ACTIVATION OR RENEWAL
-         *  ------------------------------------------- */
-        if (transactionStatus.payment_status_description === 'Completed') {
-            const now = new Date();
-
-            if (subscription.status === 'ACTIVE') {
-                /** ---------------------------
-                 * 🔁 RENEWAL LOGIC
-                 * ----------------------------*/
-                const currentEnd = subscription.endDate ?? now;
-                const newEndDate = new Date(currentEnd);
-
-                // Add billing cycle duration
-                if (subscription.plan.billingCycle === 'MONTHLY') {
-                    newEndDate.setMonth(newEndDate.getMonth() + 1);
-                } else if (subscription.plan.billingCycle === 'YEARLY') {
-                    newEndDate.setFullYear(newEndDate.getFullYear() + 1);
-                }
-
-                updateData.endDate = newEndDate;
-                updateData.status = 'ACTIVE';
-
-                logWebhook('Renewing subscription', {
-                    newEndDate: newEndDate.toISOString()
-                });
-            } else {
-                /** ---------------------------
-                 * 🆕 NEW SUBSCRIPTION ACTIVATION
-                 * ----------------------------*/
-                updateData.status = 'ACTIVE';
-                updateData.startDate = now;
-
-                const endDate = new Date(now);
-                if (subscription.plan.billingCycle === 'MONTHLY') {
-                    endDate.setMonth(endDate.getMonth() + 1);
-                } else if (subscription.plan.billingCycle === 'YEARLY') {
-                    endDate.setFullYear(endDate.getFullYear() + 1);
-                }
-                updateData.endDate = endDate;
-
-                logWebhook('Activating new subscription', {
-                    startDate: now.toISOString(),
-                    endDate: endDate.toISOString()
-                });
-            }
-        }
-
-        // Update subscription
-        const updatedSubscription = await prisma.subscription.update({
-            where: { id: subscription.id },
-            data: updateData
-        });
-
+        const payment = result.payments[0];
         logWebhook('Subscription updated', {
-            id: updatedSubscription.id,
-            status: updatedSubscription.status
+            id: result.id,
+            status: result.status
         });
 
         // Emit WebSocket event for real-time updates
@@ -261,10 +181,10 @@ async function handleCompletedTransaction(transactionStatus: PesapalTransactionS
             event: 'payment:processed',
             status: transactionStatus.payment_status_description,
             subscription: {
-                id: updatedSubscription.id,
-                status: updatedSubscription.status,
-                plan: updatedSubscription.planId,
-                endDate: updatedSubscription.endDate
+                id: result.id,
+                status: result.status,
+                plan: result.planId,
+                endDate: result.endDate
             },
             payment: {
                 id: payment.id,
