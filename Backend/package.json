@@ -21,7 +21,8 @@
     "prisma:studio": "prisma studio",
     "prisma:deploy": "prisma migrate deploy",
     "build:seed": "tsc -p tsconfig.seed.json",
-    "prisma:seed": "npm run build:seed && npx prisma db seed"
+    "prisma:seed": "npm run build:seed && npx prisma db seed",
+    "seed:super-admin": "tsx scripts/seed-super-admin.ts"
   },
   "prisma": {
     "seed": "node dist-seed/prisma/seed.js"
