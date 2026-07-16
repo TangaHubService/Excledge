@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
-import { ArrowRightLeft, Loader2 } from "lucide-react";
+import { ArrowRight, ArrowRightLeft, Loader2 } from "lucide-react";
 import { apiClient } from "../../../lib/api-client";
 import { useBranch } from "../../../context/BranchContext";
 import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
@@ -240,14 +240,17 @@ export default function StockTransfersPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={createTransfer} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
+            <div className="flex items-start gap-2">
+              <div className="flex-1 space-y-1.5">
                 <Label>
                   From branch <span className="text-destructive">*</span>
                 </Label>
                 <Select value={fromBranchId} onValueChange={setFromBranchId}>
                   <SelectTrigger
-                    className={cn(attempted && !fromBranchId && "border-destructive ring-1 ring-destructive/30")}
+                    className={cn(
+                      "w-full",
+                      attempted && !fromBranchId && "border-destructive ring-1 ring-destructive/30",
+                    )}
                   >
                     <SelectValue placeholder="Select branch" />
                   </SelectTrigger>
@@ -263,13 +266,27 @@ export default function StockTransfersPage() {
                   <p className="text-xs text-destructive">Select a branch to transfer from.</p>
                 )}
               </div>
-              <div className="space-y-1.5">
+
+              {/* Connector line, vertically centered on the two SelectTriggers (pt skips past the label row above) */}
+              <div className="flex w-9 shrink-0 flex-col items-center pt-[26px]">
+                <div className="relative flex h-9 w-full items-center justify-center">
+                  <div className="absolute inset-x-0 h-px bg-border" />
+                  <div className="relative z-10 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 space-y-1.5">
                 <Label>
                   To branch <span className="text-destructive">*</span>
                 </Label>
                 <Select value={toBranchId} onValueChange={setToBranchId}>
                   <SelectTrigger
-                    className={cn(attempted && !toBranchId && "border-destructive ring-1 ring-destructive/30")}
+                    className={cn(
+                      "w-full",
+                      attempted && !toBranchId && "border-destructive ring-1 ring-destructive/30",
+                    )}
                   >
                     <SelectValue placeholder="Select branch" />
                   </SelectTrigger>
@@ -290,7 +307,7 @@ export default function StockTransfersPage() {
             {fromBranchName && toBranchName && (
               <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
                 <span className="font-medium text-foreground">{fromBranchName}</span>
-                <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" />
+                <ArrowRight className="h-3.5 w-3.5 shrink-0" />
                 <span className="font-medium text-foreground">{toBranchName}</span>
               </div>
             )}
@@ -384,7 +401,7 @@ export default function StockTransfersPage() {
                     <TableCell>
                       <span className="inline-flex items-center gap-1.5 font-medium">
                         {t.fromBranch?.name}
-                        <ArrowRightLeft className="h-3 w-3 text-muted-foreground" />
+                        <ArrowRight className="h-3 w-3 text-muted-foreground" />
                         {t.toBranch?.name}
                       </span>
                     </TableCell>
