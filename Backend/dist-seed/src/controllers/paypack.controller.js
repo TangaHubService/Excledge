@@ -35,7 +35,7 @@ const initiatePaypackPayment = async (req, res) => {
                     'Authorization': `Bearer ${access}`,
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'X-Webhook-Mode': 'development'
+                    'X-Webhook-Mode': paypack_1.paypackConfig.environment
                 }
             });
             // Paypack assigns its own transaction ref, which is what the webhook

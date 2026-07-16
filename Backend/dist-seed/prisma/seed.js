@@ -78,6 +78,21 @@ const subscriptionPlans = [
             "2 visits a month",
         ],
     },
+    {
+        // Dev-only plan for exercising the real payment rails (Paypack/Pesapal)
+        // end-to-end without charging a real plan price. Excluded from the public
+        // pricing page by name in subscription.controller.ts#getPlans, but still
+        // purchasable directly via its plan ID like any other active plan.
+        title: "Dev Test Plan",
+        price: 100,
+        period: "MONTHLY",
+        isActive: true,
+        description: "Internal use only — for testing the payment flow.",
+        features: [
+            "1 user account",
+            ...baseFeatures,
+        ],
+    },
 ];
 function extractMaxUsers(features) {
     const userFeature = features.find((f) => /user account/i.test(f));

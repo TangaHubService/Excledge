@@ -20,7 +20,7 @@ import { config } from '../config';
 export const getPlans = async (req: Request, res: Response) => {
     try {
         const plans = await prisma.subscriptionPlan.findMany({
-            where: { isActive: true, name: { not: "Free Trial" } },
+            where: { isActive: true, name: { notIn: ["Free Trial", "Dev Test Plan"] } },
             include: {
                 features: {
                     where: { isEnabled: true },
