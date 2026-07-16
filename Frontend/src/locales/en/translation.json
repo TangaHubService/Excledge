@@ -112,7 +112,23 @@
         "clickToViewDetails": "Click to view details",
         "saving": "Saving...",
         "errors": "Errors",
-        "noDataToPreview": "No data to preview"
+        "noDataToPreview": "No data to preview",
+        "clear": "Clear",
+        "clearFilters": "Clear Filters",
+        "configure": "Configure",
+        "confirmDelete": "Confirm Deletion",
+        "copy": "Copy",
+        "customer": "Customer",
+        "cancelled": "Cancelled",
+        "pending": "Pending",
+        "paid": "Paid",
+        "failed": "Failed",
+        "unknown": "Unknown",
+        "month": "Month",
+        "tryAgain": "Try Again",
+        "deleteError": "Failed to delete",
+        "deletedSuccessfully": "Deleted successfully",
+        "uploading": "Uploading..."
     },
     "nav": {
         "home": "Home",
@@ -181,7 +197,8 @@
         "owner": "Owner",
         "noOrganizations": "No organizations found",
         "createSuccess": "Organization created successfully",
-        "switchOrg": "Switch Organization"
+        "switchOrg": "Switch Organization",
+        "select": "Select organization"
     },
     "languages": {
         "en": "English",
@@ -371,7 +388,27 @@
         "movements": "Movements",
         "byType": "By Type",
         "totalCost": "Total Cost",
-        "noSummaryData": "No summary data found"
+        "noSummaryData": "No summary data found",
+        "allBranches": "All branches",
+        "allProducts": "All products",
+        "description": "Description",
+        "expiringProducts": "Expiring Products",
+        "maxStock": "Max Stock",
+        "noProductsFound": "No products found.",
+        "previewImport": "Preview Import",
+        "searchPlaceholder": "Search by name, SKU, or batch number..."
+    },
+    "batches": {
+        "title": "Batch Management",
+        "batchNumber": "Batch Number",
+        "quantity": "Quantity",
+        "unitCost": "Unit Cost",
+        "expiryDate": "Expiry Date",
+        "receivedAt": "Received At",
+        "status": "Status",
+        "noBatches": "No batches found",
+        "active": "Active",
+        "inactive": "Inactive"
     },
     "logs": {
         "activityLogs": "Activity Logs",
@@ -430,7 +467,8 @@
             "Customer": "Customer",
             "Supplier": "Supplier",
             "Organization": "Organization"
-        }
+        },
+        "requestData": "Request Data"
     },
     "sales": {
         "sales": "Sales",
@@ -497,7 +535,8 @@
             "status": "Status",
             "total": "Total",
             "actions": "Actions",
-            "profit": "Profit"
+            "profit": "Profit",
+            "tax": "Tax"
         },
         "paymentBreakdown": "Payment Breakdown",
         "totalAmount": "Total Amount",
@@ -513,7 +552,8 @@
         "summary": "Summary",
         "fetchError": "Failed to load sale details",
         "saleNotFound": "Sale not found",
-        "insuranceAmount": "Insurance Amount"
+        "insuranceAmount": "Insurance Amount",
+        "status": "Status"
     },
     "customers": {
         "customers": "Customers",
@@ -754,7 +794,13 @@
         "noExpiringProducts": "No products expiring soon.",
         "logsLoadError": "Failed to load activity logs",
         "failedToFetchNotifications": "Failed to fetch notifications",
-        "failedToMarkRead": "Failed to mark notification as read"
+        "failedToMarkRead": "Failed to mark notification as read",
+        "confirmDeleteCustomer": "Are you sure you want to delete",
+        "confirmDeleteOrder": "Are you sure you want to delete this order",
+        "confirmDeleteProduct": "Are you sure you want to delete",
+        "confirmDeleteSupplier": "Are you sure you want to delete",
+        "importError": "Failed to import products",
+        "selectBranchForProduct": "Please select a specific branch to import products"
     },
     "validation": {
         "required": "This field is required",
@@ -931,7 +977,14 @@
         "creating": "Creating...",
         "unitPriceRwf": "Unit Price (RWF)",
         "noOrdersFoundDesc": "You haven't created any purchase orders yet. Start by creating your first order to restock your inventory.",
-        "expectedDelivery": "Expected Delivery"
+        "expectedDelivery": "Expected Delivery",
+        "product": "Product",
+        "productName": "Product Name",
+        "quantity": "Quantity",
+        "supplier": "Supplier",
+        "items": "Items",
+        "orderNumber": "Order Number",
+        "pending": "Draft"
     },
     "userManagement": {
         "title": "User Management",
@@ -1095,7 +1148,8 @@
         "noTransactions": "No transactions found for the selected period.",
         "completed": "Completed",
         "refunded": "Refunded",
-        "cancelled": "Cancelled"
+        "cancelled": "Cancelled",
+        "saleId": "Sale ID"
     },
     "inventoryReport": {
         "totalValue": "Total Inventory Value",
@@ -1127,7 +1181,8 @@
         "sale": "Sale",
         "newStock": "New stock",
         "currentStock": "Current Stock",
-        "results": "results"
+        "results": "results",
+        "title": "Inventory Report"
     },
     "billing": {
         "title": "Subscription Management",
@@ -1194,7 +1249,9 @@
         "airtelMoney": "Airtel Money",
         "cardPayment": "Card Payment",
         "trialPeriod": "Free Trial Period",
-        "trialMessage": "You are currently using a free trial. It will end on {{date}}. Subscribe now to keep your data and access all features."
+        "trialMessage": "You are currently using a free trial. It will end on {{date}}. Subscribe now to keep your data and access all features.",
+        "gracePeriod": "Grace Period",
+        "renew": "Renew"
     },
     "import": {
         "customerImport": "Import Customers",

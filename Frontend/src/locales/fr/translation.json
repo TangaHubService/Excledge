@@ -109,7 +109,25 @@
         "clickToViewDetails": "Cliquez pour voir les détails",
         "saving": "Enregistrement...",
         "errors": "Erreurs",
-        "noDataToPreview": "Aucune donnée à prévisualiser"
+        "noDataToPreview": "Aucune donnée à prévisualiser",
+        "clear": "Effacer",
+        "clearFilters": "Effacer les filtres",
+        "configure": "Configurer",
+        "confirmDelete": "Confirmer la suppression",
+        "copy": "Copier",
+        "customer": "Client",
+        "cancelled": "Annulé",
+        "pending": "En attente",
+        "paid": "Payé",
+        "failed": "Échoué",
+        "unknown": "Inconnu",
+        "month": "Mois",
+        "tryAgain": "Réessayer",
+        "deleteError": "Échec de la suppression",
+        "deletedSuccessfully": "Supprimé avec succès",
+        "uploading": "Téléversement...",
+        "reset": "Réinitialiser",
+        "rowsPerPage": "Lignes par page"
     },
     "nav": {
         "home": "Accueil",
@@ -158,11 +176,25 @@
         "inventorySummary": "Résumé de l'inventaire",
         "stockTransfers": "Transferts de stock",
         "warehouses": "Entrepôts",
-        "branches": "Succursales"
+        "branches": "Succursales",
+        "organizationConfig": "Configuration de l'organisation"
     },
     "organizations": {
         "noOrganizations": "Aucune organisation trouvée",
-        "createNew": "Créer Nouveau"
+        "createNew": "Créer Nouveau",
+        "select": "Sélectionner une organisation",
+        "welcomeTitle": "Bienvenue sur Excledge ERP",
+        "welcomeDesc": "Commencez par créer votre première organisation. Cela ne prend qu'une minute pour configurer votre boutique et commencer à gérer votre inventaire.",
+        "readyToStart": "Prêt à commencer votre parcours ?",
+        "createPrompt": "Votre puissant système d'inventaire n'est qu'à un clic.",
+        "createOrganization": "Créer une organisation",
+        "myOrganizations": "Mes organisations",
+        "selectOrCreate": "Sélectionnez une organisation ou créez-en une nouvelle",
+        "current": "Actuelle",
+        "role": "Rôle",
+        "owner": "Propriétaire",
+        "createSuccess": "Organisation créée avec succès",
+        "switchOrg": "Changer d'organisation"
     },
     "languages": {
         "en": "Anglais",
@@ -352,7 +384,27 @@
         "movements": "Mouvements",
         "byType": "Par type",
         "totalCost": "Coût total",
-        "noSummaryData": "Aucune donnée de résumé trouvée"
+        "noSummaryData": "Aucune donnée de résumé trouvée",
+        "allBranches": "Toutes les succursales",
+        "allProducts": "Tous les produits",
+        "description": "Description",
+        "expiringProducts": "Produits expirant",
+        "maxStock": "Stock max",
+        "noProductsFound": "Aucun produit trouvé.",
+        "previewImport": "Aperçu de l'importation",
+        "searchPlaceholder": "Rechercher par nom, SKU ou numéro de lot..."
+    },
+    "batches": {
+        "title": "Gestion des lots",
+        "batchNumber": "Numéro de lot",
+        "quantity": "Quantité",
+        "unitCost": "Coût unitaire",
+        "expiryDate": "Date d'expiration",
+        "receivedAt": "Reçu le",
+        "status": "Statut",
+        "noBatches": "Aucun lot trouvé",
+        "active": "Actif",
+        "inactive": "Inactif"
     },
     "logs": {
         "activityLogs": "Journaux d'activité",
@@ -411,7 +463,8 @@
             "Customer": "Client",
             "Supplier": "Fournisseur",
             "Organization": "Organisation"
-        }
+        },
+        "requestData": "Données de la requête"
     },
     "sales": {
         "sales": "Ventes",
@@ -478,7 +531,8 @@
             "status": "Statut",
             "total": "Total",
             "actions": "Actions",
-            "profit": "Profit"
+            "profit": "Profit",
+            "tax": "Taxe"
         },
         "paymentBreakdown": "Détail du paiement",
         "totalAmount": "Montant total",
@@ -492,7 +546,10 @@
         "phone": "Téléphone",
         "email": "Email",
         "summary": "Résumé",
-        "insuranceAmount": "Montant de l'assurance"
+        "insuranceAmount": "Montant de l'assurance",
+        "status": "Statut",
+        "fetchError": "Échec du chargement des détails de la vente",
+        "saleNotFound": "Vente introuvable"
     },
     "customers": {
         "customers": "Clients",
@@ -708,7 +765,13 @@
         "noExpiringProducts": "Aucun produit n'expire bientôt.",
         "logsLoadError": "Échec du chargement des journaux d'activité",
         "failedToFetchNotifications": "Échec de la récupération des notifications",
-        "failedToMarkRead": "Échec de la marque de notification comme lue"
+        "failedToMarkRead": "Échec de la marque de notification comme lue",
+        "confirmDeleteCustomer": "Êtes-vous sûr de vouloir supprimer",
+        "confirmDeleteOrder": "Êtes-vous sûr de vouloir supprimer cette commande",
+        "confirmDeleteProduct": "Êtes-vous sûr de vouloir supprimer",
+        "confirmDeleteSupplier": "Êtes-vous sûr de vouloir supprimer",
+        "importError": "Échec de l'importation des produits",
+        "selectBranchForProduct": "Veuillez sélectionner une succursale spécifique pour importer des produits"
     },
     "validation": {
         "required": "Ce champ est obligatoire",
@@ -772,7 +835,6 @@
         "totalPaid": "Payé",
         "remainingBalance": "Restant",
         "paymentComplete": "Complet",
-        "paymentMethods": "Méthodes de paiement",
         "paymentMethod": "Méthode de paiement",
         "amount": "Montant",
         "reference": "Référence",
@@ -800,7 +862,6 @@
         "noRecentSales": "Aucune vente récente trouvée",
         "saleNumber": "Numéro de vente",
         "time": "Heure",
-        "amount": "Montant",
         "actions": "Actions",
         "receipt": {
             "address": "Adresse",
@@ -821,7 +882,10 @@
             "thankYou": "Merci pour votre confiance !",
             "comeAgain": "À bientôt",
             "poweredBy": "Propulsé par Excledge-erp"
-        }
+        },
+        "offlineMode": "Vous êtes actuellement hors ligne. Les ventes seront mises en file d'attente et synchronisées lorsque la connexion sera rétablie.",
+        "offlineQueued": "Hors ligne : la vente a été mise en file d'attente et sera synchronisée une fois en ligne.",
+        "syncComplete": "Ventes hors ligne synchronisées."
     },
     "companySettings": {
         "title": "Paramètres de l'Entreprise",
@@ -916,7 +980,18 @@
         "creating": "Création en cours...",
         "unitPriceRwf": "Prix unitaire (RWF)",
         "noOrdersFoundDesc": "Vous n'avez pas encore créé de bons de commande. Commencez par créer votre première commande pour réapprovisionner votre inventaire.",
-        "expectedDelivery": "Livraison prévue"
+        "expectedDelivery": "Livraison prévue",
+        "product": "Produit",
+        "productName": "Nom du produit",
+        "quantity": "Quantité",
+        "supplier": "Fournisseur",
+        "items": "Articles",
+        "orderNumber": "Numéro de commande",
+        "pending": "Brouillon",
+        "noProductsFound": "Aucun produit trouvé.",
+        "noSuppliersFound": "Aucun fournisseur trouvé.",
+        "searchProduct": "Rechercher des produits...",
+        "searchSupplier": "Rechercher des fournisseurs..."
     },
     "userManagement": {
         "title": "Gestion des utilisateurs",
@@ -1080,7 +1155,9 @@
         "noTransactions": "Aucune transaction trouvée pour la période sélectionnée.",
         "completed": "Terminé",
         "refunded": "Remboursé",
-        "cancelled": "Annulé"
+        "cancelled": "Annulé",
+        "saleId": "ID de vente",
+        "totalTransactions": "Total des transactions"
     },
     "inventoryReport": {
         "totalValue": "Valeur totale de l'inventaire",
@@ -1112,7 +1189,8 @@
         "sale": "Vente",
         "newStock": "Nouveau stock",
         "currentStock": "Stock actuel",
-        "results": "résultats"
+        "results": "résultats",
+        "title": "Rapport d'inventaire"
     },
     "billing": {
         "title": "Gestion de l'abonnement",
@@ -1179,7 +1257,9 @@
         "subscriptionRequiredMessage": "Votre abonnement a expiré ou aucun abonnement actif n'a été trouvé.",
         "subscriptionRequiredCta": "Pour continuer à utiliser toutes les fonctionnalités de la plateforme, veuillez activer un abonnement.",
         "trialPeriod": "Période d'essai gratuite",
-        "trialMessage": "Vous utilisez actuellement un essai gratuit. Il se terminera le {{date}}. Abonnez-vous maintenant pour conserver vos données et accéder à toutes les fonctionnalités."
+        "trialMessage": "Vous utilisez actuellement un essai gratuit. Il se terminera le {{date}}. Abonnez-vous maintenant pour conserver vos données et accéder à toutes les fonctionnalités.",
+        "gracePeriod": "Période de grâce",
+        "renew": "Renouveler"
     },
     "import": {
         "customerImport": "Importer des clients",
@@ -1206,5 +1286,122 @@
         "failedToDownloadTemplate": "Échec du téléchargement du modèle",
         "failedToConfirm": "Échec de la confirmation de l'importation",
         "failedToDownloadError": "Échec du téléchargement du fichier d'erreur"
+    },
+    "subscription": {
+        "choosePlan": "Choisissez le plan adapté à votre entreprise",
+        "planDesc": "Sélectionnez un plan qui correspond aux besoins actuels de votre entreprise. Vous pourrez toujours passer à un plan supérieur plus tard.",
+        "mostPopular": "Le plus populaire",
+        "choosePlanButton": "Choisir ce plan",
+        "planProcessing": "Traitement…",
+        "currencyRwf": "RWF",
+        "perMonth": "par mois",
+        "perYear": "par an",
+        "planTaglinePopular": "Plus de puissance pour les équipes en croissance — sauvegardes quotidiennes, fonctionnalités prioritaires et marge pour évoluer.",
+        "planTaglineDefault": "Tout ce dont vous avez besoin pour démarrer avec l'inventaire, les ventes et les rapports.",
+        "plansFootnote": "Prix en RWF. Paiement sécurisé. Vous pouvez changer de plan à tout moment.",
+        "trustSecure": "Paiement sécurisé",
+        "trustSupport": "Support 24/7",
+        "trustActivate": "Activation rapide"
+    },
+    "invoiceScanner": {
+        "title": "Scanner de Factures Fournisseur",
+        "subtitle": "Téléversez une facture fournisseur pour extraire et importer automatiquement les produits",
+        "scanInvoice": "Scanner une Facture",
+        "supplierInvoices": "Factures Fournisseurs",
+        "newScan": "Nouveau Scan",
+        "step1Title": "Téléverser la Facture",
+        "step1Desc": "Téléversez un PDF, JPG, JPEG ou PNG",
+        "step2Title": "Traitement",
+        "step2Desc": "Extraction des produits par IA",
+        "step3Title": "Vérifier et Modifier",
+        "step3Desc": "Vérifiez et modifiez les données extraites",
+        "step4Title": "Faire Correspondre les Produits",
+        "step4Desc": "Lier à l'inventaire existant",
+        "step5Title": "Importer",
+        "step5Desc": "Enregistrer les produits dans l'inventaire",
+        "dropzoneTitle": "Déposez la facture ici",
+        "dropzoneSubtitle": "ou cliquez pour parcourir",
+        "dropzoneHint": "Prend en charge PDF, JPG, JPEG, PNG • Max 20 Mo",
+        "uploading": "Téléversement...",
+        "processing": "Traitement de la facture...",
+        "readingInvoice": "Lecture de la facture...",
+        "extractingProducts": "Extraction des produits...",
+        "pleaseWait": "Veuillez patienter...",
+        "aiPowered": "Extraction Assistée par IA",
+        "noApiKey": "Aucune clé OCR configurée — saisissez les produits manuellement",
+        "productsFound": "{{count}} produits extraits",
+        "lowConfidence": "Vérification nécessaire",
+        "editRow": "Modifier la ligne",
+        "deleteRow": "Supprimer la ligne",
+        "duplicateRow": "Dupliquer la ligne",
+        "addRow": "Ajouter une ligne",
+        "bulkActions": "Actions Groupées",
+        "changeCategory": "Changer la Catégorie",
+        "changeSupplier": "Changer le Fournisseur",
+        "applyTax": "Appliquer la Taxe",
+        "deleteSelected": "Supprimer la Sélection",
+        "updateSellingPrice": "Mettre à Jour le Prix de Vente",
+        "setExpiryDate": "Définir la Date d'Expiration",
+        "selectAll": "Tout sélectionner",
+        "rowsSelected": "{{count}} lignes sélectionnées",
+        "existingProductFound": "Produit Existant Trouvé",
+        "currentStock": "Stock Actuel",
+        "incoming": "Entrant",
+        "newStock": "Nouveau Stock",
+        "updateExisting": "Mettre à Jour le Produit Existant",
+        "merge": "Fusionner",
+        "createNew": "Créer un Nouveau Produit",
+        "skip": "Ignorer",
+        "duplicateDetected": "Doublon Détecté",
+        "validationErrors": "Erreurs de Validation",
+        "missingName": "Nom du produit manquant",
+        "invalidExpiry": "Date d'expiration invalide",
+        "negativeQty": "La quantité ne peut pas être négative",
+        "missingPrice": "Prix d'achat manquant",
+        "importSummary": "Résumé de l'Importation",
+        "supplierLabel": "Fournisseur",
+        "invoiceLabel": "Facture",
+        "productsLabel": "Produits",
+        "newLabel": "Nouveau",
+        "existingLabel": "Existant",
+        "duplicatesLabel": "Doublons",
+        "warningsLabel": "Avertissements",
+        "importProducts": "Importer les Produits",
+        "importing": "Importation...",
+        "importSuccess": "Importation Terminée",
+        "importSuccessDesc": "{{count}} produits ont été ajoutés à l'inventaire",
+        "viewInvoice": "Voir la Facture",
+        "goToInventory": "Aller à l'Inventaire",
+        "scanAnother": "Scanner une Autre Facture",
+        "invoiceDate": "Date de la Facture",
+        "invoiceNumber": "Numéro de Facture",
+        "supplierName": "Nom du Fournisseur",
+        "currency": "Devise",
+        "noInvoices": "Aucune facture fournisseur trouvée",
+        "createFirst": "Téléversez votre première facture pour commencer",
+        "status": {
+            "DRAFT": "Brouillon",
+            "PROCESSING": "En cours",
+            "REVIEW": "Vérification",
+            "APPROVED": "Approuvé",
+            "IMPORTED": "Importé",
+            "FAILED": "Échoué"
+        },
+        "deleteConfirm": "Êtes-vous sûr de vouloir supprimer cette facture ?",
+        "deleteSuccess": "Facture supprimée",
+        "deleteFailed": "Échec de la suppression de la facture",
+        "fetchFailed": "Échec de la récupération des factures",
+        "uploadFailed": "Échec du téléversement de la facture",
+        "saveFailed": "Échec de l'enregistrement des modifications",
+        "matchFailed": "Échec de la correspondance des produits",
+        "importFailed": "Échec de l'importation des produits",
+        "confidence": "Confiance",
+        "manufacturer": "Fabricant",
+        "purchasePrice": "Prix d'Achat",
+        "sellingPrice": "Prix de Vente",
+        "items": "Articles",
+        "file": "Fichier",
+        "scannedAt": "Scanné",
+        "importedAt": "Importé"
     }
 }
