@@ -4,6 +4,7 @@ import { ArrowRightLeft, Loader2 } from "lucide-react";
 import { apiClient } from "../../../lib/api-client";
 import { useBranch } from "../../../context/BranchContext";
 import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
+import { cn } from "../../../lib/utils";
 import { Button } from "../../../components/ui/button";
 import {
   Card,
@@ -69,6 +70,7 @@ export default function StockTransfersPage() {
   const [productId, setProductId] = useState("");
   const [qty, setQty] = useState("1");
   const [submitting, setSubmitting] = useState(false);
+  const [attempted, setAttempted] = useState(false);
 
   const load = useCallback(async () => {
     if (!orgId) return;
@@ -157,8 +159,18 @@ export default function StockTransfersPage() {
 
   const createTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!orgId || !fromBranchId || !toBranchId || fromBranchId === toBranchId) {
-      toast.error("Select two different branches");
+    setAttempted(true);
+    if (!orgId) return;
+    if (!fromBranchId) {
+      toast.error("Select a from branch");
+      return;
+    }
+    if (!toBranchId) {
+      toast.error("Select a to branch");
+      return;
+    }
+    if (fromBranchId === toBranchId) {
+      toast.error("From and to branches must be different");
       return;
     }
     const pid = parseInt(productId, 10);
@@ -185,6 +197,7 @@ export default function StockTransfersPage() {
       toast.success("Transfer created");
       setProductId("");
       setQty("1");
+      setAttempted(false);
       load();
     } catch (err: any) {
       toast.error(err.message || "Create failed");
@@ -228,10 +241,14 @@ export default function StockTransfersPage() {
         <CardContent className="space-y-4">
           <form onSubmit={createTransfer} className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>From branch</Label>
+              <div className="space-y-1.5">
+                <Label>
+                  From branch <span className="text-destructive">*</span>
+                </Label>
                 <Select value={fromBranchId} onValueChange={setFromBranchId}>
-                  <SelectTrigger>
+                  <SelectTrigger
+                    className={cn(attempted && !fromBranchId && "border-destructive ring-1 ring-destructive/30")}
+                  >
                     <SelectValue placeholder="Select branch" />
                   </SelectTrigger>
                   <SelectContent>
@@ -242,11 +259,18 @@ export default function StockTransfersPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {attempted && !fromBranchId && (
+                  <p className="text-xs text-destructive">Select a branch to transfer from.</p>
+                )}
               </div>
-              <div className="space-y-2">
-                <Label>To branch</Label>
+              <div className="space-y-1.5">
+                <Label>
+                  To branch <span className="text-destructive">*</span>
+                </Label>
                 <Select value={toBranchId} onValueChange={setToBranchId}>
-                  <SelectTrigger>
+                  <SelectTrigger
+                    className={cn(attempted && !toBranchId && "border-destructive ring-1 ring-destructive/30")}
+                  >
                     <SelectValue placeholder="Select branch" />
                   </SelectTrigger>
                   <SelectContent>
@@ -257,6 +281,9 @@ export default function StockTransfersPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {attempted && !toBranchId && (
+                  <p className="text-xs text-destructive">Select a branch to transfer to.</p>
+                )}
               </div>
             </div>
 
@@ -269,22 +296,28 @@ export default function StockTransfersPage() {
             )}
 
             <div className="grid gap-4 md:grid-cols-[1fr_140px]">
-              <div className="space-y-2">
-                <Label>Product</Label>
+              <div className="space-y-1.5">
+                <Label>
+                  Product <span className="text-destructive">*</span>
+                </Label>
                 <SearchableSelect
                   value={productId}
                   onChange={setProductId}
                   placeholder="Search product by name..."
                   searchPlaceholder="Type to search products..."
                   emptyText="No products found."
+                  className={cn(attempted && !productId && "border-destructive ring-1 ring-destructive/30")}
                   options={products.map((p) => ({
                     value: String(p.id),
                     label: p.name,
                     sublabel: p.sku ?? undefined,
                   }))}
                 />
+                {attempted && !productId && (
+                  <p className="text-xs text-destructive">Select a product to transfer.</p>
+                )}
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Quantity</Label>
                 <Input
                   value={qty}
@@ -305,8 +338,23 @@ export default function StockTransfersPage() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Transfers</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle className="text-lg">Transfers</CardTitle>
+            <CardDescription>{transfers.length} total</CardDescription>
+          </div>
+          {transfers.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {(["PENDING", "APPROVED", "COMPLETED", "REJECTED"] as const)
+                .map((status) => ({ status, count: transfers.filter((t) => t.status === status).length }))
+                .filter(({ count }) => count > 0)
+                .map(({ status, count }) => (
+                  <Badge key={status} className={statusBadgeClass(status)}>
+                    {count} {status.charAt(0) + status.slice(1).toLowerCase()}
+                  </Badge>
+                ))}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {loading ? (

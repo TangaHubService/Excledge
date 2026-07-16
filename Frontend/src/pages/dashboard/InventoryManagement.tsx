@@ -14,6 +14,7 @@ import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
 import { useTheme } from "../../context/ThemeContext";
 import { useBranch } from "../../context/BranchContext";
+import { BranchRequiredNotice } from "../../components/BranchRequiredNotice";
 import {
   Table,
   TableBody,
@@ -1061,6 +1062,13 @@ export const InventoryManagement = () => {
                 Please review the products to be imported. Found {previewItems.length} valid items.
               </p>
 
+              {!selectedBranchId && (
+                <BranchRequiredNotice
+                  message='Select a specific branch from the header (not "All Branches") before importing products.'
+                  className="mb-4"
+                />
+              )}
+
               <ScrollArea className="h-[60vh] border rounded-md">
                 <div className="min-w-[1000px]">
                   <Table>
@@ -1110,7 +1118,7 @@ export const InventoryManagement = () => {
                 </Button>
                 <Button
                   onClick={handleConfirmImport}
-                  disabled={loading}
+                  disabled={loading || !selectedBranchId}
                   className="bg-green-600 hover:bg-green-700 text-white min-w-[140px]"
                 >
                   {loading ? (

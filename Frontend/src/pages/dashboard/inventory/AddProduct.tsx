@@ -24,6 +24,7 @@ import {
 import { toast } from 'react-toastify'
 import { apiClient } from '../../../lib/api-client'
 import { useBranch } from '../../../context/BranchContext'
+import { BranchRequiredNotice } from '../../../components/BranchRequiredNotice'
 import { MEASUREMENT_UNIT_OPTIONS } from '../../../types/ebm'
 
 function toRwf(value: number): number {
@@ -343,6 +344,10 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
     return (
         <div className="mx-auto max-w-xl">
             <div className="space-y-6">
+                {!selectedBranchId && (
+                    <BranchRequiredNotice message='Select a specific branch from the header (not "All Branches") before adding a product.' />
+                )}
+
                 {/* Step Indicator */}
                 <div className="flex items-center gap-1">
                     {STEPS.map((step, idx) => (
