@@ -60,8 +60,9 @@ export const getUserBranchesController = async (req: AuthRequest, res: Response)
   try {
     const userId = parseInt(req.user?.userId);
     const organizationId = req.query.organizationId ? parseInt(req.query.organizationId as string) : undefined;
+    const includeInactive = req.query.includeInactive === 'true';
 
-    const branches = await getUserBranches(userId, organizationId);
+    const branches = await getUserBranches(userId, organizationId, includeInactive);
 
     res.json(branches);
   } catch (error: any) {
