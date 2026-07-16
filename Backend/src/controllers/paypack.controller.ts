@@ -41,7 +41,7 @@ export const initiatePaypackPayment = async (req: Request, res: Response) => {
                         'Authorization': `Bearer ${access}`,
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
-                        'X-Webhook-Mode': 'development'
+                        'X-Webhook-Mode': paypackConfig.environment
                     }
                 }
             );

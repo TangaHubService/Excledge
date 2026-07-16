@@ -32,6 +32,7 @@ const notification_routes_1 = __importDefault(require("./routes/notification.rou
 const debtPayment_routes_1 = __importDefault(require("./routes/debtPayment.routes"));
 const batch_routes_1 = __importDefault(require("./routes/batch.routes"));
 const branch_routes_1 = __importDefault(require("./routes/branch.routes"));
+const warehouse_routes_1 = __importDefault(require("./routes/warehouse.routes"));
 const expense_routes_1 = __importDefault(require("./routes/expense.routes"));
 const supplier_payment_routes_1 = __importDefault(require("./routes/supplier-payment.routes"));
 const stock_transfer_routes_1 = __importDefault(require("./routes/stock-transfer.routes"));
@@ -122,6 +123,7 @@ app.use("/api/pesapal", pesapal_route_1.default);
 app.use("/api/upload", upload_route_1.default);
 app.use("/api/batches", batch_routes_1.default);
 app.use("/api/branches", branch_routes_1.default);
+app.use("/api/warehouses", warehouse_routes_1.default);
 app.use("/api/expenses", expense_routes_1.default);
 app.use("/api/supplier-payments", supplier_payment_routes_1.default);
 app.use("/api/stock-transfers", stock_transfer_routes_1.default);
