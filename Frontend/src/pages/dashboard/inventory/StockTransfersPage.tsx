@@ -240,7 +240,7 @@ export default function StockTransfersPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={createTransfer} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>
                   From branch <span className="text-destructive">*</span>
@@ -295,7 +295,7 @@ export default function StockTransfersPage() {
               </div>
             )}
 
-            <div className="grid gap-4 md:grid-cols-[1fr_140px]">
+            <div className="grid grid-cols-[1fr_100px] gap-4">
               <div className="space-y-1.5">
                 <Label>
                   Product <span className="text-destructive">*</span>
