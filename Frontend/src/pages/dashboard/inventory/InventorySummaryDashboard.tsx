@@ -10,10 +10,12 @@ import {
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
+import { SearchableSelect } from '../../../components/ui/SearchableSelect';
 import { Loader2, TrendingUp, TrendingDown, Package, DollarSign } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Badge } from '../../../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table';
+import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response';
 
 interface SummaryItem {
   productId: number;
@@ -43,6 +45,7 @@ export default function InventorySummaryDashboard() {
   const [products, setProducts] = useState<Map<number, { name: string; sku?: string }>>(new Map());
   const [branches, setBranches] = useState<Map<number, { name: string; code?: string }>>(new Map());
   const [branchOptions, setBranchOptions] = useState<Array<{ id: number; name: string; code?: string }>>([]);
+  const [productOptions, setProductOptions] = useState<Array<{ id: number; name: string; sku?: string | null }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,11 +54,20 @@ export default function InventorySummaryDashboard() {
   const [branchId, setBranchId] = useState<string>('');
   const [fromDate, setFromDate] = useState<string>('inception');
 
+  const orgId = localStorage.getItem('current_organization_id');
+
   useEffect(() => {
     apiClient.getBranches()
       .then((data: any) => setBranchOptions(Array.isArray(data) ? data : data?.branches ?? []))
       .catch(() => setBranchOptions([]));
   }, []);
+
+  useEffect(() => {
+    if (!orgId) return;
+    apiClient.getProducts({ organizationId: orgId, limit: 1000 })
+      .then((res: any) => setProductOptions(parseInventoryGetProductsResponse(res).items as Array<{ id: number; name: string; sku?: string | null }>))
+      .catch(() => setProductOptions([]));
+  }, [orgId]);
 
   useEffect(() => {
     fetchSummary();
@@ -189,12 +201,21 @@ export default function InventorySummaryDashboard() {
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label>{t('inventory.productId') || 'Product ID'}</Label>
-              <Input
-                type="number"
+              <Label>{t('common.product') || 'Product'}</Label>
+              <SearchableSelect
                 value={productId}
-                onChange={(e) => setProductId(e.target.value)}
-                placeholder={t('inventory.enterProductId') || 'Enter product ID (optional)'}
+                onChange={setProductId}
+                placeholder={t('inventory.allProducts') || 'All products'}
+                searchPlaceholder={t('inventory.searchProducts') || 'Type to search products...'}
+                emptyText={t('inventory.noProductsFound') || 'No products found.'}
+                options={[
+                  { value: '', label: t('inventory.allProducts') || 'All products' },
+                  ...productOptions.map((p) => ({
+                    value: String(p.id),
+                    label: p.name,
+                    sublabel: p.sku ?? undefined,
+                  })),
+                ]}
               />
             </div>
             <div className="space-y-2">

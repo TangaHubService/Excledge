@@ -20,7 +20,9 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
+import { SearchableSelect } from '../../../components/ui/SearchableSelect';
 import { Badge } from '../../../components/ui/badge';
+import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response';
 import { Loader2, TrendingUp, TrendingDown, Filter, FileSpreadsheet, FileText } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -64,6 +66,7 @@ export default function LedgerHistoryPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [branchOptions, setBranchOptions] = useState<Array<{ id: number; name: string; code?: string }>>([]);
+  const [productOptions, setProductOptions] = useState<Array<{ id: number; name: string; sku?: string | null }>>([]);
 
   // Filters
   const [productId, setProductId] = useState<string>('');
@@ -72,11 +75,20 @@ export default function LedgerHistoryPage() {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
+  const orgId = localStorage.getItem('current_organization_id');
+
   useEffect(() => {
     apiClient.getBranches()
       .then((data: any) => setBranchOptions(Array.isArray(data) ? data : data?.branches ?? []))
       .catch(() => setBranchOptions([]));
   }, []);
+
+  useEffect(() => {
+    if (!orgId) return;
+    apiClient.getProducts({ organizationId: orgId, limit: 1000 })
+      .then((res: any) => setProductOptions(parseInventoryGetProductsResponse(res).items as Array<{ id: number; name: string; sku?: string | null }>))
+      .catch(() => setProductOptions([]));
+  }, [orgId]);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -240,7 +252,10 @@ export default function LedgerHistoryPage() {
       let filterParts: string[] = [];
       if (startDate || endDate) filterParts.push(`Period: ${startDate || '…'} → ${endDate || '…'}`);
       if (movementType) filterParts.push(`Type: ${movementType}`);
-      if (productId) filterParts.push(`Product ID: ${productId}`);
+      if (productId) {
+        const productName = productOptions.find((p) => String(p.id) === productId)?.name ?? productId;
+        filterParts.push(`Product: ${productName}`);
+      }
       if (branchId) {
         const branchName = branchOptions.find((b) => String(b.id) === branchId)?.name ?? branchId;
         filterParts.push(`Branch: ${branchName}`);
@@ -379,17 +394,26 @@ export default function LedgerHistoryPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div className="space-y-2">
               <Label className={theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}>
-                {t('inventory.productId') || 'Product ID'}
+                {t('common.product') || 'Product'}
               </Label>
-              <Input
-                type="number"
+              <SearchableSelect
                 value={productId}
-                onChange={(e) => setProductId(e.target.value)}
-                placeholder={t('inventory.enterProductId') || 'Enter product ID'}
+                onChange={setProductId}
+                placeholder={t('inventory.allProducts') || 'All products'}
+                searchPlaceholder={t('inventory.searchProducts') || 'Type to search products...'}
+                emptyText={t('inventory.noProductsFound') || 'No products found.'}
                 className={theme === 'dark'
-                  ? 'bg-gray-700 border-gray-600 text-white placeholder:text-gray-400'
+                  ? 'bg-gray-700 border-gray-600 text-white'
                   : 'bg-white border-gray-300 text-gray-900'
                 }
+                options={[
+                  { value: '', label: t('inventory.allProducts') || 'All products' },
+                  ...productOptions.map((p) => ({
+                    value: String(p.id),
+                    label: p.name,
+                    sublabel: p.sku ?? undefined,
+                  })),
+                ]}
               />
             </div>
             <div className="space-y-2">
