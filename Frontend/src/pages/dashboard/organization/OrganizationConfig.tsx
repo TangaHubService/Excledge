@@ -150,7 +150,7 @@ export function OrganizationConfig() {
             if (orgId) {
                 const [orgResponse, branchesResponse, settingsResponse] = await Promise.all([
                     apiClient.getOrganization(orgId),
-                    apiClient.getBranches(),
+                    apiClient.getBranches(true),
                     apiClient.getOrganizationSettings(orgId)
                 ]);
 
