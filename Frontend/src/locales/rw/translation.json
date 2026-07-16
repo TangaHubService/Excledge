@@ -109,7 +109,25 @@
         "clickToViewDetails": "Kanda kugira ngo urebe ibisobanuro",
         "saving": "Birabikwa...",
         "errors": "Amakosa",
-        "noDataToPreview": "Nta makuru yagaragayemo"
+        "noDataToPreview": "Nta makuru yagaragayemo",
+        "clear": "Siba",
+        "clearFilters": "Siba ibyo wahisemo",
+        "configure": "Tunganya",
+        "confirmDelete": "Emeza Gusiba",
+        "copy": "Koporora",
+        "customer": "Umukiriya",
+        "cancelled": "Byahagaritswe",
+        "pending": "Bitegereje",
+        "paid": "Yishyuwe",
+        "failed": "Byanze",
+        "unknown": "Kitazwi",
+        "month": "Ukwezi",
+        "tryAgain": "Ongera ugerageze",
+        "deleteError": "Gusiba ntibyagenze neza",
+        "deletedSuccessfully": "Byasibwe neza",
+        "uploading": "Birakoreshwa...",
+        "reset": "Subiza uko byari",
+        "rowsPerPage": "Imirongo ku ipaji"
     },
     "languages": {
         "title": "Indimi",
@@ -117,6 +135,23 @@
         "en": "Icyongereza",
         "fr": "Igifaransa",
         "sw": "Igiswahili"
+    },
+    "organizations": {
+        "welcomeTitle": "Ikaze kuri Excledge ERP",
+        "welcomeDesc": "Tangira ukoze igikorwa cyo kurema ikigo cyawe cya mbere. Bifata umunota umwe gusa gutunganya iduka ryawe no gutangira gucunga ibicuruzwa byawe.",
+        "readyToStart": "Witeguye gutangira urugendo rwawe?",
+        "createPrompt": "Sisitemu yawe ikomeye yo gucunga ibicuruzwa iri hafi, kanda rimwe gusa.",
+        "createOrganization": "Rema Ikigo",
+        "createNew": "Rema Gishya",
+        "myOrganizations": "Ibigo Byanjye",
+        "selectOrCreate": "Hitamo ikigo cyangwa urema igishya",
+        "current": "Igikoreshwa",
+        "role": "Uruhare",
+        "owner": "Nyir'ikigo",
+        "noOrganizations": "Nta bigo byabonetse",
+        "createSuccess": "Ikigo cyaremwe neza",
+        "switchOrg": "Hindura Ikigo",
+        "select": "Hitamo ikigo"
     },
     "nav": {
         "home": "Ahabanza",
@@ -165,7 +200,8 @@
         "inventorySummary": "Incamake y'ibicuruzwa",
         "stockTransfers": "Kohereza ibicuruzwa hagati y'amashami",
         "warehouses": "Ububiko",
-        "branches": "Amashami"
+        "branches": "Amashami",
+        "organizationConfig": "Igenamiterere ry'Ikigo"
     },
     "auth": {
         "login": "Injira",
@@ -351,7 +387,27 @@
         "movements": "Impinduka",
         "byType": "Ku bwoko",
         "totalCost": "Igiciro Cyose",
-        "noSummaryData": "Nta makuru y'incamake abonetse"
+        "noSummaryData": "Nta makuru y'incamake abonetse",
+        "allBranches": "Amashami Yose",
+        "allProducts": "Ibicuruzwa Byose",
+        "description": "Ibisobanuro",
+        "expiringProducts": "Ibicuruzwa bigiye kurangira",
+        "maxStock": "Ububiko Ntarengwa",
+        "noProductsFound": "Nta bicuruzwa byabonetse.",
+        "previewImport": "Reba Mbere yo Kwinjiza",
+        "searchPlaceholder": "Shakisha ukoresheje izina, SKU, cyangwa nimero ya ipaki..."
+    },
+    "batches": {
+        "title": "Gucunga Ipaki",
+        "batchNumber": "Nimero ya Ipaki",
+        "quantity": "Umubare",
+        "unitCost": "Igiciro ku gice",
+        "expiryDate": "Itariki yo kurangira",
+        "receivedAt": "Byakiriwe",
+        "status": "Uko bimeze",
+        "noBatches": "Nta paki ziboneka",
+        "active": "Ikora",
+        "inactive": "Idakora"
     },
     "logs": {
         "activityLogs": "Ibyakozwe",
@@ -410,7 +466,8 @@
             "Customer": "Umukiriya",
             "Supplier": "Utanga",
             "Organization": "Ibikoresho"
-        }
+        },
+        "requestData": "Amakuru y'Icyifuzo"
     },
     "sales": {
         "sales": "Igurisha",
@@ -477,7 +534,8 @@
             "status": "Uko bimeze",
             "total": "Igiteranyo",
             "actions": "Ibikorwa",
-            "profit": "Inyungu"
+            "profit": "Inyungu",
+            "tax": "Umusoro"
         },
         "paymentBreakdown": "Incamake y'ishyura",
         "totalAmount": "Igiteranyo cyose",
@@ -493,7 +551,8 @@
         "summary": "Incamake",
         "fetchError": "Gushaka amakuru y'igurisha ntibyagenze neza",
         "saleNotFound": "Nta gurisha ryabonetse",
-        "insuranceAmount": "Amafaranga y'ubwishingizi"
+        "insuranceAmount": "Amafaranga y'ubwishingizi",
+        "status": "Uko bimeze"
     },
     "customers": {
         "customers": "Abakiriya",
@@ -680,7 +739,14 @@
         "noExpiringProducts": "Nta bicuruzwa bizata igihe vuba.",
         "logsLoadError": "Kureba ibikorwa byakozwe ntibyagenze neza",
         "failedToFetchNotifications": "Gushaka imenyesha ntibyagenze neza",
-        "failedToMarkRead": "Gukoresha imenyesha nk'iyasomwe ntibyagenze neza"
+        "failedToMarkRead": "Gukoresha imenyesha nk'iyasomwe ntibyagenze neza",
+        "confirmDeleteCustomer": "Uremeza ko ushaka gusiba",
+        "confirmDeleteOrder": "Uremeza ko ushaka gusiba iki cyasabwe",
+        "confirmDeleteProduct": "Uremeza ko ushaka gusiba",
+        "confirmDeleteSupplier": "Uremeza ko ushaka gusiba",
+        "importError": "Kwinjiza ibicuruzwa ntibyagenze neza",
+        "selectBranchForProduct": "Nyamuneka hitamo ishami ryihariye kugira ngo winjize ibicuruzwa",
+        "noOrganizationFound": "Nta kigo cyabonetse"
     },
     "validation": {
         "required": "Iki gice kirakenewe",
@@ -743,9 +809,8 @@
         "totalPaid": "Cyishyuwe",
         "remainingBalance": "Risigaye",
         "paymentComplete": "Byarangiye",
-        "paymentMethods": "Uburyo bwo kwishyura",
         "paymentMethod": "Uburyo bwo kwishyura",
-        "amount": "Amafaranga",
+        "amount": "Agaciro",
         "reference": "Inyandiko",
         "referencePlaceholder": "Inyandiko",
         "completePayment": "Gukomeza",
@@ -771,7 +836,6 @@
         "noRecentSales": "Nta gurisha ryaherutse kuboneka",
         "saleNumber": "Nimero y'igurisha",
         "time": "Isaha",
-        "amount": "Agaciro",
         "actions": "Ibikorwa",
         "receipt": {
             "address": "Aderesi",
@@ -792,7 +856,10 @@
             "thankYou": "Murakoze guhitamo serivisi zacu!",
             "comeAgain": "Muzongere kugaruka",
             "poweredBy": "Ikoresha Excledge-erp"
-        }
+        },
+        "offlineMode": "Kuri ubu ntabwo uri kuri interineti. Igurisha rizabikwa mu murongo kandi rihuzwe iyo interineti isubiye.",
+        "offlineQueued": "Nta interineti: Igurisha ryabitswe mu murongo kandi rizahuzwa iyo interineti isubiye.",
+        "syncComplete": "Igurisha ryakozwe nta interineti ryahujwe."
     },
     "companySettings": {
         "title": "Igenamiterere rya Sosiyete",
@@ -897,7 +964,16 @@
         "expectedDelivery": "Itariki yo gutanga yitezwe",
         "orderId": "ID y'ubugure",
         "orderNumberShort": "N° Cde",
-        "noOrdersFoundDesc": "Nturakora ubugure na bumwe. Tangira ukora ubugure bwawe bwa mbere kugira ngo wongere ibicuruzwa mu bubiko."
+        "noOrdersFoundDesc": "Nturakora ubugure na bumwe. Tangira ukora ubugure bwawe bwa mbere kugira ngo wongere ibicuruzwa mu bubiko.",
+        "product": "Igicuruzwa",
+        "productName": "Izina ry'igicuruzwa",
+        "quantity": "Umubare",
+        "supplier": "Umucuruzi",
+        "items": "Ibintu",
+        "noProductsFound": "Nta bicuruzwa byabonetse.",
+        "noSuppliersFound": "Nta batanga babonetse.",
+        "searchProduct": "Shakisha ibicuruzwa...",
+        "searchSupplier": "Shakisha abatanga..."
     },
     "userManagement": {
         "title": "Gucunga Abakoresha",
@@ -1060,7 +1136,9 @@
         "noTransactions": "Nta transactions zabonetse mu gihe cyahiswemo.",
         "completed": "Byarangiye",
         "refunded": "Byishyuwe",
-        "cancelled": "Byakuweho"
+        "cancelled": "Byakuweho",
+        "saleId": "ID y'igurisha",
+        "totalTransactions": "Igiteranyo cy'Ivunjwa"
     },
     "inventoryReport": {
         "totalValue": "Agaciro k'Ibicuruzwa Byose",
@@ -1092,7 +1170,8 @@
         "sale": "Kugurisha",
         "newStock": "Ibisigaye",
         "currentStock": "Ibirimo ubu",
-        "results": "ibisubizo"
+        "results": "ibisubizo",
+        "title": "Raporo y'ibicuruzwa"
     },
     "billing": {
         "title": "Gucunga Ifatabuguzi",
@@ -1159,7 +1238,9 @@
         "subscriptionRequiredMessage": "Ifatabuguzi ryawe ryarangiye cyangwa nta fatabuguzi rikoreshwa ryabonetse.",
         "subscriptionRequiredCta": "Kugira ngo ukomeze gukoresha ibikorwa byose bya sisitemu, nyamuneka fata ifatabuguzi.",
         "trialPeriod": "Igihe cy'igeragezwa",
-        "trialMessage": "Ubu uri gukoresha igihe cy'igeragezwa ry'ubuntu. Bizarangira ku wa {{date}}. Gura abonema ubu kugira ngo ukomeze kubona amakuru yawe n'ibindi byose."
+        "trialMessage": "Ubu uri gukoresha igihe cy'igeragezwa ry'ubuntu. Bizarangira ku wa {{date}}. Gura abonema ubu kugira ngo ukomeze kubona amakuru yawe n'ibindi byose.",
+        "gracePeriod": "Igihe cy'ubuntu",
+        "renew": "Kongera"
     },
     "import": {
         "customerImport": "Injiza Abakiriya",
@@ -1186,5 +1267,122 @@
         "failedToDownloadTemplate": "Gupakurura icyizere ntibyagenze neza",
         "failedToConfirm": "Gukomeza guinjiza ntibyagenze neza",
         "failedToDownloadError": "Gupakurura idosiye y'amakosa ntibyagenze neza"
+    },
+    "subscription": {
+        "choosePlan": "Hitamo gahunda ikwiye ubucuruzi bwawe",
+        "planDesc": "Hitamo gahunda ihuye n'ibyo ubucuruzi bwawe bukeneye ubu. Ushobora kuzamura gahunda igihe cyose ukura.",
+        "mostPopular": "Ikunzwe Cyane",
+        "choosePlanButton": "Hitamo Gahunda",
+        "planProcessing": "Biratunganywa…",
+        "currencyRwf": "RWF",
+        "perMonth": "ku kwezi",
+        "perYear": "ku mwaka",
+        "planTaglinePopular": "Imbaraga nyinshi ku matsinda akura — kubika inyandiko buri munsi, ibiranga by'ibanze, n'umwanya wo gukura.",
+        "planTaglineDefault": "Ibyo wese ukeneye kugira ngo utangire gucunga ibicuruzwa, igurisha, n'amaraporo.",
+        "plansFootnote": "Ibiciro biri muri RWF. Kwishyura biri mu mutekano. Ushobora guhindura gahunda igihe cyose ukura.",
+        "trustSecure": "Kwishyura mu Mutekano",
+        "trustSupport": "Ubufasha 24/7",
+        "trustActivate": "Gutangira Byihuse"
+    },
+    "invoiceScanner": {
+        "title": "Igikoresho cyo Gusoma Fagitire z'Abatanga",
+        "subtitle": "Ohereza fagitire y'utanga kugira ngo ukurureho kandi winjize ibicuruzwa mu buryo bwikora",
+        "scanInvoice": "Soma Fagitire",
+        "supplierInvoices": "Fagitire z'Abatanga",
+        "newScan": "Gusoma Gushya",
+        "step1Title": "Ohereza Fagitire",
+        "step1Desc": "Ohereza PDF, JPG, JPEG, cyangwa PNG",
+        "step2Title": "Biratunganywa",
+        "step2Desc": "Gukuramo ibicuruzwa hakoreshejwe AI",
+        "step3Title": "Suzuma kandi Uhindure",
+        "step3Desc": "Emeza kandi uhindure amakuru yakuwemo",
+        "step4Title": "Huza Ibicuruzwa",
+        "step4Desc": "Huza n'ibiri mu bubiko",
+        "step5Title": "Injiza",
+        "step5Desc": "Bika ibicuruzwa mu bubiko",
+        "dropzoneTitle": "Shyira fagitire hano",
+        "dropzoneSubtitle": "cyangwa kanda ushakishe",
+        "dropzoneHint": "Ifasha PDF, JPG, JPEG, PNG • Ntarengwa MB 20",
+        "uploading": "Birakoreshwa...",
+        "processing": "Fagitire iratunganywa...",
+        "readingInvoice": "Fagitire irasomwa...",
+        "extractingProducts": "Ibicuruzwa biragukurwaho...",
+        "pleaseWait": "Nyamuneka tegereza...",
+        "aiPowered": "Gukuramo Bikoresheje AI",
+        "noApiKey": "Nta rufunguzo rwa OCR rwashyizweho — injiza ibicuruzwa wenyine",
+        "productsFound": "Ibicuruzwa {{count}} byakuwemo",
+        "lowConfidence": "Bikeneye gusuzumwa",
+        "editRow": "Hindura umurongo",
+        "deleteRow": "Siba umurongo",
+        "duplicateRow": "Gukoporora umurongo",
+        "addRow": "Ongeramo umurongo",
+        "bulkActions": "Ibikorwa by'Itsinda",
+        "changeCategory": "Hindura Icyiciro",
+        "changeSupplier": "Hindura Utanga",
+        "applyTax": "Shyiraho Umusoro",
+        "deleteSelected": "Siba Ibyahiswemo",
+        "updateSellingPrice": "Vugurura Igiciro cyo Kugurisha",
+        "setExpiryDate": "Shyiraho Itariki yo Kurangira",
+        "selectAll": "Hitamo byose",
+        "rowsSelected": "Imirongo {{count}} yahiswemo",
+        "existingProductFound": "Igicuruzwa Kiriho Cyabonetse",
+        "currentStock": "Ububiko bw'Ubu",
+        "incoming": "Biraza",
+        "newStock": "Ububiko Bushya",
+        "updateExisting": "Vugurura Igicuruzwa Kiriho",
+        "merge": "Huza",
+        "createNew": "Kora Igicuruzwa Gishya",
+        "skip": "Simbuka",
+        "duplicateDetected": "Hagaragaye Igisubiramo",
+        "validationErrors": "Amakosa yo Kwemeza",
+        "missingName": "Izina ry'igicuruzwa ribuze",
+        "invalidExpiry": "Itariki yo kurangira ntiyemewe",
+        "negativeQty": "Umubare ntushobora kuba munsi ya zeru",
+        "missingPrice": "Igiciro cyo kugura kibuze",
+        "importSummary": "Incamake y'Ikwinjizwa",
+        "supplierLabel": "Utanga",
+        "invoiceLabel": "Fagitire",
+        "productsLabel": "Ibicuruzwa",
+        "newLabel": "Gishya",
+        "existingLabel": "Kiriho",
+        "duplicatesLabel": "Ibisubiramo",
+        "warningsLabel": "Iburira",
+        "importProducts": "Injiza Ibicuruzwa",
+        "importing": "Birinjizwa...",
+        "importSuccess": "Ikwinjizwa Ryarangiye",
+        "importSuccessDesc": "Ibicuruzwa {{count}} byongewe mu bubiko",
+        "viewInvoice": "Reba Fagitire",
+        "goToInventory": "Jya mu Bubiko",
+        "scanAnother": "Soma Indi Fagitire",
+        "invoiceDate": "Itariki ya Fagitire",
+        "invoiceNumber": "Nimero ya Fagitire",
+        "supplierName": "Izina ry'Utanga",
+        "currency": "Ifaranga",
+        "noInvoices": "Nta fagitire z'abatanga zabonetse",
+        "createFirst": "Ohereza fagitire yawe ya mbere kugira ngo utangire",
+        "status": {
+            "DRAFT": "Umushinga",
+            "PROCESSING": "Biratunganywa",
+            "REVIEW": "Isuzuma",
+            "APPROVED": "Byemejwe",
+            "IMPORTED": "Byinjijwe",
+            "FAILED": "Byanze"
+        },
+        "deleteConfirm": "Uremeza ko ushaka gusiba iyi fagitire?",
+        "deleteSuccess": "Fagitire yasibwe",
+        "deleteFailed": "Gusiba fagitire ntibyagenze neza",
+        "fetchFailed": "Gushaka fagitire ntibyagenze neza",
+        "uploadFailed": "Kohereza fagitire ntibyagenze neza",
+        "saveFailed": "Kubika impinduka ntibyagenze neza",
+        "matchFailed": "Guhuza ibicuruzwa ntibyagenze neza",
+        "importFailed": "Kwinjiza ibicuruzwa ntibyagenze neza",
+        "confidence": "Ukwizera",
+        "manufacturer": "Uwakoze",
+        "purchasePrice": "Igiciro cyo Kugura",
+        "sellingPrice": "Igiciro cyo Kugurisha",
+        "items": "Ibintu",
+        "file": "Dosiye",
+        "scannedAt": "Byasomwe",
+        "importedAt": "Byinjijwe"
     }
 }
