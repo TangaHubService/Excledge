@@ -19,6 +19,7 @@ import {
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Badge } from '../../../components/ui/badge';
 import { Loader2, TrendingUp, TrendingDown, Filter, FileSpreadsheet, FileText } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -62,6 +63,7 @@ export default function LedgerHistoryPage() {
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [branchOptions, setBranchOptions] = useState<Array<{ id: number; name: string; code?: string }>>([]);
 
   // Filters
   const [productId, setProductId] = useState<string>('');
@@ -69,6 +71,12 @@ export default function LedgerHistoryPage() {
   const [movementType, setMovementType] = useState<string>('');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+
+  useEffect(() => {
+    apiClient.getBranches()
+      .then((data: any) => setBranchOptions(Array.isArray(data) ? data : data?.branches ?? []))
+      .catch(() => setBranchOptions([]));
+  }, []);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -233,7 +241,10 @@ export default function LedgerHistoryPage() {
       if (startDate || endDate) filterParts.push(`Period: ${startDate || '…'} → ${endDate || '…'}`);
       if (movementType) filterParts.push(`Type: ${movementType}`);
       if (productId) filterParts.push(`Product ID: ${productId}`);
-      if (branchId) filterParts.push(`Branch ID: ${branchId}`);
+      if (branchId) {
+        const branchName = branchOptions.find((b) => String(b.id) === branchId)?.name ?? branchId;
+        filterParts.push(`Branch: ${branchName}`);
+      }
       if (filterParts.length === 0) filterParts.push('All entries');
 
       doc.setTextColor(80, 80, 80);
@@ -385,16 +396,24 @@ export default function LedgerHistoryPage() {
               <Label className={theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}>
                 {t('inventory.branch') || 'Branch'}
               </Label>
-              <Input
-                type="number"
-                value={branchId}
-                onChange={(e) => setBranchId(e.target.value)}
-                placeholder={t('inventory.enterBranchId') || 'Enter branch ID'}
-                className={theme === 'dark'
-                  ? 'bg-gray-700 border-gray-600 text-white placeholder:text-gray-400'
-                  : 'bg-white border-gray-300 text-gray-900'
-                }
-              />
+              <Select value={branchId || 'all'} onValueChange={(v) => setBranchId(v === 'all' ? '' : v)}>
+                <SelectTrigger
+                  className={theme === 'dark'
+                    ? 'bg-gray-700 border-gray-600 text-white'
+                    : 'bg-white border-gray-300 text-gray-900'
+                  }
+                >
+                  <SelectValue placeholder={t('inventory.allBranches') || 'All branches'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('inventory.allBranches') || 'All branches'}</SelectItem>
+                  {branchOptions.map((b) => (
+                    <SelectItem key={b.id} value={String(b.id)}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label className={theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}>

@@ -9,6 +9,7 @@ import {
 } from '../../../components/ui/card';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Loader2, TrendingUp, TrendingDown, Package, DollarSign } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Badge } from '../../../components/ui/badge';
@@ -41,6 +42,7 @@ export default function InventorySummaryDashboard() {
   const [summaryData, setSummaryData] = useState<InventorySummaryResponse | null>(null);
   const [products, setProducts] = useState<Map<number, { name: string; sku?: string }>>(new Map());
   const [branches, setBranches] = useState<Map<number, { name: string; code?: string }>>(new Map());
+  const [branchOptions, setBranchOptions] = useState<Array<{ id: number; name: string; code?: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +50,12 @@ export default function InventorySummaryDashboard() {
   const [productId, setProductId] = useState<string>('');
   const [branchId, setBranchId] = useState<string>('');
   const [fromDate, setFromDate] = useState<string>('inception');
+
+  useEffect(() => {
+    apiClient.getBranches()
+      .then((data: any) => setBranchOptions(Array.isArray(data) ? data : data?.branches ?? []))
+      .catch(() => setBranchOptions([]));
+  }, []);
 
   useEffect(() => {
     fetchSummary();
@@ -191,12 +199,19 @@ export default function InventorySummaryDashboard() {
             </div>
             <div className="space-y-2">
               <Label>{t('inventory.branch') || 'Branch'}</Label>
-              <Input
-                type="number"
-                value={branchId}
-                onChange={(e) => setBranchId(e.target.value)}
-                placeholder={t('inventory.enterBranchId') || 'Enter branch ID (optional)'}
-              />
+              <Select value={branchId || 'all'} onValueChange={(v) => setBranchId(v === 'all' ? '' : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t('inventory.allBranches') || 'All branches'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('inventory.allBranches') || 'All branches'}</SelectItem>
+                  {branchOptions.map((b) => (
+                    <SelectItem key={b.id} value={String(b.id)}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>{t('common.fromDate') || 'From Date'}</Label>
