@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import { ArrowRightLeft, Loader2 } from "lucide-react";
 import { apiClient } from "../../../lib/api-client";
 import { useBranch } from "../../../context/BranchContext";
+import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
 import { Button } from "../../../components/ui/button";
 import {
   Card,
@@ -29,6 +30,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
+import { SearchableSelect } from "../../../components/ui/SearchableSelect";
+
+const STATUS_BADGE_CLASSES: Record<string, string> = {
+  PENDING: "border-transparent bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  APPROVED: "border-transparent bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
+  COMPLETED: "border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+  REJECTED: "border-transparent bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+};
+
+function statusBadgeClass(status: string) {
+  return STATUS_BADGE_CLASSES[status] ?? "";
+}
 
 type TransferRow = {
   id: number;
@@ -50,6 +63,7 @@ export default function StockTransfersPage() {
   const [loading, setLoading] = useState(true);
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
   const [branches, setBranches] = useState<Array<{ id: number; name: string }>>([]);
+  const [products, setProducts] = useState<Array<{ id: number; name: string; sku?: string | null }>>([]);
   const [fromBranchId, setFromBranchId] = useState<string>("");
   const [toBranchId, setToBranchId] = useState<string>("");
   const [productId, setProductId] = useState("");
@@ -88,6 +102,24 @@ export default function StockTransfersPage() {
       }
     };
     fetchBranches();
+  }, [orgId]);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      if (!orgId) return;
+      try {
+        const res = await apiClient.getProducts({ organizationId: orgId, limit: 1000 });
+        const items = parseInventoryGetProductsResponse(res).items as Array<{
+          id: number;
+          name: string;
+          sku?: string | null;
+        }>;
+        setProducts(items);
+      } catch {
+        setProducts([]);
+      }
+    };
+    fetchProducts();
   }, [orgId]);
 
   const approve = async (id: number) => {
@@ -131,8 +163,12 @@ export default function StockTransfersPage() {
     }
     const pid = parseInt(productId, 10);
     const q = parseInt(qty, 10);
-    if (!pid || q < 1) {
-      toast.error("Valid product ID and quantity required");
+    if (!pid) {
+      toast.error("Select a product");
+      return;
+    }
+    if (!q || q < 1) {
+      toast.error("Enter a valid quantity");
       return;
     }
     setSubmitting(true);
@@ -165,14 +201,19 @@ export default function StockTransfersPage() {
     );
   }
 
+  const fromBranchName = branches.find((b) => String(b.id) === fromBranchId)?.name;
+  const toBranchName = branches.find((b) => String(b.id) === toBranchId)?.name;
+
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-2">
-        <ArrowRightLeft className="h-7 w-7" />
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <ArrowRightLeft className="h-6 w-6" />
+        </div>
         <div>
-          <h1 className="text-2xl font-semibold">Stock transfers</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Stock transfers</h1>
           <p className="text-sm text-muted-foreground">
-            Move inventory between branches (approve, then complete to move stock).
+            Move inventory between branches — approve, then complete to move stock.
           </p>
         </div>
       </div>
@@ -184,56 +225,77 @@ export default function StockTransfersPage() {
             One product per request for simplicity; create multiple transfers for more lines.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={createTransfer} className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 items-end">
-            <div className="space-y-2">
-              <Label>From branch</Label>
-              <Select value={fromBranchId} onValueChange={setFromBranchId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Branch" />
-                </SelectTrigger>
-                <SelectContent>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={String(b.id)}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <CardContent className="space-y-4">
+          <form onSubmit={createTransfer} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>From branch</Label>
+                <Select value={fromBranchId} onValueChange={setFromBranchId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches.map((b) => (
+                      <SelectItem key={b.id} value={String(b.id)} disabled={String(b.id) === toBranchId}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>To branch</Label>
+                <Select value={toBranchId} onValueChange={setToBranchId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches.map((b) => (
+                      <SelectItem key={b.id} value={String(b.id)} disabled={String(b.id) === fromBranchId}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>To branch</Label>
-              <Select value={toBranchId} onValueChange={setToBranchId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Branch" />
-                </SelectTrigger>
-                <SelectContent>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={String(b.id)}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            {fromBranchName && toBranchName && (
+              <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{fromBranchName}</span>
+                <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" />
+                <span className="font-medium text-foreground">{toBranchName}</span>
+              </div>
+            )}
+
+            <div className="grid gap-4 md:grid-cols-[1fr_140px]">
+              <div className="space-y-2">
+                <Label>Product</Label>
+                <SearchableSelect
+                  value={productId}
+                  onChange={setProductId}
+                  placeholder="Search product by name..."
+                  searchPlaceholder="Type to search products..."
+                  emptyText="No products found."
+                  options={products.map((p) => ({
+                    value: String(p.id),
+                    label: p.name,
+                    sublabel: p.sku ?? undefined,
+                  }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Quantity</Label>
+                <Input
+                  value={qty}
+                  onChange={(e) => setQty(e.target.value)}
+                  inputMode="numeric"
+                  min={1}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Product ID</Label>
-              <Input
-                value={productId}
-                onChange={(e) => setProductId(e.target.value)}
-                placeholder="e.g. 12"
-                inputMode="numeric"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Quantity</Label>
-              <Input
-                value={qty}
-                onChange={(e) => setQty(e.target.value)}
-                inputMode="numeric"
-              />
-            </div>
-            <div className="md:col-span-2 lg:col-span-4">
+
+            <div>
               <Button type="submit" disabled={submitting}>
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create transfer"}
               </Button>
@@ -252,7 +314,10 @@ export default function StockTransfersPage() {
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : transfers.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">No transfers yet.</p>
+            <div className="flex flex-col items-center gap-2 py-12 text-center">
+              <ArrowRightLeft className="h-8 w-8 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">No transfers yet.</p>
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -267,17 +332,21 @@ export default function StockTransfersPage() {
               <TableBody>
                 {transfers.map((t) => (
                   <TableRow key={t.id}>
-                    <TableCell className="font-mono">{t.id}</TableCell>
+                    <TableCell className="font-mono text-muted-foreground">#{t.id}</TableCell>
                     <TableCell>
-                      {t.fromBranch?.name} → {t.toBranch?.name}
+                      <span className="inline-flex items-center gap-1.5 font-medium">
+                        {t.fromBranch?.name}
+                        <ArrowRightLeft className="h-3 w-3 text-muted-foreground" />
+                        {t.toBranch?.name}
+                      </span>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{t.status}</Badge>
+                      <Badge className={statusBadgeClass(t.status)}>{t.status}</Badge>
                     </TableCell>
                     <TableCell className="text-sm">
                       {t.items?.map((i) => (
                         <div key={i.product.id}>
-                          {i.product.name} × {i.quantity}
+                          {i.product.name} <span className="text-muted-foreground">× {i.quantity}</span>
                         </div>
                       ))}
                     </TableCell>
