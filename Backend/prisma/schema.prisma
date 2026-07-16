@@ -93,6 +93,7 @@ model Branch {
   addressLine2   String? // Second address line (B3)
   phone          String?
   status         BranchStatus @default(ACTIVE)
+  isDefault      Boolean      @default(false)
   metadata       Json?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt

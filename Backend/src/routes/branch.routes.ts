@@ -9,6 +9,7 @@ import {
   getUserPrimaryBranchController,
   createBranchController,
   updateBranchController,
+  setDefaultBranchController,
   deleteBranchController,
   assignUserToBranchController,
   removeUserFromBranchController,
@@ -37,6 +38,9 @@ router.post('/:organizationId', orgAccess, requireActiveSubscription(), authoriz
 
 // Update branch (Admin/Manager only)
 router.put('/:organizationId/:id', orgAccess, requireActiveSubscription(), authorize('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'), updateBranchController);
+
+// Set default branch (Admin/Manager only)
+router.put('/:organizationId/:id/default', orgAccess, requireActiveSubscription(), authorize('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'), setDefaultBranchController);
 
 // Delete branch (Admin only)
 router.delete('/:organizationId/:id', orgAccess, requireActiveSubscription(), authorize('ADMIN'), deleteBranchController);

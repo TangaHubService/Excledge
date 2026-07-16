@@ -6,6 +6,7 @@ import {
   createBranch,
   updateBranch,
   deleteBranch,
+  setDefaultBranch,
   assignUserToBranch,
   removeUserFromBranch,
   getUserBranches,
@@ -180,6 +181,31 @@ export const updateBranchController = async (req: AuthRequest, res: Response) =>
   } catch (error: any) {
     console.error('[Update Branch Error]:', error);
     res.status(500).json({ error: error.message || 'Failed to update branch' });
+  }
+};
+
+/**
+ * Set a branch as the organization's default branch
+ */
+export const setDefaultBranchController = async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const branchId = parseInt(req.params.id);
+
+    const branch = await setDefaultBranch(branchId, organizationId);
+
+    await auditLogger.system(req, {
+      type: 'BRANCH_UPDATE',
+      description: `Branch "${branch.name}" set as default`,
+      entityType: 'Branch',
+      entityId: branch.id.toString(),
+      metadata: { name: branch.name },
+    });
+
+    res.json(branch);
+  } catch (error: any) {
+    console.error('[Set Default Branch Error]:', error);
+    res.status(500).json({ error: error.message || 'Failed to set default branch' });
   }
 };
 

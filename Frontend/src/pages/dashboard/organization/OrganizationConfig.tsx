@@ -35,6 +35,7 @@ import { AppToggle } from '../../../components/ui/AppToggle';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import PhoneInputWithCountryCode from '../../../components/PhoneInputWithCountryCode';
 import { apiClient } from '../../../lib/api-client';
+import { cn } from '../../../lib/utils';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../../context/AuthContext';
 import { useOrganization } from '../../../context/OrganizationContext';
@@ -70,6 +71,7 @@ interface Branch {
     address?: string;
     location?: string;
     status: 'ACTIVE' | 'INACTIVE';
+    isDefault?: boolean;
 }
 
 const FEATURE_FLAG_LABELS: Record<keyof IFeatureFlags, { label: string; description: string }> = {
@@ -595,7 +597,14 @@ export function OrganizationConfig() {
                                         branches.map((branch) => (
                                             <TableRow key={branch.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/30 transition-colors">
                                                 <TableCell className="font-medium pl-6">
-                                                    {branch.name}
+                                                    <div className="flex items-center gap-2">
+                                                        {branch.name}
+                                                        {branch.isDefault && (
+                                                            <Badge variant="outline" className="rounded-full text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-700">
+                                                                Default
+                                                            </Badge>
+                                                        )}
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell>
                                                     <code className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
@@ -629,10 +638,11 @@ export function OrganizationConfig() {
                                                                     variant="ghost"
                                                                     size="sm"
                                                                     onClick={() => handleSetDefaultBranch(branch)}
-                                                                    title="Set as Default"
-                                                                    className="text-amber-500 hover:text-amber-600 hover:bg-amber-50"
+                                                                    disabled={branch.isDefault || branch.status !== 'ACTIVE'}
+                                                                    title={branch.isDefault ? 'Default branch' : 'Set as Default'}
+                                                                    className="text-amber-500 hover:text-amber-600 hover:bg-amber-50 disabled:opacity-100"
                                                                 >
-                                                                    <Star className="h-4 w-4" />
+                                                                    <Star className={cn('h-4 w-4', branch.isDefault && 'fill-amber-500')} />
                                                                 </Button>
                                                                 <Button variant="ghost" size="sm" onClick={() => handleBranchEdit(branch)} className="text-blue-600 hover:bg-blue-50">
                                                                     <Edit className="h-4 w-4" />

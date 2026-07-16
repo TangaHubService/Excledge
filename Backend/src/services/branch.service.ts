@@ -141,6 +141,33 @@ export async function updateBranch(
 }
 
 /**
+ * Set a branch as the organization's default branch, unsetting any other
+ * branch previously marked as default.
+ */
+export async function setDefaultBranch(branchId: number, organizationId: number) {
+  const branch = await prisma.branch.findFirst({
+    where: {
+      id: branchId,
+      organizationId,
+    },
+  });
+
+  if (!branch) {
+    throw new Error(`Branch with ID ${branchId} not found`);
+  }
+
+  await prisma.branch.updateMany({
+    where: { organizationId, isDefault: true, NOT: { id: branchId } },
+    data: { isDefault: false },
+  });
+
+  return await prisma.branch.update({
+    where: { id: branchId },
+    data: { isDefault: true },
+  });
+}
+
+/**
  * Delete a branch (soft delete by setting status to INACTIVE)
  */
 export async function deleteBranch(branchId: number, organizationId: number) {
