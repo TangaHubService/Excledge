@@ -263,15 +263,21 @@ export async function removeUserFromBranch(userId: number, branchId: number) {
 /**
  * Get all branches for a user
  */
-export async function getUserBranches(userId: number, organizationId?: number) {
+export async function getUserBranches(
+  userId: number,
+  organizationId?: number,
+  includeInactive: boolean = false
+) {
   const where: any = {
     userId,
   };
 
-  if (organizationId) {
-    where.branch = {
-      organizationId,
-    };
+  const branchWhere: any = {};
+  if (organizationId) branchWhere.organizationId = organizationId;
+  if (!includeInactive) branchWhere.status = BranchStatus.ACTIVE;
+
+  if (Object.keys(branchWhere).length > 0) {
+    where.branch = branchWhere;
   }
 
   const userBranches = await prisma.userBranch.findMany({
