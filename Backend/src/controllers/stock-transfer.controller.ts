@@ -83,6 +83,18 @@ export const createStockTransfer = async (req: BranchAuthRequest, res: Response)
       return res.status(400).json(apiError("Invalid or inactive branch"));
     }
 
+    const productIds = items.map((i: { productId: number }) => parseInt(String(i.productId)));
+    if (productIds.some((id: number) => Number.isNaN(id))) {
+      return res.status(400).json(apiError("Invalid product in items"));
+    }
+    const validProducts = await prisma.product.findMany({
+      where: { id: { in: productIds }, organizationId },
+      select: { id: true },
+    });
+    if (validProducts.length !== new Set(productIds).size) {
+      return res.status(400).json(apiError("One or more products were not found"));
+    }
+
     const transfer = await prisma.stockTransfer.create({
       data: {
         organizationId,

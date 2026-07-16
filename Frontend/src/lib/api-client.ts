@@ -1329,8 +1329,9 @@ class ApiClient {
   /**
    * Get all warehouses for the organization
    */
-  async getWarehouses() {
-    return this.request(`/warehouses/${this.getOrganizationId()}`, {
+  async getWarehouses(includeInactive: boolean = true) {
+    const query = includeInactive ? '?includeInactive=true' : '';
+    return this.request(`/warehouses/${this.getOrganizationId()}${query}`, {
       method: 'GET',
     });
   }
