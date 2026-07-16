@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 
@@ -74,15 +74,37 @@ export const DurationSelector = ({
     const isYearly = value.billingMode === 'YEARLY';
     const units = isYearly ? Math.max(1, Math.round(value.months / 12)) : Math.max(1, value.months);
 
+    // Local draft text for the units input, separate from the derived numeric
+    // `units` above. This lets the field go empty while the user is clearing
+    // the default to type a new number, instead of a controlled value that
+    // snaps back to "1" on every keystroke that isn't yet a valid number >= 1.
+    const [draftUnits, setDraftUnits] = useState(String(units));
+
+    useEffect(() => {
+        setDraftUnits(String(units));
+    }, [units]);
+
     const setBillingMode = (mode: BillingMode) => {
         if (mode === value.billingMode) return;
         onChange({ billingMode: mode, months: mode === 'YEARLY' ? 12 : 1 });
     };
 
-    const setUnits = (raw: string) => {
+    const handleUnitsChange = (raw: string) => {
+        setDraftUnits(raw);
+        if (raw === '') return;
         const parsed = Math.floor(Number(raw));
-        const n = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
-        onChange({ billingMode: value.billingMode, months: isYearly ? n * 12 : n });
+        if (Number.isFinite(parsed) && parsed >= 1) {
+            onChange({ billingMode: value.billingMode, months: isYearly ? parsed * 12 : parsed });
+        }
+    };
+
+    const handleUnitsBlur = () => {
+        const parsed = Math.floor(Number(draftUnits));
+        if (!Number.isFinite(parsed) || parsed < 1) {
+            setDraftUnits(String(units));
+        } else {
+            setDraftUnits(String(parsed));
+        }
     };
 
     const total = useMemo(
@@ -134,9 +156,10 @@ export const DurationSelector = ({
                     min={1}
                     step={1}
                     inputMode="numeric"
-                    value={units}
+                    value={draftUnits}
                     disabled={disabled}
-                    onChange={(e) => setUnits(e.target.value)}
+                    onChange={(e) => handleUnitsChange(e.target.value)}
+                    onBlur={handleUnitsBlur}
                     className="max-w-[140px]"
                 />
             </div>
