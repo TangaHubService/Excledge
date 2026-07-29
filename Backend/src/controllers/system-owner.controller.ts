@@ -492,6 +492,44 @@ export const systemOwnerController = {
     }
   },
 
+  async updatePaymentStatus(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const { status } = req.body;
+
+      const validStatuses = ["COMPLETED", "FAILED", "REFUNDED", "CANCELED", "UNPAID"];
+      if (!status || !validStatuses.includes(status)) {
+        return res.status(400).json({ error: `status must be one of: ${validStatuses.join(", ")}` });
+      }
+
+      const payment = await prisma.payment.findUnique({
+        where: { id },
+        include: { subscription: { include: { organization: true } } },
+      });
+
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+
+      const data: any = { status };
+      if (status === "COMPLETED") {
+        data.processedAt = new Date();
+      }
+
+      const updated = await prisma.payment.update({
+        where: { id },
+        data,
+      });
+
+      console.log(`System owner updated payment ${id} status to ${status}`);
+
+      res.json({ message: "Payment status updated", payment: updated });
+    } catch (error) {
+      console.error("Error updating payment status:", error);
+      res.status(500).json({ error: "Failed to update payment status" });
+    }
+  },
+
   async getAllPayments(req: Request, res: Response) {
     try {
       const { page = 1, limit = 10, status } = req.query;

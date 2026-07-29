@@ -177,4 +177,12 @@ export const systemOwnerService = {
     });
     return response;
   },
+
+  async updatePaymentStatus(id: string | number, status: string) {
+    const response = await apiClient.request(`/system-owner/payments/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+    return response;
+  },
 };

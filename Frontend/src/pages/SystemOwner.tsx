@@ -116,6 +116,17 @@ export const SystemOwnerDashboard: React.FC = () => {
         }
     };
 
+    // Update payment status
+    const handleUpdatePaymentStatus = async (id: string | number, status: string) => {
+        try {
+            await systemOwnerService.updatePaymentStatus(id, status);
+            // Refresh payments after status change
+            await fetchPayments();
+        } catch (err) {
+            console.error('Error updating payment status:', err);
+        }
+    };
+
     // Calculate analytics from existing data
     const calculateAnalytics = () => {
         // Calculate revenue by month from payments
@@ -244,6 +255,7 @@ export const SystemOwnerDashboard: React.FC = () => {
                         payments={payments}
                         isLoading={isLoading.payments}
                         error={error.payments}
+                        onUpdatePaymentStatus={handleUpdatePaymentStatus}
                     />
                 }
             />

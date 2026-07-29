@@ -1,14 +1,17 @@
-import React from 'react';
-import { CheckCircle, XCircle, Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import { CheckCircle, XCircle, Clock, Ban } from 'lucide-react';
 import type { Payment } from '../../services/systemOwnerService';
 
 interface PaymentsProps {
   payments: Payment[];
   isLoading: boolean;
   error: string | null;
+  onUpdatePaymentStatus: (id: string | number, status: string) => Promise<void>;
 }
 
-const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error }) => {
+const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdatePaymentStatus }) => {
+  const [updatingId, setUpdatingId] = useState<string | number | null>(null);
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -99,12 +102,15 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error }) => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                   Paid On
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {payments.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-4 text-gray-500 dark:text-gray-400">
+                    <td colSpan={6} className="text-center py-4 text-gray-500 dark:text-gray-400">
                     No payments found
                   </td>
                 </tr>
@@ -134,6 +140,39 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error }) => {
                         new Date(payment.updatedAt).toLocaleDateString()
                       ) : (
                         <span className="text-gray-400 dark:text-gray-500">Not paid</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {payment.status === 'PENDING' && (
+                        <div className="flex gap-1">
+                          <button
+                            onClick={async () => { setUpdatingId(payment.id); await onUpdatePaymentStatus(payment.id, 'COMPLETED'); setUpdatingId(null); }}
+                            disabled={updatingId === payment.id}
+                            className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50"
+                            title="Mark as Paid"
+                          >
+                            <CheckCircle className="h-3.5 w-3.5" />
+                            Paid
+                          </button>
+                          <button
+                            onClick={async () => { setUpdatingId(payment.id); await onUpdatePaymentStatus(payment.id, 'FAILED'); setUpdatingId(null); }}
+                            disabled={updatingId === payment.id}
+                            className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
+                            title="Mark as Failed"
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            Fail
+                          </button>
+                          <button
+                            onClick={async () => { setUpdatingId(payment.id); await onUpdatePaymentStatus(payment.id, 'CANCELED'); setUpdatingId(null); }}
+                            disabled={updatingId === payment.id}
+                            className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300 disabled:opacity-50"
+                            title="Cancel"
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                            Cancel
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
