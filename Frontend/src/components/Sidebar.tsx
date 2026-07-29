@@ -497,13 +497,13 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
       >
         {/* ── Logo / Organization area ───────────────── */}
         <div className="flex h-14 shrink-0 items-center border-b border-white/15 px-3 lg:px-4">
-          {organization && !isCollapsed ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  disabled={switching || orgLoading}
-                  className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pr-1 text-left transition-colors hover:bg-white/10"
+          {organization ? (
+            isSystemOwner() ? (
+              <>
+                <Link
+                  to="/dashboard/system-owner/overview"
+                  onClick={onClose}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 transition-colors hover:bg-white/10"
                 >
                   {organization.avatar ? (
                     <img
@@ -516,61 +516,138 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
                       <Package className="h-5 w-5 text-white" />
                     </div>
                   )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-white">{organization.name}</p>
-                  </div>
-                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-300" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                sideOffset={6}
-                className="w-[220px] overflow-hidden rounded-lg border border-white/20 bg-slate-800 p-1 shadow-xl"
-              >
-                {switching || orgLoading ? (
-                  <div className="flex items-center justify-center gap-2 px-4 py-6">
-                    <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
-                    <span className="text-sm text-slate-300">{t('common.loading')}</span>
-                  </div>
-                ) : organizations.length === 0 ? (
-                  <div className="px-4 py-3 text-sm text-slate-400">{t('organizations.noOrganizations')}</div>
-                ) : (
-                  <DropdownMenuRadioGroup
-                    value={String(organization?.id)}
-                    onValueChange={handleSelectOrganization}
-                  >
-                    {organizations.map(org => (
-                      <DropdownMenuRadioItem
-                        key={org.id}
-                        value={String(org.id)}
-                        className="flex items-center gap-3 px-3 py-2.5 text-sm text-slate-300 focus:bg-white/10 focus:text-white"
+                  {!isCollapsed && (
+                    <span className="truncate text-sm font-semibold text-white">{organization.name}</span>
+                  )}
+                </Link>
+                {!isCollapsed && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={switching || orgLoading}
+                        className="rounded-lg p-1.5 text-slate-300 transition-colors hover:bg-white/10"
+                        title={t('organizations.switchOrg')}
                       >
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-800/60 ring-1 ring-white/15">
-                          <Building2 className="h-4 w-4 text-white" />
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      sideOffset={6}
+                      className="w-[220px] overflow-hidden rounded-lg border border-white/20 bg-slate-800 p-1 shadow-xl"
+                    >
+                      {switching || orgLoading ? (
+                        <div className="flex items-center justify-center gap-2 px-4 py-6">
+                          <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
+                          <span className="text-sm text-slate-300">{t('common.loading')}</span>
                         </div>
-                        <span className="flex-1 truncate">{org.name}</span>
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
+                      ) : organizations.length === 0 ? (
+                        <div className="px-4 py-3 text-sm text-slate-400">{t('organizations.noOrganizations')}</div>
+                      ) : (
+                        <DropdownMenuRadioGroup
+                          value={String(organization?.id)}
+                          onValueChange={handleSelectOrganization}
+                        >
+                          {organizations.map(org => (
+                            <DropdownMenuRadioItem
+                              key={org.id}
+                              value={String(org.id)}
+                              className="flex items-center gap-3 px-3 py-2.5 text-sm text-slate-300 focus:bg-white/10 focus:text-white"
+                            >
+                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-800/60 ring-1 ring-white/15">
+                                <Building2 className="h-4 w-4 text-white" />
+                              </div>
+                              <span className="flex-1 truncate">{org.name}</span>
+                            </DropdownMenuRadioItem>
+                          ))}
+                        </DropdownMenuRadioGroup>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </>
+            ) : !isCollapsed ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={switching || orgLoading}
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pr-1 text-left transition-colors hover:bg-white/10"
+                  >
+                    {organization.avatar ? (
+                      <img
+                        src={organization.avatar}
+                        alt={organization.name}
+                        className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-white/25"
+                      />
+                    ) : (
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-800/90 ring-1 ring-white/15">
+                        <Package className="h-5 w-5 text-white" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-white">{organization.name}</p>
+                    </div>
+                    <ChevronDown className="h-4 w-4 shrink-0 text-slate-300" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  sideOffset={6}
+                  className="w-[220px] overflow-hidden rounded-lg border border-white/20 bg-slate-800 p-1 shadow-xl"
+                >
+                  {switching || orgLoading ? (
+                    <div className="flex items-center justify-center gap-2 px-4 py-6">
+                      <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
+                      <span className="text-sm text-slate-300">{t('common.loading')}</span>
+                    </div>
+                  ) : organizations.length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-slate-400">{t('organizations.noOrganizations')}</div>
+                  ) : (
+                    <DropdownMenuRadioGroup
+                      value={String(organization?.id)}
+                      onValueChange={handleSelectOrganization}
+                    >
+                      {organizations.map(org => (
+                        <DropdownMenuRadioItem
+                          key={org.id}
+                          value={String(org.id)}
+                          className="flex items-center gap-3 px-3 py-2.5 text-sm text-slate-300 focus:bg-white/10 focus:text-white"
+                        >
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-800/60 ring-1 ring-white/15">
+                            <Building2 className="h-4 w-4 text-white" />
+                          </div>
+                          <span className="flex-1 truncate">{org.name}</span>
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                {organization.avatar ? (
+                  <img
+                    src={organization.avatar}
+                    alt={organization.name}
+                    className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-white/25"
+                  />
+                ) : (
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-800/90 ring-1 ring-white/15">
+                    <Package className="h-5 w-5 text-white" />
+                  </div>
+                )}
+              </div>
+            )
           ) : (
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              {organization?.avatar ? (
-                <img
-                  src={organization.avatar}
-                  alt={organization.name}
-                  className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-white/25"
-                />
-              ) : (
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-800/90 ring-1 ring-white/15">
-                  <Package className="h-5 w-5 text-white" />
-                </div>
-              )}
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-800/90 ring-1 ring-white/15">
+                <Package className="h-5 w-5 text-white" />
+              </div>
               {!isCollapsed && (
                 <span className="truncate text-base font-semibold tracking-tight text-white">
-                  {organization?.name || t('common.appName')}
+                  {t('common.appName')}
                 </span>
               )}
             </div>
