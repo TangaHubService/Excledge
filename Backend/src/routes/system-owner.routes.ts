@@ -28,6 +28,10 @@ router.get(
   "/subscriptions/expiring",
   systemOwnerController.getExpiringSubscriptions
 );
+router.patch(
+  "/subscriptions/:id/extend",
+  systemOwnerController.extendSubscription
+);
 
 // Payment management
 router.get("/payments", systemOwnerController.getAllPayments);

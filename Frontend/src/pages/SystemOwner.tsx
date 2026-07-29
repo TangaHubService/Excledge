@@ -105,6 +105,17 @@ export const SystemOwnerDashboard: React.FC = () => {
         }
     };
 
+    // Extend subscription
+    const handleExtendSubscription = async (id: number, data: { endDate?: string; monthsToAdd?: number }) => {
+        try {
+            await systemOwnerService.extendSubscription(id, data);
+            // Refresh subscriptions after extension
+            await fetchSubscriptions();
+        } catch (err) {
+            console.error('Error extending subscription:', err);
+        }
+    };
+
     // Calculate analytics from existing data
     const calculateAnalytics = () => {
         // Calculate revenue by month from payments
@@ -222,6 +233,7 @@ export const SystemOwnerDashboard: React.FC = () => {
                         subscriptions={subscriptions}
                         isLoading={isLoading.subscriptions}
                         error={error.subscriptions}
+                        onExtendSubscription={handleExtendSubscription}
                     />
                 }
             />

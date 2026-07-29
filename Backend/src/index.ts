@@ -39,6 +39,7 @@ import ebmOutboxRoutes from "./routes/ebm-outbox.routes";
 import { errorHandler } from "./middleware/error.middleware";
 import webhookRoutes from "./routes/paypack-webhook.routes";
 import {
+  runImmediateSubscriptionTransition,
   subscriptionReminderJob,
   subscriptionStatusTransitionJob,
 } from "./jobs/subscription.job";
@@ -173,6 +174,13 @@ if (process.env.RUN_JOBS !== "false") {
   ebmQueueJob.start();
   ebmOutboxJob.start();
   vsdcHeartbeatJob.start();
+
+  // Run an immediate subscription status transition on boot so that
+  // overdue statuses (TRIALING, ACTIVE, GRACE_PERIOD) are always caught
+  // even if the hourly cron was down for a while.
+  runImmediateSubscriptionTransition().catch((err) =>
+    console.error("Boot-time subscription transition failed:", err)
+  );
 }
 
 

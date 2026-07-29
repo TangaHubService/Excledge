@@ -169,4 +169,12 @@ export const systemOwnerService = {
     });
     return response;
   },
+
+  async extendSubscription(id: number, data: { endDate?: string; monthsToAdd?: number }) {
+    const response = await apiClient.request(`/system-owner/subscriptions/${id}/extend`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    return response;
+  },
 };
