@@ -13,6 +13,9 @@ import { BranchSelector } from "./BranchSelector";
 import { apiClient } from "../lib/api-client";
 import { Link, useNavigate } from "react-router-dom";
 import NotificationBell from "./NotificationBell";
+import { OrganizationSwitcher } from "./OrganizationSwitcher";
+import { useAuth } from "../context/AuthContext";
+import { useOrganization } from "../context/OrganizationContext";
 import { useTranslation } from 'react-i18next';
 import { cn } from "../lib/utils";
 
@@ -35,6 +38,8 @@ interface HeaderProps {
 export function Header({ onMenuClick }: HeaderProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { isSystemOwner } = useAuth();
+  const { organization } = useOrganization();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -88,6 +93,10 @@ export function Header({ onMenuClick }: HeaderProps) {
       {/* Right side controls */}
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <BranchSelector toolbar />
+
+        {isSystemOwner() && organization && (
+          <OrganizationSwitcher toolbar />
+        )}
 
         <div className="hidden items-center gap-2 sm:flex">
           <ThemeToggle className="text-white hover:bg-white/10 hover:text-white" />
