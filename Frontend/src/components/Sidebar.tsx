@@ -137,6 +137,7 @@ const adminNav: NavItem[] = [
 const systemOwnerNav: NavItem[] = [
   { id: "system-owner-header", name: "nav.systemOwner", href: "", type: "header" },
   { id: "system-overview", name: "nav.overview", href: "/dashboard/system-owner/overview", icon: LayoutDashboard },
+  { id: "my-organisations", name: "nav.myOrganisations", href: "/dashboard/system-owner/my-organisations", icon: Building2 },
   { id: "system-organizations", name: "nav.organizations", href: "/dashboard/system-owner/organizations", icon: Users },
   { id: "system-subscriptions", name: "nav.subscriptions", href: "/dashboard/system-owner/subscriptions", icon: CreditCard },
   { id: "system-payments", name: "nav.payments", href: "/dashboard/system-owner/payments", icon: Receipt },

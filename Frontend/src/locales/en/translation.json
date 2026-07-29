@@ -181,7 +181,8 @@
         "stockTransfers": "Stock transfers",
         "warehouses": "Warehouses",
         "branches": "Branches",
-        "getStarted": "Get Started"
+        "getStarted": "Get Started",
+        "myOrganisations": "My Organisations"
     },
     "organizations": {
         "welcomeTitle": "Welcome to Excledge ERP",
