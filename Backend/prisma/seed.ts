@@ -95,6 +95,21 @@ const subscriptionPlans = [
     ],
   },
   {
+    // Auto-assigned to every newly registered organization (see
+    // organization.controller.ts#createOrganization), which requires a plan
+    // named exactly "Free Trial" to exist. Excluded from the public pricing
+    // page by name in subscription.controller.ts#getPlans.
+    title: "Free Trial",
+    price: 0,
+    period: "MONTHLY",
+    isActive: true,
+    description: "Try all features free for 7 days.",
+    features: [
+      "1 user account",
+      ...baseFeatures,
+    ],
+  },
+  {
     // Dev-only plan for exercising the real payment rails (Paypack/Pesapal)
     // end-to-end without charging a real plan price. Excluded from the public
     // pricing page by name in subscription.controller.ts#getPlans, but still
