@@ -36,6 +36,10 @@ router.patch(
 // Payment management
 router.get("/payments", systemOwnerController.getAllPayments);
 router.get("/payments/pending", systemOwnerController.getPendingPayments);
+router.patch(
+  "/payments/:id/status",
+  systemOwnerController.updatePaymentStatus
+);
 
 // Analytics
 router.get("/analytics/revenue", systemOwnerController.getRevenueAnalytics);
