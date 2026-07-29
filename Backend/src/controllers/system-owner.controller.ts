@@ -427,6 +427,71 @@ export const systemOwnerController = {
     }
   },
 
+  async extendSubscription(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const { endDate, monthsToAdd } = req.body;
+
+      const subscription = await prisma.subscription.findUnique({
+        where: { id },
+        include: { organization: true },
+      });
+
+      if (!subscription) {
+        return res.status(404).json({ error: "Subscription not found" });
+      }
+
+      let newEndDate: Date;
+
+      if (endDate) {
+        newEndDate = new Date(endDate);
+        if (isNaN(newEndDate.getTime())) {
+          return res.status(400).json({ error: "Invalid endDate" });
+        }
+      } else if (monthsToAdd) {
+        const months = Number(monthsToAdd);
+        if (months < 1 || !Number.isInteger(months)) {
+          return res.status(400).json({ error: "monthsToAdd must be a positive integer" });
+        }
+        newEndDate = new Date(subscription.endDate ?? new Date());
+        newEndDate.setMonth(newEndDate.getMonth() + months);
+      } else {
+        return res.status(400).json({ error: "Provide either endDate or monthsToAdd" });
+      }
+
+      // Only allow future dates
+      if (newEndDate <= new Date()) {
+        return res.status(400).json({ error: "endDate must be in the future" });
+      }
+
+      const updated = await prisma.subscription.update({
+        where: { id },
+        data: {
+          endDate: newEndDate,
+          ...(subscription.status === "EXPIRED" || subscription.status === "CANCELED" || subscription.status === "CANCELLED"
+            ? { status: "ACTIVE" }
+            : {}),
+        },
+        include: { organization: true },
+      });
+
+      // If the org was deactivated and the subscription is now active, reactivate it
+      if (!subscription.organization.isActive && (updated.status === "ACTIVE" || updated.status === "GRACE_PERIOD" || updated.status === "TRIALING")) {
+        await prisma.organization.update({
+          where: { id: subscription.organizationId },
+          data: { isActive: true },
+        });
+      }
+
+      console.log(`System owner extended subscription ${id} to ${newEndDate.toISOString()}`);
+
+      res.json({ message: "Subscription extended successfully", subscription: updated });
+    } catch (error) {
+      console.error("Error extending subscription:", error);
+      res.status(500).json({ error: "Failed to extend subscription" });
+    }
+  },
+
   async getAllPayments(req: Request, res: Response) {
     try {
       const { page = 1, limit = 10, status } = req.query;

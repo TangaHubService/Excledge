@@ -370,8 +370,11 @@ export class SubscriptionService {
             warningLevel = 'red';
             const daysAgo = daysUntilExpiry !== null ? Math.abs(daysUntilExpiry) : 0;
             const expiryPhrase = daysAgo === 0 ? 'expired today' : daysAgo === 1 ? 'expired yesterday' : `expired ${daysAgo} days ago`;
-            const remaining = graceDaysRemaining ?? (subscription.gracePeriodDays || config.subscription.gracePeriodDays);
-            warningMessage = `Your subscription ${expiryPhrase}. You have ${remaining} grace day${remaining === 1 ? '' : 's'} remaining.`;
+            if (isGrace && graceDaysRemaining !== null) {
+                warningMessage = `Your subscription ${expiryPhrase}. You have ${graceDaysRemaining} grace day${graceDaysRemaining === 1 ? '' : 's'} remaining.`;
+            } else {
+                warningMessage = `Your subscription ${expiryPhrase}.`;
+            }
         } else if (isActive && daysUntilExpiry !== null) {
             if (daysUntilExpiry <= 3) {
                 warningLevel = 'orange';

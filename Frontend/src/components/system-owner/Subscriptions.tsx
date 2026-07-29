@@ -1,14 +1,18 @@
 import React from 'react';
-import { XCircle } from 'lucide-react';
+import { XCircle, Clock } from 'lucide-react';
 import type { Subscription } from '../../services/systemOwnerService';
+import ExtendSubscriptionModal from './ExtendSubscriptionModal';
 
 interface SubscriptionsProps {
   subscriptions: Subscription[];
   isLoading: boolean;
   error: string | null;
+  onExtendSubscription: (id: number, data: { endDate?: string; monthsToAdd?: number }) => Promise<void>;
 }
 
-const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, isLoading, error }) => {
+const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, isLoading, error, onExtendSubscription }) => {
+  const [extendingId, setExtendingId] = React.useState<number | null>(null);
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -59,12 +63,15 @@ const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, isLoading,
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                   Amount
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {subscriptions.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-4 text-gray-500 dark:text-gray-400">
+                  <td colSpan={6} className="text-center py-4 text-gray-500 dark:text-gray-400">
                     No subscriptions found
                   </td>
                 </tr>
@@ -104,6 +111,15 @@ const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, isLoading,
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                       RWF {subscription.paymentDetails?.amount !== null && subscription.paymentDetails?.amount !== undefined ? (typeof subscription.paymentDetails.amount === 'string' ? parseFloat(subscription.paymentDetails.amount) : subscription.paymentDetails.amount).toLocaleString() : '0'}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <button
+                        onClick={() => setExtendingId(subscription.id)}
+                        className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                      >
+                        <Clock className="h-4 w-4" />
+                        Extend
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -111,6 +127,18 @@ const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, isLoading,
           </table>
         </div>
       </div>
+
+      {extendingId !== null && (
+        <ExtendSubscriptionModal
+          isOpen={true}
+          onClose={() => setExtendingId(null)}
+          onExtend={async (data) => {
+            await onExtendSubscription(extendingId, data);
+            setExtendingId(null);
+          }}
+          organizationName={subscriptions.find((s) => s.id === extendingId)?.organization?.name || ''}
+        />
+      )}
     </div>
   );
 };
