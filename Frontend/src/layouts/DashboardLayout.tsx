@@ -63,6 +63,8 @@ export function DashboardLayout() {
 
   useEffect(() => {
     if (!authReady) return;
+    /* Never redirect a system owner away from system-owner routes */
+    if (location.pathname.startsWith('/dashboard/system-owner')) return;
     if (isAuthenticated && !isSystemOwner() && !hasOrganization) {
       if (location.pathname !== '/create-organization') {
         navigate('/create-organization', { replace: true });
