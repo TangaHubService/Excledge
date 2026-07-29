@@ -177,7 +177,8 @@
         "stockTransfers": "Transferts de stock",
         "warehouses": "Entrepôts",
         "branches": "Succursales",
-        "organizationConfig": "Configuration de l'organisation"
+        "organizationConfig": "Configuration de l'organisation",
+        "myOrganisations": "Mes Organisations"
     },
     "organizations": {
         "noOrganizations": "Aucune organisation trouvée",

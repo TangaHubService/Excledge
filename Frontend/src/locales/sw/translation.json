@@ -178,7 +178,8 @@
         "stockTransfers": "Uhamisho wa stocki",
         "warehouses": "Maghala",
         "branches": "Matawi",
-        "organizationConfig": "Mipangilio ya Shirika"
+        "organizationConfig": "Mipangilio ya Shirika",
+        "myOrganisations": "Mashirika Yangu"
     },
     "organizations": {
         "noOrganizations": "Hakuna mashirika yaliyopatikana",

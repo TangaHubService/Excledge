@@ -189,7 +189,7 @@ export const login = async (req: Request, res: Response) => {
     const tokenPayload = {
       userId: user.id,
       email: user.email,
-      role: primaryUo ? primaryUo.role : user.role,
+      role: user.role,
       activeOrganizationId: primaryUo?.organizationId,
       organizationIds,
       organizationId: primaryUo?.organizationId ?? organizationIds,
@@ -236,7 +236,7 @@ export const login = async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: primaryUo ? primaryUo.role : user.role,
+        role: user.role,
         requirePasswordChange: user.requirePasswordChange,
       },
       organizations: organizations.map((org, index) => ({
@@ -492,7 +492,7 @@ export const switchOrganization = async (req: Request, res: Response) => {
         id: fullUser.id,
         email: fullUser.email,
         name: fullUser.name,
-        role: userOrg.role,
+        role: fullUser.role,
       },
     })
   } catch (error: any) {

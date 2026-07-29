@@ -201,7 +201,8 @@
         "stockTransfers": "Kohereza ibicuruzwa hagati y'amashami",
         "warehouses": "Ububiko",
         "branches": "Amashami",
-        "organizationConfig": "Igenamiterere ry'Ikigo"
+        "organizationConfig": "Igenamiterere ry'Ikigo",
+        "myOrganisations": "Amasosiyete Yange"
     },
     "auth": {
         "login": "Injira",

@@ -6,6 +6,7 @@ import Organizations from '../components/system-owner/Organizations';
 import Subscriptions from '../components/system-owner/Subscriptions';
 import Payments from '../components/system-owner/Payments';
 import Analytics from '../components/system-owner/Analytics';
+import MyOrganisations from '../components/system-owner/MyOrganisations';
 import type { DashboardStats, Organization, Subscription, Payment } from '../services/systemOwnerService';
 
 export const SystemOwnerDashboard: React.FC = () => {
@@ -243,6 +244,12 @@ export const SystemOwnerDashboard: React.FC = () => {
                         isLoading={isLoading.analytics}
                         error={error.analytics}
                     />
+                }
+            />
+            <Route
+                path="/my-organisations"
+                element={
+                    <MyOrganisations />
                 }
             />
             <Route path="/" element={<Navigate to="overview" replace />} />
