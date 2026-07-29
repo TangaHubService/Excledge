@@ -22,6 +22,7 @@
    - 1.3 Key Terms You Must Understand
    - 1.4 User Roles
    - 1.5 How to Get Help
+   - 1.6 About the Software Supplier
 
 2. [Getting Started](#section-2-getting-started)
    - 2.1 Accessing the System
@@ -80,6 +81,17 @@
 11. [Common Problems and Solutions](#section-11-common-problems-and-solutions)
 
 12. [Frequently Asked Questions](#section-12-frequently-asked-questions)
+
+13. [Programming System & Operational Parameters (Administrator Reference)](#section-13-programming-system--operational-parameters-administrator-reference)
+    - 13.1 Setting Up Tax Codes on a Product
+    - 13.2 Changing a Product's Price
+    - 13.3 Setting Up PLU / Barcode Identifiers
+    - 13.4 Creating and Naming Cashier Accounts
+    - 13.5 Other System Options
+
+14. [Peripheral Devices](#section-14-peripheral-devices)
+    - 14.1 Receipt Printer
+    - 14.2 Barcode Scanner
 
 - [Appendix A: Receipt Field Complete Glossary](#appendix-a-receipt-field-complete-glossary)
 - [Appendix B: RRA Contact Information](#appendix-b-rra-contact-information)
@@ -266,6 +278,32 @@ If you are currently being audited by the RRA and have an urgent question, call 
 
 ---
 
+### 1.6 About the Software Supplier
+
+Excledge ERP/POS is developed, supported, and maintained by the software supplier registered with the Rwanda Revenue Authority as a Certified Invoicing System developer. The details below identify the supplier for RRA certification purposes and must match the Company Profile and Physical Address Declaration (document reference EXC-COMPANY-v1.0.0-2026) submitted alongside this manual — update both documents together if any of these details change.
+
+| Field | Details |
+|---|---|
+| **Supplier Legal Name** | [COMPANY LEGAL NAME] |
+| **Company Registration Number** | [REG NUMBER] |
+| **RRA Tax Identification Number (TIN)** | [9-DIGIT TIN] |
+| **Registered Physical Address** | [SEE SECTION 2 OF EXC-COMPANY-v1.0.0-2026] |
+| **General Support Email** | exceledgecpaltd@gmail.com |
+| **Support Phone** | [+250 7XX XXX XXX] |
+| **Product / System URL** | https://erp.exceledgecpa.com |
+| **Support Hours** | Monday – Friday, 08:00 – 18:00 Central Africa Time (CAT) |
+
+**Primary contact for RRA certification and compliance matters:**
+
+| Role | Name | Phone | Email |
+|---|---|---|---|
+| Authorized Representative | [FULL NAME] | [+250 7XX XXX XXX] | [EMAIL] |
+| Technical Lead (VSDC Integration) | [FULL NAME] | [+250 7XX XXX XXX] | [EMAIL] |
+
+If you are an RRA auditor or official and need to reach the supplier directly (for example, to verify a certification detail or report a defect), use the General Support Email or Support Phone above — see also Appendix B for the RRA's own contact details.
+
+---
+
 ## SECTION 2: GETTING STARTED
 
 ### 2.1 Accessing the System
@@ -366,6 +404,14 @@ After logging in, you will see the main dashboard. The dashboard gives you a qui
 
 The VSDC Status Indicator is one of the most important elements on the screen. It tells you whether Excledge ERP/POS is currently connected to the RRA's certification server.
 
+> **⚠ SAFETY REQUIREMENT AND WARNING — RECEIPTS DEPEND ON THE VSDC**
+>
+> Excledge ERP/POS **will not produce an RRA-certified receipt without a working connection to the VSDC.** A receipt is only legally valid — with a complete SDC Information Block, digital signature, and scannable QR code — once the VSDC has received and certified it.
+>
+> If the VSDC cannot be reached (indicator RED), the system does not refuse to serve customers — it records the sale locally and marks the receipt **"Pending Certification"** while the transaction waits in the internal offline queue. That receipt is **not yet a valid tax document** until the VSDC certifies it, which happens automatically the moment connectivity is restored. Staff and customers must never treat a "Pending Certification" receipt as a final, certified tax invoice.
+>
+> Never disable, bypass, or attempt to work around the VSDC connection check. Never issue a receipt from a modified or unauthorized version of this software. Doing so produces a document with no legal standing under Rwanda's EBM law and exposes the business to penalties.
+
 **GREEN (Connected):**
 > **VSDC Connected — All receipts are being certified in real time.**
 
@@ -388,7 +434,7 @@ When the indicator is red, the internet connection to the RRA VSDC has been inte
 1. Note the exact time the VSDC went offline.
 2. Check the internet connection by opening a different website on any device in the building. If websites load, the internet is working but there may be a specific issue with the VSDC server — call IT support.
 3. If no websites load, check that the internet router is turned on and all cables are connected. Try restarting the router (turn it off, wait 30 seconds, turn it back on).
-4. If the internet connection is restored and the VSDC indicator turns green again within 30 minutes, no further action is needed. Check the offline queue (Settings → EBM Queue) to confirm all receipts have been certified.
+4. If the internet connection is restored and the VSDC indicator turns green again within 30 minutes, no further action is needed. Check the offline queue (main navigation menu → **EBM Outbox**, under the Admin section — administrators only) to confirm all receipts have been certified.
 5. If the VSDC indicator is still red after 30 minutes, call IT support immediately.
 6. If the VSDC indicator is still red after 2 hours, call IT support and also contact the RRA EBM Helpdesk to report the issue.
 7. If the VSDC indicator has been red for 4 hours or more, the system may begin limiting new sales. Call IT support immediately and do not attempt to close the business — document everything.
@@ -1166,21 +1212,19 @@ When the VSDC goes offline:
 
 ### 10.4 How to Check the Offline Queue
 
-**Step 1:** Click **"Settings"** in the navigation menu.
+**Step 1:** This screen is only visible to Administrators. In the main navigation menu, find the Admin section and click **"EBM Outbox"** (it uses a Wi-Fi icon).
 
-**Step 2:** Click **"EBM Queue"** (may also be labelled "VSDC Queue" or "Offline Queue").
+**Step 2:** The outbox screen shows a list of all receipts that are currently queued for VSDC certification, grouped by status count at the top: PENDING, PROCESSING, SUCCEEDED, FAILED, and DEAD_LETTER. For each entry in the list, you can see:
+- Receipt type and the sale it belongs to
+- Queue status
+- Number of retry attempts made (retry count)
+- The last error message, if any, or the confirmed SDC certification date/time once successful
 
-**Step 3:** The queue screen shows a list of all receipts that are currently queued for VSDC certification. For each entry in the queue, you can see:
-- Receipt type (NS, NR, CS, etc.)
-- Receipt number
-- Transaction date and time
-- Queue status: PENDING (waiting to be sent), PROCESSING (currently being sent), SUCCEEDED (sent and certified), FAILED (failed to send after maximum retries)
-- Number of retry attempts made
-- Last attempt time
+**Step 3:** Normally, all items should move from PENDING to SUCCEEDED automatically when the VSDC comes back online. You do not need to do anything. Click the refresh button at the top of the screen to update the list.
 
-**Step 4:** Normally, all items should move from PENDING to SUCCEEDED automatically when the VSDC comes back online. You do not need to do anything.
+**If an item is PENDING, PROCESSING, or FAILED:** Click **"Check VSDC"** next to that entry to manually ask the VSDC for its current certification status, rather than waiting for the automatic retry.
 
-**If you see FAILED items:** This means the system tried to send the receipt to the VSDC multiple times but failed. Contact IT support. Do not attempt to delete failed queue items yourself.
+**If an item reaches DEAD_LETTER status:** This means the system exhausted its automatic retry attempts and the receipt could not be certified. A **"Request Reversal"** button appears for these entries — this starts the compensation process (reversing the inventory and customer balance impact of that sale). Do not click this without your manager's or IT support's confirmation first; contact IT support before taking action on any DEAD_LETTER entry.
 
 ### 10.5 VSDC Error Codes in Plain Language
 
@@ -1347,7 +1391,7 @@ A: Excledge ERP/POS is accessible on mobile phones through a web browser, but it
 A: Follow the daily opening checklist (see Appendix C for the printed quick reference card):
 1. Check that the VSDC Status Indicator is green (connected)
 2. Log in with your personal credentials
-3. Check if there are any pending items in the EBM Queue (Settings → EBM Queue) from the previous day
+3. (Administrators) Check if there are any pending or failed items in the EBM Outbox from the previous day
 4. Check for any low stock alerts on the dashboard notification bell
 5. Confirm that you are on the correct branch in the branch selector
 
@@ -1368,6 +1412,108 @@ A: "Items Number" shows the total count of individual items in the transaction. 
 **Q20: How long should I keep receipt records?**
 
 A: The RRA requires businesses to keep all EBM records — including physical copies of Z Reports, electronic backups, and the digital records stored in the system — for a minimum of five (5) years from the date of the transaction. The records stored in Excledge ERP/POS are maintained automatically. Physical Z Report copies and PDF backups must be kept by the business. It is good practice to keep records for 7 years to allow for any delayed audits. Never delete records from the system, and never destroy physical Z Report archives, without confirming that they are beyond the 5-year retention period.
+
+---
+
+## SECTION 13: PROGRAMMING SYSTEM & OPERATIONAL PARAMETERS (ADMINISTRATOR REFERENCE)
+
+This section is for Administrators only. It explains how to configure the parameters that control how products, prices, tax codes, and cashier accounts behave in Excledge ERP/POS. Cashiers and Managers do not need this section for daily work.
+
+### 13.1 Setting Up Tax Codes on a Product
+
+Excledge ERP/POS does not use custom, business-defined tax rates — it uses the five fixed RRA tax codes (A, B, C, D, E) described in Section 1.3. Configuring a product means **assigning** the correct RRA tax code to it, not creating a new rate.
+
+**Step 1:** Go to **Inventory** in the navigation menu.
+
+**Step 2:** Click **"Add Product"** to create a new product, or select an existing product and click **"Edit"**.
+
+**Step 3:** In the product form, find the **"Tax Code"** field and select the correct code from the list (A, B, C, D, or E — see Section 1.3 for what each one means).
+
+**Step 4:** Enter the **Unit Price**, which the system uses together with the tax code to calculate the tax breakdown shown on receipts.
+
+**Step 5:** Click **"Save"** (or complete the remaining steps in the Add Product wizard, then confirm on the review screen).
+
+**Important:** Assigning the wrong tax code to a product will cause incorrect VAT to be charged and reported to the RRA. If you are unsure which tax code applies to a product, confirm with your accountant or the RRA before saving.
+
+### 13.2 Changing a Product's Price
+
+**Step 1:** Go to **Inventory**, find the product, and click **"Edit"**.
+
+**Step 2:** Update the **Unit Price** field to the new price.
+
+**Step 3:** Click **"Save."** The new price applies to all sales made from this point forward. Sales already completed before the change keep the price that was in effect at the time of the original sale — changing the price does not alter historical receipts.
+
+**Important:** Only Administrators (and Managers where permitted) can change prices. Cashiers cannot override a product's price at the till unless your organization has specifically granted that permission.
+
+### 13.3 Setting Up PLU / Barcode Identifiers
+
+Excledge ERP/POS identifies products using a **SKU** (internal stock code) and/or a **Barcode** (scannable code), either of which can serve as the product's PLU (Price Look-Up) identifier referenced in the PLU Report (Section 8.3).
+
+**Step 1:** In the Add/Edit Product form, enter the product's **SKU** in the "SKU" field (used for internal reference and searching).
+
+**Step 2:** Enter the product's **Barcode** in the "Barcode" field. If the product has a printed barcode, you can scan it directly into this field using a barcode scanner connected to the computer.
+
+**Step 3:** Click **"Save."** The product can now be found at the POS by searching its name, SKU, or barcode, and will appear individually on the PLU Report.
+
+### 13.4 Creating and Naming Cashier Accounts
+
+Cashier (and other staff) accounts are created through an email invitation, not by typing a name directly into a form. The invited person supplies their own name when they accept the invitation and set up their account.
+
+**Step 1:** Go to **Settings → User Management** (Administrators only).
+
+**Step 2:** Click **"Add User"** / **"Invite User."**
+
+**Step 3:** Enter the staff member's **email address**.
+
+**Step 4:** Select their **Role** — for a till operator, select **Seller/Cashier**. See Section 1.4 for what each role can and cannot do. Only Administrators can assign the Administrator role to someone else.
+
+**Step 5:** Select the **Branch** the staff member will work at.
+
+**Step 6:** Click **"Send Invitation."** The staff member receives an email invitation; once they accept it and complete their account setup, their name will appear throughout the system (in the "Recorded By" / cashier fields on sales, reports, and the audit trail).
+
+**To change a user's role or disable their access:** Go to Settings → User Management, find the user, and use the role dropdown or the disable toggle next to their entry. Only Administrators can disable or re-enable accounts.
+
+### 13.5 Other System Options
+
+The remaining system-wide options are configured under **Settings → Organization Settings** (Administrators only):
+
+- **Organization TIN, EBM Device ID, and EBM Serial Number** — see the companion *Programming and Configuration Manual* (document 06-programming-configuration-manual) for the full procedure.
+- **Branches** — create, edit, activate/deactivate branches, and set the organization's default branch, from the Branch Management tab of Organization Settings.
+- **Training Mode** — turn on/off, as described in Section 6.2 and 6.5.
+
+---
+
+## SECTION 14: PERIPHERAL DEVICES
+
+Excledge ERP/POS is a browser-based system. It does not require special drivers or an in-app pairing process for peripherals — printers and scanners are set up once at the operating-system level and then work through the browser like any other application.
+
+### 14.1 Receipt Printer
+
+**Setup:**
+
+**Step 1:** Connect the receipt printer to the till computer, either directly by USB cable or over the network (Wi-Fi/Ethernet), following the printer manufacturer's instructions.
+
+**Step 2:** Install the printer's driver on the computer if the manufacturer requires one, and confirm the computer's operating system recognizes the printer (it should appear in the OS's list of printers/devices).
+
+**Step 3:** In the operating system's printer settings, you may set the receipt printer as the default printer for the till computer, so that clicking "Print" in Excledge ERP/POS sends the receipt straight to it without extra prompts.
+
+**Operation:** When a cashier clicks **"Print"** on a completed sale (Section 3.17), the browser's print function sends the receipt to whichever printer is selected (the default, or one chosen from the browser's print dialog).
+
+**Troubleshooting:** See the printer-related rows in Section 11 (Common Problems and Solutions) — for example, "Receipt did not print," "Printer won't print — jobs stuck," and "QR code on receipt not scanning." For hardware faults (paper jams, power issues, damaged print heads), refer to the printer manufacturer's own manual or contact IT support.
+
+### 14.2 Barcode Scanner
+
+**Setup:**
+
+**Step 1:** Connect the barcode scanner to the till computer by USB cable, or pair it over Bluetooth if it is a wireless model, following the scanner manufacturer's instructions.
+
+**Step 2:** Most barcode scanners work as a "keyboard wedge" — the operating system sees them as a keyboard, typing out the scanned number automatically. No driver or in-app configuration is normally required.
+
+**Step 3:** Confirm the scanner is working by clicking into the product search box on the POS screen (Section 3.3) and scanning a barcoded product — the barcode number should appear in the box and the matching product should be found automatically.
+
+**Operation:** Cashiers use the scanner at the POS screen (Section 3.3) and when entering a product's barcode in the Add/Edit Product form (Section 13.3). Always click into the relevant search or input field before scanning, since the scanner types into whichever field is currently focused.
+
+**Troubleshooting:** If scans are not recognized, confirm the product's barcode is correctly saved in the system (Section 13.3), check the scanner's USB/Bluetooth connection, and try scanning into a plain text field (such as the browser's address bar) to confirm the scanner itself is working before assuming the fault is in Excledge ERP/POS.
 
 ---
 
@@ -1548,7 +1694,7 @@ Before you start serving customers, complete these 5 checks:
 
 - [ ] **1. VSDC Status is GREEN** (check the indicator at the top of the screen — if red, call manager)
 - [ ] **2. Log in** with YOUR personal account (never share accounts)
-- [ ] **3. Check EBM Queue** (Settings → EBM Queue) — confirm no FAILED items from yesterday
+- [ ] **3. Check EBM Outbox** (Administrators — confirm no FAILED or DEAD_LETTER items from yesterday)
 - [ ] **4. Check low stock alerts** (notification bell — bell) — report critical low stock to manager
 - [ ] **5. Correct branch selected** (check branch name top right of screen)
 
