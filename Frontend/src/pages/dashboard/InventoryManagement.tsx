@@ -78,6 +78,7 @@ export const InventoryManagement = () => {
   const [expiryStatus, setExpiryStatus] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewProduct, setViewProduct] = useState<Product | null>(null);
   const [totalPages, setTotalPages] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -487,22 +488,23 @@ export const InventoryManagement = () => {
             </Button>
 
             <Button
-              onClick={() => setIsDialogOpen(true)}
+              onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }}
               className="bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200 h-10"
             >
               <Plus className="mr-2 h-4 w-4" />
               {t('inventory.addProduct')}
             </Button>
 
-            {/* Add Product Drawer */}
-            <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            {/* Add/Edit Product Drawer */}
+            <Drawer open={isDialogOpen} onOpenChange={(open) => { if (!open) setEditingProduct(null); setIsDialogOpen(open); }}>
               <DrawerContent className="sm:max-w-[680px] h-full min-h-[60vh] overflow-y-auto bg-white dark:bg-gray-900">
                 <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4 rounded-tl-2xl rounded-tr-2xl">
-                  <DrawerTitle className="text-lg font-semibold">Add New Product</DrawerTitle>
+                  <DrawerTitle className="text-lg font-semibold">{editingProduct ? 'Edit Product' : 'Add New Product'}</DrawerTitle>
                 </DrawerHeader>
                 <div className="p-4">
-                  <AddProduct onSuccess={() => {
+                  <AddProduct product={editingProduct} onSuccess={() => {
                     getProducts({ search: debouncedSearchTerm, category, expiryStatus, page: currentPage, limit: itemsPerPage, branchId: selectedBranchId });
+                    setEditingProduct(null);
                     setIsDialogOpen(false);
                   }} />
                 </div>
@@ -850,15 +852,11 @@ export const InventoryManagement = () => {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => {
-                                      setSelectedProductForAdjustment({
-                                        id: item.id,
-                                        name: item.name,
-                                        quantity: item.quantity,
-                                      });
-                                      setAdjustmentDialogOpen(true);
+                                      setEditingProduct(item);
+                                      setIsDialogOpen(true);
                                     }}
                                     className="h-8 px-2"
-                                    title={t('inventory.adjustStock') || 'Adjust Stock'}
+                                    title={t('common.edit') || 'Edit'}
                                   >
                                     <Edit className="h-4 w-4" />
                                   </Button>

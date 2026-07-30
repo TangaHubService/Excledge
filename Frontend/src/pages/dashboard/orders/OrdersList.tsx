@@ -63,6 +63,10 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
     const [orderToDelete, setOrderToDelete] = useState<string | number | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [receiveModalOpen, setReceiveModalOpen] = useState(false);
+    const [receivingOrder, setReceivingOrder] = useState<Order | null>(null);
+    const [receivingQuantities, setReceivingQuantities] = useState<Record<number, number>>({});
+    const [isReceiving, setIsReceiving] = useState(false);
 
     useEffect(() => {
         const fetchOrders = async () => {
@@ -172,6 +176,69 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
         }
     };
 
+    const handleReceiveOpen = (order: Order) => {
+        setReceivingOrder(order);
+        const initial: Record<number, number> = {};
+        order.items.forEach(item => {
+            const alreadyReceived = item.quantityReceived || 0;
+            initial[item.id] = Math.max(0, item.quantity - alreadyReceived);
+        });
+        setReceivingQuantities(initial);
+        setReceiveModalOpen(true);
+    };
+
+    const handleReceiveConfirm = async () => {
+        if (!receivingOrder) return;
+        setIsReceiving(true);
+        try {
+            const branchIdForReceive = selectedBranchId ?? primaryBranch?.id ?? null;
+            const receivedItems = receivingOrder.items.map(item => ({
+                productId: item.productId!,
+                quantity: receivingQuantities[item.id] ?? (item.quantity - (item.quantityReceived || 0)),
+            })).filter(ri => ri.quantity > 0);
+
+            if (receivedItems.length === 0) {
+                toast.error(t('purchaseOrders.noItemsToReceive') || 'No items to receive');
+                setIsReceiving(false);
+                return;
+            }
+
+            const response = await apiClient.updatePurchaseOrderStatus(
+                receivingOrder.id,
+                'PARTIALLY_RECEIVED',
+                organizationId,
+                {
+                    branchId: branchIdForReceive,
+                    receivedItems,
+                }
+            );
+
+            if (response) {
+                setOrders(prevOrders =>
+                    prevOrders.map(order =>
+                        String(order.id) === String(receivingOrder.id)
+                            ? { ...order, status: response.status || 'PARTIALLY_RECEIVED' }
+                            : order
+                    )
+                );
+                if (String(selectedOrder?.id) === String(receivingOrder.id)) {
+                    setSelectedOrder(prev => prev ? { ...prev, status: response.status || 'PARTIALLY_RECEIVED' } : null);
+                }
+                toast.success(t('purchaseOrders.itemsReceived') || 'Items received successfully');
+                setReceiveModalOpen(false);
+                setReceivingOrder(null);
+            } else {
+                throw new Error(t('purchaseOrders.updateError'));
+            }
+        } catch (err) {
+            console.error('Error receiving items:', err);
+            const errorMessage = err instanceof Error ? err.message : t('purchaseOrders.updateError');
+            toast.error(`${t('common.error')}: ${errorMessage}`);
+        } finally {
+            setIsReceiving(false);
+        }
+    };
+
     const getStatusStyles = (status: string) => {
         switch (status.toUpperCase()) {
             case 'COMPLETED':
@@ -180,6 +247,20 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                     text: 'text-green-700 dark:text-green-400',
                     icon: <CheckCircle2 className="h-3 w-3 mr-1" />,
                     label: t('common.completed')
+                };
+            case 'APPROVED':
+                return {
+                    bg: 'bg-sky-100 dark:bg-sky-900/30',
+                    text: 'text-sky-700 dark:text-sky-400',
+                    icon: <CheckCircle2 className="h-3 w-3 mr-1" />,
+                    label: t('common.approved') || 'Approved'
+                };
+            case 'PARTIALLY_RECEIVED':
+                return {
+                    bg: 'bg-orange-100 dark:bg-orange-900/30',
+                    text: 'text-orange-700 dark:text-orange-400',
+                    icon: <Package className="h-3 w-3 mr-1" />,
+                    label: t('common.partiallyReceived') || 'Partial'
                 };
             case 'PROCESSING':
                 return {
@@ -409,9 +490,21 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                                                     <ExternalLink className="h-3.5 w-3.5 text-blue-500" />
                                                                     <span className="font-semibold">{t('purchaseOrders.orderDetails')}</span>
                                                                 </DropdownMenuItem>
+                                                                {['APPROVED', 'PARTIALLY_RECEIVED'].includes(order.status) && (
+                                                                    <>
+                                                                        <DropdownMenuSeparator className="my-1" />
+                                                                        <DropdownMenuItem
+                                                                            onSelect={() => handleReceiveOpen(order)}
+                                                                            className="rounded-md px-2 py-1.5 gap-2 cursor-pointer text-xs text-green-600 focus:text-green-600 focus:bg-green-50 dark:focus:bg-green-900/20"
+                                                                        >
+                                                                            <Package className="h-3.5 w-3.5" />
+                                                                            <span className="font-semibold">{t('purchaseOrders.receive') || 'Receive'}</span>
+                                                                        </DropdownMenuItem>
+                                                                    </>
+                                                                )}
                                                                 <DropdownMenuSeparator className="my-1" />
 
-                                                                {['PENDING', 'PROCESSING', 'COMPLETED', 'CANCELLED']
+                                                                {['PENDING', 'APPROVED', 'PROCESSING', 'PARTIALLY_RECEIVED', 'COMPLETED', 'CANCELLED']
                                                                     .filter(s => s !== order.status)
                                                                     .map((s) => {
                                                                         const styles = getStatusStyles(s);
@@ -602,7 +695,11 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                                     {selectedOrder.items.map((item) => (
                                                         <tr key={item.id} className={`${theme === 'dark' ? 'bg-gray-800/20' : 'bg-white'}`}>
                                                             <td className="px-4 py-2 font-semibold text-xs tracking-tight">{item.productName}</td>
-                                                            <td className="px-4 py-2 text-right font-mono text-xs">{item.quantity}</td>
+                                                            <td className="px-4 py-2 text-right font-mono text-xs">
+                                                                <span className={item.quantityReceived !== undefined ? 'text-orange-600 dark:text-orange-400' : ''}>
+                                                                    {item.quantityReceived !== undefined ? `${item.quantityReceived}/${item.quantity}` : item.quantity}
+                                                                </span>
+                                                            </td>
                                                             <td className="px-4 py-2 text-right font-mono text-[11px] text-gray-500">{parseInt(item.unitPrice).toLocaleString()}</td>
                                                             <td className="px-4 py-2 text-right font-bold text-xs text-blue-600 dark:text-blue-400">
                                                                 {parseInt(item.totalPrice).toLocaleString()}
@@ -626,6 +723,16 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                     {t('common.close')}
                                 </Button>
                                 <div className="flex gap-2 ml-auto">
+                                    {['APPROVED', 'PARTIALLY_RECEIVED'].includes(selectedOrder.status) && (
+                                        <Button
+                                            size="sm"
+                                            onClick={() => { setSelectedOrder(null); handleReceiveOpen(selectedOrder); }}
+                                            className="rounded-md font-bold px-4 h-8 bg-green-600 hover:bg-green-700 text-white text-xs gap-1 shadow-sm"
+                                        >
+                                            <Package className="h-3.5 w-3.5" />
+                                            {t('purchaseOrders.receive') || 'Receive'}
+                                        </Button>
+                                    )}
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <Button size="sm" className="rounded-md font-bold px-4 h-8 bg-blue-600 hover:bg-blue-700 text-white text-xs gap-1 shadow-sm">
@@ -633,7 +740,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                             </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end" className="w-44 rounded-md p-1 shadow-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg">
-                                            {['PENDING', 'PROCESSING', 'COMPLETED', 'CANCELLED']
+                                            {['PENDING', 'APPROVED', 'PROCESSING', 'PARTIALLY_RECEIVED', 'COMPLETED', 'CANCELLED']
                                                 .filter(s => s !== selectedOrder.status)
                                                 .map((s) => {
                                                     const styles = getStatusStyles(s);
@@ -651,6 +758,90 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </div>
+                            </DrawerFooter>
+                        </>
+                    )}
+                </DrawerContent>
+            </Drawer>
+
+            {/* Receive Items Modal */}
+            <Drawer open={receiveModalOpen} onOpenChange={(open) => { if (!open) { setReceiveModalOpen(false); setReceivingOrder(null); } }}>
+                <DrawerContent className={`max-w-3xl p-0 overflow-hidden border-none shadow-xl rounded-md ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}>
+                    {receivingOrder && (
+                        <>
+                            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between">
+                                    <h2 className="text-lg font-bold">{t('purchaseOrders.receiveItems') || 'Receive Items'}</h2>
+                                    <button onClick={() => { setReceiveModalOpen(false); setReceivingOrder(null); }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                                        <X className="h-5 w-5" />
+                                    </button>
+                                </div>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                    {receivingOrder.orderNumber}
+                                </p>
+                            </div>
+
+                            <div className="p-6">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className={`text-[9px] font-black uppercase tracking-widest border-b ${theme === 'dark' ? 'border-gray-700 text-gray-400' : 'border-gray-100 text-gray-500'}`}>
+                                            <th className="px-4 py-2.5">{t('purchaseOrders.itemName')}</th>
+                                            <th className="px-4 py-2.5 text-right">{t('purchaseOrders.orderedQty') || 'Ordered'}</th>
+                                            <th className="px-4 py-2.5 text-right">{t('purchaseOrders.previouslyReceived') || 'Received'}</th>
+                                            <th className="px-4 py-2.5 text-right">{t('purchaseOrders.quantityToReceive') || 'To Receive'}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className={`divide-y ${theme === 'dark' ? 'divide-gray-700' : 'divide-gray-100'}`}>
+                                        {receivingOrder.items.map((item) => {
+                                            const alreadyReceived = item.quantityReceived || 0;
+                                            const remaining = item.quantity - alreadyReceived;
+                                            return (
+                                                <tr key={item.id} className={`${theme === 'dark' ? 'bg-gray-800/20' : 'bg-white'}`}>
+                                                    <td className="px-4 py-3 font-semibold text-xs tracking-tight">{item.productName}</td>
+                                                    <td className="px-4 py-3 text-right font-mono text-xs">{item.quantity}</td>
+                                                    <td className="px-4 py-3 text-right font-mono text-xs text-gray-500">{alreadyReceived}</td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            max={remaining}
+                                                            value={receivingQuantities[item.id] ?? remaining}
+                                                            onChange={(e) => {
+                                                                const val = Math.min(remaining, Math.max(0, parseInt(e.target.value) || 0));
+                                                                setReceivingQuantities(prev => ({ ...prev, [item.id]: val }));
+                                                            }}
+                                                            className="w-20 text-right px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <DrawerFooter className={`p-4 gap-2 ${theme === 'dark' ? 'bg-gray-800/50 border-t border-gray-700' : 'bg-gray-50 border-t border-gray-100'}`}>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => { setReceiveModalOpen(false); setReceivingOrder(null); }}
+                                    className="rounded-md font-bold px-4 h-8 text-xs"
+                                >
+                                    {t('common.cancel')}
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    onClick={handleReceiveConfirm}
+                                    disabled={isReceiving}
+                                    className="rounded-md font-bold px-4 h-8 bg-green-600 hover:bg-green-700 text-white text-xs gap-1 shadow-sm"
+                                >
+                                    {isReceiving ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <Package className="h-3.5 w-3.5" />
+                                    )}
+                                    {isReceiving ? t('common.receiving') || 'Receiving...' : t('purchaseOrders.confirmReceive') || 'Confirm Receive'}
+                                </Button>
                             </DrawerFooter>
                         </>
                     )}

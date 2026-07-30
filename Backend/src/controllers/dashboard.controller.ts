@@ -10,10 +10,20 @@ interface DateRange {
   endDate: Date
 }
 
-function parseDateRange(query: Record<string, any>): DateRange {
+export function parseDateRange(query: Record<string, any>): DateRange {
   const now = new Date()
-  const endDate = new Date(now)
-  endDate.setHours(23, 59, 59, 999)
+  const endOfDay = (d: Date): Date => {
+    const e = new Date(d)
+    e.setHours(23, 59, 59, 999)
+    return e
+  }
+  const startOfDay = (d: Date): Date => {
+    const s = new Date(d)
+    s.setHours(0, 0, 0, 0)
+    return s
+  }
+
+  const endDate = endOfDay(now)
   let startDate: Date
 
   const preset = query.preset as string | undefined
@@ -30,16 +40,48 @@ function parseDateRange(query: Record<string, any>): DateRange {
 
   switch (preset) {
     case 'today':
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      startDate = startOfDay(now)
+      break
+    case 'yesterday': {
+      const yesterday = new Date(now)
+      yesterday.setDate(yesterday.getDate() - 1)
+      startDate = startOfDay(yesterday)
+      endDate.setTime(endOfDay(yesterday).getTime())
+      break
+    }
+    case 'this_week': {
+      const dayOfWeek = now.getDay()
+      const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+      startDate = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff))
+      break
+    }
+    case 'last_week': {
+      const dayOfWeek = now.getDay()
+      const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+      const lastMon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff - 7)
+      const lastSun = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff - 1)
+      startDate = startOfDay(lastMon)
+      endDate.setTime(endOfDay(lastSun).getTime())
+      break
+    }
+    case 'this_month':
+      startDate = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1))
+      break
+    case 'last_month':
+      startDate = startOfDay(new Date(now.getFullYear(), now.getMonth() - 1, 1))
+      endDate.setTime(endOfDay(new Date(now.getFullYear(), now.getMonth(), 0)).getTime())
+      break
+    case 'this_year':
+      startDate = startOfDay(new Date(now.getFullYear(), 0, 1))
       break
     case 'weekly': {
       const dayOfWeek = now.getDay()
-      const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1 // Monday start
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff)
+      const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+      startDate = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff))
       break
     }
     case 'monthly':
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+      startDate = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1))
       break
     default:
       // Fallback: last 30 days

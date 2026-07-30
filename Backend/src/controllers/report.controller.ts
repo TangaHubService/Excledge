@@ -16,11 +16,12 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
       status,
       sellerId,
       product,
-      page,
-      limit
+      sortBy = 'date',
+      sortOrder = 'desc',
+      page = '1',
+      limit = '10'
     } = req.query;
 
-    // Base where clause
     const where: any = {
       organizationId,
       ...buildBranchFilter(req),
@@ -29,55 +30,64 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
         const end = new Date(endDate as string);
         if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
           end.setHours(23, 59, 59, 999);
-          return {
-            createdAt: {
-              gte: start,
-              lte: end,
-            }
-          };
+          return { createdAt: { gte: start, lte: end } };
         }
         return null;
       })()),
-      ...(status && status !== 'all' && {
-        status: status as string
-      }),
-      ...(sellerId && sellerId !== 'all' && {
-        userId: parseInt(sellerId as string)
-      })
+      ...(status && status !== 'all' && { status: status as string }),
+      ...(sellerId && sellerId !== 'all' && { userId: parseInt(sellerId as string) })
     };
 
-    // Get all sales with line items, product details, and user (seller) info
-    // Hard cap at 2000 rows to prevent heap OOM — use date ranges to narrow large datasets
+    const pageNum = Math.max(parseInt(page as string) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit as string) || 10, 1), 500);
+    const skip = (pageNum - 1) * limitNum;
+
+    const totalSalesCount = await prisma.sale.count({ where });
+
     const sales = await prisma.sale.findMany({
       where,
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        },
+        user: { select: { id: true, name: true, email: true } },
         saleItems: {
           include: {
-            product: {
-              select: {
-                id: true,
-                name: true,
-                category: true
-              }
-            }
+            product: { select: { id: true, name: true, category: true } }
           }
-        }
+        },
+        salePayments: { select: { paymentMethod: true, amount: true } },
       },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      take: 2000,
+      orderBy: sortBy === 'date' ? { createdAt: sortOrder === 'asc' ? 'asc' : 'desc' }
+        : sortBy === 'amount' ? { totalAmount: sortOrder === 'asc' ? 'asc' : 'desc' }
+        : { createdAt: 'desc' },
+      skip,
+      take: limitNum,
     });
 
-    // Map transactions with all IDs and apply filters (skip service items)
-    let transactions = sales.flatMap(sale =>
+    // Calculate summary from ALL matching sales (not just paginated)
+    const [aggregateTotals, refundAgg, vatAgg] = await Promise.all([
+      prisma.sale.aggregate({
+        where,
+        _sum: { totalAmount: true, cashAmount: true, debtAmount: true, insuranceAmount: true, vatAmount: true, taxableAmount: true },
+        _count: { id: true },
+      }),
+      prisma.sale.aggregate({
+        where: { ...where, status: 'REFUNDED' },
+        _sum: { totalAmount: true },
+      }),
+      prisma.sale.aggregate({
+        where: { ...where, NOT: { status: 'REFUNDED' } },
+        _sum: { vatAmount: true, taxableAmount: true },
+      }),
+    ]);
+
+    const totalRevenue = Number(aggregateTotals._sum.totalAmount || 0);
+    const totalRefunds = Math.abs(Number(refundAgg._sum.totalAmount || 0));
+    const netRevenue = totalRevenue - totalRefunds;
+    const totalVat = Number(vatAgg._sum.vatAmount || 0);
+    const totalTaxable = Number(vatAgg._sum.taxableAmount || 0);
+    const totalTransactions = aggregateTotals._count.id || 0;
+    const avgTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
+
+    const transactions = sales.flatMap(sale =>
       sale.saleItems
         .filter(item => item.product)
         .map(item => ({
@@ -90,71 +100,73 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
           category: item.product!.category || 'Uncategorized',
           quantity: item.quantity,
           unitPrice: item.unitPrice.toNumber(),
-          total: (item.quantity * item.unitPrice.toNumber()),
+          total: item.quantity * item.unitPrice.toNumber(),
+          costPrice: item.costPrice.toNumber(),
+          profit: item.profit.toNumber(),
+          taxAmount: item.taxAmount.toNumber(),
+          taxRate: item.taxRate.toNumber(),
           status: sale.status,
           seller: sale.user.name,
           sellerEmail: sale.user.email,
+          paymentType: sale.paymentType,
+          saleNumber: sale.saleNumber,
+          invoiceNumber: sale.invoiceNumber,
+          payments: sale.salePayments.map(p => ({ method: p.paymentMethod, amount: Number(p.amount) })),
         }))
     );
 
-    // Apply client-side filters (category, product search, maxAmount)
+    let filteredTransactions = transactions;
+
     if (category && category !== 'all') {
-      transactions = transactions.filter(t => t.category === category);
+      filteredTransactions = filteredTransactions.filter(t => t.category === category);
     }
 
     if (product) {
       const productSearch = (product as string).toLowerCase();
-      transactions = transactions.filter(t =>
+      filteredTransactions = filteredTransactions.filter(t =>
         t.product.toLowerCase().includes(productSearch)
       );
     }
 
-    // Get total count before pagination
-    const totalItems = transactions.length;
-
-    // Apply pagination
-    const pageNum = page ? parseInt(page as string) : 1;
-    const limitNum = limit ? parseInt(limit as string) : 10;
-    const skip = (pageNum - 1) * limitNum;
-    const paginatedTransactions = transactions.slice(skip, skip + limitNum);
-
-    // Calculate summary statistics (from all transactions, not just paginated)
-    const totalSales = transactions.reduce((sum, t) => sum + (t.status === 'REFUNDED' ? -t.total : t.total), 0);
-    const totalQuantity = transactions.reduce((sum, t) => sum + (t.status === 'REFUNDED' ? -t.quantity : t.quantity), 0);
-    const totalTransactions = new Set(transactions.map(t => t.saleId)).size;
-    const avgTransaction = totalTransactions > 0 ? totalSales / totalTransactions : 0;
-
-    // Extract unique values for filter dropdowns (from all transactions)
-    const uniqueCategories = Array.from(new Set(transactions.map(t => t.category).filter(Boolean))).sort();
+    const uniqueCategories = Array.from(new Set(filteredTransactions.map(t => t.category).filter(Boolean))).sort();
     const uniqueSellers = Array.from(
-      new Map(
-        transactions.map(t => [t.sellerId, { id: t.sellerId, name: t.seller, email: t.sellerEmail }])
-      ).values()
+      new Map(filteredTransactions.map(t => [t.sellerId, { id: t.sellerId, name: t.seller, email: t.sellerEmail }])).values()
     ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     const uniqueProducts = Array.from(
-      new Map(
-        transactions.map(t => [t.productId, { id: t.productId, name: t.product, category: t.category }])
-      ).values()
+      new Map(filteredTransactions.map(t => [t.productId, { id: t.productId, name: t.product, category: t.category }])).values()
     ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
-    // Prepare the response
     const response = {
       summary: {
-        totalSales,
-        totalQuantity,
+        totalRevenue,
+        totalRefunds,
+        netRevenue,
+        totalVat,
+        totalTaxable,
+        totalQuantity: filteredTransactions.reduce((sum, t) => sum + t.quantity, 0),
         totalTransactions,
-        avgTransaction
+        avgTransaction,
+        totalCost: filteredTransactions.reduce((sum, t) => sum + t.costPrice, 0),
+        totalProfit: filteredTransactions.reduce((sum, t) => sum + t.profit, 0),
+        totalDiscount: 0,
       },
-      transactions: paginatedTransactions,
-      totalItems,
+      transactions: filteredTransactions,
+      totalItems: filteredTransactions.length,
+      totalCount: totalSalesCount,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalSalesCount,
+        totalPages: Math.ceil(totalSalesCount / limitNum),
+      },
       filters: {
         categories: uniqueCategories,
         sellers: uniqueSellers,
-        products: uniqueProducts
-      }
+        products: uniqueProducts,
+      },
     };
 
-    res.json(success(response));
+    res.json(response);
   } catch (error: any) {
     console.error('Error generating sales report:', error);
     res.status(500).json(apiError('Failed to generate sales report', undefined, error.message));
@@ -263,15 +275,23 @@ export const getInventoryReport = async (req: BranchAuthRequest, res: Response) 
       },
     }) as unknown as ProductWithSales[]
 
-    // Get restock history (assuming you have a restock model)
-    const restocks = await prisma.$queryRaw`
-      SELECT id, "productId", quantity, "createdAt"
-      FROM "restocks"
-      WHERE "organizationId" = ${organizationId}
-      ORDER BY "createdAt" DESC
-    `.catch(() => []) as Array<{
-      id: string
-      productId: string
+    // Get restock history from inventory ledger
+    const restocks = await prisma.inventoryLedger.findMany({
+      where: {
+        organizationId,
+        movementType: { in: ['PURCHASE', 'TRANSFER_IN', 'ADJUSTMENT'] },
+        direction: 'IN',
+      },
+      select: {
+        id: true,
+        productId: true,
+        quantity: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    }) as Array<{
+      id: number
+      productId: number
       quantity: number
       createdAt: Date
     }>
@@ -296,7 +316,7 @@ export const getInventoryReport = async (req: BranchAuthRequest, res: Response) 
         }))
 
         const restockChanges = restocks
-          .filter((r) => r.productId === product.id)
+          .filter((r) => r.productId === Number(product.id))
           .map((restock) => ({
             date: restock.createdAt.toISOString().split('T')[0],
             type: 'restock' as const,
@@ -389,7 +409,7 @@ export const getInventoryReport = async (req: BranchAuthRequest, res: Response) 
     // Get unique categories
     const categories = [...new Set(filteredData.map((item) => item.category).filter(Boolean))]
 
-    res.json(success({
+    res.json({
       inventoryData: filteredData,
       summary: {
         totalValue,
@@ -398,7 +418,7 @@ export const getInventoryReport = async (req: BranchAuthRequest, res: Response) 
         lowStockItems,
       },
       categories,
-    }))
+    })
   } catch (error: any) {
     console.error('[Inventory Report Error]:', error)
     res.status(500).json(apiError('Failed to generate inventory report'))

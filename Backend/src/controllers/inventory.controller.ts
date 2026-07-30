@@ -591,6 +591,68 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
   }
 }
 
+export const updateProductImage = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id)
+    const organizationId = parseInt(req.params.organizationId)
+
+    const existingProduct = await prisma.product.findFirst({
+      where: { id, organizationId, deletedAt: null },
+    })
+
+    if (!existingProduct) {
+      return res.status(404).json(apiError("Product not found"))
+    }
+
+    let imageUrl: string | null = existingProduct.imageUrl
+
+    // Handle image removal
+    if (req.body.removeImage === 'true' || req.body.removeImage === true) {
+      imageUrl = null
+      if (existingProduct.imageUrl) {
+        try {
+          const { deleteFromCloudinary } = await import("../config/cloudinary")
+          await deleteFromCloudinary(existingProduct.imageUrl)
+        } catch (e) {
+          console.warn("Failed to delete old image from cloudinary:", e)
+        }
+      }
+    }
+
+    // Handle file upload
+    if (req.file) {
+      try {
+        // Delete old image if exists
+        if (existingProduct.imageUrl) {
+          const { deleteFromCloudinary } = await import("../config/cloudinary")
+          await deleteFromCloudinary(existingProduct.imageUrl)
+        }
+
+        const { uploadToCloudinary } = await import("../config/cloudinary")
+        const result: any = await uploadToCloudinary(req.file)
+        imageUrl = result.secure_url || result.url
+      } catch (uploadError) {
+        console.error("Failed to upload image:", uploadError)
+        return res.status(500).json(apiError("Failed to upload image"))
+      }
+    }
+
+    if (!req.file && !req.body.removeImage) {
+      return res.status(400).json(apiError("No image provided"))
+    }
+
+    const product = await prisma.product.update({
+      where: { id },
+      data: { imageUrl },
+    })
+
+    res.json(success(product))
+  } catch (error: any) {
+    console.error("[Update Product Image Error]:", error)
+    res.status(500).json(apiError("Failed to update product image"))
+  }
+}
+
 export const deleteProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)

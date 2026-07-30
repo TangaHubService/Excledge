@@ -591,15 +591,8 @@ export default function SalesForm() {
   ) => {
     try {
       setIsSubmitting(true)
-      let cashAmount = 0, insuranceAmount = 0, debtAmount = 0
-      entries.forEach(p => {
-        if (p.method === 'CASH' || p.method === 'MOBILE_MONEY' || p.method === 'CREDIT_CARD') cashAmount += p.amount
-        else if (p.method === 'INSURANCE') insuranceAmount += p.amount
-        else if (p.method === 'DEBT') debtAmount += p.amount
-      })
       const totalPaid = entries.reduce((s, p) => s + p.amount, 0)
       const remainingDebt = Math.max(0, total - totalPaid)
-      if (remainingDebt > 0) debtAmount += remainingDebt
 
       const activeMethods = [...new Set(entries.filter(p => p.amount > 0).map(p => p.method))]
       let paymentType: string = 'CASH'
@@ -607,9 +600,28 @@ export default function SalesForm() {
         paymentType = 'MIXED'
       } else if (activeMethods.length === 1) {
         paymentType = activeMethods[0]
-      } else if (debtAmount > 0) {
+      } else if (remainingDebt > 0) {
         paymentType = 'DEBT'
       }
+
+      // Build split payments array — map frontend methods to backend payment methods
+      let cashAmount = 0, insuranceAmount = 0, debtAmount = 0
+      const splitPayments = entries
+        .filter(p => p.amount > 0)
+        .map(p => {
+          let paymentMethod = p.method
+          if (p.method === 'MOBILE_MONEY') paymentMethod = 'MTN_MOMO'
+          else if (p.method === 'CREDIT_CARD') paymentMethod = 'CARD'
+          if (paymentMethod === 'CASH' || paymentMethod === 'CARD' || paymentMethod === 'MTN_MOMO') cashAmount += p.amount
+          else if (p.method === 'INSURANCE') insuranceAmount += p.amount
+          else if (p.method === 'DEBT') debtAmount += p.amount
+          return {
+            paymentMethod,
+            amount: p.amount,
+            reference: p.reference || null,
+          }
+        })
+      if (remainingDebt > 0) debtAmount += remainingDebt
 
       const payload = {
         customerId: selectedCustomer,
@@ -618,6 +630,7 @@ export default function SalesForm() {
         cashAmount,
         insuranceAmount,
         debtAmount,
+        payments: splitPayments,
         branchId: selectedBranchId,
       }
 

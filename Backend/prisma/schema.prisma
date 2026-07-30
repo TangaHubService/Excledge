@@ -55,6 +55,8 @@ model Organization {
   supplierInvoices         SupplierInvoice[]
   invoiceImportLogs        InvoiceImportLog[]
   settings                 OrganizationSetting?
+  supplierAccessTokens     SupplierAccessToken[]
+  salePayments             SalePayment[]
 
   @@map("organizations")
 }
@@ -153,10 +155,11 @@ model Supplier {
   updatedAt        DateTime          @updatedAt
   id               Int               @id @default(autoincrement())
   organizationId   Int
-  products         Product[]
-  purchaseOrders   PurchaseOrder[]
-  supplierInvoices SupplierInvoice[]
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products            Product[]
+  purchaseOrders      PurchaseOrder[]
+  supplierInvoices    SupplierInvoice[]
+  supplierAccessTokens SupplierAccessToken[]
+  organization        Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@map("suppliers")
@@ -195,17 +198,18 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  productName     String
-  quantity        Int
-  unitPrice       Decimal       @db.Decimal(10, 2)
-  totalPrice      Decimal       @db.Decimal(10, 2)
-  taxCode         RraTaxCode?   @default(A)
-  taxRate         Decimal?      @db.Decimal(5, 2)
-  id              Int           @id @default(autoincrement())
-  purchaseOrderId Int
-  productId       Int?
-  product         Product?      @relation(fields: [productId], references: [id])
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productName         String
+  quantity            Int
+  quantityReceived    Int           @default(0)
+  unitPrice           Decimal       @db.Decimal(10, 2)
+  totalPrice          Decimal       @db.Decimal(10, 2)
+  taxCode             RraTaxCode?   @default(A)
+  taxRate             Decimal?      @db.Decimal(5, 2)
+  id                  Int           @id @default(autoincrement())
+  purchaseOrderId     Int
+  productId           Int?
+  product             Product?      @relation(fields: [productId], references: [id])
+  purchaseOrder       PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
   @@index([purchaseOrderId])
   @@index([productId])
@@ -232,6 +236,8 @@ model User {
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt
   deletedAt                DateTime?
+  disabledAt               DateTime?
+  reactivatedAt            DateTime?
   id                       Int                      @id @default(autoincrement())
   activityLogs             ActivityLog[]
   recordedCashBalances     CashBalance[]            @relation("RecordedCashBalances")
@@ -537,7 +543,8 @@ model Sale {
   branch             Branch           @relation(fields: [branchId], references: [id]) // NEW
   originalSale       Sale?            @relation("RefundRelation", fields: [originalSaleId], references: [id])
   refunds            Sale[]           @relation("RefundRelation")
-  user               User             @relation(fields: [userId], references: [id])
+  user             User             @relation(fields: [userId], references: [id])
+  salePayments     SalePayment[]
 
   @@index([organizationId, status, createdAt])
   @@index([invoiceNumber])
@@ -943,6 +950,48 @@ model Expense {
   @@map("expenses")
 }
 
+model SalePayment {
+  id             Int              @id @default(autoincrement())
+  saleId         Int
+  organizationId Int
+  amount         Decimal          @db.Decimal(10, 2)
+  paymentMethod  SalePaymentMethodType
+  reference      String?
+  status         String           @default("COMPLETED")
+  processedAt    DateTime         @default(now())
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  sale         Sale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([organizationId])
+  @@index([paymentMethod])
+  @@map("sale_payments")
+}
+
+model SupplierAccessToken {
+  id             Int      @id @default(autoincrement())
+  supplierId     Int
+  organizationId Int
+  token          String   @unique
+  expiresAt      DateTime
+  isActive       Boolean  @default(true)
+  lastUsedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  supplier     Supplier     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
+  @@index([token])
+  @@index([organizationId])
+  @@map("supplier_access_tokens")
+}
+
 model SupplierPayment {
   id              Int           @id @default(autoincrement())
   purchaseOrderId Int
@@ -1022,6 +1071,7 @@ enum PurchaseOrderStatus {
   CANCELLED
   APPROVED
   REJECTED
+  PARTIALLY_RECEIVED
 }
 
 enum UserRole {
@@ -1087,6 +1137,9 @@ enum SaleStatus {
   CANCELLED
   DRAFT
   PENDING
+  PARTIALLY_PAID
+  OVERPAID
+  UNPAID
 }
 
 enum LogModule {
@@ -1170,6 +1223,18 @@ enum SalePaymentType {
   MIXED
   CREDIT_CARD
   MOBILE_MONEY
+}
+
+enum SalePaymentMethodType {
+  CASH
+  BANK
+  CARD
+  PAYPACK
+  MTN_MOMO
+  AIRTEL_MONEY
+  WALLET
+  GIFT_CARD
+  STORE_CREDIT
 }
 
 enum NotificationType {

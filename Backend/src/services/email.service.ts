@@ -24,15 +24,43 @@ class EmailService {
     });
   }
 
+  private emailLog: Array<{ to: string; subject: string; status: 'sent' | 'failed'; messageId?: string; error?: string; timestamp: Date }> = [];
+
   private async sendMail(options: nodemailer.SendMailOptions) {
     try {
       const info = await this.transporter.sendMail(options);
-      console.log(`[EmailService] Email sent to ${options.to} | subject="${options.subject}" | messageId=${info.messageId}`);
+      const recipientStr = typeof options.to === 'string' ? options.to : Array.isArray(options.to) ? options.to.join(', ') : '';
+      const logEntry = {
+        to: recipientStr,
+        subject: options.subject || '',
+        status: 'sent' as const,
+        messageId: info.messageId,
+        timestamp: new Date(),
+      };
+      this.emailLog.push(logEntry);
+      console.log(`[EmailService] Email sent to ${recipientStr} | subject="${options.subject}" | messageId=${info.messageId}`);
       return info;
-    } catch (error) {
-      console.error(`[EmailService] Failed to send email to ${options.to} | subject="${options.subject}":`, error);
+    } catch (error: any) {
+      const recipientStr = typeof options.to === 'string' ? options.to : Array.isArray(options.to) ? options.to.join(', ') : '';
+      const logEntry = {
+        to: recipientStr,
+        subject: options.subject || '',
+        status: 'failed' as const,
+        error: error.message,
+        timestamp: new Date(),
+      };
+      this.emailLog.push(logEntry);
+      console.error(`[EmailService] Failed to send email to ${recipientStr} | subject="${options.subject}":`, error);
       throw error;
     }
+  }
+
+  getEmailLog() {
+    return this.emailLog;
+  }
+
+  clearEmailLog() {
+    this.emailLog = [];
   }
 
   async sendInvitationEmail(
@@ -321,63 +349,89 @@ class EmailService {
     notes?: string,
     expectedDate?: Date,
     creatorEmail?: string,
+    updateType?: 'created' | 'updated',
   ) {
+    const isUpdate = updateType === 'updated'
+    const subject = isUpdate
+      ? `Purchase Order ${orderNumber} Updated by ${organizationName}`
+      : `New Purchase Order ${orderNumber} from ${organizationName}`
+
     const itemsList = items
       .map(
         (item) => `
       <tr>
         <td style="padding: 8px; border: 1px solid #ddd;">${item.productName}</td>
         <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.quantity}</td>
-        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${item.unitPrice.toFixed(2)} Frw</td>
-        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${item.totalPrice.toFixed(2)} Frw</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${Number(item.unitPrice).toLocaleString()} Frw</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${Number(item.totalPrice).toLocaleString()} Frw</td>
       </tr>
     `,
       )
       .join("")
 
+    const viewUrl = `${config.primaryFrontendUrl}/supplier-portal/orders?order=${orderNumber}`
+
     await this.sendMail({
       from: config.email.from,
       to: supplierEmail,
       ...(creatorEmail ? { replyTo: creatorEmail } : {}),
-      subject: `New Purchase Order ${orderNumber} from ${organizationName}`,
+      subject,
       html: `
-        <h2>New Purchase Order</h2>
-        <p>Dear ${supplierName},</p>
-        <p>You have received a new purchase order from <strong>${organizationName}</strong>.</p>
-        
-        <h3>Order Details</h3>
-        <ul>
-          <li><strong>Order Number:</strong> ${orderNumber}</li>
-          <li><strong>Order Date:</strong> ${new Date().toLocaleDateString()}</li>
-          ${expectedDate ? `<li><strong>Expected Delivery:</strong> ${new Date(expectedDate).toLocaleDateString()}</li>` : ""}
-          <li><strong>Total Amount:</strong> ${totalAmount.toFixed(2)} Frw</li>
-        </ul>
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; color: #333;">
+          <div style="background-color: #1e40af; padding: 24px; border-radius: 8px 8px 0 0; text-align: center;">
+            <h2 style="color: white; margin: 0;">${isUpdate ? 'Purchase Order Updated' : 'New Purchase Order'}</h2>
+          </div>
+          <div style="padding: 24px; background: #fff; border: 1px solid #e5e7eb; border-top: none;">
+            <p>Dear <strong>${supplierName}</strong>,</p>
+            <p>${isUpdate
+              ? `The purchase order <strong>${orderNumber}</strong> from <strong>${organizationName}</strong> has been updated.`
+              : `You have received a new purchase order from <strong>${organizationName}</strong>.`}</p>
 
-        <h3>Items Ordered</h3>
-        <table style="border-collapse: collapse; width: 100%; margin-top: 20px;">
-          <thead>
-            <tr style="background-color: #f3f4f6;">
-              <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Product</th>
-              <th style="padding: 8px; border: 1px solid #ddd; text-align: center;">Quantity</th>
-              <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Unit Price</th>
-              <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsList}
-          </tbody>
-          <tfoot>
-            <tr style="background-color: #f3f4f6; font-weight: bold;">
-              <td colspan="3" style="padding: 8px; border: 1px solid #ddd; text-align: right;">Total Amount:</td>
-              <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${totalAmount.toFixed(2)} Frw</td>
-            </tr>
-          </tfoot>
-        </table>
+            <h3 style="color: #1e40af; border-bottom: 2px solid #f3f4f6; padding-bottom: 8px;">Order Details</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+              <tr><td style="padding: 6px 0; color: #666; width: 140px;"><strong>Order Number:</strong></td><td>${orderNumber}</td></tr>
+              <tr><td style="padding: 6px 0; color: #666;"><strong>Organization:</strong></td><td>${organizationName}</td></tr>
+              <tr><td style="padding: 6px 0; color: #666;"><strong>Order Date:</strong></td><td>${new Date().toLocaleDateString()}</td></tr>
+              ${expectedDate ? `<tr><td style="padding: 6px 0; color: #666;"><strong>Delivery Date:</strong></td><td>${new Date(expectedDate).toLocaleDateString()}</td></tr>` : ''}
+              <tr><td style="padding: 6px 0; color: #666;"><strong>Total Amount:</strong></td><td style="font-weight: bold; font-size: 16px;">${Number(totalAmount).toLocaleString()} Frw</td></tr>
+              ${isUpdate ? '<tr><td style="padding: 6px 0; color: #666;"><strong>Status:</strong></td><td style="color: #f59e0b; font-weight: bold;">UPDATED</td></tr>' : ''}
+            </table>
 
-        ${notes ? `<p style="margin-top: 20px;"><strong>Notes:</strong> ${notes}</p>` : ""}
+            <h3 style="color: #1e40af; border-bottom: 2px solid #f3f4f6; padding-bottom: 8px;">Items</h3>
+            <table style="border-collapse: collapse; width: 100%; margin-top: 12px;">
+              <thead>
+                <tr style="background-color: #f3f4f6;">
+                  <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Product</th>
+                  <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Quantity</th>
+                  <th style="padding: 10px; border: 1px solid #ddd; text-align: right;">Unit Price</th>
+                  <th style="padding: 10px; border: 1px solid #ddd; text-align: right;">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsList}
+              </tbody>
+              <tfoot>
+                <tr style="background-color: #f9fafb; font-weight: bold;">
+                  <td colspan="3" style="padding: 10px; border: 1px solid #ddd; text-align: right;">Total Amount:</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">${Number(totalAmount).toLocaleString()} Frw</td>
+                </tr>
+              </tfoot>
+            </table>
 
-        <p style="margin-top: 20px;">Please confirm receipt of this order and provide an estimated delivery date.</p>
-        <p>Thank you for your business!</p>
+            ${notes ? `<p style="margin-top: 16px;"><strong>Notes:</strong> ${notes}</p>` : ''}
+
+            <div style="text-align: center; margin-top: 28px;">
+              <a href="${viewUrl}" style="background-color: #1e40af; color: white; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 15px;">
+                View Purchase Order
+              </a>
+            </div>
+
+            <p style="margin-top: 20px; font-size: 13px; color: #6b7280; text-align: center; border-top: 1px solid #f3f4f6; padding-top: 16px;">
+              ${isUpdate ? 'Please review the updated details.' : 'Please confirm receipt of this order and provide an estimated delivery date.'}<br>
+              Thank you for your business with <strong>${organizationName}</strong>!
+            </p>
+          </div>
+        </div>
       `,
     })
   }

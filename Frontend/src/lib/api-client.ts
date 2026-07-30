@@ -607,6 +607,12 @@ class ApiClient {
     });
   }
 
+  async regenerateInvoice(saleId: string | number) {
+    return this.request(`/sales/${this.getOrganizationId()}/${saleId}/regenerate-invoice`, {
+      method: "POST",
+    })
+  }
+
   // Inventory endpoints
   async getProducts(params?: Record<string, any>) {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";
@@ -698,8 +704,15 @@ class ApiClient {
   }
 
   // User endpoints
-  async getUsers() {
-    return this.request(`/users/${this.getOrganizationId()}`);
+  async getUsers(params?: { page?: number; limit?: number; search?: string; status?: string }) {
+    const query = params ? '?' + new URLSearchParams(params as any).toString() : '';
+    return this.request(`/users/${this.getOrganizationId()}${query}`);
+  }
+
+  async reactivateUser(organizationId: string | number, userId: string | number) {
+    return this.request(`/users/${organizationId}/reactivate/${userId}`, {
+      method: "PUT",
+    })
   }
 
   async inviteUser(data: { email: string; role: string; branchId?: number | null }) {
@@ -997,6 +1010,13 @@ class ApiClient {
     const org = organizationId ?? this.getOrganizationId();
     return this.request(`/purchase-orders/${org}/${id}`, {
       method: "DELETE",
+    })
+  }
+
+  async updatePurchaseOrder(organizationId: string | number, id: string | number, data: any) {
+    return this.request(`/purchase-orders/${organizationId}/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
     })
   }
 
@@ -1702,6 +1722,17 @@ class ApiClient {
     if (!response.ok) {
       throw new Error('Image upload failed');
     }
+    return response.json();
+  }
+
+  async updateProductImage(organizationId: string | number, productId: string | number, file?: File) {
+    const formData = new FormData();
+    if (file) formData.append('image', file);
+    const response = await this.fetchWithRefresh(
+      `${this.baseUrl}/inventory/${organizationId}/product/${productId}/image`,
+      { method: 'PUT', body: formData },
+    );
+    if (!response.ok) throw new Error('Failed to update product image');
     return response.json();
   }
 

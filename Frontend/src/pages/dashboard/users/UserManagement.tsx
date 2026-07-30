@@ -40,6 +40,7 @@ function usersFromListResponse(res: unknown): User[] {
 export const UserManagement = () => {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled'>('all');
   const [users, setUsers] = useState<User[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,6 +53,7 @@ export const UserManagement = () => {
   const [branches, setBranches] = useState<Array<{ id: number; name: string; code: string }>>([]);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [disablingUserId, setDisablingUserId] = useState<string | null>(null);
+  const [reactivatingUserId, setReactivatingUserId] = useState<string | null>(null);
 
   // Get current logged-in user
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -78,7 +80,8 @@ export const UserManagement = () => {
     const fetchUsers = async () => {
       try {
         setIsLoading(true);
-        const response = await apiClient.getUsers();
+        const params = statusFilter === 'all' ? undefined : { status: statusFilter };
+        const response = await apiClient.getUsers(params);
         setUsers(usersFromListResponse(response));
       } catch (error) {
         console.error("Failed to fetch users:", error);
@@ -88,7 +91,7 @@ export const UserManagement = () => {
       }
     };
     fetchUsers();
-  }, [t]);
+  }, [t, statusFilter]);
 
   useEffect(() => {
     const fetchBranches = async () => {
@@ -196,6 +199,22 @@ export const UserManagement = () => {
     }
   };
 
+  const handleReactivateUser = async (userId?: string) => {
+    if (!userId) return;
+    setReactivatingUserId(userId);
+    try {
+      const orgId = apiClient.getOrganizationId();
+      await apiClient.reactivateUser(orgId, userId);
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, isActive: true } : u)));
+      toast.success(t('userManagement.userReactivated'));
+    } catch (error) {
+      console.error("Failed to reactivate user:", error);
+      toast.error(t('userManagement.failedToReactivate'));
+    } finally {
+      setReactivatingUserId(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
@@ -300,15 +319,26 @@ export const UserManagement = () => {
         {/* Users Table */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400" />
-              <input
-                type="text"
-                placeholder={t('userManagement.searchUsers')}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-              />
+            <div className="flex gap-4 items-center">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400" />
+                <input
+                  type="text"
+                  placeholder={t('userManagement.searchUsers')}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                />
+              </div>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'disabled')}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+              >
+                <option value="all">{t('common.all') || 'All'}</option>
+                <option value="active">{t('common.active') || 'Active'}</option>
+                <option value="disabled">{t('userManagement.disabled') || 'Disabled'}</option>
+              </select>
             </div>
           </div>
 
@@ -428,6 +458,19 @@ export const UserManagement = () => {
                               </div>
                             )}
                           </div>
+                          {!user.isActive && canEdit(user.id, user.role) && (
+                            <button
+                              onClick={() => handleReactivateUser(user.id)}
+                              disabled={reactivatingUserId === user.id}
+                              className="px-3 py-1 text-sm rounded-lg transition-colors bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 border border-green-200 dark:border-green-800"
+                            >
+                              {reactivatingUserId === user.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                t('userManagement.reactivate') || 'Reactivate'
+                              )}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -20,7 +20,7 @@ import { getOrganizationSettings } from "../services/organization-settings.servi
 
 export const createSale = async (req: BranchAuthRequest, res: Response) => {
   try {
-    const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma } = req.body
+    const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma, payments: splitPayments } = req.body
     // @ts-ignore
     const userId = parseInt(req.user?.userId as string)
     const organizationId = parseInt(req.params.organizationId)
@@ -333,7 +333,33 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       timeout: 60000,   // 60 seconds
     });
 
-    // 6. Log activity (outside transaction for performance, but after successful sale)
+    // 7. Record split payments if provided
+    if (splitPayments && Array.isArray(splitPayments) && splitPayments.length > 0) {
+      const validPaymentMethods = ['CASH', 'BANK', 'CARD', 'PAYPACK', 'MTN_MOMO', 'AIRTEL_MONEY', 'WALLET', 'GIFT_CARD', 'STORE_CREDIT'];
+      let totalSplitAmount = 0;
+
+      for (const pmt of splitPayments) {
+        if (!validPaymentMethods.includes(pmt.paymentMethod)) continue;
+        const amount = Number(pmt.amount) || 0;
+        if (amount <= 0) continue;
+        totalSplitAmount += amount;
+
+        await prisma.salePayment.create({
+          data: {
+            saleId: sale.id,
+            organizationId,
+            amount,
+            paymentMethod: pmt.paymentMethod,
+            reference: pmt.reference || null,
+            status: 'COMPLETED',
+            processedAt: new Date(),
+            metadata: pmt.metadata || null,
+          },
+        });
+      }
+    }
+
+    // 8. Log activity (outside transaction for performance, but after successful sale)
     await auditLogger.sales(req, {
       type: 'SALE_COMPLETED',
       description: `Sale completed (Invoice #${sale.invoiceNumber || saleNumber})`,
@@ -342,11 +368,22 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       metadata: {
         invoiceNumber: sale.invoiceNumber,
         totalAmount: sale.totalAmount,
-        paymentType: sale.paymentType
+        paymentType: sale.paymentType,
+        splitPayments: splitPayments?.length || 0,
       }
     });
 
-    res.status(201).json(success(sale))
+    // Fetch the complete sale with payments
+    const completeSale = await prisma.sale.findUnique({
+      where: { id: sale.id },
+      include: {
+        saleItems: { include: { product: true, batch: true } },
+        customer: true,
+        salePayments: true,
+      },
+    });
+
+    res.status(201).json(success(completeSale || sale))
   } catch (error: any) {
     console.error("[Create Sale Error]:", error)
 
@@ -869,6 +906,96 @@ export const reprintSaleReceipt = async (req: BranchAuthRequest, res: Response) 
     console.error("[Reprint Sale Error]:", error);
     res.status(500).json(apiError("Failed to reprint receipt"));
   }
+};
+
+/**
+ * Regenerate invoice for a sale — creates a new invoice number, updates the sale,
+ * generates new EBM transaction, preserves history, and prevents duplicate numbers.
+ */
+export const regenerateInvoice = async (req: BranchAuthRequest, res: Response) => {
+    try {
+        const saleId = parseInt(req.params.saleId);
+        const organizationId = parseInt(req.params.organizationId);
+        const branchId = getBranchIdForOperation(req);
+
+        const sale = await prisma.sale.findFirst({
+            where: { id: saleId, organizationId, ...buildBranchFilter(req) },
+            include: { ebmTransactions: { orderBy: { createdAt: 'desc' } } },
+        });
+
+        if (!sale) {
+            return res.status(404).json(apiError("Sale not found"));
+        }
+
+        if (sale.status === 'CANCELLED' || sale.status === 'REFUNDED') {
+            return res.status(400).json(apiError(`Cannot regenerate invoice for a ${sale.status.toLowerCase()} sale`));
+        }
+
+        const result = await prisma.$transaction(async (tx) => {
+            // Generate new invoice number
+            const { invoiceNumber, vsdcInvcNo } = await generateInvoiceNumber(organizationId, branchId as number, tx);
+
+            // Update sale with new invoice number
+            const updatedSale = await tx.sale.update({
+                where: { id: saleId },
+                data: {
+                    invoiceNumber,
+                    vsdcInvcNo,
+                    reprintCount: { increment: 1 },
+                    updatedAt: new Date(),
+                },
+            });
+
+            // Create a new EBM transaction record for the regenerated invoice
+            if (isEbmEnabled()) {
+                const idempotencyKey = `ebm-REGEN-${organizationId}-${saleId}-${Date.now()}`;
+                await tx.ebmOutbox.create({
+                    data: {
+                        organizationId,
+                        saleId,
+                        operation: 'SALE',
+                        idempotencyKey,
+                        payload: {
+                            version: 1,
+                            saleId,
+                            organizationId,
+                            operation: 'SALE',
+                            invoiceNumber,
+                            regenerated: true,
+                        } as any,
+                        status: 'PENDING',
+                        nextAttemptAt: new Date(),
+                    },
+                });
+            }
+
+            return updatedSale;
+        });
+
+        await auditLogger.sales(req, {
+            type: 'SALE_UPDATE',
+            description: `Invoice regenerated for Sale #${sale.saleNumber} - New invoice: ${result.invoiceNumber}`,
+            entityType: 'Sale',
+            entityId: saleId,
+            metadata: {
+                previousInvoice: sale.invoiceNumber,
+                newInvoice: result.invoiceNumber,
+                reprintCount: result.reprintCount,
+            },
+        });
+
+        res.json(success({
+            ...result,
+            previousInvoiceNumber: sale.invoiceNumber,
+            isRegenerated: true,
+        }));
+    } catch (error: any) {
+        console.error("[Regenerate Invoice Error]:", error);
+        if (error.code === 'P2002') {
+            return res.status(500).json(apiError("Invoice number conflict. Please try again."));
+        }
+        res.status(500).json(apiError("Failed to regenerate invoice"));
+    }
 };
 
 /**

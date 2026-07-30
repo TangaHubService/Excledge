@@ -119,7 +119,7 @@ const BillingHistoryPage = () => {
 
     // Handle invoice download
     const handleDownloadInvoice = async (payment: Payment) => {
-        if (!payment) return;
+        if (!payment || !profile) return;
 
         setIsDownloading(payment.id);
         try {

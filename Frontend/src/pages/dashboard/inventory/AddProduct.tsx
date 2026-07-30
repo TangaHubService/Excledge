@@ -26,6 +26,7 @@ import { apiClient } from '../../../lib/api-client'
 import { useBranch } from '../../../context/BranchContext'
 import { BranchRequiredNotice } from '../../../components/BranchRequiredNotice'
 import { MEASUREMENT_UNIT_OPTIONS } from '../../../types/ebm'
+import type { Product } from '../../../types'
 
 function toRwf(value: number): number {
     return Math.round(value * 100) / 100
@@ -83,6 +84,7 @@ interface TaxCodeOption {
 
 interface AddProductProps {
     onSuccess?: () => void
+    product?: Product | null
 }
 
 const STEPS = [
@@ -93,7 +95,7 @@ const STEPS = [
 
 type StepId = (typeof STEPS)[number]['id']
 
-export default function AddProduct({ onSuccess }: AddProductProps) {
+export default function AddProduct({ onSuccess, product }: AddProductProps) {
     const navigate = useNavigate()
     const { selectedBranchId } = useBranch()
     const [currentStep, setCurrentStep] = useState<StepId>('basic')
@@ -220,6 +222,31 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
             .catch(() => {})
     }, [selectedBranchId])
 
+    useEffect(() => {
+        if (product) {
+            setValue('name', product.name)
+            setValue('category', product.category || '')
+            setValue('description', product.description || '')
+            setValue('unitPrice', product.unitPrice)
+            setValue('taxCode', product.taxCode || '')
+            setValue('itemType', (product.itemType as 'PRODUCT' | 'SERVICE') || 'PRODUCT')
+            setValue('sku', product.sku || '')
+            setValue('barcode', product.barcode || '')
+            setValue('batchNumber', product.batchNumber || '')
+            setValue('quantity', product.quantity)
+            setValue('minStock', product.minStock)
+            setValue('measurementUnit', product.measurementUnit || '')
+            if (product.expiryDate) {
+                setValue('expiryDate', product.expiryDate.split('T')[0] as any)
+            }
+            if (product.imageUrl) {
+                setUploadedImageUrl(product.imageUrl)
+                setImagePreview(product.imageUrl)
+            }
+            setItemType((product.itemType as 'PRODUCT' | 'SERVICE') || 'PRODUCT')
+        }
+    }, [product, setValue])
+
     const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
@@ -326,8 +353,13 @@ export default function AddProduct({ onSuccess }: AddProductProps) {
                 payload.measurementUnit = 'OTHER'
             }
 
-            await apiClient.createProduct(payload)
-            toast.success(data.itemType === 'SERVICE' ? 'Service added successfully' : 'Product added successfully')
+            if (product) {
+                await apiClient.updateProduct(String(product.id), payload)
+                toast.success('Product updated successfully')
+            } else {
+                await apiClient.createProduct(payload)
+                toast.success(data.itemType === 'SERVICE' ? 'Service added successfully' : 'Product added successfully')
+            }
             if (onSuccess) onSuccess()
             else navigate('/dashboard/inventory-all')
         } catch (error: any) {

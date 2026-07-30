@@ -7,6 +7,7 @@ import {
     getPurchaseOrders,
     getPurchaseOrder,
     createPurchaseOrder,
+    updatePurchaseOrder,
     updatePurchaseOrderStatus,
     deletePurchaseOrder,
 } from "../controllers/purchaseOrder.controller"
@@ -26,6 +27,9 @@ router.get("/:organizationId/:id", orgAccess, requireActiveSubscription(), branc
 
 // Create purchase order (Admin/Manager only)
 router.post("/:organizationId", orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), createPurchaseOrder)
+
+// Update purchase order details (items, notes, expected date)
+router.put("/:organizationId/:id", orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), updatePurchaseOrder)
 
 // Update purchase order status (Admin/Manager only)
 router.patch("/:organizationId/:id/status", orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), updatePurchaseOrderStatus)
