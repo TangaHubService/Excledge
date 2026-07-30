@@ -146,7 +146,7 @@ export const StockReports = () => {
                 'Date': new Date(item.createdAt).toLocaleString(),
                 'Product': item.product.name,
                 'Batch': item.product.batchNumber || 'N/A',
-                'Type': item.type,
+                'Type': item.movementType,
                 'Quantity': item.quantity,
                 'Previous Stock': item.previousStock,
                 'New Stock': item.newStock,
@@ -207,7 +207,7 @@ export const StockReports = () => {
                 body = historyData.map(item => [
                     new Date(item.createdAt).toLocaleString(),
                     item.product.name,
-                    item.type,
+                    item.movementType,
                     item.quantity,
                     item.previousStock,
                     item.newStock,
