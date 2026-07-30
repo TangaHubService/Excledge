@@ -71,6 +71,11 @@ export const initiatePaypackPayment = async (req: Request, res: Response) => {
             phoneNumber
         });
 
+        if (typeof result !== 'object' || result === null || Array.isArray(result)) {
+            console.error('Unexpected Paypack response:', result);
+            return res.status(502).json({ success: false, message: 'Invalid response from payment provider' });
+        }
+
         // Emit socket event for payment initiation
         if (result?.ref) {
             console.log(`🚀 Payment initiated, emitting event for ref: ${result.ref}`);
