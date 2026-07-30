@@ -130,7 +130,7 @@ export const login = async (req: Request, res: Response) => {
       })
     }
 
-    if (!user.isActive) {
+    if (!user.isActive && user.role !== 'SYSTEM_OWNER') {
       return res.status(401).json({ error: "Account is inactive" })
     }
 
@@ -292,7 +292,7 @@ export const refresh = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Invalid refresh token" });
     }
 
-    if (!user.isActive) {
+    if (!user.isActive && user.role !== 'SYSTEM_OWNER') {
       // Deactivated account — clear the stored token so this can't be replayed again.
       await prisma.user.update({
         where: { id: user.id },
