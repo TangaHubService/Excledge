@@ -193,7 +193,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
         try {
             const branchIdForReceive = selectedBranchId ?? primaryBranch?.id ?? null;
             const receivedItems = receivingOrder.items.map(item => ({
-                productId: item.productId!,
+                productId: (item as any).productId!,
                 quantity: receivingQuantities[item.id] ?? (item.quantity - (item.quantityReceived || 0)),
             })).filter(ri => ri.quantity > 0);
 

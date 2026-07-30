@@ -1729,7 +1729,7 @@ class ApiClient {
     const formData = new FormData();
     if (file) formData.append('image', file);
     const response = await this.fetchWithRefresh(
-      `${this.baseUrl}/inventory/${organizationId}/product/${productId}/image`,
+      `${API_URL}/inventory/${organizationId}/product/${productId}/image`,
       { method: 'PUT', body: formData },
     );
     if (!response.ok) throw new Error('Failed to update product image');
