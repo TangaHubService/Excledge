@@ -6,6 +6,7 @@ import {
   updateUser,
   updateUserProfileImage,
   deleteUser,
+  reactivateUser,
 } from "../controllers/user.controller";
 import { authenticate, authorize } from "../middleware/auth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
@@ -50,5 +51,7 @@ router.put(
 );
 
 router.delete("/:id", authenticate, authorize("ADMIN"), deleteUser);
+
+router.put("/:organizationId/reactivate/:id", authenticate, orgAccess, authorize("ADMIN", "BRANCH_MANAGER"), reactivateUser);
 
 export default router;

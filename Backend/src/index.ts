@@ -54,6 +54,7 @@ import { vsdcHeartbeatJob } from "./jobs/vsdc-heartbeat.job";
 import pesapalRoutes from "./routes/pesapal.route";
 import uploadRoutes from "./routes/upload.route";
 import supplierInvoiceRoutes from "./routes/supplier-invoice.routes";
+import supplierPortalRoutes from "./routes/supplier-portal.routes";
 
 const app = express();
 const httpServer = createServer(app);
@@ -148,6 +149,7 @@ app.use("/api/supplier-payments", supplierPaymentRoutes);
 app.use("/api/stock-transfers", stockTransferRoutes);
 app.use("/api/organizations", ebmOutboxRoutes);
 app.use("/api/supplier-invoices", supplierInvoiceRoutes);
+app.use("/api/supplier-portal", supplierPortalRoutes);
 
 // Serve uploaded files statically
 app.use('/uploads', express.static('uploads'));

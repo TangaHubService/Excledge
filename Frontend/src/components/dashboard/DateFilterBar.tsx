@@ -81,6 +81,7 @@ export function DateFilterBar({ value, onChange, disabled = false, className }: 
       onChange({ preset, label: computePresetLabel(preset) })
       setOpen(false)
     } else {
+      onChange({ preset: 'custom', label: 'Custom Range' })
       setCustomRange(prev => {
         if (prev?.from && prev?.to) return prev
         return undefined

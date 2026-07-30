@@ -26,6 +26,9 @@ export interface Product {
     imageUrl?: string;
     taxCode?: string;
     taxCategory?: string;
+    itemType?: 'PRODUCT' | 'SERVICE';
+    measurementUnit?: string;
+    barcode?: string;
     createdAt: string;
     updatedAt: string;
 }

@@ -29,6 +29,7 @@ vi.mock("../src/services/email.service", () => ({
 
 vi.mock("../src/services/inventory-ledger.service", () => ({
   addStock: vi.fn().mockResolvedValue(undefined),
+  removeStock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/services/notification.service", () => {

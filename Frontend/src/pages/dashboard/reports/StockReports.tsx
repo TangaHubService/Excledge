@@ -34,7 +34,8 @@ interface StockSummary {
 interface StockMovement {
     id: number;
     createdAt: string;
-    type: string;
+    movementType: string;
+    direction: 'IN' | 'OUT';
     quantity: number;
     previousStock: number;
     newStock: number;
@@ -494,11 +495,11 @@ export const StockReports = () => {
                                                 <td className="px-6 py-4 text-sm">
                                                     <span className={`px-2 py-1 rounded text-xs font-medium ${item.quantity > 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30' : 'bg-red-100 text-red-700 dark:bg-red-900/30'
                                                         }`}>
-                                                        {item.type}
+                                                        {item.movementType}
                                                     </span>
                                                 </td>
-                                                <td className={`px-6 py-4 text-sm text-right font-semibold ${item.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                    {item.quantity > 0 ? '+' : ''}{item.quantity}
+                                                <td className={`px-6 py-4 text-sm text-right font-semibold ${item.direction === 'IN' ? 'text-green-600' : 'text-red-600'}`}>
+                                                    {item.direction === 'IN' ? '+' : '-'}{item.quantity}
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-right text-gray-500 dark:text-gray-400">{item.previousStock}</td>
                                                 <td className="px-6 py-4 text-sm text-right font-semibold text-gray-800 dark:text-white">{item.newStock}</td>

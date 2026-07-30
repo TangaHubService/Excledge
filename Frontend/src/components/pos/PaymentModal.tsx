@@ -5,7 +5,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from '
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Loader2, Check } from 'lucide-react';
+import { Loader2, Check, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface PaymentEntry {
   id: string;
@@ -251,19 +251,77 @@ export function PaymentModal({
             </div>
           )}
 
+          {/* Add Payment Button */}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const newId = Date.now().toString();
+                const due = Math.max(0, totalAmount - calculateTotalPaid());
+                setPayments(prev => [...prev, { id: newId, method: 'CASH', amount: due, reference: '' }]);
+                setCurrentPaymentIndex(payments.length);
+              }}
+              disabled={calculateTotalPaid() >= totalAmount - 0.01}
+              className="flex-1 text-xs gap-1"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t('pos.addPayment') || 'Add Payment'}
+            </Button>
+            {payments.length > 1 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setPayments(prev => prev.filter((_, i) => i !== currentPaymentIndex));
+                  if (currentPaymentIndex >= payments.length - 1) {
+                    setCurrentPaymentIndex(Math.max(0, payments.length - 2));
+                  }
+                }}
+                className="text-xs gap-1 text-red-600 hover:text-red-700"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {t('common.remove') || 'Remove'}
+              </Button>
+            )}
+          </div>
+
           {/* Payment List */}
           {payments.length > 1 && (
             <div className={`p-2 rounded border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-              <p className={`text-xs mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                {t('pos.payments') || 'Payments'}
-              </p>
+              <div className="flex items-center justify-between mb-1">
+                <p className={`text-xs font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {t('pos.payments') || 'Payments'}
+                </p>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPaymentIndex(Math.max(0, currentPaymentIndex - 1))}
+                    disabled={currentPaymentIndex === 0}
+                    className={`p-0.5 rounded ${currentPaymentIndex === 0 ? 'opacity-30' : 'hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPaymentIndex(Math.min(payments.length - 1, currentPaymentIndex + 1))}
+                    disabled={currentPaymentIndex >= payments.length - 1}
+                    className={`p-0.5 rounded ${currentPaymentIndex >= payments.length - 1 ? 'opacity-30' : 'hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
               <div className="space-y-1">
                 {payments.map((payment, idx) => (
                   <div
                     key={payment.id}
-                    className={`flex items-center justify-between text-xs p-1 rounded ${idx === currentPaymentIndex
+                    onClick={() => setCurrentPaymentIndex(idx)}
+                    className={`flex items-center justify-between text-xs p-1 rounded cursor-pointer ${idx === currentPaymentIndex
                       ? theme === 'dark' ? 'bg-blue-900/30' : 'bg-blue-100'
-                      : ''
+                      : 'hover:bg-gray-100 dark:hover:bg-gray-600'
                       }`}
                   >
                     <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}>

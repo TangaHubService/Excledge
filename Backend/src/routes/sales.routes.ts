@@ -7,6 +7,7 @@ import {
   refundSale,
   cancelSale,
   reprintSaleReceipt,
+  regenerateInvoice,
   getEbmReceipt,
 } from "../controllers/sales.controller";
 import { authenticate, authorize } from "../middleware/auth.middleware";
@@ -92,6 +93,16 @@ router.post(
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   reprintSaleReceipt
+);
+
+// Regenerate invoice (new invoice number, preserves history)
+router.post(
+  "/:organizationId/:saleId/regenerate-invoice",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"),
+  regenerateInvoice
 );
 
 // E3: Get EBM/SDC fiscal data for a sale (polls after outbox worker runs)

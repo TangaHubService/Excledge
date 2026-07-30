@@ -4,6 +4,7 @@ import {
   getProductById,
   createProduct,
   updateProduct,
+  updateProductImage,
   deleteProduct,
   createProducts,
   getExpiringProducts,
@@ -62,6 +63,15 @@ router.put(
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   updateProduct
+);
+
+router.put(
+  "/:organizationId/product/:id/image",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
+  updateProductImage
 );
 router.delete(
   "/:organizationId/product/:id",

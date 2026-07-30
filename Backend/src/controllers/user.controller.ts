@@ -9,17 +9,25 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
     const search = req.query.search as string;
+    const status = req.query.status as string;
     const { page = "1", limit = "50" } = req.query;
 
-    // Apply pagination defaults and caps
     const limitNum = Math.min(Math.max(Number.parseInt(limit as string) || 50, 1), 500);
     const pageNum = Math.max(Number.parseInt(page as string) || 1, 1);
     const skip = (pageNum - 1) * limitNum;
 
     const whereClause: any = {
       organizationId,
-      user: { isActive: true, deletedAt: null }
+      user: { deletedAt: null }
     };
+
+    // Filter by status: active, disabled, or all
+    if (status === 'active') {
+      whereClause.user.isActive = true;
+    } else if (status === 'disabled') {
+      whereClause.user.isActive = false;
+    }
+    // 'all' or undefined shows both active and disabled
 
     if (search) {
       whereClause.OR = [
@@ -39,6 +47,8 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
               name: true,
               isActive: true,
               createdAt: true,
+              disabledAt: true,
+              reactivatedAt: true,
             },
           },
         },
@@ -303,7 +313,7 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
 
     await prisma.user.update({
       where: { id },
-      data: { isActive: false, deletedAt: new Date() }
+      data: { isActive: false, deletedAt: new Date(), disabledAt: new Date(), reactivatedAt: null }
     });
 
     await auditLogger.users(req, {
@@ -311,13 +321,56 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
       description: `User account disabled: ${id} by user ${requesterId}`,
       entityType: 'User',
       entityId: id,
-      metadata: { actorId: requesterId },
+      metadata: { actorId: requesterId, disabledAt: new Date().toISOString() },
     });
 
     res.json({ message: "User deleted successfully" });
   } catch (error) {
     console.error("[Delete User Error]:", error);
     res.status(500).json({ error: "Failed to delete user" });
+  }
+};
+
+export const reactivateUser = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    const organizationId = parseInt(req.params.organizationId);
+    const requesterId = parseInt(String(req.user!.userId));
+
+    const userOrganization = await prisma.userOrganization.findFirst({
+      where: { userId: id, organizationId },
+    });
+
+    if (!userOrganization) {
+      return res.status(404).json({ error: "User not found in this organization" });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.isActive) {
+      return res.status(400).json({ error: "User is already active" });
+    }
+
+    await prisma.user.update({
+      where: { id },
+      data: { isActive: true, deletedAt: null, reactivatedAt: new Date() }
+    });
+
+    await auditLogger.users(req, {
+      type: 'USER_ACCOUNT_ENABLED',
+      description: `User account reactivated: ${id} by user ${requesterId}`,
+      entityType: 'User',
+      entityId: id,
+      metadata: { actorId: requesterId, reactivatedAt: new Date().toISOString() },
+    });
+
+    res.json({ message: "User reactivated successfully" });
+  } catch (error) {
+    console.error("[Reactivate User Error]:", error);
+    res.status(500).json({ error: "Failed to reactivate user" });
   }
 };
 

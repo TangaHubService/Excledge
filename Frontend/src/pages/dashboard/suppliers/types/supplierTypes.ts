@@ -78,6 +78,7 @@ export type Order = {
     id: number;
     productName: string;
     quantity: number;
+    quantityReceived?: number;
     unitPrice: string;
     totalPrice: string;
   }>;

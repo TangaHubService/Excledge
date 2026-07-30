@@ -193,7 +193,7 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({ payment, profile }) => {
                         <View style={styles.row}>
                             <Text style={styles.label}>Invoice ID:</Text>
                             <Text style={styles.value}>
-                                {payment.id.split("-")[0].toUpperCase()}
+                                {String(payment.id).split("-")[0].toUpperCase()}
                             </Text>
                         </View>
 
