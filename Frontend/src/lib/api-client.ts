@@ -514,8 +514,8 @@ class ApiClient {
     return this.request(`/dashboard/branch-stats/${this.getOrganizationId()}${qs ? '?' + qs : ''}`)
   }
 
-  async getExecutiveDashboard(params: {
-    preset?: 'today' | 'weekly' | 'monthly'
+  async getOverviewDashboard(params: {
+    preset?: string
     startDate?: string
     endDate?: string
   }) {
@@ -524,7 +524,7 @@ class ApiClient {
     if (params.startDate) query.set('startDate', params.startDate)
     if (params.endDate) query.set('endDate', params.endDate)
     const qs = query.toString()
-    return this.request(`/dashboard/executive/${this.getOrganizationId()}${qs ? '?' + qs : ''}`)
+    return this.request(`/dashboard/overview/${this.getOrganizationId()}${qs ? '?' + qs : ''}`)
   }
 
   async getSalesTrend(days = "7") {
@@ -1847,6 +1847,40 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+}
+
+export interface OverviewDashboardData {
+  currency: string;
+  dateRange: {
+    preset: string;
+    startDate: string;
+    endDate: string;
+  };
+  kpis: {
+    totalSales: { value: number; prevValue: number; changePercentage: number; sparkline: number[] };
+    transactions: { value: number; prevValue: number; changePercentage: number; sparkline: number[] };
+    totalExpenses: { value: number; prevValue: number; changePercentage: number; sparkline: number[] };
+    totalAlerts: { value: number; prevValue: number; changePercentage: number; sparkline: number[] };
+  };
+  branchPerformance: {
+    hasActivity: boolean;
+    branches: Array<{ branchId: number; name: string; sales: number; transactions: number; expenses: number }>;
+  };
+  salesOverview: Array<{ label: string; sales: number; expenses: number }>;
+  topSellingProducts: Array<{ id: number; name: string; sold: number; revenue: number; percentage: number }>;
+  stockAlerts: {
+    lowStock: { count: number; label: string; subtext: string };
+    expired: { count: number; label: string; subtext: string };
+    outOfStock: { count: number; label: string; subtext: string };
+  };
+  recentActivities: Array<{
+    id: string;
+    title: string;
+    subtext: string;
+    timestamp: string;
+    timeFormatted: string;
+    type: 'sale' | 'payment' | 'stock' | 'user';
+  }>;
 }
 
 export const apiClient = new ApiClient();

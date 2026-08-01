@@ -359,92 +359,104 @@ export const SalesReport = () => {
     }
 
     return (
-        <div className="min-h-screen dark:bg-gray-900 p-6">
-            <div className="max-w-7xl mx-auto">
-                {/* Header */}
-
-                <h1 className="text-xl md:text-xl font-semibold text-gray-800 dark:text-white py-4">{t('salesReport.title')}</h1>
-
-                {/* Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6 dark:bg-gray-900">
-                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">{t('salesReport.totalSales')}</p>
-                                <p className="text-xl font-semibold text-gray-800 dark:text-white mt-1">{formatCurrency(summary.totalSales)}</p>
-                            </div>
-                            <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-full">
-                                <DollarSign className="text-green-600 dark:text-green-400" size={20} />
-                            </div>
+        <div className="space-y-6 p-4 md:p-6">
+            {/* Page Header */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 p-6 text-white shadow-lg">
+                <div className="absolute inset-0 bg-black/10" />
+                <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+                            <TrendingUp className="h-7 w-7 text-white" />
                         </div>
-                    </div>
-
-                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">{t('salesReport.totalItemsSold')}</p>
-                                <p className="text-xl font-semibold text-gray-800 dark:text-white mt-1">{summary.totalQuantity.toLocaleString()}</p>
-                            </div>
-                            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-full">
-                                <Package className="text-blue-600 dark:text-blue-400" size={20} />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">{t('salesReport.totalTransactions')}</p>
-                                <p className="text-xl font-semibold text-gray-800 dark:text-white mt-1">{summary.totalTransactions.toLocaleString()}</p>
-                            </div>
-                            <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-full">
-                                <Calendar className="text-purple-600 dark:text-purple-400" size={20} />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">{t('salesReport.avgTransaction')}</p>
-                                <p className="text-xl font-semibold text-gray-800 dark:text-white mt-1">{formatCurrency(summary.avgTransaction)}</p>
-                            </div>
-                            <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-full">
-                                <TrendingUp className="text-orange-600 dark:text-orange-400" size={20} />
-                            </div>
+                        <div>
+                            <h1 className="text-2xl font-bold tracking-tight">{t('salesReport.title') || 'Sales Report'}</h1>
+                            <p className="text-sm text-white/70 mt-0.5">
+                                Analyze sales transactions, item quantities, and revenue performance
+                            </p>
                         </div>
                     </div>
                 </div>
+                <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+                <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
+            </div>
 
-                {/* Filter Controls - All on one line */}
-                <div className="flex flex-wrap items-end gap-3 mb-4">
-                    <div className="flex-1 min-w-[150px]">
-                        <label className="block text-sm font-normal text-gray-700 mb-1.5 dark:text-white">{t('common.startDate')}</label>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                    {
+                        label: t('salesReport.totalSales'),
+                        value: formatCurrency(summary.totalSales),
+                        icon: DollarSign,
+                        light: 'bg-emerald-50 dark:bg-emerald-900/20',
+                        text: 'text-emerald-600 dark:text-emerald-400',
+                    },
+                    {
+                        label: t('salesReport.totalItemsSold'),
+                        value: summary.totalQuantity.toLocaleString(),
+                        icon: Package,
+                        light: 'bg-blue-50 dark:bg-blue-900/20',
+                        text: 'text-blue-600 dark:text-blue-400',
+                    },
+                    {
+                        label: t('salesReport.totalTransactions'),
+                        value: summary.totalTransactions.toLocaleString(),
+                        icon: Calendar,
+                        light: 'bg-purple-50 dark:bg-purple-900/20',
+                        text: 'text-purple-600 dark:text-purple-400',
+                    },
+                    {
+                        label: t('salesReport.avgTransaction'),
+                        value: formatCurrency(summary.avgTransaction),
+                        icon: TrendingUp,
+                        light: 'bg-orange-50 dark:bg-orange-900/20',
+                        text: 'text-orange-600 dark:text-orange-400',
+                    },
+                ].map(({ label, value, icon: Icon, light, text }) => (
+                    <div
+                        key={label}
+                        className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4"
+                    >
+                        <div className={`flex h-11 w-11 items-center justify-center rounded-xl flex-shrink-0 ${light}`}>
+                            <Icon className={`h-5 w-5 ${text}`} />
+                        </div>
+                        <div>
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+                            <p className="text-lg font-bold text-gray-900 dark:text-white tabular-nums">{value}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Filter Controls */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 items-end">
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('common.startDate')}</label>
                         <input
                             type="date"
                             value={startDate}
                             max={endDate}
                             onChange={(e) => setStartDate(e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white"
+                            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-850 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
                         />
                     </div>
-                    <div className="flex-1 min-w-[150px]">
-                        <label className="block text-sm font-normal text-gray-700 mb-1.5 dark:text-white">{t('common.endDate')}</label>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('common.endDate')}</label>
                         <input
                             type="date"
                             value={endDate}
                             min={startDate}
                             max={new Date().toISOString().split('T')[0]}
                             onChange={(e) => setEndDate(e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white"
+                            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-850 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
                         />
                     </div>
-                    <div className="flex-1 min-w-[150px]">
-                        <label className="block text-sm font-normal text-gray-700 mb-1.5 dark:text-white">{t('cashFlowReport.category')}</label>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cashFlowReport.category')}</label>
                         <select
                             value={selectedCategory}
                             onChange={(e) => setSelectedCategory(e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 dark:text-white"
+                            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
                         >
                             <option value="all">{t('common.all')}</option>
                             {availableCategories.map(cat => (
@@ -452,12 +464,12 @@ export const SalesReport = () => {
                             ))}
                         </select>
                     </div>
-                    <div className="flex-1 min-w-[150px]">
-                        <label className="block text-sm font-normal text-gray-700 mb-1.5 dark:text-white">{t('salesReport.seller')}</label>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('salesReport.seller')}</label>
                         <select
                             value={selectedSeller}
                             onChange={(e) => setSelectedSeller(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 dark:text-white"
+                            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
                         >
                             <option value="all">{t('common.all')}</option>
                             {availableSellers.map(seller => (
@@ -465,106 +477,111 @@ export const SalesReport = () => {
                             ))}
                         </select>
                     </div>
-                    <div className="flex-1 min-w-[150px]">
-                        <label className="block text-sm font-normal text-gray-700 mb-1.5 dark:text-white">{t('inventory.product')}</label>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('inventory.product')}</label>
                         <input
                             type="text"
                             value={productSearch}
                             onChange={(e) => setProductSearch(e.target.value)}
                             placeholder={t('common.search')}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white"
+                            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-850 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
                         />
                     </div>
-                    {(selectedCategory !== 'all' || selectedSeller !== 'all' || productSearch) && (
-                        <div>
-                            <button
-                                onClick={() => {
-                                    setSelectedCategory('all');
-                                    setSelectedSeller('all');
-                                    setProductSearch('');
-                                    setCurrentPage(1);
-                                }}
-                                className="px-4 py-2 text-sm font-normal text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
-                            >
-                                {t('common.clearFilters')}
-                            </button>
-                        </div>
-                    )}
                 </div>
+                {(selectedCategory !== 'all' || selectedSeller !== 'all' || productSearch) && (
+                    <div className="mt-3 flex justify-end">
+                        <button
+                            onClick={() => {
+                                setSelectedCategory('all');
+                                setSelectedSeller('all');
+                                setProductSearch('');
+                                setCurrentPage(1);
+                            }}
+                            className="px-4 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-150 border border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                        >
+                            {t('common.clearFilters')}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Unified Sales Report Table */}
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-800 dark:text-white">{t('salesReport.transactionDetails')}</h2>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                        <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                            {t('salesReport.transactionDetails')}
+                        </h2>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                             {transactions.length} transaction{transactions.length !== 1 ? 's' : ''} {t('inventoryReport.history').toLowerCase()}
-                        </div>
+                        </p>
                     </div>
-                    <div className="flex gap-2">
-                        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
-                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('common.export')}:</span>
-                            <button
-                                onClick={() => exportTransactionDetails('pdf')}
-                                className="flex items-center gap-1 px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors disabled:bg-red-400 disabled:cursor-not-allowed min-w-[70px] justify-center"
-                                disabled={transactions.length === 0 || isGeneratingPdf}
-                                title={t('common.download') + " PDF"}
-                            >
-                                {isGeneratingPdf ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    <FileText size={14} />
-                                )}
-                                {isGeneratingPdf ? t('common.loading') : 'PDF'}
-                            </button>
-                            <button
-                                onClick={() => exportTransactionDetails('excel')}
-                                className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
-                                disabled={transactions.length === 0}
-                                title={t('common.download') + " Excel"}
-                            >
-                                <FileText size={14} />
-                                Excel
-                            </button>
-                        </div>
+                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 p-1.5 rounded-lg border border-gray-200/60 dark:border-gray-600">
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-2">{t('common.export')}:</span>
+                        <button
+                            onClick={() => exportTransactionDetails('pdf')}
+                            className="flex items-center gap-1.5 px-3 py-1 bg-red-600 text-white text-xs font-semibold rounded hover:bg-red-700 transition-colors disabled:bg-red-400 disabled:cursor-not-allowed min-w-[70px] justify-center"
+                            disabled={transactions.length === 0 || isGeneratingPdf}
+                            title={t('common.download') + " PDF"}
+                        >
+                            {isGeneratingPdf ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                                <FileText size={13} />
+                            )}
+                            {isGeneratingPdf ? t('common.loading') : 'PDF'}
+                        </button>
+                        <button
+                            onClick={() => exportTransactionDetails('excel')}
+                            className="flex items-center gap-1.5 px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded hover:bg-green-700 transition-colors"
+                            disabled={transactions.length === 0}
+                            title={t('common.download') + " Excel"}
+                        >
+                            <FileText size={13} />
+                            Excel
+                        </button>
                     </div>
                 </div>
-                <div className="overflow-x-auto -mx-2">
+
+                <div className="overflow-x-auto">
                     {transactions.length > 0 ? (
-                        <table className="w-full">
+                        <table className="w-full text-sm">
                             <thead>
-                                <tr className="border-b bg-gray-50/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
-                                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{t('salesReport.saleId')}</th>
-                                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{t('common.date')}</th>
-                                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{t('inventory.product')}</th>
-                                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{t('cashFlowReport.category')}</th>
-                                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{t('salesReport.seller')}</th>
-                                    <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{t('salesReport.qty')}</th>
-                                    <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{t('salesReport.unitPrice')}</th>
-                                    <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{t('common.total')}</th>
-                                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{t('common.status')}</th>
+                                <tr className="border-b bg-gray-50/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 text-left">
+                                    <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('salesReport.saleId')}</th>
+                                    <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('common.date')}</th>
+                                    <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('inventory.product')}</th>
+                                    <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cashFlowReport.category')}</th>
+                                    <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('salesReport.seller')}</th>
+                                    <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">{t('salesReport.qty')}</th>
+                                    <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">{t('salesReport.unitPrice')}</th>
+                                    <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">{t('common.total')}</th>
+                                    <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('common.status')}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                                 {transactions.map((transaction: SalesTransaction) => (
                                     <tr key={transaction.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
-                                        <td className="py-3 px-4 text-gray-600 dark:text-gray-400 text-sm font-mono whitespace-nowrap">
+                                        <td className="py-3 px-4 text-gray-600 dark:text-gray-400 text-xs font-mono">
                                             #{transaction.saleId}
                                         </td>
-                                        <td className="py-3 px-4 text-gray-700 dark:text-gray-300 text-sm whitespace-nowrap">
+                                        <td className="py-3 px-4 text-gray-750 dark:text-gray-300 text-xs whitespace-nowrap">
                                             {new Date(transaction.date).toLocaleDateString()}
                                         </td>
-                                        <td className="py-3 px-4 text-gray-900 dark:text-white text-sm font-medium whitespace-nowrap">{transaction.product}</td>
-                                        <td className="py-3 px-4 text-gray-600 dark:text-gray-400 text-sm capitalize whitespace-nowrap">{transaction.category.toLowerCase()}</td>
-                                        <td className="py-3 px-4 text-gray-600 dark:text-gray-400 text-sm whitespace-nowrap">{transaction.seller || 'N/A'}</td>
-                                        <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300 text-sm whitespace-nowrap">{transaction.quantity}</td>
-                                        <td className="py-3 px-4 text-right text-gray-600 dark:text-gray-400 text-sm whitespace-nowrap">{formatCurrency(transaction.unitPrice)}</td>
-                                        <td className={`py-3 px-4 text-right font-medium text-sm whitespace-nowrap ${transaction.status === 'REFUNDED' ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
+                                        <td className="py-3 px-4 text-gray-900 dark:text-white font-semibold">{transaction.product}</td>
+                                        <td className="py-3 px-4 text-gray-600 dark:text-gray-400 capitalize">
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300">
+                                                {transaction.category.toLowerCase()}
+                                            </span>
+                                        </td>
+                                        <td className="py-3 px-4 text-gray-650 dark:text-gray-350">{transaction.seller || 'N/A'}</td>
+                                        <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300 font-medium">{transaction.quantity}</td>
+                                        <td className="py-3 px-4 text-right text-gray-600 dark:text-gray-400 font-mono text-xs">{formatCurrency(transaction.unitPrice)}</td>
+                                        <td className={`py-3 px-4 text-right font-bold font-mono text-sm ${transaction.status === 'REFUNDED' ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
                                             {transaction.status === 'REFUNDED' ? '-' : ''}{formatCurrency(transaction.total)}
                                         </td>
                                         <td className="py-3 px-4 whitespace-nowrap">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${transaction.status === 'COMPLETED'
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${transaction.status === 'COMPLETED'
                                                 ? 'bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400 border border-green-200 dark:border-green-500/20'
                                                 : transaction.status === 'REFUNDED'
                                                     ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 border border-red-200 dark:border-red-500/20'
@@ -577,30 +594,32 @@ export const SalesReport = () => {
                                         </td>
                                     </tr>
                                 ))}
-                                {/* Total Row */}
-                                <tr className="bg-gray-50 dark:bg-gray-800/50 font-medium">
-                                    <td className="py-3 px-4 text-gray-900 dark:text-white text-sm" colSpan={5}>{t('common.total').toUpperCase()}</td>
-                                    <td className="py-3 px-4 text-right text-gray-900 dark:text-white text-sm">
+                            </tbody>
+                            <tfoot className="bg-gray-50/50 dark:bg-gray-750/50 border-t border-gray-200 dark:border-gray-600 font-semibold">
+                                <tr className="text-gray-900 dark:text-white">
+                                    <td className="py-3 px-4" colSpan={5}>{t('common.total').toUpperCase()}</td>
+                                    <td className="py-3 px-4 text-right text-gray-900 dark:text-white">
                                         {transactions.reduce((sum: number, t: SalesTransaction) => sum + (t.status === 'REFUNDED' ? -t.quantity : t.quantity), 0).toLocaleString()}
                                     </td>
                                     <td className="py-3 px-4"></td>
-                                    <td className="py-3 px-4 text-right text-blue-600 dark:text-blue-400 text-sm">
+                                    <td className="py-3 px-4 text-right text-blue-600 dark:text-blue-400 font-bold font-mono">
                                         {formatCurrency(transactions.reduce((sum: number, t: SalesTransaction) => sum + (t.status === 'REFUNDED' ? -t.total : t.total), 0))}
                                     </td>
                                     <td className="py-3 px-4"></td>
                                 </tr>
-                            </tbody>
+                            </tfoot>
                         </table>
                     ) : (
-                        <div className="text-center py-8 text-gray-500">
-                            {t('salesReport.noTransactions')}
+                        <div className="flex flex-col items-center justify-center py-16 text-center text-gray-500 dark:text-gray-400">
+                            <TrendingUp className="h-12 w-12 text-gray-400 mb-2" />
+                            <p className="text-base font-semibold">{t('salesReport.noTransactions')}</p>
                         </div>
                     )}
                 </div>
 
                 {/* Pagination Controls */}
                 {transactions.length > 0 && (
-                    <div className="flex flex-col sm:flex-row justify-between items-center mt-6 gap-4">
+                    <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4">
                         <div className="flex items-center gap-2">
                             <label className="text-sm text-gray-700 dark:text-gray-300">
                                 {t('common.itemsPerPage')}:
@@ -611,7 +630,7 @@ export const SalesReport = () => {
                                     setItemsPerPage(Number(e.target.value));
                                     setCurrentPage(1);
                                 }}
-                                className="border border-gray-300 rounded-lg px-3 py-1 bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                                className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-sm bg-white dark:bg-gray-750 dark:text-white"
                             >
                                 <option value={10}>10</option>
                                 <option value={25}>25</option>
@@ -619,26 +638,24 @@ export const SalesReport = () => {
                                 <option value={100}>100</option>
                             </select>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-700 dark:text-gray-300">
-                                {t('common.showing')} {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, totalItems)} {t('common.of')} {totalItems}
-                            </span>
+                        <div className="text-sm text-gray-600 dark:text-gray-450 font-medium">
+                            {t('common.showing')} {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, totalItems)} {t('common.of')} {totalItems}
                         </div>
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                                 disabled={currentPage === 1}
-                                className="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:text-white dark:border-gray-600 dark:hover:bg-gray-700"
+                                className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                                 {t('common.previous')}
                             </button>
-                            <span className="text-sm text-gray-700 dark:text-gray-300">
+                            <span className="text-sm text-gray-750 dark:text-gray-300 font-medium">
                                 {t('common.page')} {currentPage} {t('common.of')} {Math.ceil(totalItems / itemsPerPage)}
                             </span>
                             <button
                                 onClick={() => setCurrentPage(prev => Math.min(Math.ceil(totalItems / itemsPerPage), prev + 1))}
                                 disabled={currentPage >= Math.ceil(totalItems / itemsPerPage)}
-                                className="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:text-white dark:border-gray-600 dark:hover:bg-gray-700"
+                                className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                                 {t('common.next')}
                             </button>
@@ -646,6 +663,6 @@ export const SalesReport = () => {
                     </div>
                 )}
             </div>
-        </div >
+        </div>
     );
 };

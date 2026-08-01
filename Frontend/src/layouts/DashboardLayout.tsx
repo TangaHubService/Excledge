@@ -13,6 +13,8 @@ import { ToastContainer } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 import { cn } from "../lib/utils";
 
+import { GlobalSearchModal } from "../components/dashboard/GlobalSearchModal";
+
 const SELLER_RESTRICTED_PATHS = [
   "stock-transfers",
   "warehouses",
@@ -33,6 +35,7 @@ export function DashboardLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const { organization } = useOrganization();
   const { user, isSystemOwner, isAuthenticated, isLoading } = useAuth();
@@ -102,7 +105,14 @@ export function DashboardLayout() {
           sidebarCollapsed ? "lg:pl-16" : "lg:pl-64",
         )}
       >
-        <Header onMenuClick={() => setSidebarOpen(true)} />
+        <Header
+          onMenuClick={() => setSidebarOpen(true)}
+          onOpenSearch={() => setSearchOpen(true)}
+        />
+        <GlobalSearchModal
+          isOpen={searchOpen}
+          onClose={() => setSearchOpen(false)}
+        />
 
         {/* Toast container — rendered above the scrollable content */}
         <ToastContainer

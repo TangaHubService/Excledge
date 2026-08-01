@@ -5,6 +5,7 @@ import {
   LogOut,
   ChevronDown,
   ArrowLeft,
+  Search,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { LanguageSwitcher } from "./LanguageSwitcher";
@@ -31,11 +32,12 @@ type Profile = {
 
 interface HeaderProps {
   onMenuClick: () => void;
+  onOpenSearch?: () => void;
 }
 
 /* ─── Component ─────────────────────────────────────── */
 
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header({ onMenuClick, onOpenSearch }: HeaderProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { isSystemOwner } = useAuth();
@@ -90,9 +92,28 @@ export function Header({ onMenuClick }: HeaderProps) {
         <span className="hidden text-sm font-medium sm:inline">{t('common.back')}</span>
       </button>
 
+      {/* Search Bar matching mockup */}
+      <div className="hidden md:flex items-center flex-1 max-w-md mx-4">
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="w-full flex items-center justify-between px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-slate-200 text-xs rounded-xl border border-white/10 transition-colors shadow-inner"
+        >
+          <div className="flex items-center gap-2">
+            <Search className="h-3.5 w-3.5 text-slate-300" />
+            <span>Search anything...</span>
+          </div>
+          <kbd className="px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 bg-white/15 rounded border border-white/20">
+            Ctrl + K
+          </kbd>
+        </button>
+      </div>
+
       {/* Right side controls */}
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
-        <BranchSelector toolbar />
+        {!isSystemOwner() && (
+          <BranchSelector toolbar />
+        )}
 
         {isSystemOwner() && organization && (
           <OrganizationSwitcher toolbar />

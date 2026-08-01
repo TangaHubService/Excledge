@@ -49,6 +49,9 @@ const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, isLoading,
             <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                  ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                   Organization
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -71,13 +74,16 @@ const Subscriptions: React.FC<SubscriptionsProps> = ({ subscriptions, isLoading,
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {subscriptions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-4 text-gray-500 dark:text-gray-400">
+                  <td colSpan={7} className="text-center py-4 text-gray-500 dark:text-gray-400">
                     No subscriptions found
                   </td>
                 </tr>
               ) : (
                 subscriptions.map((subscription) => (
                   <tr key={subscription.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      #{subscription.id}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900 dark:text-white">
                         {subscription.organization?.name || 'N/A'}

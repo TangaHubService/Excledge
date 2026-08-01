@@ -73,8 +73,8 @@ export interface Subscription {
 }
 
 export interface Payment {
-  id: string;
-  subscriptionId: string;
+  id: number;
+  subscriptionId: number;
   amount: number;
   currency: string;
   paymentMethod: string;
@@ -86,8 +86,22 @@ export interface Payment {
   createdAt: string;
   updatedAt: string;
   subscription: {
-    organization: {
+    id: number;
+    startDate: string | null;
+    endDate: string | null;
+    autoRenew: boolean;
+    billingMode: string;
+    plan: {
+      id: number;
       name: string;
+      price?: number;
+      currency?: string;
+    } | null;
+    organization: {
+      id: number;
+      name: string;
+      email?: string | null;
+      phone?: string | null;
     };
   };
 }
@@ -182,6 +196,13 @@ export const systemOwnerService = {
     const response = await apiClient.request(`/system-owner/payments/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    });
+    return response;
+  },
+
+  async resendInvoice(id: string | number) {
+    const response = await apiClient.request(`/system-owner/payments/${id}/resend-invoice`, {
+      method: 'POST',
     });
     return response;
   },

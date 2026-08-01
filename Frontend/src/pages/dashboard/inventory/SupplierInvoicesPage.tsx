@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
-import { Card, CardContent } from '../../../components/ui/card';
+import { CardContent } from '../../../components/ui/card';
 import {
   Select,
   SelectContent,
@@ -119,53 +119,64 @@ export const SupplierInvoicesPage: React.FC = () => {
   };
 
   return (
-    <div className={cn('p-6 space-y-6', isDark ? 'text-gray-100' : 'text-gray-900')}>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">{t('invoiceScanner.supplierInvoices')}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t('invoiceScanner.subtitle')}</p>
+    <div className="space-y-6 p-4 md:p-6">
+      {/* Page Header */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-600 p-6 text-white shadow-lg">
+        <div className="absolute inset-0 bg-black/10" />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+              <ScanLine className="h-7 w-7 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">{t('invoiceScanner.supplierInvoices')}</h1>
+              <p className="text-sm text-white/70 mt-0.5">{t('invoiceScanner.subtitle')}</p>
+            </div>
+          </div>
+          <Button
+            onClick={() => navigate('/dashboard/scan-invoice')}
+            className="gap-2 bg-white text-blue-700 hover:bg-white/90 font-semibold shadow-sm self-start sm:self-auto"
+          >
+            <ScanLine className="size-4" />
+            {t('invoiceScanner.scanInvoice')}
+          </Button>
         </div>
-        <Button onClick={() => navigate('/dashboard/scan-invoice')} className="gap-2 shrink-0">
-          <ScanLine className="size-4" />
-          {t('invoiceScanner.scanInvoice')}
-        </Button>
+        <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+        <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                className="pl-9"
-                placeholder={t('common.search')}
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v === 'all' ? '' : v); setPage(1); }}>
-              <SelectTrigger className="w-[180px]">
-                <Filter className="size-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder={t('common.allStatuses')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('common.allStatuses')}</SelectItem>
-                {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
-                  <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button variant="outline" size="icon" onClick={fetchInvoices}>
-              <RefreshCw className="size-4" />
-            </Button>
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+            <Input
+              className="pl-9"
+              placeholder={t('common.search')}
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            />
           </div>
-        </CardContent>
-      </Card>
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v === 'all' ? '' : v); setPage(1); }}>
+            <SelectTrigger className="w-[180px]">
+              <Filter className="size-4 mr-2 text-gray-400" />
+              <SelectValue placeholder={t('common.allStatuses')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('common.allStatuses')}</SelectItem>
+              {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
+                <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="icon" onClick={fetchInvoices} title="Refresh">
+            <RefreshCw className="size-4" />
+          </Button>
+        </div>
+      </div>
 
       {/* Table */}
-      <Card>
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-16">
@@ -272,7 +283,7 @@ export const SupplierInvoicesPage: React.FC = () => {
             </div>
           )}
         </CardContent>
-      </Card>
+      </div>
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (

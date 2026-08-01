@@ -955,3 +955,352 @@ export const getDetailedInventory = async (req: BranchAuthRequest, res: Response
   }
 };
 
+export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId)
+    const { startDate, endDate } = parseDateRange(req.query)
+    const branchFilter = buildBranchFilter(req)
+    const singleBranchId = typeof branchFilter.branchId === 'number' ? branchFilter.branchId : null
+
+    // Org info for currency
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { currency: true, name: true },
+    })
+    const currency = org?.currency || 'RWF'
+
+    // Calculate previous period of exact same duration
+    const durationMs = Math.max(endDate.getTime() - startDate.getTime(), 24 * 60 * 60 * 1000)
+    const prevEndDate = new Date(startDate.getTime() - 1)
+    const prevStartDate = new Date(prevEndDate.getTime() - durationMs)
+
+    // Branch scoping
+    const branches = await prisma.branch.findMany({
+      where: {
+        organizationId,
+        status: 'ACTIVE',
+        ...(singleBranchId ? { id: singleBranchId } : {}),
+      },
+      select: { id: true, name: true, code: true },
+      orderBy: { name: 'asc' },
+    })
+    const branchIds = branches.map(b => b.id)
+
+    const saleWhereCurrent = {
+      organizationId,
+      status: { not: 'CANCELLED' as const },
+      createdAt: { gte: startDate, lte: endDate },
+      ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
+    }
+
+    const saleWherePrev = {
+      organizationId,
+      status: { not: 'CANCELLED' as const },
+      createdAt: { gte: prevStartDate, lte: prevEndDate },
+      ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
+    }
+
+    const expenseWhereCurrent = {
+      organizationId,
+      expenseDate: { gte: startDate, lte: endDate },
+      ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
+    }
+
+    const expenseWherePrev = {
+      organizationId,
+      expenseDate: { gte: prevStartDate, lte: prevEndDate },
+      ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
+    }
+
+    // Parallel execution of main KPI queries
+    const [
+      salesCurrAgg,
+      salesPrevAgg,
+      expCurrAgg,
+      expPrevAgg,
+      products,
+      salesListCurrent,
+      expensesListCurrent,
+      topSaleItems,
+      recentActivityLogs,
+      recentSales,
+      recentCustomers,
+    ] = await Promise.all([
+      prisma.sale.aggregate({ where: saleWhereCurrent, _sum: { totalAmount: true }, _count: { id: true } }),
+      prisma.sale.aggregate({ where: saleWherePrev, _sum: { totalAmount: true }, _count: { id: true } }),
+      prisma.expense.aggregate({ where: expenseWhereCurrent, _sum: { amount: true } }),
+      prisma.expense.aggregate({ where: expenseWherePrev, _sum: { amount: true } }),
+      prisma.product.findMany({
+        where: { organizationId, deletedAt: null, isActive: true },
+        select: { id: true, name: true, quantity: true, minStock: true, expiryDate: true },
+      }),
+      prisma.sale.findMany({
+        where: saleWhereCurrent,
+        select: { createdAt: true, totalAmount: true, branchId: true },
+      }),
+      prisma.expense.findMany({
+        where: expenseWhereCurrent,
+        select: { expenseDate: true, amount: true, branchId: true },
+      }),
+      prisma.saleItem.groupBy({
+        by: ['productId'],
+        where: {
+          sale: saleWhereCurrent,
+        },
+        _sum: { quantity: true, totalPrice: true },
+        orderBy: { _sum: { quantity: 'desc' } },
+        take: 5,
+      }),
+      prisma.activityLog.findMany({
+        where: { organizationId },
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        include: { user: { select: { name: true } } },
+      }),
+      prisma.sale.findMany({
+        where: { organizationId, ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}) },
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, saleNumber: true, invoiceNumber: true, totalAmount: true, createdAt: true, user: { select: { name: true } } },
+      }),
+      prisma.customer.findMany({
+        where: { organizationId, deletedAt: null },
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, name: true, createdAt: true },
+      }),
+    ])
+
+    // KPI Values
+    const totalSalesVal = Number(salesCurrAgg._sum.totalAmount ?? 0)
+    const prevSalesVal = Number(salesPrevAgg._sum.totalAmount ?? 0)
+    const salesChange = prevSalesVal > 0 ? Math.round(((totalSalesVal - prevSalesVal) / prevSalesVal) * 100) : 0
+
+    const txnsVal = salesCurrAgg._count.id ?? 0
+    const prevTxnsVal = salesPrevAgg._count.id ?? 0
+    const txnsChange = prevTxnsVal > 0 ? Math.round(((txnsVal - prevTxnsVal) / prevTxnsVal) * 100) : 0
+
+    const expensesVal = Number(expCurrAgg._sum.amount ?? 0)
+    const prevExpensesVal = Number(expPrevAgg._sum.amount ?? 0)
+    const expensesChange = prevExpensesVal > 0 ? Math.round(((expensesVal - prevExpensesVal) / prevExpensesVal) * 100) : 0
+
+    // Stock Alerts
+    let lowStockCount = 0
+    let expiredCount = 0
+    let outOfStockCount = 0
+    const now = new Date()
+
+    for (const p of products) {
+      if (p.quantity <= 0) outOfStockCount++
+      else if (p.minStock > 0 && p.quantity <= p.minStock) lowStockCount++
+
+      if (p.expiryDate && new Date(p.expiryDate) < now) expiredCount++
+    }
+    const totalAlertsVal = lowStockCount + expiredCount + outOfStockCount
+
+    // Sparklines generation (7 intervals)
+    const intervalCount = 7
+    const timeStep = durationMs / intervalCount
+
+    const salesSparkline: number[] = []
+    const txnsSparkline: number[] = []
+    const expensesSparkline: number[] = []
+    const alertsSparkline: number[] = []
+
+    for (let i = 0; i < intervalCount; i++) {
+      const stepStart = new Date(startDate.getTime() + i * timeStep)
+      const stepEnd = new Date(startDate.getTime() + (i + 1) * timeStep)
+
+      const intervalSales = salesListCurrent.filter(s => s.createdAt >= stepStart && s.createdAt < stepEnd)
+      const intervalExpenses = expensesListCurrent.filter(e => e.expenseDate >= stepStart && e.expenseDate < stepEnd)
+
+      const sSum = intervalSales.reduce((acc, curr) => acc + Number(curr.totalAmount), 0)
+      const sCount = intervalSales.length
+      const eSum = intervalExpenses.reduce((acc, curr) => acc + Number(curr.amount), 0)
+
+      salesSparkline.push(sSum)
+      txnsSparkline.push(sCount)
+      expensesSparkline.push(eSum)
+      alertsSparkline.push(totalAlertsVal)
+    }
+
+    // Sales Overview Chart Data (Daily bucket list Mon-Sun or interval dates)
+    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const salesOverviewMap = new Map<string, { label: string; sales: number; expenses: number }>()
+
+    // Initialize 7 days
+    const cursor = new Date(startDate)
+    for (let i = 0; i < 7; i++) {
+      const label = dayLabels[cursor.getDay()]
+      const key = cursor.toISOString().split('T')[0]
+      salesOverviewMap.set(key, { label, sales: 0, expenses: 0 })
+      cursor.setDate(cursor.getDate() + 1)
+    }
+
+    for (const s of salesListCurrent) {
+      const key = s.createdAt.toISOString().split('T')[0]
+      if (salesOverviewMap.has(key)) {
+        salesOverviewMap.get(key)!.sales += Number(s.totalAmount)
+      }
+    }
+    for (const e of expensesListCurrent) {
+      const key = e.expenseDate.toISOString().split('T')[0]
+      if (salesOverviewMap.has(key)) {
+        salesOverviewMap.get(key)!.expenses += Number(e.amount)
+      }
+    }
+
+    const salesOverview = Array.from(salesOverviewMap.values())
+
+    // Branch Performance Breakdown
+    const branchPerfMap = new Map<number, { branchId: number; name: string; sales: number; transactions: number; expenses: number }>()
+    for (const b of branches) {
+      branchPerfMap.set(b.id, { branchId: b.id, name: b.name, sales: 0, transactions: 0, expenses: 0 })
+    }
+    for (const s of salesListCurrent) {
+      if (branchPerfMap.has(s.branchId)) {
+        const item = branchPerfMap.get(s.branchId)!
+        item.sales += Number(s.totalAmount)
+        item.transactions += 1
+      }
+    }
+    for (const e of expensesListCurrent) {
+      if (branchPerfMap.has(e.branchId)) {
+        branchPerfMap.get(e.branchId)!.expenses += Number(e.amount)
+      }
+    }
+    const branchPerformanceList = Array.from(branchPerfMap.values())
+    const hasBranchActivity = branchPerformanceList.some(b => b.sales > 0 || b.transactions > 0 || b.expenses > 0)
+
+    // Top Selling Products
+    const topProdIds = topSaleItems.map(i => i.productId).filter((id): id is number => id !== null)
+    const topProdDetails = topProdIds.length > 0
+      ? await prisma.product.findMany({
+          where: { id: { in: topProdIds } },
+          select: { id: true, name: true },
+        })
+      : []
+    const topProdMap = new Map(topProdDetails.map(p => [p.id, p.name]))
+
+    const maxSold = Math.max(...topSaleItems.map(i => i._sum.quantity || 0), 1)
+    const topSellingProductsList = topSaleItems.map(item => {
+      const sold = item._sum.quantity || 0
+      const revenue = Number(item._sum.totalPrice || 0)
+      const name = topProdMap.get(item.productId!) || 'Unknown Product'
+      const percentage = Math.round((sold / maxSold) * 100)
+      return {
+        id: item.productId,
+        name,
+        sold,
+        revenue,
+        percentage,
+      }
+    })
+
+    // Recent Activities Stream
+    let recentActivitiesList: Array<{
+      id: string
+      title: string
+      subtext: string
+      timestamp: string
+      timeFormatted: string
+      type: 'sale' | 'payment' | 'stock' | 'user'
+    }> = []
+
+    if (recentActivityLogs.length > 0) {
+      recentActivitiesList = recentActivityLogs.map(log => {
+        let type: 'sale' | 'payment' | 'stock' | 'user' = 'sale'
+        if (log.type.includes('PAYMENT') || log.type.includes('EXPENSE')) type = 'payment'
+        else if (log.type.includes('INVENTORY') || log.type.includes('PRODUCT') || log.type.includes('STOCK')) type = 'stock'
+        else if (log.type.includes('USER') || log.type.includes('CUSTOMER')) type = 'user'
+
+        const date = new Date(log.createdAt)
+        const timeFormatted = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+        return {
+          id: String(log.id),
+          title: log.description,
+          subtext: log.user?.name ? `By ${log.user.name}` : log.entityId ? `#${log.entityId}` : '',
+          timestamp: date.toISOString(),
+          timeFormatted,
+          type,
+        }
+      })
+    } else {
+      // Fallback combined list if activity logs are empty
+      const saleActivities = recentSales.map(s => ({
+        id: `sale-${s.id}`,
+        title: 'New sale recorded',
+        subtext: s.invoiceNumber || s.saleNumber,
+        timestamp: s.createdAt.toISOString(),
+        timeFormatted: new Date(s.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        type: 'sale' as const,
+      }))
+
+      const customerActivities = recentCustomers.map(c => ({
+        id: `customer-${c.id}`,
+        title: 'New customer added',
+        subtext: `Customer: ${c.name}`,
+        timestamp: c.createdAt.toISOString(),
+        timeFormatted: new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        type: 'user' as const,
+      }))
+
+      recentActivitiesList = [...saleActivities, ...customerActivities]
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 4)
+    }
+
+    res.json({
+      currency,
+      dateRange: {
+        preset: (req.query.preset as string) || 'today',
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      },
+      kpis: {
+        totalSales: {
+          value: totalSalesVal,
+          prevValue: prevSalesVal,
+          changePercentage: salesChange,
+          sparkline: salesSparkline,
+        },
+        transactions: {
+          value: txnsVal,
+          prevValue: prevTxnsVal,
+          changePercentage: txnsChange,
+          sparkline: txnsSparkline,
+        },
+        totalExpenses: {
+          value: expensesVal,
+          prevValue: prevExpensesVal,
+          changePercentage: expensesChange,
+          sparkline: expensesSparkline,
+        },
+        totalAlerts: {
+          value: totalAlertsVal,
+          prevValue: 0,
+          changePercentage: 0,
+          sparkline: alertsSparkline,
+        },
+      },
+      branchPerformance: {
+        hasActivity: hasBranchActivity,
+        branches: branchPerformanceList,
+      },
+      salesOverview,
+      topSellingProducts: topSellingProductsList,
+      stockAlerts: {
+        lowStock: { count: lowStockCount, label: 'Low Stock Items', subtext: 'Items running low' },
+        expired: { count: expiredCount, label: 'Expired Products', subtext: 'Products past expiry date' },
+        outOfStock: { count: outOfStockCount, label: 'Out of Stock', subtext: 'Items out of stock' },
+      },
+      recentActivities: recentActivitiesList,
+    })
+  } catch (error: any) {
+    console.error('[Overview Dashboard Error]:', error)
+    res.status(500).json({ error: 'Failed to fetch overview dashboard stats' })
+  }
+}
+
+

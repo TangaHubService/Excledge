@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from '../../context/ThemeContext';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from '../ui/drawer';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
-import { Loader2, Check, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  Loader2, Check, Plus, X, Shield, Smartphone, CreditCard,
+  FileText, Wallet, Lock,
+} from 'lucide-react';
 
 interface PaymentEntry {
   id: string;
@@ -23,12 +21,14 @@ interface PaymentModalProps {
 }
 
 const PAYMENT_METHODS = [
-  { value: 'CASH', label: 'Cash' },
-  { value: 'MOBILE_MONEY', label: 'Mobile Money' },
-  { value: 'CREDIT_CARD', label: 'Card' },
-  { value: 'DEBT', label: 'Debt' },
-  { value: 'INSURANCE', label: 'Insurance' },
+  { value: 'CASH',         label: 'Cash',         icon: Wallet     },
+  { value: 'MOBILE_MONEY', label: 'Mobile Money',  icon: Smartphone },
+  { value: 'CREDIT_CARD',  label: 'Card',          icon: CreditCard },
+  { value: 'DEBT',         label: 'Debt',          icon: FileText   },
+  { value: 'INSURANCE',    label: 'Insurance',     icon: Shield     },
 ];
+
+const QUICK_AMOUNTS_EXTRA = [10000, 5000, 1000];
 
 export function PaymentModal({
   isOpen,
@@ -38,336 +38,326 @@ export function PaymentModal({
   isProcessing = false,
 }: PaymentModalProps) {
   const { t } = useTranslation();
-  const { theme } = useTheme();
   const [payments, setPayments] = useState<PaymentEntry[]>([]);
-  const [currentPaymentIndex, setCurrentPaymentIndex] = useState(0);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [currentIndex, setCurrentIndex] = useState(0);
   const submittingRef = useRef(false);
 
-  // Helper function to get payment method translation with proper fallback
-  const getPaymentMethodLabel = (methodValue: string): string => {
-    const translationKey = `pos.paymentMethods.${methodValue}`;
-    const translated = t(translationKey);
-    // If translation returns the key itself (not found), use the default label
-    if (translated === translationKey) {
-      const method = PAYMENT_METHODS.find(m => m.value === methodValue);
-      return method?.label || methodValue;
-    }
-    return translated;
-  };
-
+  /* ── reset on open ─────────────────────────────────────────────── */
   useEffect(() => {
     if (isOpen) {
       setPayments([{ id: Date.now().toString(), method: 'CASH', amount: 0 }]);
-      setCurrentPaymentIndex(0);
-      setErrors({});
+      setCurrentIndex(0);
     }
   }, [isOpen]);
 
-  const updatePayment = (index: number, field: keyof PaymentEntry, value: string | number) => {
-    // Functional form — the payment-method button below calls updatePayment
-    // twice in the same click handler (method, then amount). Reading `payments`
-    // from closure here would make the second call overwrite the first with
-    // stale data (React batches setState within one handler), so the method
-    // selection would silently revert. Building off `prev` avoids that.
-    setPayments((prev) => {
-      const newPayments = [...prev];
-      newPayments[index] = { ...newPayments[index], [field]: value };
-      return newPayments;
+  /* ── helpers ───────────────────────────────────────────────────── */
+  const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const remaining = totalAmount - totalPaid;
+  const current   = payments[currentIndex] ?? payments[0];
+
+  const update = (idx: number, field: keyof PaymentEntry, value: string | number) => {
+    setPayments(prev => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: value };
+      return next;
     });
-    const entryId = payments[index]?.id;
-    if (entryId && errors[entryId]) {
-      const newErrors = { ...errors };
-      delete newErrors[entryId];
-      setErrors(newErrors);
-    }
   };
 
-  const calculateTotalPaid = () => {
-    return payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const selectMethod = (method: string) => {
+    if (!current) return;
+    const otherPaid = payments.reduce((s, p, i) => i === currentIndex ? s : s + (p.amount || 0), 0);
+    const due = Math.max(0, totalAmount - otherPaid);
+    update(currentIndex, 'method', method);
+    update(currentIndex, 'amount', due);
   };
 
-  const calculateRemaining = () => {
-    return totalAmount - calculateTotalPaid();
+  const setAmount = (val: number) => {
+    const otherPaid = payments.reduce((s, p, i) => i === currentIndex ? s : s + (p.amount || 0), 0);
+    const max = totalAmount - otherPaid;
+    update(currentIndex, 'amount', Math.max(0, Math.min(val, max)));
   };
 
-  const handleProcessPayment = async () => {
+  const addPaymentMethod = () => {
+    if (totalPaid >= totalAmount) return;
+    const due = Math.max(0, totalAmount - totalPaid);
+    const newEntry: PaymentEntry = { id: Date.now().toString(), method: 'CASH', amount: due };
+    setPayments(prev => [...prev, newEntry]);
+    setCurrentIndex(payments.length);
+  };
+
+  const removePayment = (idx: number) => {
+    setPayments(prev => prev.filter((_, i) => i !== idx));
+    setCurrentIndex(prev => Math.max(0, prev - 1));
+  };
+
+  const handleProcess = async () => {
     if (submittingRef.current || isProcessing) return;
     submittingRef.current = true;
-
     try {
-      const validPayments = payments.filter((p) => p.amount > 0);
-      const totalPaid = validPayments.reduce((sum, p) => sum + p.amount, 0);
-      const remaining = totalAmount - totalPaid;
-
-      if (Math.abs(remaining) > 0.01) {
-        const confirmMessage = remaining > 0
-          ? t('pos.confirmPartialPayment') || `Incomplete. Continue?`
-          : t('pos.confirmOverpayment') || `Overpaid. Continue?`;
-        if (!window.confirm(confirmMessage)) { submittingRef.current = false; return; }
+      const valid = payments.filter(p => p.amount > 0);
+      const paid  = valid.reduce((s, p) => s + p.amount, 0);
+      const rem   = totalAmount - paid;
+      if (Math.abs(rem) > 0.01) {
+        const msg = rem > 0
+          ? t('pos.confirmPartialPayment') || `Amount is incomplete (${rem.toLocaleString()} RWF remaining). Continue?`
+          : t('pos.confirmOverpayment')    || `Amount exceeds total. Continue?`;
+        if (!window.confirm(msg)) { submittingRef.current = false; return; }
       }
-
-      await onProcessPayment(validPayments);
+      await onProcessPayment(valid);
     } finally {
       submittingRef.current = false;
     }
   };
 
-  const totalPaid = calculateTotalPaid();
-  const remaining = calculateRemaining();
-  const currentPayment = payments[currentPaymentIndex] || payments[0] || { id: '', method: 'CASH', amount: 0 };
+  if (!isOpen) return null;
 
-  // Ensure currentPaymentIndex is valid
-  useEffect(() => {
-    if (payments.length > 0 && currentPaymentIndex >= payments.length) {
-      setCurrentPaymentIndex(0);
-    }
-  }, [payments.length, currentPaymentIndex]);
+  /* ── quick amounts: total + extras ────────────────────────────── */
+  const quickAmounts = [totalAmount, ...QUICK_AMOUNTS_EXTRA].filter(
+    (v, i, arr) => arr.indexOf(v) === i && v > 0,
+  );
 
+  /* ── render ────────────────────────────────────────────────────── */
   return (
-    <Drawer open={isOpen} onOpenChange={onClose}>
-      <DrawerContent
-        className={`sm:max-w-md overflow-y-auto p-4 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white'
-          }`}
+    /* Backdrop */
+    <div
+      className="fixed inset-0 z-50 flex items-stretch justify-end"
+      onClick={onClose}
+      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+    >
+      {/* Panel */}
+      <div
+        className="relative flex flex-col bg-white h-full w-full max-w-[420px] shadow-2xl overflow-y-auto"
+        onClick={e => e.stopPropagation()}
       >
-        <DrawerHeader className="pb-2">
-          <DrawerTitle className={`text-lg font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-            {t('pos.processPayment') || 'Process Payment'}
-          </DrawerTitle>
-        </DrawerHeader>
 
-        <div className="space-y-3 py-2">
-          {/* Summary */}
-          <div className={`p-2 rounded border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-blue-50 border-blue-200'}`}>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div>
-                <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {t('pos.totalAmount') || 'Total'}
-                </p>
-                <p className={`text-base font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                  {totalAmount.toFixed(2)}
-                </p>
-              </div>
-              <div>
-                <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {t('pos.totalPaid') || 'Paid'}
-                </p>
-                <p className={`text-base font-bold ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>
-                  {totalPaid.toFixed(2)}
-                </p>
-              </div>
-              <div>
-                <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {t('pos.remainingBalance') || 'Remaining'}
-                </p>
-                <p className={`text-base font-bold ${remaining > 0
-                  ? theme === 'dark' ? 'text-red-400' : 'text-red-600'
-                  : theme === 'dark' ? 'text-green-400' : 'text-green-600'
-                  }`}>
-                  {remaining.toFixed(2)}
-                </p>
-              </div>
-            </div>
+        {/* ── Header ────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-6 pt-6 pb-4">
+          <h2 className="text-lg font-bold text-gray-900">Process Payment</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* ── Total / Paid / Remaining bar ──────────────────────── */}
+        <div className="mx-6 mb-6 grid grid-cols-3 divide-x divide-gray-100 rounded-2xl border border-gray-100 bg-gray-50 overflow-hidden">
+          <div className="flex flex-col items-center py-4 px-2">
+            <p className="text-[11px] font-medium text-gray-400 mb-1">Total</p>
+            <p className="text-base font-bold text-gray-900 tabular-nums">
+              {totalAmount.toLocaleString()}
+              <span className="ml-1 text-xs font-normal text-gray-400">RWF</span>
+            </p>
           </div>
+          <div className="flex flex-col items-center py-4 px-2">
+            <p className="text-[11px] font-medium text-gray-400 mb-1">Paid</p>
+            <p className="text-base font-bold text-emerald-600 tabular-nums">
+              {totalPaid.toLocaleString()}
+              <span className="ml-1 text-xs font-normal text-gray-400">RWF</span>
+            </p>
+          </div>
+          <div className="flex flex-col items-center py-4 px-2">
+            <p className="text-[11px] font-medium text-gray-400 mb-1">Remaining</p>
+            <p className={`text-base font-bold tabular-nums ${remaining > 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
+              {remaining.toLocaleString()}
+              <span className="ml-1 text-xs font-normal text-gray-400">RWF</span>
+            </p>
+          </div>
+        </div>
 
-          {/* Payment Method + Amount (always visible) */}
-          {currentPayment && (
-            <div className="space-y-2">
-              <Label className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                {t('pos.paymentMethod') || 'Payment Method'} {payments.length > 1 ? `(${currentPaymentIndex + 1}/${payments.length})` : ''}
-              </Label>
-              <div className="grid grid-cols-2 gap-2">
-                {PAYMENT_METHODS.map((method) => (
-                  <button
-                    key={method.value}
-                    type="button"
-                    onClick={() => {
-                      if (currentPaymentIndex < payments.length) {
-                        updatePayment(currentPaymentIndex, 'method', method.value);
-                        const due = totalAmount - (calculateTotalPaid() - (currentPayment?.amount || 0));
-                        updatePayment(currentPaymentIndex, 'amount', Math.max(0, due));
-                      }
-                    }}
-                    className={`px-3 py-2 rounded border-2 text-sm font-medium transition-all ${currentPayment?.method === method.value
-                      ? theme === 'dark'
-                        ? 'bg-blue-600 border-blue-500 text-white'
-                        : 'bg-blue-600 border-blue-500 text-white'
-                      : theme === 'dark'
-                        ? 'bg-gray-800 border-gray-600 text-gray-300 hover:border-gray-500'
-                        : 'bg-white border-gray-300 text-gray-700 hover:border-blue-300'
-                      }`}
-                  >
-                    {getPaymentMethodLabel(method.value)}
-                  </button>
-                ))}
-              </div>
-              {currentPayment?.method && (
-                <div className="space-y-2 mt-2">
-                  <Label className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                    {t('pos.amount') || 'Amount'} ({getPaymentMethodLabel(currentPayment.method)})
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={currentPayment.amount || ''}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value) || 0;
-                      const currentAmount = currentPayment?.amount || 0;
-                      const maxAmount = totalAmount - calculateTotalPaid() + currentAmount;
-                      if (currentPaymentIndex < payments.length) {
-                        updatePayment(currentPaymentIndex, 'amount', Math.min(val, maxAmount));
-                      }
-                    }}
-                    placeholder="0.00"
-                    autoFocus
-                    className={`text-lg font-bold h-12 text-center ${theme === 'dark'
-                      ? 'bg-gray-800 border-gray-600 text-white'
-                      : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                  />
-                  {(currentPayment.method === 'MOBILE_MONEY' || currentPayment.method === 'CREDIT_CARD' || currentPayment.method === 'DEBT') && (
-                    <Input
-                      type="text"
-                      value={currentPayment.reference || ''}
-                      onChange={(e) => {
-                        if (currentPaymentIndex < payments.length) {
-                          updatePayment(currentPaymentIndex, 'reference', e.target.value);
-                        }
-                      }}
-                      placeholder={t('pos.referencePlaceholder') || 'Reference'}
-                      className={`h-9 text-sm ${theme === 'dark' ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300'
-                        }`}
-                    />
+        {/* ── Multi-payment tabs (if >1) ────────────────────────── */}
+        {payments.length > 1 && (
+          <div className="mx-6 mb-4 flex items-center gap-2 flex-wrap">
+            {payments.map((p, idx) => {
+              const M = PAYMENT_METHODS.find(m => m.value === p.method);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setCurrentIndex(idx)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                    idx === currentIndex
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-gray-100 text-gray-600 border-gray-200 hover:border-blue-300'
+                  }`}
+                >
+                  {M && <M.icon className="h-3 w-3" />}
+                  {M?.label} · {p.amount.toLocaleString()}
+                  {payments.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); removePayment(idx); }}
+                      className="ml-1 opacity-60 hover:opacity-100"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
                   )}
-                </div>
-              )}
-              {currentPayment?.id && errors[currentPayment.id] && (
-                <p className="text-xs text-red-600 dark:text-red-400">{errors[currentPayment.id]}</p>
-              )}
-              {errors.total && (
-                <p className="text-xs text-red-600 dark:text-red-400">{errors.total}</p>
-              )}
-            </div>
-          )}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-          {/* Add Payment Button */}
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                const newId = Date.now().toString();
-                const due = Math.max(0, totalAmount - calculateTotalPaid());
-                setPayments(prev => [...prev, { id: newId, method: 'CASH', amount: due, reference: '' }]);
-                setCurrentPaymentIndex(payments.length);
-              }}
-              disabled={calculateTotalPaid() >= totalAmount - 0.01}
-              className="flex-1 text-xs gap-1"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {t('pos.addPayment') || 'Add Payment'}
-            </Button>
-            {payments.length > 1 && (
-              <Button
+        {/* ── Payment Method label ──────────────────────────────── */}
+        <div className="px-6 mb-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Payment Method {payments.length > 1 ? `(${currentIndex + 1}/${payments.length})` : ''}
+          </p>
+        </div>
+
+        {/* ── Method grid ──────────────────────────────────────── */}
+        <div className="px-6 mb-5 grid grid-cols-2 gap-3">
+          {PAYMENT_METHODS.slice(0, 4).map(m => {
+            const selected = current?.method === m.value;
+            return (
+              <button
+                key={m.value}
                 type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setPayments(prev => prev.filter((_, i) => i !== currentPaymentIndex));
-                  if (currentPaymentIndex >= payments.length - 1) {
-                    setCurrentPaymentIndex(Math.max(0, payments.length - 2));
-                  }
-                }}
-                className="text-xs gap-1 text-red-600 hover:text-red-700"
+                onClick={() => selectMethod(m.value)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
+                  selected
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:bg-blue-50/50'
+                }`}
               >
-                <Trash2 className="h-3.5 w-3.5" />
-                {t('common.remove') || 'Remove'}
-              </Button>
-            )}
+                <span className={`p-1.5 rounded-lg ${selected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                  <m.icon className="h-4 w-4" />
+                </span>
+                {m.label}
+              </button>
+            );
+          })}
+          {/* Insurance — full-width row */}
+          {(() => {
+            const m = PAYMENT_METHODS[4];
+            const selected = current?.method === m.value;
+            return (
+              <button
+                type="button"
+                onClick={() => selectMethod(m.value)}
+                className={`col-span-2 flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
+                  selected
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:bg-blue-50/50'
+                }`}
+              >
+                <span className={`p-1.5 rounded-lg ${selected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                  <m.icon className="h-4 w-4" />
+                </span>
+                {m.label}
+              </button>
+            );
+          })()}
+        </div>
+
+        {/* ── Amount input ──────────────────────────────────────── */}
+        <div className="px-6 mb-4">
+          <label className="block text-xs font-semibold text-gray-500 mb-2">
+            Amount ({PAYMENT_METHODS.find(m => m.value === current?.method)?.label ?? 'Cash'})
+          </label>
+          <div className="relative">
+            <input
+              type="number"
+              min="0"
+              value={current?.amount || ''}
+              onChange={e => setAmount(parseFloat(e.target.value) || 0)}
+              placeholder="0"
+              className="w-full h-12 pl-4 pr-16 rounded-xl border-2 border-gray-200 text-gray-900 text-sm font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-white"
+              autoFocus
+            />
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400">
+              RWF
+            </span>
           </div>
 
-          {/* Payment List */}
-          {payments.length > 1 && (
-            <div className={`p-2 rounded border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-              <div className="flex items-center justify-between mb-1">
-                <p className={`text-xs font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {t('pos.payments') || 'Payments'}
-                </p>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPaymentIndex(Math.max(0, currentPaymentIndex - 1))}
-                    disabled={currentPaymentIndex === 0}
-                    className={`p-0.5 rounded ${currentPaymentIndex === 0 ? 'opacity-30' : 'hover:bg-gray-200 dark:hover:bg-gray-600'}`}
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPaymentIndex(Math.min(payments.length - 1, currentPaymentIndex + 1))}
-                    disabled={currentPaymentIndex >= payments.length - 1}
-                    className={`p-0.5 rounded ${currentPaymentIndex >= payments.length - 1 ? 'opacity-30' : 'hover:bg-gray-200 dark:hover:bg-gray-600'}`}
-                  >
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-1">
-                {payments.map((payment, idx) => (
-                  <div
-                    key={payment.id}
-                    onClick={() => setCurrentPaymentIndex(idx)}
-                    className={`flex items-center justify-between text-xs p-1 rounded cursor-pointer ${idx === currentPaymentIndex
-                      ? theme === 'dark' ? 'bg-blue-900/30' : 'bg-blue-100'
-                      : 'hover:bg-gray-100 dark:hover:bg-gray-600'
-                      }`}
-                  >
-                    <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}>
-                      {getPaymentMethodLabel(payment.method)}: {payment.amount.toFixed(2)}
-                    </span>
-                    {payment.amount > 0 && (
-                      <Check className="h-3 w-3 text-green-600" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+          {/* Reference (for mobile, card, debt) */}
+          {(current?.method === 'MOBILE_MONEY' || current?.method === 'CREDIT_CARD' || current?.method === 'DEBT') && (
+            <input
+              type="text"
+              value={current?.reference || ''}
+              onChange={e => update(currentIndex, 'reference', e.target.value)}
+              placeholder={t('pos.referencePlaceholder') || 'Transaction reference (optional)'}
+              className="mt-2 w-full h-10 px-4 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-blue-400 transition-all bg-gray-50"
+            />
           )}
         </div>
 
-        <DrawerFooter className="gap-2 pt-2">
-          <div className="flex gap-2 w-full">
-            <Button
+        {/* ── Quick Amounts ─────────────────────────────────────── */}
+        <div className="px-6 mb-4">
+          <p className="text-xs font-semibold text-gray-500 mb-2">Quick Amounts</p>
+          <div className="flex flex-wrap gap-2">
+            {quickAmounts.map(amt => (
+              <button
+                key={amt}
+                type="button"
+                onClick={() => setAmount(amt)}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                  current?.amount === amt
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/30'
+                    : 'bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:text-blue-600'
+                }`}
+              >
+                {amt.toLocaleString()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Add Another Payment Method ────────────────────────── */}
+        <div className="px-6 mb-5">
+          <button
+            type="button"
+            onClick={addPaymentMethod}
+            disabled={totalPaid >= totalAmount}
+            className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Add Another Payment Method
+          </button>
+        </div>
+
+        {/* ── Remaining pill ────────────────────────────────────── */}
+        <div className="mx-6 mb-6 flex items-center justify-between px-5 py-3.5 rounded-xl bg-indigo-50 border border-indigo-100">
+          <span className="text-sm font-semibold text-indigo-700">Remaining</span>
+          <span className={`text-base font-extrabold tabular-nums ${remaining > 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
+            {remaining.toLocaleString()} RWF
+          </span>
+        </div>
+
+        {/* ── Footer buttons ────────────────────────────────────── */}
+        <div className="mt-auto px-6 pb-6 space-y-3">
+          <div className="flex gap-3">
+            <button
               type="button"
-              variant="outline"
               onClick={onClose}
               disabled={isProcessing}
-              className={`flex-1 py-2 px-4 text-sm ${theme === 'dark' ? 'border-gray-600 text-white hover:bg-gray-700' : ''}`}
+              className="flex-1 h-11 rounded-xl border-2 border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
-              {t('common.cancel') || 'Cancel'}
-            </Button>
-            <Button
-              onClick={handleProcessPayment}
-              disabled={isProcessing || calculateTotalPaid() <= 0}
-              className="flex-1 text-white py-2 px-4 text-sm font-semibold bg-green-600 hover:bg-green-700"
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleProcess}
+              disabled={isProcessing || totalPaid <= 0}
+              className="flex-1 h-11 flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-all shadow-md shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isProcessing ? (
-                <>
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  {t('pos.processing') || 'Processing'}
-                </>
+                <><Loader2 className="h-4 w-4 animate-spin" /> Processing…</>
               ) : (
-                <>
-                  {t('pos.processPayment') || 'Process Payment'}
-                  <Check className="ml-1 h-4 w-4" />
-                </>
+                <>Process Payment <Check className="h-4 w-4" /></>
               )}
-            </Button>
+            </button>
           </div>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+
+          {/* Secure note */}
+          <div className="flex items-center justify-center gap-1.5 text-[11px] text-gray-400">
+            <Lock className="h-3 w-3" />
+            Payments are secure and encrypted
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

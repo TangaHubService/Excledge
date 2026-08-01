@@ -3,7 +3,6 @@
 export interface ISidebarConfig {
     home: boolean;
     dashboard: boolean;
-    executiveDashboard: boolean;
     pos: boolean;
     sales: boolean;
     customers: boolean;
@@ -64,7 +63,6 @@ export const SIDEBAR_SECTIONS: { label: string; items: { key: keyof ISidebarConf
         items: [
             { key: 'home', label: 'Home', route: '/' },
             { key: 'dashboard', label: 'Dashboard', route: '/dashboard' },
-            { key: 'executiveDashboard', label: 'Executive Dashboard', route: '/dashboard/executive' },
         ],
     },
     {

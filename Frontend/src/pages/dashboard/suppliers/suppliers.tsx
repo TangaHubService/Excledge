@@ -140,31 +140,44 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
     );
 
     return (
-        <div className="container mx-auto px-4 py-8 dark:bg-gray-900 min-h-screen">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">{t('suppliers.title')}</h1>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage your suppliers and their contact information</p>
+        <div className="space-y-6 p-4 md:p-6">
+            {/* Page Header */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-teal-600 via-emerald-600 to-green-600 p-6 text-white shadow-lg">
+                <div className="absolute inset-0 bg-black/10" />
+                <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+                            <Plus className="h-7 w-7 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold tracking-tight">{t('suppliers.title')}</h1>
+                            <p className="text-sm text-white/70 mt-0.5">
+                                Manage your suppliers and their contact information
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 self-start sm:self-auto">
+                        <button
+                            onClick={() => setIsImportDialogOpen(true)}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 border border-white/30 text-white text-sm font-semibold rounded-lg backdrop-blur-sm transition-all"
+                        >
+                            <Upload className="h-4 w-4" />
+                            {t('common.import')}
+                        </button>
+                        <button
+                            onClick={() => {
+                                resetForm();
+                                setIsDialogOpen(true);
+                            }}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white text-teal-700 text-sm font-semibold rounded-lg shadow-sm hover:bg-white/90 transition-all"
+                        >
+                            <Plus className="h-4 w-4" />
+                            {t('suppliers.addSupplier')}
+                        </button>
+                    </div>
                 </div>
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                    <button
-                        onClick={() => setIsImportDialogOpen(true)}
-                        className="flex-1 md:flex-none inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-semibold rounded-lg shadow-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all active:scale-95"
-                    >
-                        <Upload className="h-4 w-4 mr-2" />
-                        {t('common.import')}
-                    </button>
-                    <button
-                        onClick={() => {
-                            resetForm();
-                            setIsDialogOpen(true);
-                        }}
-                        className="flex-1 md:flex-none inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-semibold rounded-lg shadow-md text-white bg-blue-600 hover:bg-blue-700 transition-all active:scale-95 shadow-blue-500/20"
-                    >
-                        <Plus className="h-4 w-4 mr-2" />
-                        {t('suppliers.addSupplier')}
-                    </button>
-                </div>
+                <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+                <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
             </div>
 
             <SuppliersCard

@@ -1,16 +1,24 @@
 import React, { useState } from 'react';
-import { CheckCircle, XCircle, Clock, Ban } from 'lucide-react';
+import { toast } from 'react-toastify';
+import { CheckCircle, XCircle, Clock, Ban, Download, Mail, Loader2 } from 'lucide-react';
+import { pdf } from '@react-pdf/renderer';
+import { saveAs } from 'file-saver';
 import type { Payment } from '../../services/systemOwnerService';
+import InvoicePDF, { type BillingPayment } from '../invoice/InvoicePDF';
+import type { Profile } from '../../types';
 
 interface PaymentsProps {
   payments: Payment[];
   isLoading: boolean;
   error: string | null;
   onUpdatePaymentStatus: (id: string | number, status: string) => Promise<void>;
+  onResendInvoice?: (id: string | number) => Promise<void>;
 }
 
-const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdatePaymentStatus }) => {
+const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdatePaymentStatus, onResendInvoice }) => {
   const [updatingId, setUpdatingId] = useState<string | number | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | number | null>(null);
+  const [resendingId, setResendingId] = useState<string | number | null>(null);
 
   if (isLoading) {
     return (
@@ -75,6 +83,66 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdat
     );
   };
 
+  const buildInvoiceData = (payment: Payment) => {
+    const billingPayment: BillingPayment = {
+      id: String(payment.id),
+      amount: payment.amount,
+      currency: payment.currency || 'RWF',
+      status: payment.status as BillingPayment['status'],
+      paymentMethod: payment.paymentMethod,
+      createdAt: payment.createdAt,
+      metadata: payment.metadata,
+      subscription: {
+        plan: {
+          name: payment.subscription?.plan?.name || 'Subscription',
+          price: payment.subscription?.plan?.price,
+          currency: payment.subscription?.plan?.currency,
+        },
+        startDate: payment.subscription?.startDate || undefined,
+        endDate: payment.subscription?.endDate || undefined,
+        autoRenew: payment.subscription?.autoRenew,
+      },
+    };
+
+    const orgProfile: Profile = {
+      id: String(payment.subscription?.organization?.id ?? payment.id),
+      name: payment.subscription?.organization?.name || 'N/A',
+      email: payment.subscription?.organization?.email || 'N/A',
+      phone: payment.subscription?.organization?.phone || undefined,
+    };
+
+    return { billingPayment, orgProfile };
+  };
+
+  const handleDownloadInvoice = async (payment: Payment) => {
+    const { billingPayment, orgProfile } = buildInvoiceData(payment);
+    setDownloadingId(payment.id);
+    try {
+      const blob = await pdf(<InvoicePDF payment={billingPayment} profile={orgProfile} />).toBlob();
+      saveAs(blob, `invoice-${payment.id}.pdf`);
+      toast.success(`Invoice ${payment.id} downloaded`);
+    } catch (err) {
+      console.error('Failed to generate invoice:', err);
+      toast.error('Failed to generate invoice');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handleResendInvoice = async (payment: Payment) => {
+    if (!onResendInvoice) return;
+    setResendingId(payment.id);
+    try {
+      await onResendInvoice(payment.id);
+      toast.success('Invoice resent to subscriber email');
+    } catch (err: any) {
+      console.error('Failed to resend invoice:', err);
+      toast.error(err?.message || 'Failed to resend invoice');
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -87,6 +155,9 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdat
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                  ID
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                   Organization
                 </th>
@@ -110,13 +181,16 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdat
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {payments.length === 0 ? (
                 <tr>
-                    <td colSpan={6} className="text-center py-4 text-gray-500 dark:text-gray-400">
+                  <td colSpan={7} className="text-center py-4 text-gray-500 dark:text-gray-400">
                     No payments found
                   </td>
                 </tr>
               ) : (
                 payments.map((payment) => (
                   <tr key={payment.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      #{payment.id}
+                    </td>
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900 dark:text-white">
                         {payment.subscription?.organization?.name || 'N/A'}
@@ -143,37 +217,67 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdat
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {payment.status === 'PENDING' && (
-                        <div className="flex gap-1">
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleDownloadInvoice(payment)}
+                          disabled={downloadingId === payment.id}
+                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50"
+                          title="Download invoice"
+                        >
+                          {downloadingId === payment.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Download className="h-3.5 w-3.5" />
+                          )}
+                          Download
+                        </button>
+                        {onResendInvoice && (
                           <button
-                            onClick={async () => { setUpdatingId(payment.id); await onUpdatePaymentStatus(payment.id, 'COMPLETED'); setUpdatingId(null); }}
-                            disabled={updatingId === payment.id}
-                            className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50"
-                            title="Mark as Paid"
+                            onClick={() => handleResendInvoice(payment)}
+                            disabled={resendingId === payment.id}
+                            className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 disabled:opacity-50"
+                            title="Resend invoice to subscriber email"
                           >
-                            <CheckCircle className="h-3.5 w-3.5" />
-                            Paid
+                            {resendingId === payment.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Mail className="h-3.5 w-3.5" />
+                            )}
+                            Resend
                           </button>
-                          <button
-                            onClick={async () => { setUpdatingId(payment.id); await onUpdatePaymentStatus(payment.id, 'FAILED'); setUpdatingId(null); }}
-                            disabled={updatingId === payment.id}
-                            className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
-                            title="Mark as Failed"
-                          >
-                            <XCircle className="h-3.5 w-3.5" />
-                            Fail
-                          </button>
-                          <button
-                            onClick={async () => { setUpdatingId(payment.id); await onUpdatePaymentStatus(payment.id, 'CANCELED'); setUpdatingId(null); }}
-                            disabled={updatingId === payment.id}
-                            className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300 disabled:opacity-50"
-                            title="Cancel"
-                          >
-                            <Ban className="h-3.5 w-3.5" />
-                            Cancel
-                          </button>
-                        </div>
-                      )}
+                        )}
+                        {payment.status === 'PENDING' && (
+                          <>
+                            <button
+                              onClick={async () => { setUpdatingId(payment.id); await onUpdatePaymentStatus(payment.id, 'COMPLETED'); setUpdatingId(null); }}
+                              disabled={updatingId === payment.id}
+                              className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50"
+                              title="Mark as Paid"
+                            >
+                              <CheckCircle className="h-3.5 w-3.5" />
+                              Paid
+                            </button>
+                            <button
+                              onClick={async () => { setUpdatingId(payment.id); await onUpdatePaymentStatus(payment.id, 'FAILED'); setUpdatingId(null); }}
+                              disabled={updatingId === payment.id}
+                              className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
+                              title="Mark as Failed"
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                              Fail
+                            </button>
+                            <button
+                              onClick={async () => { setUpdatingId(payment.id); await onUpdatePaymentStatus(payment.id, 'CANCELED'); setUpdatingId(null); }}
+                              disabled={updatingId === payment.id}
+                              className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300 disabled:opacity-50"
+                              title="Cancel"
+                            >
+                              <Ban className="h-3.5 w-3.5" />
+                              Cancel
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))

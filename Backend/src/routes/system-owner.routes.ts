@@ -40,6 +40,10 @@ router.patch(
   "/payments/:id/status",
   systemOwnerController.updatePaymentStatus
 );
+router.post(
+  "/payments/:id/resend-invoice",
+  systemOwnerController.resendInvoice
+);
 
 // Analytics
 router.get("/analytics/revenue", systemOwnerController.getRevenueAnalytics);

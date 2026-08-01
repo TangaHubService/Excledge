@@ -289,6 +289,82 @@ class EmailService {
       `,
     });
   }
+
+  async sendInvoiceEmail(
+    email: string,
+    organizationName: string,
+    invoice: {
+      invoiceId: string;
+      amount: number;
+      currency: string;
+      period: string;
+      date: string;
+      planName?: string;
+      paymentMethod?: string;
+      status?: string;
+    }
+  ) {
+    const currencySymbol = invoice.currency === "RWF" ? "RWF" : invoice.currency || "USD";
+    const statusLabel = invoice.status
+      ? invoice.status.charAt(0) + invoice.status.slice(1).toLowerCase()
+      : "Paid";
+
+    await this.sendMail({
+      from: config.email.from,
+      to: email,
+      subject: `Invoice #${invoice.invoiceId} - ${organizationName}`,
+      html: `
+        <div style="font-family: Arial, Helvetica, sans-serif; background-color: #f4f6f8; padding: 40px;">
+          <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+            <div style="background-color: #1e3a8a; padding: 24px 32px; color: #ffffff;">
+              <h1 style="margin: 0; font-size: 22px;">INVOICE</h1>
+              <p style="margin: 4px 0 0; font-size: 13px; opacity: 0.85;">Exceledge ERP</p>
+            </div>
+            <div style="padding: 32px;">
+              <p style="margin: 0 0 20px; font-size: 14px; color: #555;">
+                Hello,<br/>
+                Please find your invoice for <strong>${organizationName}</strong> below.
+              </p>
+              <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <tr>
+                  <td style="padding: 10px 0; color: #888;">Invoice ID</td>
+                  <td style="padding: 10px 0; text-align: right; font-weight: bold;">#${invoice.invoiceId}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 0; color: #888;">Invoice Date</td>
+                  <td style="padding: 10px 0; text-align: right;">${invoice.date}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 0; color: #888;">Organization</td>
+                  <td style="padding: 10px 0; text-align: right;">${organizationName}</td>
+                </tr>
+                ${invoice.planName ? `<tr><td style="padding: 10px 0; color: #888;">Plan</td><td style="padding: 10px 0; text-align: right;">${invoice.planName}</td></tr>` : ""}
+                <tr>
+                  <td style="padding: 10px 0; color: #888;">Billing Period</td>
+                  <td style="padding: 10px 0; text-align: right;">${invoice.period}</td>
+                </tr>
+                ${invoice.paymentMethod ? `<tr><td style="padding: 10px 0; color: #888;">Payment Method</td><td style="padding: 10px 0; text-align: right;">${invoice.paymentMethod}</td></tr>` : ""}
+                <tr>
+                  <td style="padding: 10px 0; color: #888;">Status</td>
+                  <td style="padding: 10px 0; text-align: right;">
+                    <span style="background-color: ${invoice.status === "PENDING" ? "#f59e0b" : invoice.status === "FAILED" ? "#ef4444" : "#10b981"}; color: #ffffff; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: bold;">${statusLabel}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 14px 0; border-top: 2px solid #e5e7eb; color: #1e3a8a; font-weight: bold; font-size: 15px;">TOTAL</td>
+                  <td style="padding: 14px 0; border-top: 2px solid #e5e7eb; text-align: right; font-weight: bold; font-size: 18px; color: #1e3a8a;">${currencySymbol} ${invoice.amount.toLocaleString()}</td>
+                </tr>
+              </table>
+              <p style="margin: 24px 0 0; font-size: 13px; color: #777;">
+                Thank you for choosing Exceledge ERP!<br/>
+                For any inquiries, contact us at <a href="mailto:info@exceledgecpa.com" style="color: #1e3a8a;">info@exceledgecpa.com</a>.
+              </p>
+            </div>
+          </div>
+        </div>
+      `,
+    });
+  }
   async sendInvitationAcceptedOrDeclinedEmail(
     email: string,
     organizationName: string,
