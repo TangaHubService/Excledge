@@ -7,6 +7,7 @@ import {
   getDetailedInventory,
   getBranchDashboardStats,
   getExecutiveDashboard,
+  getOverviewDashboard,
 } from "../controllers/dashboard.controller";
 import { authenticate } from "../middleware/auth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
@@ -17,6 +18,7 @@ const router = Router();
 
 const orgAccess = requireOrganizationAccess();
 
+router.get("/overview/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, getOverviewDashboard);
 router.get("/stats/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, getDashboardStats);
 router.get("/sales-trend/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, getSalesTrend);
 router.get("/notifications/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, getNotifications);

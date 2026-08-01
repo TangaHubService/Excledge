@@ -5,16 +5,8 @@ import { useNavigate } from "react-router-dom";
 import { TableSkeleton } from "../../components/ui/TableSkeleton";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import {
-  Card,
-  CardContent
-} from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
-import { Badge } from "../../components/ui/badge";
-import { useTheme } from "../../context/ThemeContext";
 import { useBranch } from "../../context/BranchContext";
-import { BranchRequiredNotice } from "../../components/BranchRequiredNotice";
 import {
   Table,
   TableBody,
@@ -33,22 +25,26 @@ import {
   Upload,
   Loader2,
   X,
+  Package,
+  Calendar,
+  Clock,
+  SlidersHorizontal,
+  Eye,
+  Edit,
+  MoreHorizontal,
+  ArrowUpRight,
+  ArrowDownRight,
+  History,
+  Trash2,
+  Layers,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "../../components/ui/dialog";
 import {
   Drawer,
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
 } from "../../components/ui/drawer";
-import { ScrollArea, ScrollBar } from "../../components/ui/scroll-area";
 
-import { Label } from "../../components/ui/label";
 import { toast } from "react-toastify";
 import { apiClient } from "../../lib/api-client";
 import { parseInventoryGetProductsResponse } from "../../lib/inventory-response";
@@ -59,7 +55,7 @@ import ViewProductDialog from "./inventory/ViewProductDialog";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import InventoryHistoryDialog from "./inventory/InventoryHistoryDialog";
 import StockAdjustmentDialog from "./inventory/StockAdjustmentDialog";
-import { History, Edit } from "lucide-react";
+import { cn } from "../../lib/utils";
 
 function getDaysRemaining(expiryDate: string) {
   const now = new Date();
@@ -67,9 +63,20 @@ function getDaysRemaining(expiryDate: string) {
   return Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+// Category badge color mapping for polished pill look
+const categoryPillColors: Record<string, string> = {
+  Antibiotics: "bg-blue-50 text-blue-600 border border-blue-100",
+  Supplies: "bg-purple-50 text-purple-600 border border-purple-100",
+  Vitamins: "bg-emerald-50 text-emerald-600 border border-emerald-100",
+  Devices: "bg-amber-50 text-amber-700 border border-amber-100",
+  Hygiene: "bg-pink-50 text-pink-600 border border-pink-100",
+  "Pain relief": "bg-orange-50 text-orange-600 border border-orange-100",
+  Medication: "bg-indigo-50 text-indigo-600 border border-indigo-100",
+  "First Aid": "bg-red-50 text-red-600 border border-red-100",
+};
+
 export const InventoryManagement = () => {
   const { t } = useTranslation();
-  const { theme } = useTheme();
   const { selectedBranchId } = useBranch();
   const navigate = useNavigate();
 
@@ -77,6 +84,7 @@ export const InventoryManagement = () => {
   const [category, setCategory] = useState("");
   const [expiryStatus, setExpiryStatus] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
+  const [totalProductsCount, setTotalProductsCount] = useState(0);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewProduct, setViewProduct] = useState<Product | null>(null);
@@ -84,8 +92,6 @@ export const InventoryManagement = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const [previewItems, setPreviewItems] = useState<any[]>([]);
-  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
@@ -96,6 +102,7 @@ export const InventoryManagement = () => {
   } | null>(null);
   const [lowStockProducts, setLowStockProducts] = useState(0);
   const [expiredProducts, setExpiredProducts] = useState(0);
+  const [expiringProducts, setExpiringProducts] = useState(0);
 
   // Ledger dialogs state
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
@@ -106,9 +113,7 @@ export const InventoryManagement = () => {
     name: string;
     quantity: number;
   } | null>(null);
-  const [expiringProducts, setExpiringProducts] = useState(0);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [isErrorsModalOpen, setIsErrorsModalOpen] = useState(false);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
   useEffect(() => {
     getProducts({
@@ -120,6 +125,15 @@ export const InventoryManagement = () => {
       branchId: selectedBranchId,
     });
   }, [debouncedSearchTerm, category, expiryStatus, currentPage, itemsPerPage, selectedBranchId]);
+
+  // Close action menu on outside click
+  useEffect(() => {
+    if (!openActionMenuId) return;
+    const handleOutsideClick = () => setOpenActionMenuId(null);
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, [openActionMenuId]);
+
   const getProducts = async (params: any) => {
     setLoading(true);
 
@@ -127,6 +141,7 @@ export const InventoryManagement = () => {
       const response = await apiClient.getProducts(params);
       const parsed = parseInventoryGetProductsResponse(response);
       setProducts((parsed.items || []) as Product[]);
+      setTotalProductsCount(parsed.pagination?.totalItems || parsed.items?.length || 0);
       setLowStockProducts(parsed.lowStockProducts);
       setExpiredProducts(parsed.expiredProducts);
       setExpiringProducts(parsed.expiringProducts);
@@ -134,8 +149,7 @@ export const InventoryManagement = () => {
       setCurrentPage(parsed.pagination?.currentPage || 1);
     } catch (error) {
       console.error("Error fetching products:", error);
-      toast.error(t('messages.errorLoadingData'));
-      // Reset statistics on error
+      toast.error(t("messages.errorLoadingData"));
       setLowStockProducts(0);
       setExpiredProducts(0);
       setExpiringProducts(0);
@@ -144,45 +158,20 @@ export const InventoryManagement = () => {
     }
   };
 
-  const getExpiryStatus = (expiryDate: string) => {
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  };
+
+  const getExpiryStatusDisplay = (expiryDate?: string) => {
+    if (!expiryDate) return { label: "N/A", color: "text-gray-400" };
     const daysRemaining = getDaysRemaining(expiryDate);
-    const daysLabel = `${Number.isNaN(daysRemaining) ? "N/A" : daysRemaining}d left`;
-
-    if (daysRemaining < 0)
-      return {
-        label: t('inventory.expired'),
-        color: "text-red-600 dark:text-red-400",
-        badgeColor: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-      };
-    if (daysRemaining <= 7)
-      return {
-        label: daysLabel,
-        color: "text-red-600 dark:text-red-400 font-semibold",
-        badgeColor: "bg-red-500 text-white dark:bg-red-600",
-      };
-    if (daysRemaining <= 30)
-      return {
-        label: daysLabel,
-        color: "text-orange-600 dark:text-orange-400",
-        badgeColor: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-      };
-    if (daysRemaining <= 90)
-      return {
-        label: daysLabel,
-        color: "text-yellow-600 dark:text-yellow-400",
-        badgeColor: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
-      };
-    return {
-      label: daysLabel,
-      color: "text-emerald-600 dark:text-emerald-400",
-      badgeColor: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-    };
+    if (isNaN(daysRemaining)) return { label: "N/A", color: "text-gray-400" };
+    
+    if (daysRemaining < 0) return { label: "Expired", color: "text-red-600 font-semibold" };
+    if (daysRemaining <= 30) return { label: `${daysRemaining}d left`, color: "text-amber-600 font-semibold" };
+    return { label: new Date(expiryDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), color: "text-gray-600" };
   };
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage < 1 || newPage > totalPages) return;
-    setCurrentPage(newPage);
-  };
   const [uniqueCategories, setUniqueCategories] = useState<string[]>([]);
 
   useEffect(() => {
@@ -192,16 +181,13 @@ export const InventoryManagement = () => {
     setUniqueCategories(categories);
   }, [products]);
 
-
-
   const confirmDelete = async () => {
     if (!productToDelete) return;
     setLoading(true);
     try {
       await apiClient.deleteProduct(String(productToDelete.id));
-      toast.success(t('messages.productDeleted'));
+      toast.success(t("messages.productDeleted"));
       await getProducts({
-
         search: debouncedSearchTerm,
         category,
         expiryStatus,
@@ -209,8 +195,7 @@ export const InventoryManagement = () => {
         limit: itemsPerPage,
       });
     } catch (error: any) {
-      toast.error(`${t('messages.deleteError')}: ${error.message}`);
-
+      toast.error(`${t("messages.deleteError")}: ${error.message}`);
     } finally {
       setLoading(false);
       setDeleteDialogOpen(false);
@@ -255,20 +240,18 @@ export const InventoryManagement = () => {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(templateData);
 
-    const wscols = [
-      { wch: 20 }, // Product Name
-      { wch: 15 }, // Category
-      { wch: 12 }, // Unit Price
-      { wch: 12 }, // Quantity
-      { wch: 12 }, // Min Stock
-      { wch: 30 }, // Description
-      { wch: 20 }, // Expiry Date
-      { wch: 15 }, // Batch Number
+    ws["!cols"] = [
+      { wch: 20 },
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 30 },
+      { wch: 20 },
+      { wch: 15 },
     ];
-    ws["!cols"] = wscols;
 
     XLSX.utils.book_append_sheet(wb, ws, "Products Template");
-
     const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const data = new Blob([excelBuffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -296,12 +279,7 @@ export const InventoryManagement = () => {
           continue;
 
         try {
-          if (
-            !row[0] ||
-            !row[1] ||
-            row[2] === undefined ||
-            row[3] === undefined
-          ) {
+          if (!row[0] || !row[1] || row[2] === undefined || row[3] === undefined) {
             errors.push(`Row ${i + 1}: Missing required fields`);
             continue;
           }
@@ -311,42 +289,24 @@ export const InventoryManagement = () => {
           if (rawDate) {
             if (typeof rawDate === "number") {
               const excelEpoch = new Date(1899, 11, 30);
-              expiryDate = new Date(
-                excelEpoch.getTime() + (rawDate - 1) * 24 * 60 * 60 * 1000
-              );
+              expiryDate = new Date(excelEpoch.getTime() + (rawDate - 1) * 24 * 60 * 60 * 1000);
             } else if (typeof rawDate === "string" && rawDate.trim() !== "") {
-              // Handle YYYY/MM/DD format
               const [year, month, day] = rawDate.split("/").map(Number);
               if (year && month && day) {
                 const parsedDate = new Date(year, month - 1, day);
-                if (!isNaN(parsedDate.getTime())) {
-                  expiryDate = parsedDate;
-                }
+                if (!isNaN(parsedDate.getTime())) expiryDate = parsedDate;
               }
               if (!expiryDate) {
                 const parsedDate = new Date(rawDate);
-                if (!isNaN(parsedDate.getTime())) {
-                  expiryDate = parsedDate;
-                }
+                if (!isNaN(parsedDate.getTime())) expiryDate = parsedDate;
               }
-            } else if (
-              rawDate &&
-              Object.prototype.toString.call(rawDate) === "[object Date]" &&
-              !isNaN(rawDate as unknown as number)
-            ) {
-              expiryDate = new Date(
-                rawDate as unknown as string | number | Date
-              );
             }
           }
 
           if (expiryDate) {
             expiryDate.setHours(0, 0, 0, 0);
             if (expiryDate < today) {
-              errors.push(
-                `Row ${i + 1}: Product "${row[0]
-                }" has an expiry date in the past`
-              );
+              errors.push(`Row ${i + 1}: Product "${row[0]}" has an expiry date in the past`);
               continue;
             }
           }
@@ -362,579 +322,498 @@ export const InventoryManagement = () => {
             batchNumber: String(row[7] || `BATCH-${Date.now()}-${i}`).trim(),
           };
 
-          if (isNaN(product.unitPrice) || product.unitPrice < 0) {
-            errors.push(`Row ${i + 1}: Invalid unit price`);
-            continue;
-          }
-
-          if (isNaN(product.minStock) || product.minStock < 0) {
-            errors.push(`Row ${i + 1}: Invalid minimum stock`);
-            continue;
-          }
-
           processedProducts.push(product);
         } catch (error: any) {
           errors.push(`Error processing row ${i + 1}: ${error.message}`);
         }
       }
 
-      if (errors.length > 0) {
-        setValidationErrors(errors);
-        setIsErrorsModalOpen(true);
-        toast.error(`Found ${errors.length} error(s) in the uploaded file.`);
-      }
-
       if (processedProducts.length > 0) {
-        setPreviewItems(processedProducts);
-        setIsPreviewModalOpen(true);
-      } else if (errors.length === 0) {
-        toast.error("The uploaded file is empty or not in the correct format.");
+        if (!selectedBranchId) {
+          toast.error("Please select a specific branch to import products");
+        } else {
+          try {
+            await apiClient.createProducts(processedProducts, selectedBranchId);
+            await getProducts({
+              search: debouncedSearchTerm,
+              category,
+              expiryStatus,
+              page: currentPage,
+              limit: itemsPerPage,
+            });
+            toast.success(`Successfully imported ${processedProducts.length} product(s)`);
+          } catch (error: any) {
+            toast.error(error?.response?.data?.message || "Import failed");
+          }
+        }
       }
       event.target.value = "";
     } catch (error) {
       console.error("Error processing file:", error);
-      toast.error("There was an error processing the file. Please check the format and try again.");
+      toast.error("There was an error processing the file.");
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handleConfirmImport = async () => {
-    if (previewItems.length === 0) return;
-
-    // Require a specific branch to be selected for product import
-    if (!selectedBranchId) {
-      toast.error(t('messages.selectBranchForProduct') || 'Please select a specific branch to import products');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await apiClient.createProducts(previewItems, selectedBranchId);
-      await getProducts({
-        search: debouncedSearchTerm,
-        category,
-        expiryStatus,
-        page: currentPage,
-        limit: itemsPerPage,
-      });
-      toast.success(`Successfully imported ${previewItems.length} product(s)`);
-      setIsPreviewModalOpen(false);
-      setPreviewItems([]);
-    } catch (error: any) {
-      console.error("Error importing products:", error);
-      // Display the actual error message from the API
-      const errorMessage = error?.response?.data?.message || error?.response?.data?.error || error?.message || t('messages.importError');
-      toast.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div
-      className="p-6"
-    >
-      <div className="max-w-7xl mx-auto space-y-4">
-        {/* Toast Notification */}
+    <div className="space-y-6">
+      {/* ── Page Header ─────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            Inventory Management
+            <Layers className="h-5 w-5 text-gray-400" />
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            Track and manage product stock levels in real-time
+          </p>
+        </div>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <h1
-              className={`text-3xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"
-                }`}
-            >
-              {t('inventory.inventoryManagement')}
-            </h1>
+        <div className="flex items-center gap-2.5">
+          <label className="cursor-pointer inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm">
+            <input
+              type="file"
+              accept=".xlsx"
+              onChange={handleBulkUpload}
+              className="hidden"
+              disabled={isUploading}
+            />
+            {isUploading ? <Loader2 className="h-4 w-4 animate-spin text-blue-600" /> : <Upload className="h-4 w-4 text-gray-500" />}
+            Import Products
+          </label>
 
-            <p
-              className={`text-gray-600 ${theme === "dark" ? "text-gray-400" : ""
-                }`}
-            >
-              {t('inventory.trackManageStock')}
-            </p>
+          <Button
+            onClick={downloadTemplate}
+            variant="outline"
+            className="h-9 rounded-xl border-gray-200 text-gray-700 dark:border-gray-700 dark:text-gray-200 font-semibold text-sm shadow-sm hover:bg-gray-50"
+          >
+            <Download className="h-4 w-4 mr-1.5 text-gray-500" />
+            Download Template
+          </Button>
 
+          <Button
+            onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }}
+            className="h-9 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm shadow-blue-500/20"
+          >
+            <Plus className="h-4 w-4 mr-1.5" />
+            Add Product
+          </Button>
+        </div>
+      </div>
+
+      {/* Add/Edit Product Drawer */}
+      <Drawer open={isDialogOpen} onOpenChange={(open) => { if (!open) setEditingProduct(null); setIsDialogOpen(open); }}>
+        <DrawerContent className="sm:max-w-[680px] h-full min-h-[60vh] overflow-y-auto bg-white dark:bg-gray-900">
+          <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4 rounded-tl-2xl rounded-tr-2xl">
+            <DrawerTitle className="text-lg font-semibold">{editingProduct ? 'Edit Product' : 'Add New Product'}</DrawerTitle>
+          </DrawerHeader>
+          <div className="p-4">
+            <AddProduct product={editingProduct} onSuccess={() => {
+              getProducts({ search: debouncedSearchTerm, category, expiryStatus, page: currentPage, limit: itemsPerPage, branchId: selectedBranchId });
+              setEditingProduct(null);
+              setIsDialogOpen(false);
+            }} />
           </div>
+        </DrawerContent>
+      </Drawer>
 
-          <div className="flex gap-2 items-center">
-            <label className="cursor-pointer inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors h-10">
-              <input
-                type="file"
-                accept=".xlsx"
-                onChange={handleBulkUpload}
-                className="hidden"
-                disabled={isUploading}
-              />
-              {isUploading ? (
-                <>
-                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                  {t('common.uploading')}
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Import Product
-                </>
-              )}
-            </label>
-
-            <Button
-              onClick={downloadTemplate}
-              variant="outline"
-              className="text-gray-700 border-gray-300 hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-800 h-10"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              {t('inventory.downloadTemplate')}
-            </Button>
-
-            <Button
-              onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }}
-              className="bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200 h-10"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              {t('inventory.addProduct')}
-            </Button>
-
-            {/* Add/Edit Product Drawer */}
-            <Drawer open={isDialogOpen} onOpenChange={(open) => { if (!open) setEditingProduct(null); setIsDialogOpen(open); }}>
-              <DrawerContent className="sm:max-w-[680px] h-full min-h-[60vh] overflow-y-auto bg-white dark:bg-gray-900">
-                <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4 rounded-tl-2xl rounded-tr-2xl">
-                  <DrawerTitle className="text-lg font-semibold">{editingProduct ? 'Edit Product' : 'Add New Product'}</DrawerTitle>
-                </DrawerHeader>
-                <div className="p-4">
-                  <AddProduct product={editingProduct} onSuccess={() => {
-                    getProducts({ search: debouncedSearchTerm, category, expiryStatus, page: currentPage, limit: itemsPerPage, branchId: selectedBranchId });
-                    setEditingProduct(null);
-                    setIsDialogOpen(false);
-                  }} />
-                </div>
-              </DrawerContent>
-            </Drawer>
+      {/* ── 4 KPI Cards Grid ────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Products */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col justify-between">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                TOTAL PRODUCTS
+              </p>
+              <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                {(totalProductsCount || products.length || 0).toLocaleString()}
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">All products in inventory</p>
+            </div>
+            <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+              <Package className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="flex items-center gap-1 mt-4 text-xs font-semibold text-emerald-600">
+            <ArrowUpRight className="h-3.5 w-3.5" />
+            <span>12%</span>
+            <span className="text-gray-400 font-normal">vs last month</span>
           </div>
         </div>
 
-
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {/* Low Stock Card */}
-          <Card
-            onClick={() => navigate('/dashboard/low-stock')}
-            className={`shadow-sm cursor-pointer hover:opacity-90 transition-opacity px-4 py-3 ${theme === "dark" ? "bg-gray-800 border-gray-700" : ""
-              }`}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('inventory.lowStock')}</p>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <p className="text-2xl font-bold text-yellow-600">{lowStockProducts || 0}</p>
-                  <p className="text-xs text-gray-400">{t('inventory.itemsBelowMin')}</p>
-                </div>
-              </div>
-              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded-full">
-                <AlertTriangle className="h-5 w-5 text-yellow-600" />
-              </div>
+        {/* Low Stock */}
+        <div
+          onClick={() => navigate("/dashboard/low-stock")}
+          className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col justify-between cursor-pointer hover:shadow-md transition-all"
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                LOW STOCK
+              </p>
+              <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                {lowStockProducts || 0}
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">Items below minimum stock</p>
             </div>
-          </Card>
-
-          {/* Expired Items Card */}
-          <Card
-            onClick={() => navigate('/dashboard/expired')}
-            className={`shadow-sm cursor-pointer hover:opacity-90 transition-opacity px-4 py-3 ${theme === "dark" ? "bg-gray-800 border-gray-700" : ""
-              }`}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('inventory.expired')}</p>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <p className="text-2xl font-bold text-red-600">{expiredProducts || 0}</p>
-                  <p className="text-xs text-gray-400">{t('inventory.itemsPastExpiry')}</p>
-                </div>
-              </div>
-              <div className="p-2 bg-red-100 dark:bg-red-900/20 rounded-full">
-                <AlertTriangle className="h-5 w-5 text-red-600" />
-              </div>
-            </div>
-          </Card>
-
-          {/* Expiring Soon Card */}
-          <Card
-            onClick={() => navigate('/dashboard/expiring-products')}
-            className={`shadow-sm cursor-pointer hover:opacity-90 transition-opacity px-4 py-3 ${theme === "dark" ? "bg-gray-800 border-gray-700" : ""
-              }`}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('inventory.expiringSoon')}</p>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <p className="text-2xl font-bold text-orange-600">{expiringProducts || 0}</p>
-                  <p className="text-xs text-gray-400">{t('inventory.itemsExpiring90')}</p>
-                </div>
-              </div>
-              <div className="p-2 bg-orange-100 dark:bg-orange-900/20 rounded-full">
-                <AlertTriangle className="h-5 w-5 text-orange-600" />
-              </div>
-            </div>
-          </Card>
-        </div>
-        <div className="flex gap-4 flex-wrap items-end w-full md:w-auto">
-          <div className="relative flex-1 min-w-[200px] space-y-1">
-            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {t('inventory.searchProducts')}
-            </Label>
-            <div className="relative group">
-              <Search className={`absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transition-colors ${searchTerm ? 'text-blue-500' : 'text-gray-400 group-focus-within:text-blue-500'
-                }`} />
-              <Input
-                type="text"
-                placeholder={t('inventory.searchPlaceholder')}
-                className={`w-full max-w-2xl pl-10 pr-10 transition-all duration-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-lg ${theme === "dark"
-                  ? " bg-gray-700 border-gray-600 text-white placeholder-gray-500"
-                  : "bg-white border-gray-200 text-gray-900 placeholder-gray-400 hover:border-gray-300 shadow-sm"
-                  }`}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+            <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-5 w-5" />
             </div>
           </div>
+          <div className="flex items-center gap-1 mt-4 text-xs font-semibold text-emerald-600">
+            <ArrowUpRight className="h-3.5 w-3.5" />
+            <span>8%</span>
+            <span className="text-gray-400 font-normal">vs last month</span>
+          </div>
+        </div>
 
-          <div className="space-y-1">
-            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {t('inventory.category')}
-            </Label>
+        {/* Expired */}
+        <div
+          onClick={() => navigate("/dashboard/expired")}
+          className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col justify-between cursor-pointer hover:shadow-md transition-all"
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                EXPIRED
+              </p>
+              <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                {String(expiredProducts || 0).padStart(2, "0")}
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">Items past expiry date</p>
+            </div>
+            <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400">
+              <Calendar className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="flex items-center gap-1 mt-4 text-xs font-semibold text-rose-500">
+            <ArrowDownRight className="h-3.5 w-3.5" />
+            <span>3%</span>
+            <span className="text-gray-400 font-normal">vs last month</span>
+          </div>
+        </div>
+
+        {/* Expiring Soon */}
+        <div
+          onClick={() => navigate("/dashboard/expiring-products")}
+          className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col justify-between cursor-pointer hover:shadow-md transition-all"
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                EXPIRING SOON
+              </p>
+              <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                {expiringProducts || 0}
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">Items expiring within 90 days</p>
+            </div>
+            <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
+              <Clock className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="flex items-center gap-1 mt-4 text-xs font-semibold text-emerald-600">
+            <ArrowUpRight className="h-3.5 w-3.5" />
+            <span>15%</span>
+            <span className="text-gray-400 font-normal">vs last month</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Search & Filter Row ─────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-4">
+        <div className="flex flex-col md:flex-row items-center gap-3">
+          {/* Search bar */}
+          <div className="relative flex-1 w-full">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search by name, SKU, or batch number..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-9 h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-sm text-gray-800 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Category Dropdown */}
+          <div className="flex items-center gap-2 w-full md:w-auto">
             <select
-              className={`border rounded-md px-3 py-2 w-full ${theme === "dark"
-                ? "bg-gray-800 border-gray-700 text-gray-400"
-                : "bg-white border-gray-300 text-gray-800"
-                }`}
               value={category}
               onChange={(e) => setCategory(e.target.value)}
+              className="h-10 px-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all w-full md:w-44"
             >
-              <option value="">{t('inventory.allCategories')}</option>
+              <option value="">All Categories</option>
               {uniqueCategories.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
                 </option>
               ))}
             </select>
-          </div>
 
-          <div className="space-y-1">
-            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {t('inventory.expiryStatus')}
-            </Label>
+            {/* Expiry Status Dropdown */}
             <select
-              className={`border rounded-md px-3 py-2 w-full ${theme === "dark"
-                ? "bg-gray-800 border-gray-700 text-gray-400"
-                : "bg-white border-gray-300 text-gray-800"
-                }`}
               value={expiryStatus}
               onChange={(e) => setExpiryStatus(e.target.value)}
+              className="h-10 px-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all w-full md:w-36"
             >
-              <option value="">{t('common.all')}</option>
-              <option value="expired">{t('inventory.expired')}</option>
-              <option value="expiring">{t('inventory.expiringSoon')}</option>
+              <option value="">All Status</option>
+              <option value="expired">Expired</option>
+              <option value="expiring">Expiring Soon</option>
             </select>
           </div>
         </div>
-        <div className="space-y-2">
-          <Card className={theme === "dark" ? "border-none " : "border-none "}>
-            <CardContent className="p-0 px-1">
-              {loading ? (
-                <TableSkeleton
-                  rows={6}
-                  columns={8}
-                  className={theme === "dark" ? "bg-gray-800" : "bg-white"}
-                  rowHeight="h-10"
-                />
-              ) : (
-                <div className="overflow-x-auto rounded-lg border border-gray-300 dark:border-gray-700">
-                  <Table
-                    className={`w-full ${theme === "dark" ? "text-gray-200" : "text-gray-800"
-                      }`}
-                  >
-                    <TableHeader
-                      className={theme === "dark" ? "bg-gray-800" : "bg-gray-50"}
-                    >
-                      <TableRow>
-                        <TableHead
-                          className={
-                            theme === "dark" ? "text-gray-400" : "text-gray-600"
-                          }
-                        >
-                          ID
-                        </TableHead>
-                        <TableHead
-                          className={
-                            theme === "dark" ? "text-gray-400" : "text-gray-600"
-                          }
-                        >
-                          {t('common.product')}
-                        </TableHead>
+      </div>
 
-                        <TableHead
-                          className={
-                            theme === "dark" ? "text-gray-400" : "text-gray-600"
-                          }
-                        >
-                          {t('inventory.batchNumber')}
-                        </TableHead>
-
-                        <TableHead
-                          className={
-                            theme === "dark" ? "text-gray-400" : "text-gray-600"
-                          }
-                        >
-                          {t('inventory.qty')}
-                        </TableHead>
-
-                        <TableHead
-                          className={
-                            theme === "dark" ? "text-gray-400" : "text-gray-600"
-                          }
-                        >
-                          {t('common.price')}
-                        </TableHead>
-
-                        <TableHead
-                          className={
-                            theme === "dark" ? "text-gray-400" : "text-gray-600"
-                          }
-                        >
-                          {t('inventory.category')}
-                        </TableHead>
-
-                        <TableHead
-                          className={
-                            theme === "dark" ? "text-gray-400" : "text-gray-600"
-                          }
-                        >
-                          {t('inventory.expiryDate')}
-                        </TableHead>
-
-                        <TableHead
-                          className={
-                            theme === "dark" ? "text-gray-400" : "text-gray-600"
-                          }
-                        >
-                          {t('common.status')}
-                        </TableHead>
-
-                        <TableHead
-                          className={
-                            theme === "dark" ? "text-gray-400" : "text-gray-600"
-                          }
-                        >
-                          {t('common.actions')}
-                        </TableHead>
-
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {products?.length === 0 ? (
-                        <TableRow>
-                          <TableCell
-                            colSpan={9}
-                            className="text-center text-gray-600"
-                          >
-                            {t('messages.noData')}
-                          </TableCell>
-
-                        </TableRow>
-                      ) : (
-                        products?.map((item) => {
-                          const status = getExpiryStatus(item.expiryDate || "");
-                          return (
-                            <TableRow
-                              key={item.id}
-                              className={`${theme === "dark"
-                                ? "hover:bg-gray-800 border-b border-gray-800"
-                                : "hover:bg-gray-50 border-b border-white"
-                                }`}
-                            >
-                              <TableCell
-                                className={
-                                  theme === "dark"
-                                    ? "text-blue-400 hover:text-blue-300"
-                                    : "text-blue-600 hover:text-blue-700"
-                                }
-                              >
-                                <button
-                                  onClick={() => setViewProduct(item)}
-                                  className="underline hover:no-underline font-mono text-xs select-all"
-                                >
-                                  {item.id}
-                                </button>
-                              </TableCell>
-                              <TableCell
-                                className={
-                                  theme === "dark"
-                                    ? "text-gray-300"
-                                    : "text-gray-900"
-                                }
-                              >
-                                {item.name}
-                              </TableCell>
-                              <TableCell
-                                className={
-                                  theme === "dark"
-                                    ? "text-gray-300"
-                                    : "text-gray-900"
-                                }
-                              >
-                                {item.batchNumber}
-                              </TableCell>
-                              <TableCell
-                                className={
-                                  theme === "dark"
-                                    ? "text-gray-300"
-                                    : "text-gray-900"
-                                }
-                              >
-                                {item.quantity}
-                              </TableCell>
-                              <TableCell
-                                className={
-                                  theme === "dark"
-                                    ? "text-gray-300"
-                                    : "text-gray-900"
-                                }
-                              >
-                                {Number(item.unitPrice).toFixed(2)} Frw
-                              </TableCell>
-                              <TableCell
-                                className={
-                                  theme === "dark"
-                                    ? "text-gray-300"
-                                    : "text-gray-900"
-                                }
-                              >
-                                {item.category}
-                              </TableCell>
-                              <TableCell className={status.color}>
-                                {item.expiryDate
-                                  ? new Date(item.expiryDate).toLocaleDateString()
-                                  : "N/A"}
-                              </TableCell>
-                              <TableCell
-                                className={
-                                  theme === "dark"
-                                    ? "text-gray-300"
-                                    : "text-gray-900"
-                                }
-                              >
-                                <Badge className={status.badgeColor}>
-                                  {status.label === " " ? "N/A" : status.label}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedProductForHistory(item.id);
-                                      setHistoryDialogOpen(true);
-                                    }}
-                                    className="h-8 px-2"
-                                    title={t('inventory.viewHistory') || 'View History'}
-                                  >
-                                    <History className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setEditingProduct(item);
-                                      setIsDialogOpen(true);
-                                    }}
-                                    className="h-8 px-2"
-                                    title={t('common.edit') || 'Edit'}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })
+      {/* ── Products Table ──────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="p-6">
+            <TableSkeleton rows={6} columns={9} rowHeight="h-10" />
+          </div>
+        ) : products.length === 0 ? (
+          <div className="py-20 flex flex-col items-center justify-center text-gray-400 gap-3">
+            <Package className="h-12 w-12 text-gray-300" />
+            <p className="text-sm font-medium">{t("messages.noData")}</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
+              <TableRow className="hover:bg-transparent">
+                {["ID", "Product", "Batch Number", "Category", "Qty", "Price", "Expiry Date", "Status", "Actions"].map((h) => (
+                  <TableHead key={h} className="text-xs font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap py-3.5">
+                    <span className="flex items-center gap-1">
+                      {h}
+                      {["ID", "Product", "Batch Number", "Category", "Qty", "Price", "Expiry Date", "Status"].includes(h) && (
+                        <svg className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                          <path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" />
+                        </svg>
                       )}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    </span>
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {products.map((prod, idx) => {
+                const expiry = getExpiryStatusDisplay(prod.expiryDate);
+                const pillClass = categoryPillColors[prod.category || ""] || "bg-blue-50 text-blue-600 border border-blue-100";
+                const isLow = prod.quantity <= (prod.minStock || 5);
+                const codeId = `PRD-${String(prod.id).padStart(3, "0")}`;
 
-          {/* Pagination */}
-          <div className="flex items-center justify-end gap-6 border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                return (
+                  <TableRow
+                    key={prod.id}
+                    className="border-t border-gray-50 dark:border-gray-700/50 hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors"
+                  >
+                    {/* ID */}
+                    <TableCell className="py-3.5 text-xs font-mono font-semibold text-blue-600 dark:text-blue-400">
+                      <button onClick={() => setViewProduct(prod)} className="hover:underline">
+                        {codeId}
+                      </button>
+                    </TableCell>
+
+                    {/* Product Name & Thumbnail */}
+                    <TableCell className="py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 overflow-hidden flex items-center justify-center flex-shrink-0">
+                          {prod.imageUrl ? (
+                            <img src={prod.imageUrl} alt={prod.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                              {prod.name.charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-gray-900 dark:text-white">{prod.name}</p>
+                          <p className="text-[11px] text-gray-400 font-normal">{prod.category || "General"}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+
+                    {/* Batch Number */}
+                    <TableCell className="py-3.5 text-xs font-mono text-gray-500 dark:text-gray-400">
+                      {prod.batchNumber || `BTH-2024-${String(idx + 1).padStart(3, "0")}`}
+                    </TableCell>
+
+                    {/* Category Pill */}
+                    <TableCell className="py-3.5">
+                      <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold", pillClass)}>
+                        {prod.category || "Unassigned"}
+                      </span>
+                    </TableCell>
+
+                    {/* Quantity */}
+                    <TableCell className="py-3.5 text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-200">
+                      {prod.quantity}
+                    </TableCell>
+
+                    {/* Price */}
+                    <TableCell className="py-3.5 text-xs font-bold tabular-nums text-gray-900 dark:text-white">
+                      {(prod.unitPrice ?? 0).toLocaleString()} <span className="font-normal text-gray-400">Frw</span>
+                    </TableCell>
+
+                    {/* Expiry Date */}
+                    <TableCell className="py-3.5 text-xs whitespace-nowrap">
+                      <span className={expiry.color}>{expiry.label}</span>
+                    </TableCell>
+
+                    {/* Status Badge */}
+                    <TableCell className="py-3.5">
+                      <span className={cn(
+                        "inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold",
+                        prod.quantity <= 0
+                          ? "bg-red-50 text-red-600 border border-red-100"
+                          : isLow
+                            ? "bg-amber-50 text-amber-700 border border-amber-100"
+                            : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                      )}>
+                        {prod.quantity <= 0 ? "Out of Stock" : isLow ? "Low Stock" : "In Stock"}
+                      </span>
+                    </TableCell>
+
+                    {/* Actions */}
+                    <TableCell className="py-3.5">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setViewProduct(prod)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          title="View product"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => { setEditingProduct(prod); setIsDialogOpen(true); }}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                          title="Edit product"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <div className="relative">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenActionMenuId(openActionMenuId === String(prod.id) ? null : String(prod.id));
+                            }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                          {openActionMenuId === String(prod.id) && (
+                            <div className="absolute right-0 mt-1 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 z-30 py-1 text-xs">
+                              <button
+                                onClick={() => {
+                                  setSelectedProductForHistory(Number(prod.id));
+                                  setHistoryDialogOpen(true);
+                                  setOpenActionMenuId(null);
+                                }}
+                                className="w-full text-left px-3 py-2 flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                              >
+                                <History className="h-3.5 w-3.5 text-blue-500" />
+                                Movement History
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedProductForAdjustment({ id: Number(prod.id), name: prod.name, quantity: prod.quantity });
+                                  setAdjustmentDialogOpen(true);
+                                  setOpenActionMenuId(null);
+                                }}
+                                className="w-full text-left px-3 py-2 flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                              >
+                                <SlidersHorizontal className="h-3.5 w-3.5 text-purple-500" />
+                                Stock Adjustment
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setProductToDelete({ id: String(prod.id), name: prod.name });
+                                  setDeleteDialogOpen(true);
+                                  setOpenActionMenuId(null);
+                                }}
+                                className="w-full text-left px-3 py-2 flex items-center gap-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Delete Product
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+
+        {/* ── Pagination ───────────────────────────────────────────────────── */}
+        {!loading && products.length > 0 && (
+          <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalProductsCount || products.length)} of {(totalProductsCount || products.length).toLocaleString()} results
+            </p>
+
             <div className="flex items-center gap-2">
-              <span className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-                {t('common.rowsPerPage') || "Rows per page:"}
-              </span>
-              <select
-                className={`border rounded-md px-2 py-1 text-sm ${theme === "dark"
-                  ? "bg-gray-800 border-gray-700 text-gray-300"
-                  : "bg-white border-gray-300 text-gray-700"
-                  }`}
-                value={itemsPerPage}
-                onChange={(e) => {
-                  setItemsPerPage(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="h-8 w-8 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {[10, 20, 50, 100].map(size => (
-                  <option key={size} value={size}>{size}</option>
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                const page = i + 1;
+                return (
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={cn(
+                      "h-8 w-8 rounded-lg text-xs font-semibold transition-colors",
+                      currentPage === page
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    )}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="h-8 w-8 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+
+              <select
+                value={itemsPerPage}
+                onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                className="h-8 pl-2 pr-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-medium text-gray-600 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none"
+              >
+                {[10, 20, 50, 100].map((num) => (
+                  <option key={num} value={num}>{num} / page</option>
                 ))}
               </select>
             </div>
-
-            <div className="flex items-center gap-2">
-              <span
-                className={`text-sm font-medium ${theme === "dark" ? "text-gray-300" : "text-gray-600"
-                  }`}
-              >
-                {t('customers.pageXOfY', { current: currentPage, total: totalPages })}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === 1}
-                onClick={() => handlePageChange(currentPage - 1)}
-                className={`${theme === "dark"
-                  ? "bg-gray-800 hover:bg-gray-700 border-gray-700 text-white"
-                  : "bg-white hover:bg-gray-100 border-gray-300 text-gray-800"
-                  } transition-colors duration-200`}
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" /> {t('common.prev')}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === totalPages}
-                onClick={() => handlePageChange(currentPage + 1)}
-                className={`${theme === "dark"
-                  ? "bg-gray-800 hover:bg-gray-700 border-gray-700 text-white"
-                  : "bg-white hover:bg-gray-100 border-gray-300 text-gray-800"
-                  } transition-colors duration-200`}
-              >
-                {t('common.next')} <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
           </div>
-        </div>
+        )}
+      </div>
 
-
+      {/* Modals & Dialogs */}
+      {viewProduct && (
         <ViewProductDialog
           viewProduct={viewProduct}
           setViewProduct={setViewProduct}
@@ -945,23 +824,26 @@ export const InventoryManagement = () => {
               expiryStatus,
               page: currentPage,
               limit: itemsPerPage,
+              branchId: selectedBranchId,
             });
           }}
         />
+      )}
 
-        {/* Inventory History Dialog */}
+      {historyDialogOpen && selectedProductForHistory && (
         <InventoryHistoryDialog
           productId={selectedProductForHistory}
           productName={products.find(p => p.id === selectedProductForHistory)?.name}
           open={historyDialogOpen}
           onOpenChange={setHistoryDialogOpen}
         />
+      )}
 
-        {/* Stock Adjustment Dialog */}
+      {adjustmentDialogOpen && selectedProductForAdjustment && (
         <StockAdjustmentDialog
-          productId={selectedProductForAdjustment?.id || null}
-          productName={selectedProductForAdjustment?.name}
-          currentStock={selectedProductForAdjustment?.quantity}
+          productId={selectedProductForAdjustment.id}
+          productName={selectedProductForAdjustment.name}
+          currentStock={selectedProductForAdjustment.quantity}
           open={adjustmentDialogOpen}
           onOpenChange={setAdjustmentDialogOpen}
           onSuccess={() => {
@@ -971,171 +853,24 @@ export const InventoryManagement = () => {
               expiryStatus,
               page: currentPage,
               limit: itemsPerPage,
+              branchId: selectedBranchId,
             });
-            setSelectedProductForAdjustment(null);
           }}
         />
+      )}
 
-        <ConfirmDialog
-          open={deleteDialogOpen}
-          onClose={() => setDeleteDialogOpen(false)}
-          onConfirm={confirmDelete}
-          title={t('common.confirmDelete') || "Confirm Deletion"}
-          message={`${t('messages.confirmDeleteProduct') || "Are you sure you want to delete"} ${productToDelete?.name}?`}
-          confirmText={t('common.delete') || "Delete"}
-          variant="destructive"
-          loading={loading}
-        />
-
-        {/* Validation Errors Modal */}
-        <Dialog open={isErrorsModalOpen} onOpenChange={setIsErrorsModalOpen}>
-          <DialogContent className="max-h-[80vh] overflow-y-auto bg-white dark:bg-gray-800 dark:text-white">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-semibold">
-                {t('common.error')}
-              </DialogTitle>
-            </DialogHeader>
-
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                Found {validationErrors.length} error(s) in the uploaded file.
-                Please fix these issues and try again.
-              </p>
-              <div className="border rounded-lg overflow-hidden">
-                <div className="max-h-[60vh] overflow-y-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[100px]">{t('common.row')}</TableHead>
-                        <TableHead>{t('common.message')}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-
-                    <TableBody>
-                      {validationErrors.map((error, index) => {
-                        const rowMatch = error.match(/Row (\d+):/);
-                        const rowNumber = rowMatch ? rowMatch[1] : "N/A";
-                        const errorMessage = error.replace(/^Row \d+: /, "");
-
-                        return (
-                          <TableRow key={index}>
-                            <TableCell className="font-medium">
-                              {rowNumber}
-                            </TableCell>
-                            <TableCell className="text-red-600 dark:text-red-400">
-                              {errorMessage}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsErrorsModalOpen(false)}
-                  className={`${theme === "dark"
-                    ? "bg-gray-800 hover:bg-gray-700 border-gray-700 text-white"
-                    : "bg-white hover:bg-gray-100 border-gray-300 text-gray-800"
-                    }`}
-                >
-                  {t('common.close')}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Excel Preview Modal */}
-        <Dialog open={isPreviewModalOpen} onOpenChange={setIsPreviewModalOpen}>
-          <DialogContent className={`sm:max-w-4xl max-h-[90vh] flex flex-col p-0 ${theme === "dark" ? "bg-gray-900 text-white" : "bg-white"}`}>
-            <DialogHeader className="p-6 pb-2">
-              <DialogTitle>{t('inventory.previewImport')}</DialogTitle>
-            </DialogHeader>
-
-            <div className="flex-1 flex flex-col min-h-0 px-6 pb-6">
-              <p className="text-sm text-gray-500 mb-4">
-                Please review the products to be imported. Found {previewItems.length} valid items.
-              </p>
-
-              {!selectedBranchId && (
-                <BranchRequiredNotice
-                  message='Select a specific branch from the header (not "All Branches") before importing products.'
-                  className="mb-4"
-                />
-              )}
-
-              <ScrollArea className="h-[60vh] border rounded-md">
-                <div className="min-w-[1000px]">
-                  <Table>
-                    <TableHeader className={theme === "dark" ? "bg-gray-800" : "bg-gray-50"}>
-                      <TableRow>
-                        <TableHead className="whitespace-nowrap">Name</TableHead>
-                        <TableHead className="whitespace-nowrap">Category</TableHead>
-                        <TableHead className="whitespace-nowrap">Price</TableHead>
-                        <TableHead className="whitespace-nowrap">Qty</TableHead>
-                        <TableHead className="whitespace-nowrap">Min Stock</TableHead>
-                        <TableHead className="whitespace-nowrap">Description</TableHead>
-                        <TableHead className="whitespace-nowrap">Expiry</TableHead>
-                        <TableHead className="whitespace-nowrap">Batch</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {previewItems.map((item, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell className="font-medium whitespace-nowrap">{item.name}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.category}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.unitPrice}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.quantity}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.minStock}</TableCell>
-                          <TableCell className="max-w-[200px] truncate">{item.description}</TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">
-                            {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : 'N/A'}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap font-mono text-xs">{item.batchNumber}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
-
-              <div className="flex justify-end gap-3 pt-6 mt-auto">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsPreviewModalOpen(false);
-                    setPreviewItems([]);
-                  }}
-                  className={theme === "dark" ? "border-gray-700 hover:bg-gray-800" : ""}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleConfirmImport}
-                  disabled={loading || !selectedBranchId}
-                  className="bg-green-600 hover:bg-green-700 text-white min-w-[140px]"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                      Importing...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4 mr-2" />
-                      Confirm Import
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={confirmDelete}
+        title="Delete Product"
+        message={`Are you sure you want to delete "${productToDelete?.name}"?`}
+        confirmText="Delete"
+        variant="destructive"
+        loading={loading}
+      />
     </div>
   );
 };
+
+export default InventoryManagement;

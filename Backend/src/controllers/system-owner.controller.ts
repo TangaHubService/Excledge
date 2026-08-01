@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
+import { emailService } from "../services/email.service";
 
 export const systemOwnerController = {
   async getDashboardStats(req: Request, res: Response) {
@@ -548,6 +549,7 @@ export const systemOwnerController = {
             subscription: {
               include: {
                 organization: true,
+                plan: true,
               },
             },
           },
@@ -568,6 +570,71 @@ export const systemOwnerController = {
     } catch (error) {
       console.error("Error fetching payments:", error);
       res.status(500).json({ error: "Failed to fetch payments" });
+    }
+  },
+
+  async resendInvoice(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+
+      const payment = await prisma.payment.findUnique({
+        where: { id },
+        include: {
+          subscription: {
+            include: {
+              organization: {
+                include: {
+                  userOrganizations: {
+                    where: { isOwner: true },
+                    include: { user: true },
+                  },
+                },
+              },
+              plan: true,
+            },
+          },
+        },
+      });
+
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+
+      const organization = payment.subscription.organization;
+      const ownerUser = organization.userOrganizations?.[0]?.user;
+      const subscriberEmail = ownerUser?.email || organization.email;
+
+      if (!subscriberEmail) {
+        return res.status(400).json({ error: "No subscriber email found for this organization" });
+      }
+
+      const period =
+        payment.subscription.billingMode === "YEARLY" ? "year" : "month";
+
+      await emailService.sendInvoiceEmail(subscriberEmail, organization.name, {
+        invoiceId: String(payment.id),
+        amount: payment.amount,
+        currency: payment.currency,
+        period,
+        date: payment.processedAt
+          ? new Date(payment.processedAt).toLocaleDateString()
+          : new Date(payment.createdAt).toLocaleDateString(),
+        planName: payment.subscription.plan?.name,
+        paymentMethod: payment.paymentMethod,
+        status: payment.status,
+      });
+
+      console.log(
+        `System owner resent invoice ${id} to ${subscriberEmail} for ${organization.name}`
+      );
+
+      res.json({
+        message: "Invoice resent successfully",
+        to: subscriberEmail,
+      });
+    } catch (error) {
+      console.error("Error resending invoice:", error);
+      res.status(500).json({ error: "Failed to resend invoice" });
     }
   },
 

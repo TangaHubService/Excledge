@@ -10,7 +10,8 @@ import {
 } from '../../../components/ui/select'
 import {
   ShoppingCart, Loader2, UserPlus, Search, X, WifiOff,
-  Package, Minus, Plus, Trash2,
+  Package, Minus, Plus, Trash2, Star,
+  ChevronRight,
 } from 'lucide-react'
 import PhoneInputWithCountryCode from '../../../components/PhoneInputWithCountryCode'
 import {
@@ -62,56 +63,65 @@ function productsFromInventoryResponse(res: unknown): Product[] {
 
 // ── ProductCard ───────────────────────────────────────────────────────────────
 
-const ProductCard = memo(({ product, onAddToCart }: { product: Product; onAddToCart: (p: Product) => void }) => {
+const ProductCard = memo(({
+  product, onAddToCart, isFavorite, onToggleFavorite,
+}: {
+  product: Product
+  onAddToCart: (p: Product) => void
+  isFavorite: boolean
+  onToggleFavorite: (id: string) => void
+}) => {
   const isLowStock = product.quantity > 0 && product.quantity <= 5
+  const isOutOfStock = product.quantity <= 0
 
   return (
-    <button
-      type="button"
-      onClick={() => onAddToCart(product)}
-      className={cn(
-        'relative flex flex-col rounded-lg border-2 p-3 text-left transition-all duration-150',
-        'bg-white dark:bg-gray-800',
-        'border-gray-200 dark:border-gray-700',
-        'hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500',
-        'active:scale-[0.98]',
-      )}
-    >
-      {/* Product image / initial */}
-      <div className="w-full h-20 rounded-md flex items-center justify-center mb-2 overflow-hidden bg-gray-100 dark:bg-gray-700">
+    <div className="relative flex flex-col rounded-2xl border border-gray-100 bg-white overflow-hidden group transition-all duration-200 hover:shadow-md hover:border-blue-200">
+      {/* Favorite button */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onToggleFavorite(product.id) }}
+        className="absolute top-2 right-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur-sm text-gray-300 hover:text-amber-400 transition-colors"
+      >
+        <Star className={cn('h-3.5 w-3.5', isFavorite && 'text-amber-400 fill-amber-400')} />
+      </button>
+
+      {/* Image / Initial */}
+      <button
+        type="button"
+        onClick={() => !isOutOfStock && onAddToCart(product)}
+        disabled={isOutOfStock}
+        className="w-full h-24 flex items-center justify-center bg-blue-50 overflow-hidden flex-shrink-0 disabled:cursor-not-allowed"
+      >
         {product.imageUrl ? (
           <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
         ) : (
-          <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+          <span className="text-3xl font-bold text-blue-300">
             {product.name.charAt(0).toUpperCase()}
           </span>
         )}
-      </div>
+      </button>
 
-      {/* Name */}
-      <p className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2 leading-snug mb-1">
-        {product.name}
-      </p>
-
-      {/* Price */}
-      <p className="text-sm font-bold text-blue-600 dark:text-blue-400 tabular-nums">
-        {(product.unitPrice ?? product.price ?? 0).toLocaleString()} RWF
-      </p>
-
-      {/* Stock */}
-      <p className={cn(
-        'text-[11px] mt-0.5 font-medium',
-        isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500',
-      )}>
-        {isLowStock ? `Low: ${product.quantity} left` : `${product.quantity} in stock`}
-      </p>
-
-      {/* Low stock warning dot */}
-      {isLowStock && (
-        <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-      )}
-    </button>
+      {/* Content */}
+      <button
+        type="button"
+        onClick={() => !isOutOfStock && onAddToCart(product)}
+        disabled={isOutOfStock}
+        className="flex flex-col flex-1 p-3 text-left disabled:cursor-not-allowed"
+      >
+        <p className="text-xs font-semibold text-gray-800 line-clamp-2 leading-snug mb-2 flex-1">
+          {product.name}
+        </p>
+        <p className="text-sm font-bold text-blue-600 tabular-nums">
+          {(product.unitPrice ?? product.price ?? 0).toLocaleString()} <span className="text-xs font-normal text-gray-400">RWF</span>
+        </p>
+        <p className={cn(
+          'text-[10px] mt-1 font-medium',
+          isOutOfStock ? 'text-red-500' : isLowStock ? 'text-amber-500' : 'text-emerald-500',
+        )}>
+          {isOutOfStock ? 'Out of stock' : isLowStock ? `Low: ${product.quantity} left` : `${product.quantity} in stock`}
+        </p>
+      </button>
+    </div>
   )
 })
 
@@ -139,108 +149,91 @@ const CartItemRow = memo(({
   const lineTotal = (item.unitPrice * item.quantity).toLocaleString()
 
   return (
-    <div className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700">
+    <div className="flex items-center gap-3 py-3.5 border-b border-gray-50 last:border-b-0">
       {/* Thumbnail */}
-      <div className="h-10 w-10 rounded-md flex-shrink-0 overflow-hidden flex items-center justify-center bg-gray-200 dark:bg-gray-600">
+      <div className="h-11 w-11 rounded-xl flex-shrink-0 overflow-hidden flex items-center justify-center bg-blue-50">
         {item.product.imageUrl ? (
           <img src={item.product.imageUrl} alt={item.product.name} className="h-full w-full object-cover" />
         ) : (
-          <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
+          <span className="text-sm font-bold text-blue-400">
             {item.product.name.charAt(0).toUpperCase()}
           </span>
         )}
       </div>
 
-      {/* Details */}
+      {/* Name + Price */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.product.name}</p>
-
-        {/* Qty controls */}
-        <div className="flex items-center gap-1.5 mt-1.5">
-          <button
-            type="button"
-            onClick={() => onUpdateQuantity(item.product.id, Math.max(1, item.quantity - 1))}
-            className="h-6 w-6 rounded flex items-center justify-center bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
-          >
-            <Minus className="h-3 w-3" />
-          </button>
-
-          {editingQty ? (
-            <input
-              type="number"
-              min={1}
-              max={item.product.quantity}
-              value={quantityInput}
-              onChange={e => setQuantityInput(e.target.value)}
-              onBlur={commitQty}
-              onKeyDown={e => e.key === 'Enter' && commitQty()}
-              className="w-12 px-1 py-0.5 text-xs border rounded text-center bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-              autoFocus
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditingQty(true)}
-              className="w-12 px-1 py-0.5 text-xs border rounded text-center border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white hover:border-blue-400 transition-colors"
-            >
-              {item.quantity}
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
-            className="h-6 w-6 rounded flex items-center justify-center bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
-          >
-            <Plus className="h-3 w-3" />
-          </button>
-        </div>
-
-        {/* Remaining stock indicator */}
-        {(() => {
-          const remaining = item.product.quantity - item.quantity
-          return (
-            <p className={cn(
-              'text-[10px] mt-1 font-medium',
-              remaining === 0
-                ? 'text-red-500 dark:text-red-400'
-                : remaining <= 3
-                  ? 'text-amber-500 dark:text-amber-400'
-                  : 'text-gray-400 dark:text-gray-500',
-            )}>
-              {remaining === 0 ? 'Stock limit reached' : `${remaining} remaining`}
-            </p>
-          )
-        })()}
+        <p className="text-xs font-semibold text-gray-800 truncate">{item.product.name}</p>
+        <p className="text-xs text-blue-600 font-medium tabular-nums mt-0.5">
+          {item.unitPrice.toLocaleString()} RWF
+        </p>
       </div>
 
-      {/* Price + remove */}
-      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-        <input
-          type="number"
-          min={0}
-          value={item.unitPrice === null ? '' : item.unitPrice}
-          onChange={e => {
-            if (!priceEditable) return
-            const v = e.target.value
-            if (v === '') { onUpdatePrice(item.product.id, ''); return }
-            const n = parseFloat(v)
-            if (!isNaN(n) && n >= 0) onUpdatePrice(item.product.id, n)
-          }}
-          readOnly={!priceEditable}
-          title={priceEditable ? undefined : 'Manual price overrides are disabled for this organization'}
-          className={cn(
-            'w-20 text-right text-xs border rounded px-1.5 py-0.5 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500',
-            !priceEditable && 'opacity-60 cursor-not-allowed bg-gray-100 dark:bg-gray-900',
-          )}
-        />
-        <p className="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{lineTotal} RWF</p>
+      {/* Qty Controls */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => onUpdateQuantity(item.product.id, Math.max(1, item.quantity - 1))}
+          className="h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600 transition-colors"
+        >
+          <Minus className="h-3 w-3" />
+        </button>
+
+        {editingQty ? (
+          <input
+            type="number"
+            min={1}
+            max={item.product.quantity}
+            value={quantityInput}
+            onChange={e => setQuantityInput(e.target.value)}
+            onBlur={commitQty}
+            onKeyDown={e => e.key === 'Enter' && commitQty()}
+            className="w-9 px-1 py-0.5 text-xs border rounded-lg text-center bg-white border-blue-300 text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            autoFocus
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditingQty(true)}
+            className="w-9 text-xs text-center font-bold text-gray-800 hover:text-blue-600 transition-colors"
+          >
+            {item.quantity}
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
+          className="h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600 transition-colors"
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      </div>
+
+      {/* Line total + remove */}
+      <div className="flex flex-col items-end gap-1 flex-shrink-0 min-w-[60px]">
+        {priceEditable ? (
+          <input
+            type="number"
+            min={0}
+            value={item.unitPrice === null ? '' : item.unitPrice}
+            onChange={e => {
+              const v = e.target.value
+              if (v === '') { onUpdatePrice(item.product.id, ''); return }
+              const n = parseFloat(v)
+              if (!isNaN(n) && n >= 0) onUpdatePrice(item.product.id, n)
+            }}
+            className="w-16 text-right text-[11px] border rounded-lg px-1.5 py-0.5 bg-white border-gray-200 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        ) : (
+          <p className="text-xs font-bold tabular-nums text-gray-800">{lineTotal} <span className="text-gray-400 font-normal">RWF</span></p>
+        )}
         <button
           type="button"
           onClick={() => onRemove(item.product.id)}
-          className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+          className="text-gray-300 hover:text-red-500 transition-colors"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>
@@ -360,11 +353,14 @@ const AddCustomerDrawer = memo(({
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
+const CATEGORIES = ['All', 'Medicines', 'Health & Care', 'Baby Care', 'Vitamins', 'Medical Devices', 'Supplements']
+const TAX_RATE = 0.18
+
 export default function SalesForm() {
   const { t } = useTranslation()
   const { selectedBranchId } = useBranch()
   const { settings: orgSettings } = useOrganizationSettings()
-  useVsdcOnlineStatus() // keeps VSDC status alive in context
+  useVsdcOnlineStatus()
 
   const [cart, setCart] = useState<CartItem[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -380,6 +376,9 @@ export default function SalesForm() {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [isSyncing, setIsSyncing] = useState(false)
   const [displayedCount, setDisplayedCount] = useState(30)
+  const [activeCategory, setActiveCategory] = useState('All')
+  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+
   const LOAD_STEP = 15
   const productsRef = useRef<HTMLDivElement | null>(null)
   const isLoadingMoreRef = useRef(false)
@@ -407,12 +406,6 @@ export default function SalesForm() {
     return () => document.removeEventListener('mousedown', handle)
   }, [showCustomerDropdown])
 
-  const fetchRecentSales = useCallback(async () => {
-    try {
-      await apiClient.getSales({ page: 1, limit: 10, search: '', branchId: selectedBranchId })
-    } catch { /* silent */ }
-  }, [selectedBranchId])
-
   const fetchData = useCallback(async () => {
     try {
       setIsLoading(true)
@@ -434,7 +427,6 @@ export default function SalesForm() {
       if (allCustomers.length > 0) {
         setSelectedCustomer(allCustomers[0].id)
       } else {
-        // Create default Walk-in Customer
         try {
           const walkIn = await apiClient.createCustomer({ name: 'Walk-in Customer', type: 'INDIVIDUAL', balance: 0 })
           setCustomers([walkIn])
@@ -451,7 +443,7 @@ export default function SalesForm() {
     }
   }, [isOnline, selectedBranchId, t])
 
-  useEffect(() => { fetchData(); fetchRecentSales() }, [fetchData, fetchRecentSales])
+  useEffect(() => { fetchData() }, [fetchData])
 
   // Offline sync
   useEffect(() => {
@@ -465,10 +457,10 @@ export default function SalesForm() {
         catch { /* keep item in queue */ }
       }
       setIsSyncing(false)
-      if (!offlineQueue.hasItems()) { toast.success(t('pos.syncComplete') || 'Offline sales synchronized.'); fetchRecentSales() }
+      if (!offlineQueue.hasItems()) { toast.success(t('pos.syncComplete') || 'Offline sales synchronized.') }
     }
     sync()
-  }, [isOnline, isSyncing, t, fetchRecentSales])
+  }, [isOnline, isSyncing, t])
 
   // Product search with debounce
   useEffect(() => {
@@ -560,8 +552,18 @@ export default function SalesForm() {
     setSelectedCustomer(c.id)
   }, [])
 
+  const toggleFavorite = useCallback((id: string) => {
+    setFavorites(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0), [cart])
-  const total = subtotal
+  const taxAmount = useMemo(() => Math.round(subtotal - subtotal / (1 + TAX_RATE)), [subtotal])
+  const total = useMemo(() => subtotal, [subtotal])
 
   const selectedCustomerObj = useMemo(
     () => customers.find(c => c.id === selectedCustomer),
@@ -578,7 +580,11 @@ export default function SalesForm() {
     [customers, customerSearch],
   )
 
-  const inStockProducts = useMemo(() => products.filter(p => p.quantity > 0), [products])
+  const inStockProducts = useMemo(() => {
+    const base = products.filter(p => p.quantity > 0)
+    if (activeCategory === 'All') return base
+    return base.filter(p => p.category?.toLowerCase() === activeCategory.toLowerCase())
+  }, [products, activeCategory])
 
   const handleOpenPayment = useCallback(() => {
     if (cart.length === 0) { toast.error(t('pos.noItemsInCart')); return }
@@ -604,7 +610,6 @@ export default function SalesForm() {
         paymentType = 'DEBT'
       }
 
-      // Build split payments array — map frontend methods to backend payment methods
       let cashAmount = 0, insuranceAmount = 0, debtAmount = 0
       const splitPayments = entries
         .filter(p => p.amount > 0)
@@ -643,7 +648,6 @@ export default function SalesForm() {
       }
 
       await apiClient.createSale(payload)
-      await fetchRecentSales()
 
       if (remainingDebt > 0) {
         toast.success(t('pos.paymentDebtSuccess', { paid: totalPaid, debt: remainingDebt }))
@@ -668,7 +672,7 @@ export default function SalesForm() {
     } finally {
       setIsSubmitting(false)
     }
-  }, [cart, selectedCustomer, total, t, fetchRecentSales, isOnline, selectedBranchId])
+  }, [cart, selectedCustomer, total, t, isOnline, selectedBranchId])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -682,128 +686,165 @@ export default function SalesForm() {
         </div>
       )}
 
-      {/* Full-height POS shell — sits inside the DashboardLayout main scroll area */}
-      <div className="flex h-[calc(100vh-8.5rem)] -mx-4 sm:-mx-6 lg:-mx-8 overflow-hidden bg-gray-50 dark:bg-gray-900">
+      {/* POS Shell */}
+      <div className="flex h-[calc(100vh-8.5rem)] -mx-4 sm:-mx-6 lg:-mx-8 overflow-hidden bg-[#F8F9FC]">
 
-        {/* ── LEFT: product browser ───────────────────────────────────────── */}
-        <div className="flex flex-1 flex-col min-w-0 border-r border-gray-200 dark:border-gray-700">
+        {/* ── LEFT: product browser ─────────────────────────────────────── */}
+        <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
 
-          {/* Search bar */}
-          <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+          {/* Search bar row */}
+          <div className="flex items-center gap-3 px-5 py-3.5 bg-white border-b border-gray-100 flex-shrink-0">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                placeholder={t('pos.searchPlaceholder') || 'Search products…'}
-                className="pl-9 pr-8 h-9 bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600"
+                placeholder="Search products by name, barcode or SKU..."
+                className="w-full pl-10 pr-10 h-10 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
               />
               {searchTerm && (
                 <button
                   type="button"
                   onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
-            <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums whitespace-nowrap">
+            <span className="text-xs text-gray-400 whitespace-nowrap tabular-nums bg-gray-100 px-2.5 py-1 rounded-lg">
               {inStockProducts.length} items
             </span>
           </div>
 
+          {/* Category filter tabs */}
+          <div className="flex items-center gap-2 px-5 py-3 bg-white border-b border-gray-100 flex-shrink-0 overflow-x-auto scrollbar-none">
+            {CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setActiveCategory(cat)}
+                className={cn(
+                  'flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150',
+                  activeCategory === cat
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700',
+                )}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
           {/* Product grid */}
-          <div ref={productsRef} className="flex-1 overflow-y-auto p-4">
+          <div ref={productsRef} className="flex-1 overflow-y-auto p-5">
             {isLoading ? (
               <div className="flex h-48 items-center justify-center">
                 <Loader2 className="h-7 w-7 animate-spin text-blue-500" />
               </div>
             ) : inStockProducts.length === 0 ? (
-              <div className="flex flex-col h-48 items-center justify-center text-gray-400 dark:text-gray-500 gap-2">
+              <div className="flex flex-col h-48 items-center justify-center text-gray-400 gap-2">
                 <Package className="h-10 w-10" />
                 <p className="text-sm">{t('pos.noProductsFound')}</p>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3.5">
                   {inStockProducts.slice(0, displayedCount).map(p => (
-                    <ProductCard key={p.id} product={p} onAddToCart={addToCart} />
+                    <ProductCard
+                      key={p.id}
+                      product={p}
+                      onAddToCart={addToCart}
+                      isFavorite={favorites.has(p.id)}
+                      onToggleFavorite={toggleFavorite}
+                    />
                   ))}
                 </div>
                 {inStockProducts.length > displayedCount && (
-                  <p className="mt-4 text-center text-xs text-gray-400 dark:text-gray-500">
+                  <p className="mt-4 text-center text-xs text-gray-400">
                     Showing {displayedCount} of {inStockProducts.length} — scroll to load more
                   </p>
                 )}
               </>
             )}
           </div>
+
+          {/* Bottom Action Bar */}
+          <div className="flex items-center gap-3 px-5 py-3 bg-white border-t border-gray-100 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setCart([])}
+              disabled={cart.length === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 hover:bg-red-50 hover:text-red-600 text-sm font-medium text-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="h-4 w-4" />
+              Clear Cart
+            </button>
+
+            {isSyncing && (
+              <div className="ml-auto flex items-center gap-1.5 text-xs text-amber-600">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Syncing…
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* ── RIGHT: cart & checkout ──────────────────────────────────────── */}
-        <div className="w-[340px] xl:w-[380px] flex flex-col flex-shrink-0 bg-white dark:bg-gray-800">
+        {/* ── RIGHT: current order ──────────────────────────────────────── */}
+        <div className="w-[340px] xl:w-[375px] flex flex-col flex-shrink-0 bg-white border-l border-gray-100">
 
-          {/* Cart header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <ShoppingCart className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                {t('pos.currentOrder') || 'Order'}
-              </h2>
+          {/* Order header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+            <div className="flex items-center gap-2.5">
+              <ShoppingCart className="h-4 w-4 text-gray-500" />
+              <h2 className="text-sm font-bold text-gray-900">Current Order</h2>
               {cart.length > 0 && (
-                <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
                   {cart.length}
                 </span>
               )}
             </div>
-            {cart.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setCart([])}
-                className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-              >
-                Clear
-              </button>
-            )}
+            <div className="flex items-center gap-1.5">
+              {cart.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCart([])}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                  title="Clear cart"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Customer selector */}
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-            <div className="flex items-center justify-between mb-1.5">
-              <Label className="text-xs font-medium text-gray-600 dark:text-gray-300">
-                {t('pos.customer')}
-              </Label>
-              <button
-                type="button"
-                onClick={() => setIsAddCustomerOpen(true)}
-                className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                <UserPlus className="h-3 w-3" />
-                {t('pos.addNew')}
-              </button>
-            </div>
-
+          <div className="px-5 py-3.5 border-b border-gray-100 flex-shrink-0">
             <div ref={customerDropdownRef} className="relative">
               <button
                 type="button"
                 onClick={() => setShowCustomerDropdown(prev => !prev)}
                 className={cn(
-                  'w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-sm text-left transition-colors',
-                  'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600',
-                  'hover:border-blue-400 dark:hover:border-blue-500',
-                  showCustomerDropdown && 'border-blue-500 ring-1 ring-blue-500/30',
+                  'w-full flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-sm text-left transition-all',
+                  'bg-gray-50 border-gray-200',
+                  'hover:border-blue-300',
+                  showCustomerDropdown && 'border-blue-500 ring-2 ring-blue-500/20 bg-white',
                 )}
               >
                 <Search className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                <span className={cn('flex-1 truncate', selectedCustomerObj ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500')}>
-                  {selectedCustomerObj ? selectedCustomerObj.name : t('pos.selectCustomer') || 'Select customer…'}
+                <span className={cn('flex-1 truncate text-xs', selectedCustomerObj ? 'text-gray-800 font-medium' : 'text-gray-400')}>
+                  {selectedCustomerObj ? selectedCustomerObj.name : 'Search customer or member…'}
                 </span>
+                {selectedCustomerObj && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium flex-shrink-0">
+                    {selectedCustomerObj.type}
+                  </span>
+                )}
               </button>
 
               {showCustomerDropdown && (
-                <div className="absolute top-full mt-1 inset-x-0 z-50 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-dropdown">
-                  <div className="p-2 border-b border-gray-100 dark:border-gray-700">
+                <div className="absolute top-full mt-1.5 inset-x-0 z-50 rounded-xl border border-gray-200 bg-white shadow-xl">
+                  <div className="p-2 border-b border-gray-100">
                     <Input
                       value={customerSearch}
                       onChange={e => setCustomerSearch(e.target.value)}
@@ -812,9 +853,9 @@ export default function SalesForm() {
                       autoFocus
                     />
                   </div>
-                  <ul className="max-h-48 overflow-y-auto py-1">
+                  <ul className="max-h-44 overflow-y-auto py-1">
                     {filteredCustomers.length === 0 ? (
-                      <li className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">No customers found</li>
+                      <li className="px-3 py-2 text-xs text-gray-400">No customers found</li>
                     ) : filteredCustomers.map(c => (
                       <li key={c.id}>
                         <button
@@ -822,12 +863,12 @@ export default function SalesForm() {
                           onClick={() => { setSelectedCustomer(c.id); setShowCustomerDropdown(false); setCustomerSearch('') }}
                           className={cn(
                             'w-full px-3 py-2 text-xs text-left transition-colors',
-                            'hover:bg-gray-50 dark:hover:bg-gray-700',
-                            c.id === selectedCustomer && 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium',
+                            'hover:bg-gray-50',
+                            c.id === selectedCustomer && 'bg-blue-50 text-blue-700 font-medium',
                           )}
                         >
-                          <span className="block font-medium text-gray-900 dark:text-white">{c.name}</span>
-                          {c.phone && <span className="text-gray-500 dark:text-gray-400">{c.phone}</span>}
+                          <span className="block font-medium text-gray-900">{c.name}</span>
+                          {c.phone && <span className="text-gray-500">{c.phone}</span>}
                         </button>
                       </li>
                     ))}
@@ -835,14 +876,23 @@ export default function SalesForm() {
                 </div>
               )}
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsAddCustomerOpen(true)}
+              className="mt-2 flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
+            >
+              <UserPlus className="h-3 w-3" />
+              Add New Customer
+            </button>
           </div>
 
           {/* Cart items */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+          <div className="flex-1 overflow-y-auto px-5">
             {cart.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-32 text-gray-300 dark:text-gray-600 gap-2">
+              <div className="flex flex-col items-center justify-center h-36 text-gray-300 gap-2">
                 <ShoppingCart className="h-10 w-10" />
-                <p className="text-xs">Cart is empty — click a product to add</p>
+                <p className="text-xs text-gray-400">Cart is empty — click a product to add</p>
               </div>
             ) : cart.map(item => (
               <CartItemRow
@@ -856,32 +906,41 @@ export default function SalesForm() {
             ))}
           </div>
 
-          {/* Order totals + checkout */}
-          <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-4 space-y-3 flex-shrink-0 bg-white dark:bg-gray-800">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500 dark:text-gray-400">Subtotal</span>
-              <span className="font-medium tabular-nums text-gray-900 dark:text-white">
-                {subtotal.toLocaleString()} RWF
-              </span>
+          {/* Order summary + checkout */}
+          <div className="border-t border-gray-100 px-5 py-4 space-y-3 flex-shrink-0 bg-white">
+            {/* Subtotal */}
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>Subtotal</span>
+              <span className="font-semibold text-gray-800 tabular-nums">{subtotal.toLocaleString()} RWF</span>
             </div>
-            <div className="flex items-center justify-between text-base font-bold border-t border-gray-100 dark:border-gray-700 pt-2">
-              <span className="text-gray-900 dark:text-white">Total</span>
-              <span className="text-blue-600 dark:text-blue-400 tabular-nums text-lg">
-                {total.toLocaleString()} RWF
+
+            {/* Tax */}
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>Tax (18%)</span>
+              <span className="font-semibold text-gray-800 tabular-nums">{taxAmount.toLocaleString()} RWF</span>
+            </div>
+
+            {/* Total */}
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+              <span className="text-sm font-bold text-gray-900">Total</span>
+              <span className="text-lg font-extrabold text-blue-600 tabular-nums">
+                {total.toLocaleString()} <span className="text-xs font-normal text-gray-400">RWF</span>
               </span>
             </div>
 
-            <Button
+            {/* Process Payment button */}
+            <button
+              type="button"
               onClick={handleOpenPayment}
               disabled={cart.length === 0 || !selectedCustomer || isSubmitting}
-              className="w-full h-11 text-sm font-semibold bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              className="w-full h-11 flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-all shadow-md shadow-blue-500/30 hover:shadow-lg hover:shadow-blue-500/40 active:scale-[0.99]"
             >
               {isSubmitting ? (
-                <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Processing…</>
+                <><Loader2 className="h-4 w-4 animate-spin" /> Processing…</>
               ) : (
-                <>{t('pos.processPayment') || 'Charge'} {total > 0 && `· ${total.toLocaleString()} RWF`}</>
+                <>Process Payment <ChevronRight className="h-4 w-4" /></>
               )}
-            </Button>
+            </button>
           </div>
         </div>
       </div>

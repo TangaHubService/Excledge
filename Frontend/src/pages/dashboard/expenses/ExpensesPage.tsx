@@ -479,19 +479,32 @@ export default function ExpensesPage() {
   const hasFilters = categoryFilter !== 'ALL' || methodFilter !== 'ALL' || startDate || endDate || search
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Expenses</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Track and manage operational expenses across your branches.
-          </p>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 p-6 text-white shadow-lg">
+        <div className="absolute inset-0 bg-black/10" />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+              <TrendingDown className="h-7 w-7 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
+              <p className="text-sm text-white/70 mt-0.5">
+                Track and manage operational expenses across your branches.
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={openCreate}
+            className="gap-2 bg-white text-amber-700 hover:bg-white/90 font-semibold shadow-sm self-start sm:self-auto"
+          >
+            <Plus className="h-4 w-4" />
+            Record Expense
+          </Button>
         </div>
-        <Button onClick={openCreate} className="gap-2 bg-blue-600 hover:bg-blue-700 self-start sm:self-auto">
-          <Plus className="h-4 w-4" />
-          Record Expense
-        </Button>
+        <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+        <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
       </div>
 
       {/* KPI row */}

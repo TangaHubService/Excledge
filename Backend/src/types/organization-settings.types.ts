@@ -12,7 +12,6 @@
 export interface ISidebarConfig {
   home: boolean;
   dashboard: boolean;
-  executiveDashboard: boolean;
   pos: boolean;
   sales: boolean;
   customers: boolean;
@@ -77,7 +76,6 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
   sidebarConfig: {
     home: true,
     dashboard: true,
-    executiveDashboard: true,
     pos: true,
     sales: true,
     customers: true,

@@ -2,19 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { systemOwnerService } from '../services/systemOwnerService';
 import Overview from '../components/system-owner/Overview';
-import Organizations from '../components/system-owner/Organizations';
 import Subscriptions from '../components/system-owner/Subscriptions';
 import Payments from '../components/system-owner/Payments';
 import Analytics from '../components/system-owner/Analytics';
-import MyOrganisations from '../components/system-owner/MyOrganisations';
-import type { DashboardStats, Organization, Subscription, Payment } from '../services/systemOwnerService';
+import type { DashboardStats, Subscription, Payment } from '../services/systemOwnerService';
 
 export const SystemOwnerDashboard: React.FC = () => {
     const location = useLocation();
 
     // Dashboard Stats
     const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
-    const [organizations, setOrganizations] = useState<Organization[]>([]);
     const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
     const [payments, setPayments] = useState<Payment[]>([]);
     const [revenueData, setRevenueData] = useState<Array<{ period: string; total: number; count: number }>>([]);
@@ -23,7 +20,6 @@ export const SystemOwnerDashboard: React.FC = () => {
     // Loading and error states
     const [isLoading, setIsLoading] = useState({
         dashboard: false,
-        organizations: false,
         subscriptions: false,
         payments: false,
         analytics: false,
@@ -31,7 +27,6 @@ export const SystemOwnerDashboard: React.FC = () => {
 
     const [error, setError] = useState({
         dashboard: '',
-        organizations: '',
         subscriptions: '',
         payments: '',
         analytics: '',
@@ -49,20 +44,6 @@ export const SystemOwnerDashboard: React.FC = () => {
             console.error('Error fetching dashboard stats:', err);
         } finally {
             setIsLoading(prev => ({ ...prev, dashboard: false }));
-        }
-    };
-
-    // Fetch organizations
-    const fetchOrganizations = async () => {
-        setIsLoading(prev => ({ ...prev, organizations: true }));
-        try {
-            const data = await systemOwnerService.getOrganizations();
-            setOrganizations(data.organizations || []);
-        } catch (err) {
-            setError(prev => ({ ...prev, organizations: 'Failed to load organizations' }));
-            console.error('Error fetching organizations:', err);
-        } finally {
-            setIsLoading(prev => ({ ...prev, organizations: false }));
         }
     };
 
@@ -94,17 +75,6 @@ export const SystemOwnerDashboard: React.FC = () => {
         }
     };
 
-    // Update organization status
-    const handleOrganizationStatusChange = async (id: string | number, isActive: boolean) => {
-        try {
-            await systemOwnerService.updateOrganizationStatus(id, isActive);
-            // Refresh organizations after status change
-            await fetchOrganizations();
-        } catch (err) {
-            console.error('Error updating organization status:', err);
-        }
-    };
-
     // Extend subscription
     const handleExtendSubscription = async (id: number, data: { endDate?: string; monthsToAdd?: number }) => {
         try {
@@ -124,6 +94,16 @@ export const SystemOwnerDashboard: React.FC = () => {
             await fetchPayments();
         } catch (err) {
             console.error('Error updating payment status:', err);
+        }
+    };
+
+    // Resend invoice to subscriber email
+    const handleResendInvoice = async (id: string | number) => {
+        try {
+            await systemOwnerService.resendInvoice(id);
+        } catch (err) {
+            console.error('Error resending invoice:', err);
+            throw err;
         }
     };
 
@@ -193,9 +173,6 @@ export const SystemOwnerDashboard: React.FC = () => {
         fetchDashboardStats();
 
         // Load data based on current route
-        if (path.includes('/organizations') && organizations.length === 0) {
-            fetchOrganizations();
-        }
         if (path.includes('/subscriptions') && subscriptions.length === 0) {
             fetchSubscriptions();
         }
@@ -227,17 +204,6 @@ export const SystemOwnerDashboard: React.FC = () => {
                 }
             />
             <Route
-                path="/organizations"
-                element={
-                    <Organizations
-                        organizations={organizations}
-                        isLoading={isLoading.organizations}
-                        error={error.organizations}
-                        onStatusChange={handleOrganizationStatusChange}
-                    />
-                }
-            />
-            <Route
                 path="/subscriptions"
                 element={
                     <Subscriptions
@@ -256,6 +222,7 @@ export const SystemOwnerDashboard: React.FC = () => {
                         isLoading={isLoading.payments}
                         error={error.payments}
                         onUpdatePaymentStatus={handleUpdatePaymentStatus}
+                        onResendInvoice={handleResendInvoice}
                     />
                 }
             />
@@ -268,12 +235,6 @@ export const SystemOwnerDashboard: React.FC = () => {
                         isLoading={isLoading.analytics}
                         error={error.analytics}
                     />
-                }
-            />
-            <Route
-                path="/my-organisations"
-                element={
-                    <MyOrganisations />
                 }
             />
             <Route path="/" element={<Navigate to="overview" replace />} />

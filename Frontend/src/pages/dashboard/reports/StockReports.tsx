@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Package, ArrowUpRight, ArrowDownRight, History, FileText, Loader2, Search, Filter, X } from 'lucide-react';
+import { Calendar, Package, ArrowUpRight, ArrowDownRight, History, FileText, Loader2, Search, Filter, X, DollarSign } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -249,170 +249,206 @@ export const StockReports = () => {
     }, [searchQuery, startDate, endDate]);
 
     return (
-        <div className="min-h-screen dark:bg-gray-900 p-6">
-            <div className="max-w-7xl mx-auto">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-800 dark:text-white">{t('inventoryReport.title')}</h1>
-                        <p className="text-gray-500 dark:text-gray-400">Manage and track your inventory stock levels</p>
+        <div className="space-y-6 p-4 md:p-6">
+            {/* Page Header */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 text-white shadow-lg">
+                <div className="absolute inset-0 bg-black/10" />
+                <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+                            <Package className="h-7 w-7 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold tracking-tight">{t('inventoryReport.title') || 'Stock Movement Report'}</h1>
+                            <p className="text-sm text-white/70 mt-0.5">Manage and track your inventory stock levels and history details</p>
+                        </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 self-start sm:self-auto">
                         <button
                             onClick={handleExportPdf}
                             disabled={loading || isGeneratingPdf}
-                            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 px-4 py-2 bg-red-650 text-white text-xs font-semibold rounded-lg hover:bg-red-750 transition-colors disabled:opacity-50 shadow-sm border border-transparent"
                         >
-                            {isGeneratingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText size={18} />}
+                            {isGeneratingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText size={14} />}
                             PDF
                         </button>
                         <button
                             onClick={handleExportExcel}
                             disabled={loading}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 px-4 py-2 bg-white text-blue-700 font-semibold text-xs rounded-lg hover:bg-white/90 transition-colors disabled:opacity-50 shadow-sm"
                         >
-                            <FileText size={18} />
+                            <FileText size={14} />
                             Excel
                         </button>
                     </div>
                 </div>
+                <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+                <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
+            </div>
 
-                {/* Tabs */}
-                <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6">
-                    <button
-                        className={`px-6 py-3 font-medium transition-colors border-b-2 ${activeTab === 'report' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                        onClick={() => setActiveTab('report')}
-                    >
-                        <div className="flex items-center gap-2">
-                            <Package size={18} />
-                            Stock Summary
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-t-xl px-4">
+                <button
+                    className={`px-5 py-3 font-semibold text-sm transition-colors border-b-2 ${activeTab === 'report' ? 'border-blue-650 text-blue-600 dark:text-blue-450' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                    onClick={() => setActiveTab('report')}
+                >
+                    <div className="flex items-center gap-2">
+                        <Package size={16} />
+                        Stock Summary
+                    </div>
+                </button>
+                <button
+                    className={`px-5 py-3 font-semibold text-sm transition-colors border-b-2 ${activeTab === 'history' ? 'border-blue-650 text-blue-600 dark:text-blue-450' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                    onClick={() => setActiveTab('history')}
+                >
+                    <div className="flex items-center gap-2">
+                        <History size={16} />
+                        Detailed History
+                    </div>
+                </button>
+            </div>
+
+            {/* Filters */}
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-b-xl border border-t-0 border-gray-200 dark:border-gray-700 shadow-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Start Date</label>
+                        <div className="relative">
+                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-450" size={15} />
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-gray-650 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm focus:outline-none"
+                            />
                         </div>
-                    </button>
-                    <button
-                        className={`px-6 py-3 font-medium transition-colors border-b-2 ${activeTab === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                        onClick={() => setActiveTab('history')}
-                    >
-                        <div className="flex items-center gap-2">
-                            <History size={18} />
-                            Detailed History
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">End Date</label>
+                        <div className="relative">
+                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-450" size={15} />
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-gray-650 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm focus:outline-none"
+                            />
                         </div>
-                    </button>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Search Product</label>
+                        <div className="relative group">
+                            <Search className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
+                                searchQuery ? 'text-blue-500' : 'text-gray-455 group-focus-within:text-blue-500'
+                            }`} size={15} />
+                            <input
+                                type="text"
+                                placeholder="Search by name or batch..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className={`w-full pl-9 pr-9 py-2 border rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm ${
+                                    theme === "dark" 
+                                        ? "bg-gray-700 border-gray-600 text-white placeholder-gray-500" 
+                                        : "bg-white border-gray-200 text-gray-900 placeholder-gray-400 hover:border-gray-300 shadow-sm"
+                                }`}
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+                                >
+                                    <X size={15} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    {activeTab === 'history' && (
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Movement Type</label>
+                            <div className="relative">
+                                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-450" size={15} />
+                                <select
+                                    value={movementType}
+                                    onChange={(e) => setMovementType(e.target.value)}
+                                    className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-gray-650 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-white appearance-none text-sm focus:outline-none"
+                                >
+                                    <option value="ALL">All Types</option>
+                                    <option value="SALE">Sales</option>
+                                    <option value="PURCHASE">Purchases</option>
+                                    <option value="RETURN">Returns</option>
+                                    <option value="ADJUSTMENT">Adjustments</option>
+                                    <option value="DAMAGE">Damage</option>
+                                    <option value="EXPIRED">Expired</option>
+                                </select>
+                            </div>
+                        </div>
+                    )}
                 </div>
+            </div>
 
-                {/* Filters */}
-                <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
-                            <div className="relative">
-                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                                <input
-                                    type="date"
-                                    value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
-                                    className="w-full pl-10 pr-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                                />
+            {/* Summary Cards (Report Tab) */}
+            {activeTab === 'report' && summary && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    {[
+                        {
+                            label: 'Opening Stock',
+                            value: summary.totalOpening.toLocaleString(),
+                            icon: Package,
+                            light: 'bg-gray-50 dark:bg-gray-900/20',
+                            text: 'text-gray-600 dark:text-gray-400',
+                        },
+                        {
+                            label: 'Total Stock In',
+                            value: `+${summary.totalIn.toLocaleString()}`,
+                            icon: ArrowUpRight,
+                            light: 'bg-green-50 dark:bg-green-900/20',
+                            text: 'text-green-600 dark:text-green-400',
+                        },
+                        {
+                            label: 'Total Stock Out',
+                            value: `-${summary.totalOut.toLocaleString()}`,
+                            icon: ArrowDownRight,
+                            light: 'bg-red-50 dark:bg-red-900/20',
+                            text: 'text-red-600 dark:text-red-400',
+                        },
+                        {
+                            label: 'Closing Stock',
+                            value: summary.totalClosing.toLocaleString(),
+                            icon: Package,
+                            light: 'bg-indigo-50 dark:bg-indigo-900/20',
+                            text: 'text-indigo-600 dark:text-indigo-400',
+                        },
+                        {
+                            label: 'Inventory Value',
+                            value: formatCurrency(summary.totalValue),
+                            icon: DollarSign,
+                            light: 'bg-blue-50 dark:bg-blue-900/20',
+                            text: 'text-blue-600 dark:text-blue-400',
+                        },
+                    ].map(({ label, value, icon: Icon, light, text }) => (
+                        <div
+                            key={label}
+                            className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4"
+                        >
+                            <div className={`flex h-11 w-11 items-center justify-center rounded-xl flex-shrink-0 ${light}`}>
+                                <Icon className={`h-5 w-5 ${text}`} />
                             </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date</label>
-                            <div className="relative">
-                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                                <input
-                                    type="date"
-                                    value={endDate}
-                                    onChange={(e) => setEndDate(e.target.value)}
-                                    className="w-full pl-10 pr-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Search Product</label>
-                            <div className="relative group">
-                                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
-                                    searchQuery ? 'text-blue-500' : 'text-gray-400 group-focus-within:text-blue-500'
-                                }`} size={16} />
-                                <input
-                                    type="text"
-                                    placeholder="Search by name or batch..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className={`w-full pl-10 pr-10 py-2 border rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-                                        theme === "dark" 
-                                            ? "bg-gray-700 border-gray-600 text-white placeholder-gray-500" 
-                                            : "bg-white border-gray-200 text-gray-900 placeholder-gray-400 hover:border-gray-300 shadow-sm"
-                                    }`}
-                                />
-                                {searchQuery && (
-                                    <button
-                                        onClick={() => setSearchQuery('')}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-                                    >
-                                        <X size={16} />
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                        {activeTab === 'history' && (
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Movement Type</label>
-                                <div className="relative">
-                                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                                    <select
-                                        value={movementType}
-                                        onChange={(e) => setMovementType(e.target.value)}
-                                        className="w-full pl-10 pr-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-white appearance-none"
-                                    >
-                                        <option value="ALL">All Types</option>
-                                        <option value="SALE">Sales</option>
-                                        <option value="PURCHASE">Purchases</option>
-                                        <option value="RETURN">Returns</option>
-                                        <option value="ADJUSTMENT">Adjustments</option>
-                                        <option value="DAMAGE">Damage</option>
-                                        <option value="EXPIRED">Expired</option>
-                                    </select>
-                                </div>
+                                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+                                <p className="text-base font-bold text-gray-900 dark:text-white tabular-nums">{value}</p>
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    ))}
                 </div>
+            )}
 
-                {/* Summary Cards (Report Tab) */}
-                {activeTab === 'report' && summary && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-                        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                            <p className="text-sm text-gray-500 mb-1">Opening Stock</p>
-                            <p className="text-lg font-semibold dark:text-white">{summary.totalOpening.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                            <p className="text-sm text-gray-500 mb-1">Total Stock In</p>
-                            <div className="flex items-center gap-1">
-                                <ArrowUpRight className="text-green-500" size={16} />
-                                <p className="text-lg font-semibold text-green-600">{summary.totalIn.toLocaleString()}</p>
-                            </div>
-                        </div>
-                        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                            <p className="text-sm text-gray-500 mb-1">Total Stock Out</p>
-                            <div className="flex items-center gap-1">
-                                <ArrowDownRight className="text-red-500" size={16} />
-                                <p className="text-lg font-semibold text-red-600">{summary.totalOut.toLocaleString()}</p>
-                            </div>
-                        </div>
-                        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                            <p className="text-sm text-gray-500 mb-1">Closing Stock</p>
-                            <p className="text-lg font-semibold dark:text-white">{summary.totalClosing.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-blue-100 dark:border-blue-900 shadow-sm">
-                            <p className="text-sm text-gray-500 mb-1">Inventory Value</p>
-                            <p className="text-lg font-semibold text-blue-600">{formatCurrency(summary.totalValue)}</p>
-                        </div>
+            {/* Content Table */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                {loading ? (
+                    <div className="p-6">
+                        <TableSkeleton rows={10} columns={activeTab === 'report' ? 9 : 8} />
                     </div>
-                )}
-
-                {/* Content Table */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                    {loading ? (
-                        <TableSkeleton rows={10} columns={activeTab === 'report' ? 8 : 7} />
                     ) : error ? (
                         <div className="p-8 text-center text-red-500">{error}</div>
                     ) : (
@@ -654,6 +690,5 @@ export const StockReports = () => {
                     </div>
                 )}
             </div>
-        </div>
     );
 };

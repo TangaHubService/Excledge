@@ -27,7 +27,6 @@ import {
   Wifi,
   Loader2,
   Wallet,
-  LineChart,
   ScanLine,
   FileText,
   type LucideIcon,
@@ -90,7 +89,6 @@ type NavBlock =
 const baseNavigation: NavItem[] = [
   { id: "home", name: "nav.home", href: "/", icon: Home, moduleKey: "home" },
   { id: "dashboard", name: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard, moduleKey: "dashboard" },
-  { id: "executive", name: "Executive Dashboard", href: "executive", icon: LineChart, moduleKey: "executiveDashboard" },
 
   { id: "sales-header", name: "nav.salesHeader", href: "", type: "header" },
   { id: "pos", name: "nav.pos", href: "pos", icon: ShoppingCart, moduleKey: "pos" },
@@ -137,8 +135,6 @@ const adminNav: NavItem[] = [
 const systemOwnerNav: NavItem[] = [
   { id: "system-owner-header", name: "nav.systemOwner", href: "", type: "header" },
   { id: "system-overview", name: "nav.overview", href: "/dashboard/system-owner/overview", icon: LayoutDashboard },
-  { id: "my-organisations", name: "nav.myOrganisations", href: "/dashboard/system-owner/my-organisations", icon: Building2 },
-  { id: "system-organizations", name: "nav.organizations", href: "/dashboard/system-owner/organizations", icon: Users },
   { id: "system-subscriptions", name: "nav.subscriptions", href: "/dashboard/system-owner/subscriptions", icon: CreditCard },
   { id: "system-payments", name: "nav.payments", href: "/dashboard/system-owner/payments", icon: Receipt },
   { id: "system-analytics", name: "nav.analytics", href: "/dashboard/system-owner/analytics", icon: BarChart3 },
@@ -188,12 +184,7 @@ function resolveNavigation(
   settings?: IOrganizationSettings,
 ): NavItem[] {
   if (isSystemOwner) {
-    return [
-      ...systemOwnerNav,
-      ...(hasOrganization
-        ? [{ id: "branches-so", name: "nav.branches", href: "branches", icon: GitBranch as LucideIcon } as NavItem]
-        : []),
-    ];
+    return systemOwnerNav;
   }
 
   if (hasOrganization === false) {
@@ -692,7 +683,7 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
         </nav>
 
         {/* ── Create org CTA (no org state) ───────────── */}
-        {!organization && !localStorage.getItem("current_organization_id") && (
+        {!organization && !localStorage.getItem("current_organization_id") && !isSystemOwner() && (
           <div className="border-t border-white/15 p-3">
             <Link
               to="/dashboard/organizations"

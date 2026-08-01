@@ -1,12 +1,5 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../../components/ui/card";
 import {
   Table,
   TableBody,
@@ -15,25 +8,16 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { useTheme } from "../../../context/ThemeContext";
 import { format } from "date-fns";
 import { apiClient } from "../../../lib/api-client";
 import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../components/ui/select";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Button } from "../../../components/ui/button";
+import { ChevronLeft, ChevronRight, Calendar, AlertCircle, Eye, DollarSign } from "lucide-react";
 import ViewProductDialog from "./ViewProductDialog";
 import { type Product } from "../../../types";
+import { cn } from "../../../lib/utils";
 
 export default function ExpiredProducts() {
   const { t } = useTranslation();
-  const { theme } = useTheme();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,305 +37,232 @@ export default function ExpiredProducts() {
         const response = await apiClient.getExpiredProducts({
           days,
           page: currentPage,
-          limit: limit
+          limit: limit,
         });
         const parsed = parseInventoryGetProductsResponse(response);
-        setProducts(parsed.items as Product[]);
+        setProducts((parsed.items || []) as Product[]);
         setTotalPages(parsed.pagination.totalPages || 1);
         setTotalItems(parsed.pagination.totalItems || 0);
         setError(null);
       } catch (err) {
         console.error("Error fetching expired products:", err);
-        setError(t('messages.expiredLoadError'));
+        setError(t("messages.expiredLoadError"));
       } finally {
         setLoading(false);
       }
     };
 
     fetchExpiredProducts();
-  }, [days, currentPage, limit]);
+  }, [days, currentPage, limit, t]);
 
-  if (error) {
-    return <div className="p-4 text-red-500">{error}</div>;
-  }
+  const totalLossValuation = products.reduce((acc, p) => acc + p.quantity * (Number(p.unitPrice) || 0), 0);
 
   return (
-    <div className="p-4 space-y-4 bg-background text-foreground min-h-screen dark:bg-background dark:text-foreground">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl font-bold text-foreground">{t('inventory.expiredProducts')}</h2>
-        <div className="flex items-center space-x-2 w-full sm:w-auto">
-          <label htmlFor="days" className="font-medium whitespace-nowrap">
-            {t('inventory.expiredInLast')}:
-          </label>
+    <div className="space-y-6">
+      {/* ── Page Header ─────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-900/30">
+            <Calendar className="h-6 w-6 text-rose-600 dark:text-rose-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Expired Products</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              Review and audit products past their expiration dates
+            </p>
+          </div>
+        </div>
 
-          <Select
+        {/* Days filter select */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-gray-500">Expired in:</span>
+          <select
             value={days.toString()}
-            onValueChange={(value: string) => {
-              setDays(Number(value));
-              setCurrentPage(1); // Reset to first page when filter changes
+            onChange={(e) => {
+              setDays(Number(e.target.value));
+              setCurrentPage(1);
             }}
+            className="h-9 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all shadow-sm"
           >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder={t('common.selectDays')} />
-            </SelectTrigger>
-
-            <SelectContent
-              className={
-                theme === "dark"
-                  ? "bg-gray-800 border-gray-700 text-gray-300"
-                  : "bg-white border-gray-300"
-              }
-            >
-              <SelectItem value="7">{t('common.days', { count: 7 })}</SelectItem>
-              <SelectItem value="30">{t('common.days', { count: 30 })}</SelectItem>
-              <SelectItem value="90">{t('common.days', { count: 90 })}</SelectItem>
-              <SelectItem value="365">{t('common.year', { count: 1 })}</SelectItem>
-
-            </SelectContent>
-          </Select>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="365">Last 1 year</option>
+          </select>
         </div>
       </div>
 
-      <Card
-        className={
-          theme === "dark"
-            ? "bg-gray-800 border-gray-700"
-            : "bg-white border-gray-300"
-        }
-      >
-        <CardHeader>
-          <CardTitle
-            className={theme === "dark" ? "text-gray-400" : "text-gray-800"}
-          >
-            {t('inventory.expiredProducts')}
-          </CardTitle>
-
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-10 w-full ${theme === "dark" ? "bg-gray-700" : "bg-gray-200"
-                    } rounded-md animate-pulse`}
-                />
-              ))}
+      {/* ── KPI Stat Cards ──────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col justify-between">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">TOTAL EXPIRED ITEMS</p>
+              <h3 className="text-3xl font-extrabold text-rose-600 tracking-tight">{totalItems}</h3>
+              <p className="text-xs text-gray-400 mt-1">Products needing disposal</p>
             </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <Table
-                  className={
-                    theme === "dark" ? "text-gray-200" : "text-gray-800 "
-                  }
-                >
-                  <TableHeader
-                    className={
-                      theme === "dark"
-                        ? "bg-gray-800 border-b border-gray-700"
-                        : "bg-gray-50 border-b border-gray-400"
-                    }
-                  >
-                    <TableRow>
-                      <TableHead
-                        className={
-                          theme === "dark" ? "text-gray-400" : "text-gray-600"
-                        }
-                      >
-                        ID
-                      </TableHead>
-                      <TableHead
-                        className={
-                          theme === "dark" ? "text-gray-400" : "text-gray-600"
-                        }
-                      >
-                        {t('inventory.productName')}
-                      </TableHead>
-                      <TableHead
-                        className={
-                          theme === "dark" ? "text-gray-400" : "text-gray-600"
-                        }
-                      >
-                        {t('inventory.batchNumber')}
-                      </TableHead>
-                      <TableHead
-                        className={
-                          theme === "dark" ? "text-gray-400" : "text-gray-600"
-                        }
-                      >
-                        {t('inventory.expiryDate')}
-                      </TableHead>
-                      <TableHead
-                        className={
-                          theme === "dark" ? "text-gray-400" : "text-gray-600"
-                        }
-                      >
-                        {t('inventory.quantity')}
-                      </TableHead>
-                      <TableHead
-                        className={
-                          theme === "dark" ? "text-gray-400" : "text-gray-600"
-                        }
-                      >
-                        {t('inventory.unitPrice')}
-                      </TableHead>
-                      <TableHead
-                        className={
-                          theme === "dark" ? "text-gray-400" : "text-gray-600"
-                        }
-                      >
-                        {t('common.amount')}
-                      </TableHead>
-                    </TableRow>
+            <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-900/30 text-rose-600">
+              <AlertCircle className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="flex items-center gap-1 mt-4 text-xs font-semibold text-rose-600">
+            <span>Action required</span>
+          </div>
+        </div>
 
-                  </TableHeader>
-                  <TableBody
-                    className={
-                      theme === "dark" ? "border-gray-700" : "border-gray-400"
-                    }
-                  >
-                    {products?.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={7}
-                          className="text-center text-gray-600"
-                        >
-                          {t('messages.noData')}
-                        </TableCell>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col justify-between">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">ESTIMATED LOSS VALUATION</p>
+              <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                {totalLossValuation.toLocaleString()} <span className="text-xs font-normal text-gray-400">Frw</span>
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">Total value of expired inventory</p>
+            </div>
+            <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-900/30 text-amber-600">
+              <DollarSign className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="flex items-center gap-1 mt-4 text-xs font-semibold text-amber-600">
+            <span>Audit report generated</span>
+          </div>
+        </div>
+      </div>
 
-                      </TableRow>
-                    ) : (
-                      products.map((product) => (
-                        <TableRow
-                          key={product.id}
-                          className={`${theme === "dark"
-                            ? "hover:bg-gray-800 border-gray-800"
-                            : "hover:bg-gray-50 border-gray-100"
-                            }`}
-                        >
-                          <TableCell
-                            className={
-                              theme === "dark" ? "text-gray-400" : "text-gray-500 font-mono text-xs"
-                            }
-                          >
-                            <button
-                              onClick={() => setViewProduct(product)}
-                              className="hover:underline hover:text-blue-500 transition-colors"
-                            >
-                              {product.id}
-                            </button>
-                          </TableCell>
-                          <TableCell
-                            className={
-                              theme === "dark" ? "text-gray-300" : "text-gray-900"
-                            }
-                          >
-                            {product.name}
-                          </TableCell>
-                          <TableCell
-                            className={
-                              theme === "dark" ? "text-gray-300" : "text-gray-900"
-                            }
-                          >
-                            {product.batchNumber}
-                          </TableCell>
-                          <TableCell
-                            className={
-                              theme === "dark" ? "text-gray-300" : "text-gray-900"
-                            }
-                          >
-                            {format(new Date(product.expiryDate!), "MMM dd, yyyy")}
-                          </TableCell>
-                          <TableCell
-                            className={
-                              theme === "dark" ? "text-gray-300" : "text-gray-900"
-                            }
-                          >
-                            {product.quantity}
-                          </TableCell>
-                          <TableCell
-                            className={
-                              theme === "dark" ? "text-gray-300" : "text-gray-900"
-                            }
-                          >
-                            {Number(product.unitPrice).toFixed(2)} Frw
-                          </TableCell>
-                          <TableCell
-                            className={
-                              theme === "dark" ? "text-gray-300" : "text-gray-900"
-                            }
-                          >
-                            {(product.quantity * Number(product.unitPrice)).toFixed(2)} Frw
-                          </TableCell>
-                        </TableRow>
-                      ))
+      {/* ── Table Container ─────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="p-6 space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-10 w-full bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="py-12 text-center text-rose-500 text-sm">{error}</div>
+        ) : products.length === 0 ? (
+          <div className="py-20 flex flex-col items-center justify-center text-gray-400 gap-2">
+            <Calendar className="h-10 w-10 text-gray-300" />
+            <p className="text-sm font-medium">{t("messages.noData")}</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
+              <TableRow className="hover:bg-transparent">
+                {["ID", "Product Name", "Batch Number", "Expiry Date", "Qty", "Unit Price", "Valuation Loss", "Action"].map((h) => (
+                  <TableHead key={h} className="text-xs font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap py-3.5">
+                    {h}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {products.map((prod) => {
+                const loss = prod.quantity * Number(prod.unitPrice);
+
+                return (
+                  <TableRow
+                    key={prod.id}
+                    className="border-t border-gray-50 dark:border-gray-700/50 hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors"
+                  >
+                    <TableCell className="py-3.5 text-xs font-mono font-semibold text-blue-600 dark:text-blue-400">
+                      #{prod.id}
+                    </TableCell>
+                    <TableCell className="py-3.5 text-xs font-bold text-gray-900 dark:text-white">
+                      {prod.name}
+                    </TableCell>
+                    <TableCell className="py-3.5 text-xs font-mono text-gray-500">
+                      {prod.batchNumber || "—"}
+                    </TableCell>
+                    <TableCell className="py-3.5 text-xs whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-600 border border-rose-100">
+                        {prod.expiryDate ? format(new Date(prod.expiryDate), "MMM dd, yyyy") : "Expired"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-3.5 text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-200">
+                      {prod.quantity}
+                    </TableCell>
+                    <TableCell className="py-3.5 text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-200">
+                      {Number(prod.unitPrice).toLocaleString()} Frw
+                    </TableCell>
+                    <TableCell className="py-3.5 text-xs font-bold tabular-nums text-rose-600">
+                      {loss.toLocaleString()} Frw
+                    </TableCell>
+                    <TableCell className="py-3.5">
+                      <button
+                        onClick={() => setViewProduct(prod)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        title="View details"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+
+        {/* ── Pagination Footer ────────────────────────────────────────────── */}
+        {!loading && products.length > 0 && (
+          <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Showing {(currentPage - 1) * limit + 1} to {Math.min(currentPage * limit, totalItems)} of {totalItems} expired items
+            </p>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                disabled={currentPage === 1}
+                className="h-8 w-8 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                const pNum = i + 1;
+                return (
+                  <button
+                    key={pNum}
+                    onClick={() => setCurrentPage(pNum)}
+                    className={cn(
+                      "h-8 w-8 rounded-lg text-xs font-semibold transition-colors",
+                      currentPage === pNum
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                     )}
-                  </TableBody>
-                </Table>
-              </div>
+                  >
+                    {pNum}
+                  </button>
+                );
+              })}
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between px-2 py-4 border-t border-gray-200 dark:border-gray-700 gap-4">
-                  <div className="flex items-center gap-6 w-full sm:w-auto justify-between">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {t('common.showing')} {(currentPage - 1) * limit + 1} {t('common.to')} {Math.min(currentPage * limit, totalItems)} {t('common.of')} {totalItems} {t('inventory.products')}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{t('common.rowsPerPage')}:</span>
-                      <select
-                        className="border rounded-md px-2 py-1 text-sm bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300"
-                        value={limit}
-                        onChange={(e) => {
-                          setLimit(Number(e.target.value));
-                          setCurrentPage(1);
-                        }}
-                      >
-                        {[10, 20, 50, 100].map(size => (
-                          <option key={size} value={size}>{size}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                      className={theme === "dark" ? "border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700" : ""}
-                    >
-                      <ChevronLeft className="h-4 w-4 mr-1" />
-                      {t('common.previous')}
-                    </Button>
-                    <div className="flex items-center gap-1 mx-2">
-                      <span className="text-sm font-medium">{currentPage}</span>
-                      <span className="text-sm text-gray-500">/</span>
-                      <span className="text-sm text-gray-500">{totalPages}</span>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                      className={theme === "dark" ? "border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700" : ""}
-                    >
-                      {t('common.next')}
-                      <ChevronRight className="h-4 w-4 ml-1" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="h-8 w-8 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
 
-      <ViewProductDialog
-        viewProduct={viewProduct}
-        setViewProduct={setViewProduct}
-      />
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="h-8 pl-2 pr-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-medium text-gray-600 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none"
+              >
+                {[10, 20, 50, 100].map((num) => (
+                  <option key={num} value={num}>{num} / page</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <ViewProductDialog viewProduct={viewProduct} setViewProduct={setViewProduct} />
     </div>
   );
 }

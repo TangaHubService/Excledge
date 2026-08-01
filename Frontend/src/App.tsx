@@ -56,7 +56,6 @@ import BillingHistoryPage from "./pages/billing/BillingHistoryPage";
 import OrganizationsPage from "./pages/dashboard/organizations/OrganizationsPage";
 import { PesapalCallback } from "./pages/PesapalCallback";
 import ExpensesPage from "./pages/dashboard/expenses/ExpensesPage";
-import { ExecutiveDashboard } from "./pages/dashboard/executive/ExecutiveDashboard";
 import { SupplierInvoicesPage } from "./pages/dashboard/inventory/SupplierInvoicesPage";
 import { ScanInvoicePage } from "./pages/dashboard/inventory/ScanInvoicePage";
 
@@ -114,7 +113,7 @@ function App() {
                     {/* Redirect old system owner routes to new dashboard routes */}
                     <Route path="/my-system" element={<Navigate to="/dashboard/system-owner" replace />} />
                     <Route path="/my-system/overview" element={<Navigate to="/dashboard/system-owner/overview" replace />} />
-                    <Route path="/my-system/organizations" element={<Navigate to="/dashboard/system-owner/organizations" replace />} />
+                    <Route path="/my-system/organizations" element={<Navigate to="/dashboard/system-owner/subscriptions" replace />} />
                     <Route path="/my-system/subscriptions" element={<Navigate to="/dashboard/system-owner/subscriptions" replace />} />
                     <Route path="/my-system/payments" element={<Navigate to="/dashboard/system-owner/payments" replace />} />
                     <Route path="/my-system/analytics" element={<Navigate to="/dashboard/system-owner/analytics" replace />} />
@@ -156,7 +155,6 @@ function App() {
                       </Route>
                       <Route path="debt" element={<DebtManagement />} />
                       <Route path="expenses" element={<ExpensesPage />} />
-                      <Route path="executive" element={<ExecutiveDashboard />} />
                       <Route path="organizations" element={<OrganizationsPage />} />
                       <Route path="supplier-invoices" element={<SupplierInvoicesPage />} />
                       <Route path="scan-invoice" element={<ScanInvoicePage />} />

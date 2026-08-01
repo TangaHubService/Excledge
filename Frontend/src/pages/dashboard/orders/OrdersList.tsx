@@ -13,11 +13,9 @@ import {
     Calendar,
     User,
     ExternalLink,
-    Filter,
     CheckCircle2,
     XCircle,
     Truck,
-    Info,
     ChevronRight,
     AlertCircle,
     Trash2
@@ -319,26 +317,30 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                 loading={isDeleting}
             />
 
-            <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                    <div>
-                        <h1 className="text-xl font-bold tracking-tight">
-                            {t('purchaseOrders.title')}
-                        </h1>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5 mt-0.5">
-                            <Info className="h-3.5 w-3.5" />
-                            {t('purchaseOrders.description')}
-                        </p>
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 text-white shadow-lg mb-6">
+                    <div className="absolute inset-0 bg-black/10" />
+                    <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+                                <Package className="h-7 w-7 text-white" />
+                            </div>
+                            <div>
+                                <h1 className="text-2xl font-bold tracking-tight">{t('purchaseOrders.title')}</h1>
+                                <p className="text-sm text-white/70 mt-0.5">{t('purchaseOrders.description')}</p>
+                            </div>
+                        </div>
+                        <Button
+                            onClick={() => navigate('/dashboard/orders/new')}
+                            className="gap-2 bg-white text-blue-700 hover:bg-white/90 font-semibold shadow-sm self-start sm:self-auto"
+                        >
+                            <Plus className="h-4 w-4" />
+                            {t('purchaseOrders.newOrder')}
+                        </Button>
                     </div>
-                    <Button
-                        onClick={() => navigate('/dashboard/orders/new')}
-                        size="sm"
-                        className="h-9 px-4 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm transition-all active:scale-95"
-                    >
-                        <Plus className="mr-1.5 h-4 w-4" />
-                        {t('purchaseOrders.newOrder')}
-                    </Button>
+                    <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+                    <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
                 </div>
 
                 {/* Search & Filters Bar */}
@@ -365,11 +367,6 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                             </button>
                         )}
                     </div>
-                    <Button variant="outline" size="sm" className={`h-10 px-4 rounded-md font-semibold gap-1.5 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white'
-                        }`}>
-                        <Filter className="h-4 w-4 text-gray-400" />
-                        {t('common.filter')}
-                    </Button>
                 </div>
 
                 {/* Orders Table Card */}

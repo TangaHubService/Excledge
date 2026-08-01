@@ -13,7 +13,6 @@ const SystemOwnerLayout: React.FC<SystemOwnerLayoutProps> = ({ children, userNam
 
     const tabs = [
         { id: 'overview', label: 'Overview' },
-        { id: 'organizations', label: 'Organizations' },
         { id: 'subscriptions', label: 'Subscriptions' },
         { id: 'payments', label: 'Payments' },
         { id: 'analytics', label: 'Analytics' },

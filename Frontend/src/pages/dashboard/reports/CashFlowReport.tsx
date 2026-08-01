@@ -215,37 +215,48 @@ export const CashFlowReport = () => {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="min-w-0">
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('cashFlowReport.title')}</h1>
-                    <p className="text-gray-600 dark:text-gray-400">{t('cashFlowReport.description')}</p>
+        <div className="space-y-6 p-4 md:p-6">
+            {/* Page Header */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 text-white shadow-lg">
+                <div className="absolute inset-0 bg-black/10" />
+                <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+                            <Activity className="h-7 w-7 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold tracking-tight">{t('cashFlowReport.title') || 'Cash Flow Report'}</h1>
+                            <p className="text-sm text-white/70 mt-0.5">{t('cashFlowReport.description') || 'Track details of money entering and leaving your business'}</p>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 shrink-0 self-start sm:self-auto">
+                        <Button
+                            onClick={() => setIsExpenseModalOpen(true)}
+                            className="bg-red-600 hover:bg-red-700 text-white shadow-sm font-semibold gap-2 border border-transparent"
+                        >
+                            <PlusCircle className="size-4" />
+                            {t('cashFlowReport.recordExpense')}
+                        </Button>
+                        <Button
+                            onClick={openPaymentModal}
+                            className="bg-white text-blue-700 hover:bg-white/90 shadow-sm font-semibold gap-2"
+                        >
+                            <Receipt className="size-4" />
+                            {t('cashFlowReport.recordSupplierPayment')}
+                        </Button>
+                    </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-3 shrink-0">
-                    <Button
-                        onClick={() => setIsExpenseModalOpen(true)}
-                        className="bg-red-600 hover:bg-red-700 text-white shadow-sm"
-                    >
-                        <PlusCircle className="size-4" />
-                        {t('cashFlowReport.recordExpense')}
-                    </Button>
-                    <Button
-                        onClick={openPaymentModal}
-                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-                    >
-                        <Receipt className="size-4" />
-                        {t('cashFlowReport.recordSupplierPayment')}
-                    </Button>
-                </div>
+                <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+                <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
             </div>
 
             {/* Balance Verification Alert */}
             {verification && !verification.balanced && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-5 py-4 flex items-center gap-4">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-5 py-4 flex items-center gap-4 shadow-xs">
                     <AlertTriangle className="text-red-600 dark:text-red-400 shrink-0 size-5" />
                     <div className="min-w-0">
                         <h3 className="text-red-800 dark:text-red-200 font-semibold text-sm">Balance Mismatch Detected!</h3>
-                        <p className="text-red-700 dark:text-red-300 text-sm leading-relaxed">
+                        <p className="text-red-700 dark:text-red-300 text-xs leading-relaxed mt-0.5">
                             {verification.formula}: Calculated {formatCurrency(verification.calculated)} &middot; Actual {formatCurrency(verification.actual)}
                         </p>
                     </div>
@@ -253,11 +264,11 @@ export const CashFlowReport = () => {
             )}
 
             {verification && verification.balanced && (
-                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-5 py-4 flex items-center gap-4">
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl px-5 py-4 flex items-center gap-4 shadow-xs">
                     <CheckCircle className="text-green-600 dark:text-green-400 shrink-0 size-5" />
                     <div className="min-w-0">
                         <h3 className="text-green-800 dark:text-green-200 font-semibold text-sm">Balance Verified</h3>
-                        <p className="text-green-700 dark:text-green-300 text-sm leading-relaxed">
+                        <p className="text-green-700 dark:text-green-300 text-xs leading-relaxed mt-0.5">
                             {verification.formula} = {formatCurrency(verification.calculated)}
                         </p>
                     </div>
@@ -265,174 +276,186 @@ export const CashFlowReport = () => {
             )}
 
             {/* Filters */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="space-y-1.5">
-                    <Label className="text-gray-700 dark:text-gray-300">{t('common.startDate')}</Label>
-                    <Input
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                    />
-                </div>
-                <div className="space-y-1.5">
-                    <Label className="text-gray-700 dark:text-gray-300">{t('common.endDate')}</Label>
-                    <Input
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                    />
-                </div>
-                <div className="space-y-1.5">
-                    <Label className="text-gray-700 dark:text-gray-300">Payment Method</Label>
-                    <select
-                        value={transactionType}
-                        onChange={(e) => setTransactionType(e.target.value)}
-                        className="h-9 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800/50 px-3 py-1 text-sm text-gray-900 dark:text-gray-100 shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-blue-500 focus-visible:ring-blue-500/30 focus-visible:ring-[3px]"
-                    >
-                        <option value="ALL">All Methods</option>
-                        <option value="CASH">Cash</option>
-                        <option value="MOBILE_MONEY">Mobile Money</option>
-                        <option value="BANK">Bank/Card</option>
-                    </select>
-                </div>
-                <div className="space-y-1.5">
-                    <Label className="text-gray-700 dark:text-gray-300">Category</Label>
-                    <select
-                        value={categoryFilter}
-                        onChange={(e) => setCategoryFilter(e.target.value)}
-                        className="h-9 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800/50 px-3 py-1 text-sm text-gray-900 dark:text-gray-100 shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-blue-500 focus-visible:ring-blue-500/30 focus-visible:ring-[3px]"
-                    >
-                        <option value="ALL">All Categories</option>
-                        <option value="Sales">Sales</option>
-                        <option value="Debt Collection">Debt Collection</option>
-                        <option value="Inventory Purchase">Inventory Purchase</option>
-                        <option value="Refunds">Refunds</option>
-                        <option value="Operating Expenses">Operating Expenses</option>
-                    </select>
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('common.startDate')}</Label>
+                        <Input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="bg-white dark:bg-gray-850 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('common.endDate')}</Label>
+                        <Input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="bg-white dark:bg-gray-850 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payment Method</Label>
+                        <select
+                            value={transactionType}
+                            onChange={(e) => setTransactionType(e.target.value)}
+                            className="h-9 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1 text-sm text-gray-900 dark:text-gray-100 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        >
+                            <option value="ALL">All Methods</option>
+                            <option value="CASH">Cash</option>
+                            <option value="MOBILE_MONEY">Mobile Money</option>
+                            <option value="BANK">Bank/Card</option>
+                        </select>
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Category</Label>
+                        <select
+                            value={categoryFilter}
+                            onChange={(e) => setCategoryFilter(e.target.value)}
+                            className="h-9 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1 text-sm text-gray-900 dark:text-gray-100 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        >
+                            <option value="ALL">All Categories</option>
+                            <option value="Sales">Sales</option>
+                            <option value="Debt Collection">Debt Collection</option>
+                            <option value="Inventory Purchase">Inventory Purchase</option>
+                            <option value="Refunds">Refunds</option>
+                            <option value="Operating Expenses">Operating Expenses</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                <div className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-card border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow flex items-center gap-4 min-h-[88px]">
-                    <div className="size-12 flex items-center justify-center shrink-0 rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
-                        <DollarSign className="size-5" />
+                {[
+                    {
+                        label: t('cashFlowReport.openingBalance'),
+                        value: formatCurrency(summary.openingBalance),
+                        icon: DollarSign,
+                        light: 'bg-purple-50 dark:bg-purple-900/20',
+                        text: 'text-purple-600 dark:text-purple-400',
+                    },
+                    {
+                        label: t('cashFlowReport.totalInflows'),
+                        value: formatCurrency(summary.totalInflows),
+                        icon: TrendingUp,
+                        light: 'bg-green-50 dark:bg-green-900/20',
+                        text: 'text-green-600 dark:text-green-400',
+                    },
+                    {
+                        label: t('cashFlowReport.totalOutflows'),
+                        value: formatCurrency(summary.totalOutflows),
+                        icon: TrendingDown,
+                        light: 'bg-red-50 dark:bg-red-900/20',
+                        text: 'text-red-600 dark:text-red-400',
+                    },
+                    {
+                        label: t('cashFlowReport.netCashFlow'),
+                        value: formatCurrency(summary.netCashFlow),
+                        icon: Activity,
+                        light: summary.netCashFlow >= 0 ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20',
+                        text: summary.netCashFlow >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
+                    },
+                    {
+                        label: t('cashFlowReport.closingBalance'),
+                        value: formatCurrency(summary.closingBalance),
+                        icon: DollarSign,
+                        light: 'bg-blue-50 dark:bg-blue-900/20',
+                        text: 'text-blue-600 dark:text-blue-400',
+                        ring: true
+                    }
+                ].map(({ label, value, icon: Icon, light, text, ring }) => (
+                    <div
+                        key={label}
+                        className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4 ${ring ? 'ring-2 ring-blue-500/25' : ''}`}
+                    >
+                        <div className={`flex h-11 w-11 items-center justify-center rounded-xl flex-shrink-0 ${light}`}>
+                            <Icon className={`h-5 w-5 ${text}`} />
+                        </div>
+                        <div>
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+                            <p className="text-lg font-bold text-gray-900 dark:text-white truncate tabular-nums">{value}</p>
+                        </div>
                     </div>
-                    <div className="min-w-0">
-                        <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{t('cashFlowReport.openingBalance')}</p>
-                        <p className="text-lg font-semibold text-gray-900 dark:text-white truncate">{formatCurrency(summary.openingBalance)}</p>
-                    </div>
-                </div>
-
-                <div className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-card border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow flex items-center gap-4 min-h-[88px]">
-                    <div className="size-12 flex items-center justify-center shrink-0 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400">
-                        <TrendingUp className="size-5" />
-                    </div>
-                    <div className="min-w-0">
-                        <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{t('cashFlowReport.totalInflows')}</p>
-                        <p className="text-lg font-semibold text-green-600 dark:text-green-400 truncate">{formatCurrency(summary.totalInflows)}</p>
-                    </div>
-                </div>
-
-                <div className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-card border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow flex items-center gap-4 min-h-[88px]">
-                    <div className="size-12 flex items-center justify-center shrink-0 rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400">
-                        <TrendingDown className="size-5" />
-                    </div>
-                    <div className="min-w-0">
-                        <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{t('cashFlowReport.totalOutflows')}</p>
-                        <p className="text-lg font-semibold text-red-600 dark:text-red-400 truncate">{formatCurrency(summary.totalOutflows)}</p>
-                    </div>
-                </div>
-
-                <div className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-card border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow flex items-center gap-4 min-h-[88px]">
-                    <div className="size-12 flex items-center justify-center shrink-0 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-                        <Activity className="size-5" />
-                    </div>
-                    <div className="min-w-0">
-                        <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">{t('cashFlowReport.netCashFlow')}</p>
-                        <p className={`text-lg font-semibold truncate ${summary.netCashFlow >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {formatCurrency(summary.netCashFlow)}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="group bg-white dark:bg-gray-800 rounded-xl p-5 shadow-card border border-blue-200 dark:border-blue-800 hover:shadow-md transition-shadow flex items-center gap-4 min-h-[88px] ring-1 ring-blue-100 dark:ring-blue-900/50">
-                    <div className="size-12 flex items-center justify-center shrink-0 rounded-xl bg-blue-600 text-white shadow-sm">
-                        <DollarSign className="size-5" />
-                    </div>
-                    <div className="min-w-0">
-                        <p className="text-blue-600 dark:text-blue-400 text-xs font-semibold uppercase tracking-wider">{t('cashFlowReport.closingBalance')}</p>
-                        <p className="text-lg font-bold text-gray-900 dark:text-white truncate">{formatCurrency(summary.closingBalance)}</p>
-                    </div>
-                </div>
+                ))}
             </div>
 
             {/* Cash Flow Table */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-                <div className="p-6">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                        {t('cashFlowReport.transactionHistory')}
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                    <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                        {t('cashFlowReport.transactionHistory') || 'Transaction History'}
                     </h2>
+                </div>
 
+                <div className="p-0">
                     {loading ? (
-                        <TableSkeleton rows={5} columns={7} />
+                        <div className="p-6">
+                            <TableSkeleton rows={5} columns={7} />
+                        </div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
-                                <thead className="bg-gray-50 dark:bg-gray-700/50">
-                                    <tr>
-                                        <th className="text-left py-3 px-4 text-gray-500 dark:text-gray-400 font-medium">Date</th>
-                                        <th className="text-left py-3 px-4 text-gray-500 dark:text-gray-400 font-medium">Description</th>
-                                        <th className="text-left py-3 px-4 text-gray-500 dark:text-gray-400 font-medium">Category</th>
-                                        <th className="text-left py-3 px-4 text-gray-500 dark:text-gray-400 font-medium">Subcategory</th>
-                                        <th className="text-center py-3 px-4 text-gray-500 dark:text-gray-400 font-medium">Type</th>
-                                        <th className="text-right py-3 px-4 text-gray-500 dark:text-gray-400 font-medium">Amount</th>
-                                        <th className="text-right py-3 px-4 text-gray-500 dark:text-gray-400 font-medium">Balance</th>
+                                <thead>
+                                    <tr className="border-b bg-gray-50/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-650 text-left">
+                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
+                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Description</th>
+                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Category</th>
+                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Subcategory</th>
+                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center">Type</th>
+                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">Amount</th>
+                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">Balance</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                    <tr className="bg-blue-50/50 dark:bg-blue-900/10">
-                                        <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">{startDate}</td>
-                                        <td className="py-3 px-4 font-medium text-gray-900 dark:text-white" colSpan={4}>{t('cashFlowReport.openingBalance')}</td>
-                                        <td className="py-3 px-4 text-right font-medium text-gray-900 dark:text-white">
+                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                    <tr className="bg-blue-50/20 dark:bg-blue-900/10">
+                                        <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white">{startDate}</td>
+                                        <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white" colSpan={4}>{t('cashFlowReport.openingBalance')}</td>
+                                        <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-white">
                                             {formatCurrency(summary.openingBalance)}
                                         </td>
-                                        <td className="py-3 px-4 text-right font-medium text-gray-900 dark:text-white">
+                                        <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-white">
                                             {formatCurrency(summary.openingBalance)}
                                         </td>
                                     </tr>
 
                                     {filteredTransactions.map((transaction, index) => (
-                                        <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                            <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{transaction.date}</td>
+                                        <tr key={index} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
+                                            <td className="py-3 px-4 text-gray-500 dark:text-gray-400">{transaction.date}</td>
                                             <td className="py-3 px-4 text-gray-900 dark:text-white font-medium">{transaction.description || '-'}</td>
-                                            <td className="py-3 px-4 text-gray-500 dark:text-gray-400">{transaction.category || '-'}</td>
-                                            <td className="py-3 px-4 text-gray-500 dark:text-gray-400">{transaction.subcategory || '-'}</td>
+                                            <td className="py-3 px-4 text-gray-600 dark:text-gray-300">
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300">
+                                                    {transaction.category || '-'}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-4 text-gray-500 dark:text-gray-450">{transaction.subcategory || '-'}</td>
                                             <td className="py-3 px-4 text-center">
-                                                <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${transaction.type === 'INFLOW'
+                                                <span className={`px-2.5 py-0.5 text-xs rounded-full font-semibold ${transaction.type === 'INFLOW'
                                                     ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                                                     : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                                                     }`}>
                                                     {transaction.type}
                                                 </span>
                                             </td>
-                                            <td className={`py-3 px-4 text-right font-medium ${transaction.type === 'INFLOW'
+                                            <td className={`py-3 px-4 text-right font-bold font-mono ${transaction.type === 'INFLOW'
                                                 ? 'text-green-600 dark:text-green-400'
                                                 : 'text-red-600 dark:text-red-400'
                                                 }`}>
                                                 {transaction.type === 'INFLOW' ? '+' : ''}{formatCurrency(Math.abs(transaction.amount))}
                                             </td>
-                                            <td className="py-3 px-4 text-right text-gray-600 dark:text-gray-300">
+                                            <td className="py-3 px-4 text-right font-bold text-gray-800 dark:text-gray-300 font-mono text-xs">
                                                 {formatCurrency(transaction.balance)}
                                             </td>
                                         </tr>
                                     ))}
 
                                     {/* Closing Balance */}
-                                    <tr className="bg-blue-50/50 dark:bg-blue-900/10 border-t border-gray-200 dark:border-gray-700">
+                                    <tr className="bg-blue-50/20 dark:bg-blue-900/10 border-t border-gray-200 dark:border-gray-700">
                                         <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white">{endDate}</td>
                                         <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white" colSpan={4}>{t('cashFlowReport.closingBalance')}</td>
-                                        <td className="py-3 px-4 text-right font-semibold text-blue-600 dark:text-blue-400">
+                                        <td className="py-3 px-4 text-right font-bold text-blue-600 dark:text-blue-400">
                                             {formatCurrency(summary.closingBalance)}
                                         </td>
                                         <td className="py-3 px-4 text-right font-bold text-blue-600 dark:text-blue-400 text-base">
