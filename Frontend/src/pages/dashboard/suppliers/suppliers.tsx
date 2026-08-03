@@ -68,7 +68,7 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
         e.preventDefault();
         try {
             if (editingSupplier) {
-                await apiClient.updateSupplier(editingSupplier.id, formData);
+                await apiClient.updateSupplier(editingSupplier.id, formData, organizationId);
                 showToast(t('suppliers.supplierUpdated'));
             } else {
                 await apiClient.createSupplier(organizationId, formData);
@@ -76,7 +76,7 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
             }
             setIsDialogOpen(false);
             resetForm();
-            fetchSuppliers();
+            await fetchSuppliers();
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : t('suppliers.saveError');
             showToast(errorMessage, 'error');
@@ -92,9 +92,9 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
         if (!supplierToDelete) return;
 
         try {
-            await apiClient.deleteSupplier(supplierToDelete);
+            await apiClient.deleteSupplier(supplierToDelete, organizationId);
             showToast(t('suppliers.supplierDeleted'));
-            fetchSuppliers();
+            await fetchSuppliers();
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : t('suppliers.deleteError');
             showToast(errorMessage, 'error');
@@ -127,6 +127,11 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
         setEditingSupplier(null);
     };
 
+    const handleAdd = () => {
+        resetForm();
+        setIsDialogOpen(true);
+    };
+
     const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
         setToast({ message, type });
     };
@@ -143,8 +148,8 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
         <div className="space-y-6 p-4 md:p-6">
             {/* Page Header */}
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-teal-600 via-emerald-600 to-green-600 p-6 text-white shadow-lg">
-                <div className="absolute inset-0 bg-black/10" />
-                <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="pointer-events-none absolute inset-0 bg-black/10" />
+                <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4">
                         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
                             <Plus className="h-7 w-7 text-white" />
@@ -158,6 +163,7 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
                     </div>
                     <div className="flex items-center gap-3 self-start sm:self-auto">
                         <button
+                            type="button"
                             onClick={() => setIsImportDialogOpen(true)}
                             className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 border border-white/30 text-white text-sm font-semibold rounded-lg backdrop-blur-sm transition-all"
                         >
@@ -165,10 +171,8 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
                             {t('common.import')}
                         </button>
                         <button
-                            onClick={() => {
-                                resetForm();
-                                setIsDialogOpen(true);
-                            }}
+                            type="button"
+                            onClick={handleAdd}
                             className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white text-teal-700 text-sm font-semibold rounded-lg shadow-sm hover:bg-white/90 transition-all"
                         >
                             <Plus className="h-4 w-4" />
@@ -176,8 +180,8 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
                         </button>
                     </div>
                 </div>
-                <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-                <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
+                <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+                <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
             </div>
 
             <SuppliersCard
@@ -185,6 +189,7 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
                 suppliers={filteredSuppliers}
                 searchTerm={searchTerm}
                 onSearchChange={setSearchTerm}
+                onAdd={handleAdd}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
             />

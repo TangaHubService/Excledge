@@ -1,5 +1,9 @@
 {
     "common": {
+        "approved": "Approuvé",
+        "partiallyReceived": "Partiellement reçu",
+        "receiving": "Réception en cours...",
+        "movements": "Mouvements",
         "welcome": "Bienvenue",
         "loading": "Chargement...",
         "save": "Enregistrer",
@@ -131,6 +135,9 @@
         "rowsPerPage": "Lignes par page"
     },
     "nav": {
+        "expenses": "Dépenses",
+        "financeHeader": "FINANCES",
+        "getStarted": "COMMENCER",
         "home": "Accueil",
         "dashboard": "Tableau de bord",
         "inventory": "Inventaire",
@@ -786,6 +793,7 @@
         "passwordMismatch": "Les mots de passe ne correspondent pas"
     },
     "pos": {
+        "syncingSales": "Synchronisation des ventes...",
         "pointOfSale": "Point de Vente",
         "currentOrder": "Commande en Cours",
         "stock": "Stock",
@@ -944,6 +952,14 @@
         "total": "TOTAL"
     },
     "purchaseOrders": {
+        "confirmReceive": "Confirmer la réception",
+        "itemsReceived": "Articles reçus avec succès",
+        "noItemsToReceive": "Saisissez une quantité pour au moins un article",
+        "orderedQty": "Quantité commandée",
+        "previouslyReceived": "Reçu précédemment",
+        "quantityToReceive": "Quantité à recevoir",
+        "receive": "Recevoir",
+        "receiveItems": "Recevoir les articles",
         "title": "Bons de commande",
         "description": "Gérer les commandes aux fournisseurs",
         "createOrder": "Créer une commande",
@@ -997,6 +1013,10 @@
         "searchSupplier": "Rechercher des fournisseurs..."
     },
     "userManagement": {
+        "disabled": "Désactivé",
+        "reactivate": "Réactiver",
+        "userReactivated": "Utilisateur réactivé avec succès",
+        "failedToReactivate": "Échec de la réactivation de l'utilisateur",
         "title": "Gestion des utilisateurs",
         "description": "Gérer les utilisateurs et les permissions du système",
         "addUser": "Ajouter un utilisateur",

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Skeleton } from './skeleton'
@@ -11,6 +11,8 @@ export interface ColumnDef<T> {
   key: string
   header: string
   sortable?: boolean
+  /** Value used for client-side sorting when it differs from row[key]. */
+  sortValue?: (row: T) => unknown
   className?: string
   headerClassName?: string
   render?: (row: T, index: number) => ReactNode
@@ -46,6 +48,27 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   if (!active || dir === null) return <ChevronsUpDown className="h-3.5 w-3.5 opacity-40" />
   if (dir === 'asc') return <ChevronUp className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
   return <ChevronDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+}
+
+function compareValues(left: unknown, right: unknown): number {
+  if (left == null && right == null) return 0
+  if (left == null) return 1
+  if (right == null) return -1
+
+  if (typeof left === 'number' && typeof right === 'number') return left - right
+
+  const leftText = String(left).trim()
+  const rightText = String(right).trim()
+  const leftNumber = Number(leftText)
+  const rightNumber = Number(rightText)
+  if (leftText !== '' && rightText !== '' && Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    return leftNumber - rightNumber
+  }
+
+  return leftText.localeCompare(rightText, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  })
 }
 
 // ── Skeleton row ──────────────────────────────────────────────────────────────
@@ -174,6 +197,9 @@ export function DataTable<T>({
   const activeSortKey = sortKey ?? internalSortKey
   const activeSortDir = sortDir ?? internalSortDir
 
+  const isSortable = (column: ColumnDef<T>) =>
+    column.sortable ?? (column.key !== 'actions' && column.key !== 'action')
+
   const handleSort = (key: string) => {
     if (!onSort) {
       // Uncontrolled
@@ -193,6 +219,23 @@ export function DataTable<T>({
 
   const hasPagination = page !== undefined && onPageChange && total !== undefined
 
+  const displayedData = useMemo(() => {
+    // A controlled table delegates ordering to its caller (usually a server query).
+    if (onSort || !activeSortKey || !activeSortDir) return data
+    const column = columns.find(item => item.key === activeSortKey)
+    if (!column) return data
+
+    return data
+      .map((row, index) => ({ row, index }))
+      .sort((a, b) => {
+        const left = column.sortValue?.(a.row) ?? (a.row as any)[column.key]
+        const right = column.sortValue?.(b.row) ?? (b.row as any)[column.key]
+        const result = compareValues(left, right)
+        return result === 0 ? a.index - b.index : activeSortDir === 'asc' ? result : -result
+      })
+      .map(item => item.row)
+  }, [activeSortDir, activeSortKey, columns, data, onSort])
+
   return (
     <div className={cn('rounded-card border border-gray-200 dark:border-gray-700 overflow-hidden shadow-card', className)}>
       <div className="overflow-x-auto">
@@ -204,14 +247,17 @@ export function DataTable<T>({
                   key={col.key}
                   className={cn(
                     'px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap select-none',
-                    col.sortable && 'cursor-pointer hover:text-gray-700 dark:hover:text-gray-200',
+                    isSortable(col) && 'cursor-pointer hover:text-gray-700 dark:hover:text-gray-200',
                     col.headerClassName,
                   )}
-                  onClick={col.sortable ? () => handleSort(col.key) : undefined}
+                  onClick={isSortable(col) ? () => handleSort(col.key) : undefined}
+                  aria-sort={activeSortKey === col.key && activeSortDir
+                    ? activeSortDir === 'asc' ? 'ascending' : 'descending'
+                    : undefined}
                 >
                   <span className="flex items-center gap-1.5">
                     {col.header}
-                    {col.sortable && (
+                    {isSortable(col) && (
                       <SortIcon
                         active={activeSortKey === col.key}
                         dir={activeSortKey === col.key ? activeSortDir : null}
@@ -227,10 +273,10 @@ export function DataTable<T>({
               Array.from({ length: skeletonRows }).map((_, i) => (
                 <SkeletonRow key={i} columns={columns} />
               ))
-            ) : data.length === 0 ? (
+            ) : displayedData.length === 0 ? (
               <EmptyState icon={emptyIcon} title={emptyTitle} message={emptyMessage} />
             ) : (
-              data.map((row, index) => (
+              displayedData.map((row, index) => (
                 <tr
                   key={keyExtractor(row, index)}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}

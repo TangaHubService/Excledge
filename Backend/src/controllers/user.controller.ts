@@ -4,6 +4,7 @@ import type { AuthRequest } from "../middleware/auth.middleware";
 import { auditLogger } from "../utils/auditLogger";
 import { deleteFromCloudinary, uploadToCloudinary } from "../config/cloudinary";
 import { prisma } from "../lib/prisma";
+import { getOrderBy } from "../utils/sorting";
 
 export const getUsers = async (req: AuthRequest, res: Response) => {
   try {
@@ -52,7 +53,13 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
             },
           },
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: getOrderBy(req.query, {
+          name: { user: { name: '$direction' } },
+          email: { user: { email: '$direction' } },
+          status: { user: { isActive: '$direction' } },
+          role: { role: '$direction' },
+          createdAt: { user: { createdAt: '$direction' } },
+        }, 'createdAt', 'desc'),
         skip,
         take: limitNum,
       }),

@@ -6,11 +6,12 @@ import * as XLSX from "xlsx"
 import { validateCustomerRow } from "../services/import-validation.service"
 import { createPreviewSession, getPreviewSession, deletePreviewSession } from "../services/preview-session.service"
 import { prisma } from "../lib/prisma"
+import { getOrderBy } from "../utils/sorting"
 
 export const getCustomers = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params?.organizationId)
-    const { search, hasDebt, showInactive } = req.query
+    const { search, hasDebt, showInactive, customerType } = req.query
     const { page = "1", limit = "50" } = req.query
 
     // Apply pagination defaults and caps
@@ -35,6 +36,9 @@ export const getCustomers = async (req: BranchAuthRequest, res: Response) => {
     if (hasDebt === "true") {
       where.balance = { gt: 0 }
     }
+    if (typeof customerType === 'string' && customerType) {
+      where.customerType = customerType
+    }
 
     // Customers are organization-wide records (the Customer model has no
     // branchId column), so no branch filter is applied here. Filtering by
@@ -57,7 +61,16 @@ export const getCustomers = async (req: BranchAuthRequest, res: Response) => {
           select: { sales: true },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: getOrderBy(req.query, {
+        name: { name: '$direction' },
+        phone: { phone: '$direction' },
+        email: { email: '$direction' },
+        customerType: { customerType: '$direction' },
+        TIN: { TIN: '$direction' },
+        balance: { balance: '$direction' },
+        isActive: { isActive: '$direction' },
+        createdAt: { createdAt: '$direction' },
+      }, 'createdAt', 'desc'),
       skip,
       take: limitNum,
     })

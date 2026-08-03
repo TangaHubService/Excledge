@@ -16,6 +16,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -76,6 +79,8 @@ export const SupplierInvoicesPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [pagination, setPagination] = useState({ totalItems: 0, totalPages: 1, currentPage: 1 });
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
@@ -90,6 +95,8 @@ export const SupplierInvoicesPage: React.FC = () => {
         page,
         limit: 15,
         search: search || undefined,
+        sortBy,
+        sortOrder,
       });
       setInvoices(res?.data?.data || []);
       setPagination(res?.data?.pagination || { totalItems: 0, totalPages: 1, currentPage: 1 });
@@ -98,7 +105,26 @@ export const SupplierInvoicesPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [organizationId, statusFilter, page, search]);
+  }, [organizationId, statusFilter, page, search, sortBy, sortOrder]);
+
+  const sortHeader = (label: string, key: string) => (
+    <th
+      className="px-4 py-3 font-medium text-muted-foreground cursor-pointer select-none"
+      aria-sort={sortBy === key ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
+      onClick={() => {
+        setSortOrder(sortBy === key && sortOrder === 'asc' ? 'desc' : 'asc');
+        setSortBy(key);
+        setPage(1);
+      }}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {sortBy !== key ? <ChevronsUpDown className="size-3 opacity-40" /> : sortOrder === 'asc'
+          ? <ChevronUp className="size-3 text-blue-600" />
+          : <ChevronDown className="size-3 text-blue-600" />}
+      </span>
+    </th>
+  );
 
   useEffect(() => {
     fetchInvoices();
@@ -122,8 +148,8 @@ export const SupplierInvoicesPage: React.FC = () => {
     <div className="space-y-6 p-4 md:p-6">
       {/* Page Header */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-600 p-6 text-white shadow-lg">
-        <div className="absolute inset-0 bg-black/10" />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="pointer-events-none absolute inset-0 bg-black/10" />
+        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
               <ScanLine className="h-7 w-7 text-white" />
@@ -141,8 +167,8 @@ export const SupplierInvoicesPage: React.FC = () => {
             {t('invoiceScanner.scanInvoice')}
           </Button>
         </div>
-        <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-        <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
+        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+        <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
       </div>
 
       {/* Filters */}
@@ -197,12 +223,12 @@ export const SupplierInvoicesPage: React.FC = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className={cn('border-b text-left', isDark ? 'border-gray-700' : 'border-gray-200')}>
-                    <th className="px-4 py-3 font-medium text-muted-foreground">{t('invoiceScanner.invoiceNumber')}</th>
-                    <th className="px-4 py-3 font-medium text-muted-foreground">{t('invoiceScanner.supplierName')}</th>
+                    {sortHeader(t('invoiceScanner.invoiceNumber'), 'invoiceNumber')}
+                    {sortHeader(t('invoiceScanner.supplierName'), 'supplierName')}
                     <th className="px-4 py-3 font-medium text-muted-foreground">{t('invoiceScanner.items')}</th>
-                    <th className="px-4 py-3 font-medium text-muted-foreground">{t('common.total')}</th>
-                    <th className="px-4 py-3 font-medium text-muted-foreground">{t('common.status')}</th>
-                    <th className="px-4 py-3 font-medium text-muted-foreground">{t('common.date')}</th>
+                    {sortHeader(t('common.total'), 'totalAmount')}
+                    {sortHeader(t('common.status'), 'status')}
+                    {sortHeader(t('common.date'), 'createdAt')}
                     <th className="px-4 py-3 font-medium text-muted-foreground">{t('common.actions')}</th>
                   </tr>
                 </thead>

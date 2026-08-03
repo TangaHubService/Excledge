@@ -1,5 +1,9 @@
 {
     "common": {
+        "approved": "Byemejwe",
+        "partiallyReceived": "Byakiriwe igice",
+        "receiving": "Birimo kwakirwa...",
+        "movements": "Imigendekere",
         "welcome": "Murakaza neza",
         "loading": "Iratunganya...",
         "save": "Bika",
@@ -155,6 +159,9 @@
         "select": "Hitamo ikigo"
     },
     "nav": {
+        "expenses": "Amafaranga yasohotse",
+        "financeHeader": "IMARI",
+        "getStarted": "TANGIRA",
         "home": "Ahabanza",
         "dashboard": "Ikibaho",
         "inventory": "Ibicuruzwa",
@@ -641,6 +648,8 @@
         "loadError": "Gushaka amashami ntibyagenze neza"
     },
     "orders": {
+        "orderId": "Nomero y'icyasabwe",
+        "orderNumberShort": "No.",
         "orders": "Ibisabwa",
         "newOrder": "Ibusabwa gishya",
         "orderDate": "Itariki yo gusaba",
@@ -761,6 +770,8 @@
         "passwordMismatch": "Amagambo y'ibanga ntabwo ahura"
     },
     "pos": {
+        "critical": "Byihutirwa",
+        "syncingSales": "Igurisha ririmo guhuzwa...",
         "pointOfSale": "Aho Gucuruza",
         "currentOrder": "Tegeko Rihari",
         "stock": "Stock",
@@ -918,6 +929,14 @@
         "total": "YOSE HAMWE"
     },
     "purchaseOrders": {
+        "confirmReceive": "Emeza ko byakiriwe",
+        "itemsReceived": "Ibicuruzwa byakiriwe neza",
+        "noItemsToReceive": "Andika ingano y'igicuruzwa nibura kimwe",
+        "orderedQty": "Ingano yasabwe",
+        "previouslyReceived": "Ibyakiriwe mbere",
+        "quantityToReceive": "Ingano yo kwakira",
+        "receive": "Akira",
+        "receiveItems": "Akira ibicuruzwa",
         "title": "Ibisabwa byo Kugura",
         "description": "Gucunga ibisabwa ku batanga",
         "createOrder": "Kora Icyasabwe",
@@ -979,6 +998,10 @@
         "searchSupplier": "Shakisha abatanga..."
     },
     "userManagement": {
+        "disabled": "Yahagaritswe",
+        "reactivate": "Ongera umwemerere",
+        "userReactivated": "Ukoresha yongeye kwemererwa neza",
+        "failedToReactivate": "Kongera kwemerera ukoresha ntibyagenze neza",
         "title": "Gucunga Abakoresha",
         "description": "Gucunga abakoresha n'uburenganzira bwabo",
         "addUser": "Ongeraho Ukoresha",

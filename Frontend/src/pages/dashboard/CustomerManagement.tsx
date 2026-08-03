@@ -30,6 +30,9 @@ import {
   CreditCard,
   ArrowUpRight,
   MoreHorizontal,
+  ChevronsUpDown,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import { CustomerForm } from "../../components/customers/CustomerForm";
 import { cn } from "../../lib/utils";
@@ -67,6 +70,9 @@ export function CustomerManagement() {
   const [totalSales, setTotalSales] = useState(0);
   const [loadingSales, setLoadingSales] = useState(false);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalCustomersCount, setTotalCustomersCount] = useState(0);
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [customerToDelete, setCustomerToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -76,7 +82,7 @@ export function CustomerManagement() {
 
   useEffect(() => {
     fetchCustomers();
-  }, [page, organizationId]);
+  }, [page, itemsPerPage, organizationId, debouncedSearchTerm, typeFilter, sortBy, sortOrder]);
 
   useEffect(() => {
     if (!openRowMenuId) return;
@@ -88,8 +94,17 @@ export function CustomerManagement() {
   const fetchCustomers = async () => {
     try {
       setIsLoading(true);
-      const data = await apiClient.getCustomers({ organizationId, page });
+      const data = await apiClient.getCustomers({
+        organizationId,
+        page,
+        limit: itemsPerPage,
+        search: debouncedSearchTerm || undefined,
+        customerType: typeFilter || undefined,
+        sortBy,
+        sortOrder,
+      });
       setCustomers(data.customers || []);
+      setTotalCustomersCount(data.pagination?.total ?? data.count ?? 0);
     } catch (error) {
       console.error("Failed to fetch customers:", error);
       toast.error(t("messages.errorLoadingData"));
@@ -209,8 +224,27 @@ export function CustomerManagement() {
         customer.phone?.includes(debouncedSearchTerm))
   );
 
-  const paginatedCustomers = filteredCustomers.slice((page - 1) * itemsPerPage, page * itemsPerPage);
-  const totalFilteredPages = Math.ceil(filteredCustomers.length / itemsPerPage) || 1;
+  const paginatedCustomers = filteredCustomers;
+  const totalFilteredPages = Math.ceil(totalCustomersCount / itemsPerPage) || 1;
+
+  const sortHeader = (label: string, key: string, align = '') => (
+    <th
+      className={`py-3.5 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300 cursor-pointer select-none ${align}`}
+      aria-sort={sortBy === key ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
+      onClick={() => {
+        setSortOrder(sortBy === key && sortOrder === 'asc' ? 'desc' : 'asc');
+        setSortBy(key);
+        setPage(1);
+      }}
+    >
+      <span className={`inline-flex items-center gap-1 ${align === 'text-right' ? 'justify-end w-full' : ''}`}>
+        {label}
+        {sortBy !== key ? <ChevronsUpDown className="h-3 w-3 text-gray-400" /> : sortOrder === 'asc'
+          ? <ChevronUp className="h-3 w-3 text-blue-600" />
+          : <ChevronDown className="h-3 w-3 text-blue-600" />}
+      </span>
+    </th>
+  );
 
   // KPI Stats
   const totalCustomers = customers.length;
@@ -404,11 +438,11 @@ export function CustomerManagement() {
             <table className="w-full text-left">
               <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
                 <tr>
-                  <th className="py-3.5 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">ID</th>
-                  <th className="py-3.5 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">Customer</th>
-                  <th className="py-3.5 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">Contact Details</th>
-                  <th className="py-3.5 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300">Type</th>
-                  <th className="py-3.5 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300 text-right">Balance</th>
+                  {sortHeader('ID', 'createdAt')}
+                  {sortHeader('Customer', 'name')}
+                  {sortHeader('Contact Details', 'email')}
+                  {sortHeader('Type', 'customerType')}
+                  {sortHeader('Balance', 'balance', 'text-right')}
                   <th className="py-3.5 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300 text-center">Actions</th>
                 </tr>
               </thead>
@@ -532,7 +566,7 @@ export function CustomerManagement() {
         {!isLoading && filteredCustomers.length > 0 && (
           <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800">
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Showing {(page - 1) * itemsPerPage + 1} to {Math.min(page * itemsPerPage, filteredCustomers.length)} of {filteredCustomers.length} customers
+              Showing {(page - 1) * itemsPerPage + 1} to {Math.min(page * itemsPerPage, totalCustomersCount)} of {totalCustomersCount} customers
             </p>
 
             <div className="flex items-center gap-2">

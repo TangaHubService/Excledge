@@ -100,7 +100,7 @@ export default function DebtManagement() {
         <div className="space-y-6 p-4 md:p-6">
             {/* Page Header */}
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 p-6 text-white shadow-lg">
-                <div className="absolute inset-0 bg-black/10" />
+                <div className="pointer-events-none absolute inset-0 bg-black/10" />
                 <div className="relative flex items-center gap-4">
                     <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
                         <CreditCard className="h-7 w-7 text-white" />
@@ -112,8 +112,8 @@ export default function DebtManagement() {
                         </p>
                     </div>
                 </div>
-                <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-                <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
+                <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+                <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
             </div>
 
             {/* KPI Cards */}

@@ -412,7 +412,7 @@ export default function SalesPage() {
             </div>
             <button
               type="button"
-              onClick={() => navigate('/dashboard/sales/pos')}
+              onClick={() => navigate('/dashboard/pos')}
               className="h-9 flex items-center gap-2 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm shadow-blue-500/20"
             >
               <Plus className="h-4 w-4" />

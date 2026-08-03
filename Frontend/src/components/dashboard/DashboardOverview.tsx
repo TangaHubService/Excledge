@@ -360,7 +360,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           generateSparkline={generateSparklinePath}
           menuOpen={activeMenuCard === 'alerts'}
           onToggleMenu={() => setActiveMenuCard(activeMenuCard === 'alerts' ? null : 'alerts')}
-          onViewDetails={() => navigate('/dashboard/inventory/low-stock')}
+          onViewDetails={() => navigate('/dashboard/low-stock')}
         />
       </div>
 
@@ -403,7 +403,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   No sales or transactions recorded for the selected time range.
                 </p>
                 <button
-                  onClick={() => navigate('/dashboard/reports')}
+                  type="button"
+                  onClick={() => navigate('/dashboard/sales-reports')}
                   className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-xs shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all hover:scale-105"
                 >
                   <BarChart3 className="h-4 w-4" />
@@ -513,7 +514,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               Stock Alerts
             </h3>
             <button
-              onClick={() => navigate('/dashboard/inventory/low-stock')}
+              type="button"
+              onClick={() => navigate('/dashboard/low-stock')}
               className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
             >
               View all
@@ -522,8 +524,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
           <div className="space-y-3.5">
             {/* Low stock */}
-            <div
-              onClick={() => navigate('/dashboard/inventory/low-stock')}
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/low-stock')}
               className="p-3.5 rounded-xl bg-amber-50/60 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/30 flex items-center justify-between cursor-pointer hover:bg-amber-50 transition-colors"
             >
               <div className="flex items-center gap-3">
@@ -538,11 +541,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <span className="px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-800/60 text-amber-700 dark:text-amber-300 font-bold text-xs">
                 {String(data.stockAlerts.lowStock.count).padStart(2, '0')}
               </span>
-            </div>
+            </button>
 
             {/* Expired products */}
-            <div
-              onClick={() => navigate('/dashboard/inventory/expired')}
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/expired')}
               className="p-3.5 rounded-xl bg-rose-50/60 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800/30 flex items-center justify-between cursor-pointer hover:bg-rose-50 transition-colors"
             >
               <div className="flex items-center gap-3">
@@ -557,11 +561,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <span className="px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-800/60 text-rose-700 dark:text-rose-300 font-bold text-xs">
                 {String(data.stockAlerts.expired.count).padStart(2, '0')}
               </span>
-            </div>
+            </button>
 
             {/* Out of stock */}
-            <div
-              onClick={() => navigate('/dashboard/inventory')}
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/inventory-all')}
               className="p-3.5 rounded-xl bg-purple-50/60 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800/30 flex items-center justify-between cursor-pointer hover:bg-purple-50 transition-colors"
             >
               <div className="flex items-center gap-3">
@@ -576,7 +581,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <span className="px-2.5 py-1 rounded-full bg-purple-100 dark:bg-purple-800/60 text-purple-700 dark:text-purple-300 font-bold text-xs">
                 {String(data.stockAlerts.outOfStock.count).padStart(2, '0')}
               </span>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -587,6 +592,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               Recent Activities
             </h3>
             <button
+              type="button"
               onClick={() => navigate('/dashboard/activity-logs')}
               className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
             >
@@ -680,6 +686,7 @@ const KPICard: React.FC<KPICardProps> = ({
           </div>
           <div className="relative">
             <button
+              type="button"
               onClick={onToggleMenu}
               className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
@@ -688,6 +695,7 @@ const KPICard: React.FC<KPICardProps> = ({
             {menuOpen && (
               <div className="absolute right-0 mt-1 w-36 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 py-1 z-20">
                 <button
+                  type="button"
                   onClick={onViewDetails}
                   className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-between"
                 >

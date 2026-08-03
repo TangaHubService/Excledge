@@ -3,15 +3,24 @@ import type { SuppliersTableProps } from '../types/supplierTypes';
 import { SupplierRow } from './SupplierRow';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../../../context/ThemeContext';
+import { Plus } from 'lucide-react';
 
-export const SuppliersTable: React.FC<SuppliersTableProps> = ({ suppliers, onEdit, onDelete }) => {
+export const SuppliersTable: React.FC<SuppliersTableProps> = ({ suppliers, onAdd, onEdit, onDelete }) => {
   const { t } = useTranslation();
   const { theme } = useTheme();
   
   if (suppliers.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">
-        No suppliers found
+      <div className="flex flex-col items-center py-10 text-center text-gray-500">
+        <p>No suppliers found</p>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+        >
+          <Plus className="h-4 w-4" />
+          Add New Supplier
+        </button>
       </div>
     );
   }

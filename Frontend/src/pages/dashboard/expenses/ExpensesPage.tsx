@@ -20,6 +20,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../../../components/ui/alert-dialog'
 import { DataTable, type ColumnDef } from '../../../components/ui/data-table'
+import type { SortDir } from '../../../components/ui/data-table'
 import { StatusBadge } from '../../../components/ui/status-badge'
 import { cn } from '../../../lib/utils'
 import { useBranch } from '../../../context/BranchContext'
@@ -309,6 +310,8 @@ export default function ExpensesPage() {
   const [methodFilter, setMethodFilter] = useState('ALL')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [sortBy, setSortBy] = useState('expenseDate')
+  const [sortOrder, setSortOrder] = useState<SortDir>('desc')
 
   // UI state
   const [formOpen, setFormOpen] = useState(false)
@@ -320,6 +323,8 @@ export default function ExpensesPage() {
   const queryParams = {
     page: String(page),
     limit: String(PAGE_SIZE),
+    sortBy,
+    sortOrder: sortOrder ?? 'desc',
     ...(categoryFilter !== 'ALL' && { category: categoryFilter }),
     ...(methodFilter !== 'ALL' && { paymentMethod: methodFilter }),
     ...(startDate && { startDate }),
@@ -401,6 +406,7 @@ export default function ExpensesPage() {
     {
       key: 'category',
       header: 'Category',
+      sortValue: row => CATEGORY_LABELS[row.category] ?? row.category,
       render: row => (
         <span className="text-xs font-medium text-gray-700 dark:text-gray-200">
           {CATEGORY_LABELS[row.category] ?? row.category}
@@ -420,6 +426,7 @@ export default function ExpensesPage() {
     {
       key: 'paymentMethod',
       header: 'Method',
+      sortValue: row => METHOD_LABELS[row.paymentMethod] ?? row.paymentMethod,
       render: row => (
         <StatusBadge status={row.paymentMethod} label={METHOD_LABELS[row.paymentMethod] ?? row.paymentMethod} />
       ),
@@ -439,6 +446,7 @@ export default function ExpensesPage() {
     {
       key: 'user',
       header: 'Recorded By',
+      sortValue: row => row.user?.name,
       className: 'text-xs text-gray-500 dark:text-gray-400',
       render: row => row.user?.name ?? '—',
     },
@@ -482,8 +490,8 @@ export default function ExpensesPage() {
     <div className="space-y-6 p-4 md:p-6">
       {/* Page header */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 p-6 text-white shadow-lg">
-        <div className="absolute inset-0 bg-black/10" />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="pointer-events-none absolute inset-0 bg-black/10" />
+        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
               <TrendingDown className="h-7 w-7 text-white" />
@@ -503,8 +511,8 @@ export default function ExpensesPage() {
             Record Expense
           </Button>
         </div>
-        <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-        <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
+        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+        <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
       </div>
 
       {/* KPI row */}
@@ -614,6 +622,13 @@ export default function ExpensesPage() {
         pageSize={PAGE_SIZE}
         total={total}
         onPageChange={p => setPage(p)}
+        sortKey={sortBy}
+        sortDir={sortOrder}
+        onSort={(key, direction) => {
+          setSortBy(direction ? key : 'expenseDate')
+          setSortOrder(direction ?? 'desc')
+          setPage(1)
+        }}
         onRowClick={openEdit}
       />
 

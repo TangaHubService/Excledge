@@ -103,6 +103,8 @@ export const InventoryManagement = () => {
   const [lowStockProducts, setLowStockProducts] = useState(0);
   const [expiredProducts, setExpiredProducts] = useState(0);
   const [expiringProducts, setExpiringProducts] = useState(0);
+  const [sortBy, setSortBy] = useState('expiryDate');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Ledger dialogs state
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
@@ -123,8 +125,10 @@ export const InventoryManagement = () => {
       page: currentPage,
       limit: itemsPerPage,
       branchId: selectedBranchId,
+      sortBy,
+      sortOrder,
     });
-  }, [debouncedSearchTerm, category, expiryStatus, currentPage, itemsPerPage, selectedBranchId]);
+  }, [debouncedSearchTerm, category, expiryStatus, currentPage, itemsPerPage, selectedBranchId, sortBy, sortOrder]);
 
   // Close action menu on outside click
   useEffect(() => {
@@ -589,13 +593,38 @@ export const InventoryManagement = () => {
           <Table>
             <TableHeader className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
               <TableRow className="hover:bg-transparent">
-                {["ID", "Product", "Batch Number", "Category", "Qty", "Price", "Expiry Date", "Status", "Actions"].map((h) => (
-                  <TableHead key={h} className="text-xs font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap py-3.5">
+                {[
+                  { label: "ID", key: "id" },
+                  { label: "Product", key: "name" },
+                  { label: "Batch Number", key: "batchNumber" },
+                  { label: "Category", key: "category" },
+                  { label: "Qty", key: "quantity" },
+                  { label: "Price", key: "sellingPrice" },
+                  { label: "Expiry Date", key: "expiryDate" },
+                  { label: "Status", key: "" },
+                  { label: "Actions", key: "" },
+                ].map(({ label, key }) => (
+                  <TableHead
+                    key={label}
+                    aria-sort={key && sortBy === key ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
+                    className={cn(
+                      "text-xs font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap py-3.5",
+                      key && "cursor-pointer select-none hover:text-blue-600",
+                    )}
+                    onClick={() => {
+                      if (!key) return;
+                      setSortOrder(sortBy === key && sortOrder === 'asc' ? 'desc' : 'asc');
+                      setSortBy(key);
+                      setCurrentPage(1);
+                    }}
+                  >
                     <span className="flex items-center gap-1">
-                      {h}
-                      {["ID", "Product", "Batch Number", "Category", "Qty", "Price", "Expiry Date", "Status"].includes(h) && (
-                        <svg className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                          <path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" />
+                      {label}
+                      {key && (
+                        <svg className={cn("h-3 w-3", sortBy === key ? "text-blue-600" : "text-gray-400")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                          {sortBy === key && sortOrder === 'desc'
+                            ? <path d="M12 5v14m0 0 5-5m-5 5-5-5" />
+                            : <path d="M12 19V5m0 0 5 5m-5-5-5 5" />}
                         </svg>
                       )}
                     </span>

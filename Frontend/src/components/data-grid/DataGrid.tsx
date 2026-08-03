@@ -12,6 +12,8 @@ export interface Column<T> {
   accessor: (row: T) => React.ReactNode
   sortKey?: keyof T | string
   sortable?: boolean
+  /** Value used for local sorting when it differs from the field value. */
+  sortValue?: (row: T) => unknown
   className?: string
   headerClassName?: string
   /** Hide on mobile (default: visible) */
@@ -78,11 +80,48 @@ export function DataGrid<T extends { id: number | string }>({
 
   const currentSortField = isControlled ? sortField : localSortField
   const currentSortDir = isControlled ? sortDirection : localSortDir
+  const isSortable = (column: Column<T>) =>
+    column.sortable ?? (column.id !== 'actions' && column.id !== 'action')
+  const columnSortKey = (column: Column<T>) => String(column.sortKey ?? column.id)
+
+  const getNestedValue = (row: T, path: string): unknown =>
+    path.split('.').reduce<unknown>((value, part) =>
+      value != null && typeof value === 'object' ? (value as Record<string, unknown>)[part] : undefined,
+    row,
+    )
+
+  const compareValues = (left: unknown, right: unknown): number => {
+    if (left == null && right == null) return 0
+    if (left == null) return 1
+    if (right == null) return -1
+    if (typeof left === 'number' && typeof right === 'number') return left - right
+    const a = String(left).trim()
+    const b = String(right).trim()
+    const aNumber = Number(a)
+    const bNumber = Number(b)
+    if (a && b && Number.isFinite(aNumber) && Number.isFinite(bNumber)) return aNumber - bNumber
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+  }
+
+  const displayedData = useMemo(() => {
+    if (isControlled || !currentSortField) return data
+    const column = columns.find(col => columnSortKey(col) === currentSortField)
+    if (!column) return data
+    return data
+      .map((row, index) => ({ row, index }))
+      .sort((a, b) => {
+        const left = column.sortValue?.(a.row) ?? getNestedValue(a.row, columnSortKey(column))
+        const right = column.sortValue?.(b.row) ?? getNestedValue(b.row, columnSortKey(column))
+        const result = compareValues(left, right)
+        return result === 0 ? a.index - b.index : currentSortDir === 'asc' ? result : -result
+      })
+      .map(item => item.row)
+  }, [columns, currentSortDir, currentSortField, data, isControlled])
 
   const handleSort = useCallback(
     (column: Column<T>) => {
-      if (!column.sortable || !column.sortKey) return
-      const key = String(column.sortKey)
+      if (!isSortable(column)) return
+      const key = columnSortKey(column)
       if (isControlled) {
         const dir = sortField === key && sortDirection === 'asc' ? 'desc' : 'asc'
         onSort(key, dir)
@@ -160,16 +199,16 @@ export function DataGrid<T extends { id: number | string }>({
                   key={col.id}
                   className={cn(
                     'h-11 px-4 text-caption font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400',
-                    col.sortable && 'cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200',
+                    isSortable(col) && 'cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200',
                     col.align === 'right' && 'text-right',
                     col.align === 'center' && 'text-center',
                     col.hideOnMobile && 'hidden lg:table-cell',
                     col.headerClassName,
                   )}
                   style={col.width ? { width: col.width, minWidth: col.width } : undefined}
-                  onClick={() => col.sortable && handleSort(col)}
+                  onClick={() => isSortable(col) && handleSort(col)}
                   aria-sort={
-                    currentSortField === col.sortKey
+                    currentSortField === columnSortKey(col)
                       ? currentSortDir === 'asc'
                         ? 'ascending'
                         : 'descending'
@@ -178,9 +217,9 @@ export function DataGrid<T extends { id: number | string }>({
                 >
                   <div className="inline-flex items-center gap-1">
                     <span>{col.header}</span>
-                    {col.sortable && (
+                    {isSortable(col) && (
                       <span className="shrink-0 text-gray-300 dark:text-gray-600">
-                        {currentSortField === col.sortKey ? (
+                        {currentSortField === columnSortKey(col) ? (
                           currentSortDir === 'asc' ? (
                             <ChevronUp className="h-3.5 w-3.5 text-blue-500" />
                           ) : (
@@ -209,7 +248,7 @@ export function DataGrid<T extends { id: number | string }>({
                 action={emptyAction}
               />
             ) : (
-              data.map((row, idx) => {
+              displayedData.map((row, idx) => {
                 const key = getKey(row, idx)
                 const isSelected = selectedIds?.has(key)
                 return (
@@ -275,7 +314,7 @@ export function DataGrid<T extends { id: number | string }>({
             <EmptyContent title={emptyTitle} description={emptyDescription} action={emptyAction} />
           </div>
         ) : (
-          data.map((row, idx) => {
+          displayedData.map((row, idx) => {
             const key = getKey(row, idx)
             const isSelected = selectedIds?.has(key)
             return (

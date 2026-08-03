@@ -161,8 +161,8 @@ export default function WarehouseManagement() {
     <div className="space-y-6 p-4 md:p-6">
       {/* Page Header */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-700 via-gray-700 to-zinc-700 p-6 text-white shadow-lg">
-        <div className="absolute inset-0 bg-black/10" />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="pointer-events-none absolute inset-0 bg-black/10" />
+        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
               <WarehouseIcon className="h-7 w-7 text-white" />
@@ -184,8 +184,8 @@ export default function WarehouseManagement() {
             {t('inventory.addWarehouse') || 'Add Warehouse'}
           </Button>
         </div>
-        <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-        <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
+        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+        <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
       </div>
 
       {/* KPI Cards */}

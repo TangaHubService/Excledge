@@ -14,6 +14,7 @@ export const SupplierRow: React.FC<SupplierRowProps> = ({ supplier, onEdit, onDe
       <td className="py-3 px-4 text-right">
         <div className="flex justify-end gap-2">
           <button
+            type="button"
             onClick={() => onEdit(supplier)}
             className="p-2 hover:bg-gray-200 rounded-md transition-colors"
             aria-label="Edit supplier"
@@ -21,6 +22,7 @@ export const SupplierRow: React.FC<SupplierRowProps> = ({ supplier, onEdit, onDe
             <Pencil className="h-4 w-4" />
           </button>
           <button
+            type="button"
             onClick={() => onDelete(supplier.id)}
             className="p-2 text-red-500 hover:bg-red-50 rounded-md transition-colors"
             aria-label="Delete supplier"

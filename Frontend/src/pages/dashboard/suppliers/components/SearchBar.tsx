@@ -28,6 +28,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ value, onChange }) => {
       />
       {value && (
         <button
+          type="button"
           onClick={() => onChange('')}
           className="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-red-500 transition-colors text-gray-400"
         >

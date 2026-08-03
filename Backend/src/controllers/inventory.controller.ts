@@ -11,6 +11,7 @@ import {
 import { syncProductToRraAsync } from "../services/product-sync.service"
 import { success, error as apiError } from "../utils/apiResponse"
 import { getOrganizationSettings } from "../services/organization-settings.service"
+import { getOrderBy } from "../utils/sorting"
 
 export const getProducts = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -83,7 +84,20 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
     const [products, totalCount] = await Promise.all([
       prisma.product.findMany({
         where,
-        orderBy: { expiryDate: "asc" },
+        orderBy: getOrderBy(req.query, {
+          id: { id: '$direction' },
+          name: { name: '$direction' },
+          sku: { sku: '$direction' },
+          batchNumber: { batchNumber: '$direction' },
+          barcode: { barcode: '$direction' },
+          category: { category: '$direction' },
+          sellingPrice: { sellingPrice: '$direction' },
+          costPrice: { costPrice: '$direction' },
+          minStock: { minStock: '$direction' },
+          quantity: { quantity: '$direction' },
+          expiryDate: { expiryDate: '$direction' },
+          createdAt: { createdAt: '$direction' },
+        }, 'expiryDate', 'asc'),
         skip,
         take: limitNum,
       }),
@@ -719,7 +733,14 @@ export const getExpiringProducts = async (req: BranchAuthRequest, res: Response)
     const [products, totalCount] = await Promise.all([
       prisma.product.findMany({
         where,
-        orderBy: { expiryDate: "asc" },
+        orderBy: getOrderBy(req.query, {
+          id: { id: '$direction' },
+          name: { name: '$direction' },
+          batchNumber: { batchNumber: '$direction' },
+          expiryDate: { expiryDate: '$direction' },
+          quantity: { quantity: '$direction' },
+          sellingPrice: { sellingPrice: '$direction' },
+        }, 'expiryDate', 'asc'),
         skip,
         take,
       }),
@@ -771,7 +792,14 @@ export const getExpiredProducts = async (req: BranchAuthRequest, res: Response) 
     const [products, totalCount] = await Promise.all([
       prisma.product.findMany({
         where,
-        orderBy: { expiryDate: "desc" },
+        orderBy: getOrderBy(req.query, {
+          id: { id: '$direction' },
+          name: { name: '$direction' },
+          batchNumber: { batchNumber: '$direction' },
+          expiryDate: { expiryDate: '$direction' },
+          quantity: { quantity: '$direction' },
+          sellingPrice: { sellingPrice: '$direction' },
+        }, 'expiryDate', 'desc'),
         skip,
         take,
       }),

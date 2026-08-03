@@ -1,6 +1,7 @@
 import type { Response } from 'express';
 import { ActivityType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import { getOrderBy } from '../utils/sorting';
 import { logManualActivity } from '../middleware/activity-log.middleware';
 import type { BranchAuthRequest } from '../middleware/branchAuth.middleware';
 import { buildBranchFilter, getBranchIdForOperation } from '../middleware/branchAuth.middleware';
@@ -131,7 +132,15 @@ export const getExpenses = async (req: BranchAuthRequest, res: Response) => {
                         }
                     }
                 },
-                orderBy: { expenseDate: 'desc' },
+                orderBy: getOrderBy(req.query, {
+                    expenseDate: { expenseDate: '$direction' },
+                    category: { category: '$direction' },
+                    description: { description: '$direction' },
+                    paymentMethod: { paymentMethod: '$direction' },
+                    amount: { amount: '$direction' },
+                    user: { user: { name: '$direction' } },
+                    createdAt: { createdAt: '$direction' }
+                }, 'expenseDate', 'desc'),
                 skip,
                 take
             }),
