@@ -23,6 +23,7 @@ export interface SupplierRowProps {
 
 export interface SuppliersTableProps {
   suppliers: Supplier[];
+  onAdd: () => void;
   onEdit: (supplier: Supplier) => void;
   onDelete: (id: string | number) => void;
 }
@@ -37,6 +38,7 @@ export interface SuppliersCardProps {
   suppliers: Supplier[];
   searchTerm: string;
   onSearchChange: (value: string) => void;
+  onAdd: () => void;
   onEdit: (supplier: Supplier) => void;
   onDelete: (id: string | number) => void;
 }

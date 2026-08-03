@@ -22,8 +22,8 @@ const STATIC_PAGES: SearchResult[] = [
   { id: 'p-4', title: 'All Inventory', subtitle: 'Stock management', category: 'Pages', path: '/dashboard/inventory' },
   { id: 'p-5', title: 'Customers', subtitle: 'Customer database & accounts', category: 'Pages', path: '/dashboard/customers' },
   { id: 'p-6', title: 'Debt Management', subtitle: 'Outstanding debt tracking', category: 'Pages', path: '/dashboard/debt' },
-  { id: 'p-7', title: 'Low Stock Items', subtitle: 'Critical inventory alerts', category: 'Pages', path: '/dashboard/inventory/low-stock' },
-  { id: 'p-8', title: 'Stock Movements', subtitle: 'Audit log of stock transfers', category: 'Pages', path: '/dashboard/inventory/movements' },
+  { id: 'p-7', title: 'Low Stock Items', subtitle: 'Critical inventory alerts', category: 'Pages', path: '/dashboard/low-stock' },
+  { id: 'p-8', title: 'Stock Movements', subtitle: 'Audit log of stock transfers', category: 'Pages', path: '/dashboard/ledger-history' },
 ]
 
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose }) => {

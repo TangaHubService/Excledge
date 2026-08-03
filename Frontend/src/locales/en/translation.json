@@ -1,5 +1,8 @@
 {
     "common": {
+        "approved": "Approved",
+        "partiallyReceived": "Partially Received",
+        "receiving": "Receiving...",
         "welcome": "Welcome",
         "loading": "Loading...",
         "save": "Save",
@@ -937,6 +940,14 @@
         "total": "TOTAL"
     },
     "purchaseOrders": {
+        "confirmReceive": "Confirm Receipt",
+        "itemsReceived": "Items received successfully",
+        "noItemsToReceive": "Enter a quantity for at least one item",
+        "orderedQty": "Ordered Quantity",
+        "previouslyReceived": "Previously Received",
+        "quantityToReceive": "Quantity to Receive",
+        "receive": "Receive",
+        "receiveItems": "Receive Items",
         "title": "Purchase Orders",
         "description": "Manage orders to suppliers",
         "createOrder": "Create Order",
@@ -990,6 +1001,10 @@
         "pending": "Draft"
     },
     "userManagement": {
+        "disabled": "Disabled",
+        "reactivate": "Reactivate",
+        "userReactivated": "User reactivated successfully",
+        "failedToReactivate": "Failed to reactivate user",
         "title": "User Management",
         "description": "Manage system users and permissions",
         "addUser": "Add User",

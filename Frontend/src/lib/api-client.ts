@@ -704,7 +704,7 @@ class ApiClient {
   }
 
   // User endpoints
-  async getUsers(params?: { page?: number; limit?: number; search?: string; status?: string }) {
+  async getUsers(params?: { page?: number; limit?: number; search?: string; status?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' }) {
     const query = params ? '?' + new URLSearchParams(params as any).toString() : '';
     return this.request(`/users/${this.getOrganizationId()}${query}`);
   }
@@ -831,10 +831,9 @@ class ApiClient {
     );
   }
 
-  async getCashFlowReport(startDate: string, endDate: string) {
-    return this.request(
-      `/reports/cash-flow/${this.getOrganizationId()}?startDate=${startDate}&endDate=${endDate}`
-    );
+  async getCashFlowReport(startDate: string, endDate: string, sortBy = 'date', sortOrder: 'asc' | 'desc' = 'asc') {
+    const query = new URLSearchParams({ startDate, endDate, sortBy, sortOrder });
+    return this.request(`/reports/cash-flow/${this.getOrganizationId()}?${query}`);
   }
 
   async getStockReport(params: { startDate: string; endDate: string; productId?: string; category?: string }) {
@@ -1807,12 +1806,14 @@ class ApiClient {
     });
   }
 
-  async getSupplierInvoices(organizationId: string, params?: { status?: string; page?: number; limit?: number; search?: string }) {
+  async getSupplierInvoices(organizationId: string, params?: { status?: string; page?: number; limit?: number; search?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' }) {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);
     if (params?.page) qs.set('page', String(params.page));
     if (params?.limit) qs.set('limit', String(params.limit));
     if (params?.search) qs.set('search', params.search);
+    if (params?.sortBy) qs.set('sortBy', params.sortBy);
+    if (params?.sortOrder) qs.set('sortOrder', params.sortOrder);
     const query = qs.toString() ? `?${qs.toString()}` : '';
     return this.request(`/supplier-invoices/${organizationId}${query}`);
   }

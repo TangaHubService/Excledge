@@ -10,6 +10,7 @@ export const SuppliersCard: React.FC<SuppliersCardProps> = ({
   suppliers,
   searchTerm,
   onSearchChange,
+  onAdd,
   onEdit,
   onDelete,
 }) => {
@@ -42,6 +43,7 @@ export const SuppliersCard: React.FC<SuppliersCardProps> = ({
         ) : (
           <SuppliersTable
             suppliers={suppliers}
+            onAdd={onAdd}
             onEdit={onEdit}
             onDelete={onDelete}
           />

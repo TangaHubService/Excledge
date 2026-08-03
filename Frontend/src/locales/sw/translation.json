@@ -1,5 +1,8 @@
 {
     "common": {
+        "approved": "Imeidhinishwa",
+        "partiallyReceived": "Imepokelewa kwa sehemu",
+        "receiving": "Inapokelewa...",
         "welcome": "Karibu",
         "loading": "Inapakia...",
         "save": "Hifadhi",
@@ -132,6 +135,9 @@
         "uploading": "Inapakia..."
     },
     "nav": {
+        "expenses": "Matumizi",
+        "financeHeader": "FEDHA",
+        "getStarted": "ANZA",
         "home": "Nyumbani",
         "dashboard": "Dashibodi",
         "inventory": "Hesabu",
@@ -555,6 +561,9 @@
         "status": "Hali"
     },
     "customers": {
+        "importCustomers": "Ingiza wateja",
+        "noPurchases": "Hakuna manunuzi",
+        "purchasesCount": "Manunuzi {{count}}",
         "customers": "Wateja",
         "addCustomer": "Ongeza mteja",
         "editCustomer": "Hariri mteja",
@@ -636,6 +645,8 @@
         "loadError": "Imeshindwa kupakia matawi"
     },
     "orders": {
+        "orderId": "Kitambulisho cha agizo",
+        "orderNumberShort": "Agizo #",
         "orders": "Maagizo",
         "newOrder": "Agizo jipya",
         "orderDate": "Tarehe ya agizo",
@@ -755,6 +766,7 @@
         "passwordMismatch": "Nywila hazilingani"
     },
     "pos": {
+        "syncingSales": "Inasawazisha mauzo...",
         "pointOfSale": "Sehemu ya Uuzaji",
         "currentOrder": "Agizo la Sasa",
         "stock": "Hisa",
@@ -876,6 +888,14 @@
         "total": "JUMLA"
     },
     "purchaseOrders": {
+        "confirmReceive": "Thibitisha upokeaji",
+        "itemsReceived": "Bidhaa zimepokelewa kwa mafanikio",
+        "noItemsToReceive": "Weka kiasi cha angalau bidhaa moja",
+        "orderedQty": "Kiasi kilichoagizwa",
+        "previouslyReceived": "Kilichopokelewa awali",
+        "quantityToReceive": "Kiasi cha kupokea",
+        "receive": "Pokea",
+        "receiveItems": "Pokea bidhaa",
         "title": "Maagizo ya Ununuzi",
         "description": "Simamia maagizo kwa wasambazaji",
         "createOrder": "Tengeneza Agizo",
@@ -931,6 +951,10 @@
         "searchSupplier": "Tafuta wasambazaji..."
     },
     "userManagement": {
+        "disabled": "Amezimwa",
+        "reactivate": "Washa tena",
+        "userReactivated": "Mtumiaji amewashwa tena kwa mafanikio",
+        "failedToReactivate": "Imeshindwa kumwasha tena mtumiaji",
         "title": "Usimamizi wa Watumiaji",
         "description": "Simamia watumiaji na ruhusa zao",
         "addUser": "Ongeza Mtumiaji",

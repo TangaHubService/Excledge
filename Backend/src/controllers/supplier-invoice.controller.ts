@@ -10,6 +10,7 @@ import { addStock } from '../services/inventory-ledger.service';
 import { normalizeExtractedData, clampMoney, clampTaxRate } from '../services/ocr.service';
 import { analyzeInvoice } from '../services/invoice-analysis.service';
 import { config } from '../config';
+import { getOrderBy } from '../utils/sorting';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -200,7 +201,14 @@ export const getInvoices = async (req: BranchAuthRequest, res: Response) => {
           files: { select: { id: true, originalName: true, mimeType: true } },
           _count: { select: { items: true } },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: getOrderBy(req.query, {
+          invoiceNumber: { invoiceNumber: '$direction' },
+          supplierName: { supplierName: '$direction' },
+          totalAmount: { totalAmount: '$direction' },
+          status: { status: '$direction' },
+          invoiceDate: { invoiceDate: '$direction' },
+          createdAt: { createdAt: '$direction' },
+        }, 'createdAt', 'desc'),
         skip,
         take: limitNum,
       }),

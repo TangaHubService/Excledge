@@ -320,8 +320,8 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
         <div className="max-w-7xl mx-auto">
                 {/* Header */}
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 text-white shadow-lg mb-6">
-                    <div className="absolute inset-0 bg-black/10" />
-                    <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="pointer-events-none absolute inset-0 bg-black/10" />
+                    <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-4">
                             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
                                 <Package className="h-7 w-7 text-white" />
@@ -339,8 +339,8 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                             {t('purchaseOrders.newOrder')}
                         </Button>
                     </div>
-                    <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-                    <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
+                    <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+                    <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
                 </div>
 
                 {/* Search & Filters Bar */}

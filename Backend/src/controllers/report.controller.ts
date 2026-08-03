@@ -857,7 +857,7 @@ export const getDebtPaymentsReport = async (req: BranchAuthRequest, res: Respons
 export const getCashFlowReport = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, sortBy = 'date', sortOrder = 'asc' } = req.query;
 
     const start = new Date(startDate as string);
     const end = new Date(new Date(endDate as string).setHours(23, 59, 59, 999));
@@ -878,10 +878,38 @@ export const getCashFlowReport = async (req: BranchAuthRequest, res: Response) =
 
     // 5. Calculate running balance
     let runningBalance = openingBalance;
-    const transactions = allTransactions.map(t => {
+    const transactionsWithBalances = allTransactions.map(t => {
       runningBalance += t.amount; // amount is positive for inflows, negative for outflows
       return { ...t, balance: runningBalance };
     });
+
+    // Running balances must always be calculated chronologically. Sorting is
+    // applied only to the presentation rows afterwards so accounting remains valid.
+    const allowedSortFields = new Set([
+      'date', 'description', 'category', 'subcategory', 'type', 'amount',
+      'balance', 'paymentMethod', 'reference',
+    ]);
+    const sortField = typeof sortBy === 'string' && allowedSortFields.has(sortBy) ? sortBy : 'date';
+    const direction = sortOrder === 'desc' ? -1 : 1;
+    const transactions = transactionsWithBalances
+      .map((transaction, index) => ({ transaction, index }))
+      .sort((leftEntry, rightEntry) => {
+      const left = leftEntry.transaction as any;
+      const right = rightEntry.transaction as any;
+      // Amount is rendered without its accounting sign in the UI, so order by
+      // the same absolute value users actually see.
+      const a = sortField === 'amount' ? Math.abs(left.amount) : left[sortField];
+      const b = sortField === 'amount' ? Math.abs(right.amount) : right[sortField];
+      if (a == null && b == null) return 0;
+      if (a == null) return direction;
+      if (b == null) return -direction;
+      const comparison = typeof a === 'number' && typeof b === 'number'
+        ? a - b
+        : String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+      // Preserve chronological accounting order when displayed values match.
+      return comparison === 0 ? leftEntry.index - rightEntry.index : comparison * direction;
+    })
+      .map(entry => entry.transaction);
 
     // 6. Calculate summary
     const totalInflows = inflows.reduce((sum, t) => sum + t.amount, 0);
@@ -915,7 +943,8 @@ export const getCashFlowReport = async (req: BranchAuthRequest, res: Response) =
         calculated: closingBalance,
         actual: calculatedClosing,
         balanced
-      }
+      },
+      sorting: { sortBy: sortField, sortOrder: direction === 1 ? 'asc' : 'desc' }
     });
   } catch (error: any) {
     console.error('Error generating cash flow report:', error);

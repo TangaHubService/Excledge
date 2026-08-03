@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Activity, AlertTriangle, CheckCircle, PlusCircle, Receipt, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { TrendingUp, TrendingDown, DollarSign, Activity, AlertTriangle, CheckCircle, PlusCircle, Receipt, Loader2, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { TableSkeleton } from '../../../components/ui/TableSkeleton';
 import { apiClient } from '../../../lib/api-client';
@@ -60,6 +60,9 @@ export const CashFlowReport = () => {
     const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [transactionType, setTransactionType] = useState('ALL');
     const [categoryFilter, setCategoryFilter] = useState('ALL');
+    const [sortBy, setSortBy] = useState('date');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const cashFlowRequestId = useRef(0);
 
     // Modal states
     const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
@@ -111,12 +114,14 @@ export const CashFlowReport = () => {
 
     useEffect(() => {
         fetchCashFlow();
-    }, [startDate, endDate]);
+    }, [startDate, endDate, sortBy, sortOrder]);
 
     const fetchCashFlow = async () => {
+        const requestId = ++cashFlowRequestId.current;
         try {
             setLoading(true);
-            const data = await apiClient.getCashFlowReport(startDate, endDate) as CashFlowResponse;
+            const data = await apiClient.getCashFlowReport(startDate, endDate, sortBy, sortOrder) as CashFlowResponse;
+            if (requestId !== cashFlowRequestId.current) return;
             setTransactions(data.transactions || []);
             setSummary(data.summary || {
                 openingBalance: 0,
@@ -127,12 +132,31 @@ export const CashFlowReport = () => {
             });
             setVerification(data.verification || null);
         } catch (error) {
+            if (requestId !== cashFlowRequestId.current) return;
             console.error('Error fetching cash flow:', error);
             toast.error('Failed to load cash flow data');
         } finally {
-            setLoading(false);
+            if (requestId === cashFlowRequestId.current) setLoading(false);
         }
     };
+
+    const sortHeader = (label: string, key: string, align = '') => (
+        <th
+            className={`py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer select-none ${align}`}
+            aria-sort={sortBy === key ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
+            onClick={() => {
+                setSortOrder(sortBy === key && sortOrder === 'asc' ? 'desc' : 'asc');
+                setSortBy(key);
+            }}
+        >
+            <span className={`inline-flex items-center gap-1 ${align === 'text-right' ? 'justify-end w-full' : align === 'text-center' ? 'justify-center w-full' : ''}`}>
+                {label}
+                {sortBy !== key ? <ChevronsUpDown className="size-3 opacity-40" /> : sortOrder === 'asc'
+                    ? <ChevronUp className="size-3 text-blue-600" />
+                    : <ChevronDown className="size-3 text-blue-600" />}
+            </span>
+        </th>
+    );
 
     const fetchPurchaseOrders = async () => {
         try {
@@ -218,8 +242,8 @@ export const CashFlowReport = () => {
         <div className="space-y-6 p-4 md:p-6">
             {/* Page Header */}
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 text-white shadow-lg">
-                <div className="absolute inset-0 bg-black/10" />
-                <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="pointer-events-none absolute inset-0 bg-black/10" />
+                <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4">
                         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
                             <Activity className="h-7 w-7 text-white" />
@@ -246,8 +270,8 @@ export const CashFlowReport = () => {
                         </Button>
                     </div>
                 </div>
-                <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-                <div className="absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
+                <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
+                <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
             </div>
 
             {/* Balance Verification Alert */}
@@ -400,13 +424,13 @@ export const CashFlowReport = () => {
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="border-b bg-gray-50/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-650 text-left">
-                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
-                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Description</th>
-                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Category</th>
-                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Subcategory</th>
-                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center">Type</th>
-                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">Amount</th>
-                                        <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">Balance</th>
+                                        {sortHeader('Date', 'date')}
+                                        {sortHeader('Description', 'description')}
+                                        {sortHeader('Category', 'category')}
+                                        {sortHeader('Subcategory', 'subcategory')}
+                                        {sortHeader('Type', 'type', 'text-center')}
+                                        {sortHeader('Amount', 'amount', 'text-right')}
+                                        {sortHeader('Balance', 'balance', 'text-right')}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -707,4 +731,3 @@ export const CashFlowReport = () => {
         </div>
     );
 };
-

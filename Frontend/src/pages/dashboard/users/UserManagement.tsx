@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Loader2, Plus, Search, Shield, User, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown, Loader2, Plus, Search, Shield, User, X } from "lucide-react";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from "../../../components/ui/drawer";
 import { apiClient } from "../../../lib/api-client";
 import { toast } from "react-toastify";
 import { TableSkeleton } from "../../../components/ui/TableSkeleton";
 import { AppToggle } from "../../../components/ui/AppToggle";
 import { useTranslation } from "react-i18next";
+import { useDebounce } from "../../../hooks/use-debounce";
 
 interface User {
   id?: string;
@@ -40,6 +41,9 @@ function usersFromListResponse(res: unknown): User[] {
 export const UserManagement = () => {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 400);
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled'>('all');
   const [users, setUsers] = useState<User[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -80,7 +84,12 @@ export const UserManagement = () => {
     const fetchUsers = async () => {
       try {
         setIsLoading(true);
-        const params = statusFilter === 'all' ? undefined : { status: statusFilter };
+        const params = {
+          ...(statusFilter !== 'all' && { status: statusFilter }),
+          ...(debouncedSearchTerm && { search: debouncedSearchTerm }),
+          sortBy,
+          sortOrder,
+        };
         const response = await apiClient.getUsers(params);
         setUsers(usersFromListResponse(response));
       } catch (error) {
@@ -91,7 +100,23 @@ export const UserManagement = () => {
       }
     };
     fetchUsers();
-  }, [t, statusFilter]);
+  }, [t, statusFilter, debouncedSearchTerm, sortBy, sortOrder]);
+
+  const sortHeader = (label: string, key: string) => (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1 hover:text-blue-600"
+      onClick={() => {
+        setSortOrder(sortBy === key && sortOrder === 'asc' ? 'desc' : 'asc');
+        setSortBy(key);
+      }}
+    >
+      {label}
+      {sortBy !== key ? <ChevronsUpDown className="h-3.5 w-3.5 opacity-40" /> : sortOrder === 'asc'
+        ? <ChevronUp className="h-3.5 w-3.5 text-blue-600" />
+        : <ChevronDown className="h-3.5 w-3.5 text-blue-600" />}
+    </button>
+  );
 
   useEffect(() => {
     const fetchBranches = async () => {
@@ -348,17 +373,17 @@ export const UserManagement = () => {
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-gray-700">
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
-                      {t('userManagement.user')}
+                      {sortHeader(t('userManagement.user'), 'name')}
                     </th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
-                      Email
+                      {sortHeader('Email', 'email')}
                     </th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
-                      Role
+                      {sortHeader('Role', 'role')}
                     </th>
 
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
-                      Status
+                      {sortHeader('Status', 'status')}
                     </th>
 
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">

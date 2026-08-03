@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const localesDir = path.join(__dirname, 'inventory-system-fn/src/locales');
+const localesDir = path.join(__dirname, 'Frontend/src/locales');
 const enPath = path.join(localesDir, 'en/translation.json');
 const en = JSON.parse(fs.readFileSync(enPath, 'utf8'));
 
