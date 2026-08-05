@@ -68,5 +68,13 @@ export const config = {
     maxQueueRetries: Number.parseInt(process.env.EBM_MAX_QUEUE_RETRIES || "10", 10),
     statusCheckPath: process.env.EBM_STATUS_CHECK_PATH || "/status",
     securityKey: process.env.EBM_SECURITY_KEY || "",
+    // ── EBM 2.1 / OSDC (Online Sales Data Controller) integration ────────────
+    // protocol: 'vsdc' (v1, the /trnsSales/saveSales path) or 'osdc' (v2.1).
+    protocol: process.env.EBM_PROTOCOL || "vsd",
+    // Base URL for the OSDC device. Either the deployed RRA OSDC WAR
+    // (e.g. http://localhost:8080/osdc) or, if direct, the RRA EBM 2.1 server.
+    osdcApiUrl: process.env.OSDC_API_URL || "",
+    // Auth token configured on the OSDC WAR instance (set during WAR install).
+    osdcAuthToken: process.env.OSDC_AUTH_TOKEN || "",
   },
 }
