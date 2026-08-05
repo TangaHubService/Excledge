@@ -1,5 +1,6 @@
 import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.middleware';
+import { config } from '../config';
 import {
   getBranches,
   getBranchById,
@@ -144,10 +145,13 @@ export const updateBranchController = async (req: AuthRequest, res: Response) =>
     const branchId = parseInt(req.params.id);
     const { name, location, address, addressLine2, phone, status, metadata, bhfId, ebmDeviceId, ebmSerialNo, vsdcUrl } = req.body;
 
-    // C10: MRC number format validation (RRA spec §2.1: BBBCCNNNNNN, 11 chars)
+    // C10: MRC number format validation (RRA spec §2.1: BBBCCNNNNNN, 11 chars).
+    // Relaxed in sandbox/mock: RRA test-issued device serials (e.g. "excelwartest")
+    // do not follow the BBBCCNNNNNN pattern. Strict validation stays in production.
     if (ebmSerialNo !== undefined && ebmSerialNo !== null && ebmSerialNo !== '') {
+      const isSandboxOrMock = config.ebm.environment === 'sandbox' || config.ebm.useMock;
       const MRC_PATTERN = /^[A-Z0-9]{3}[A-Z0-9]{2}[0-9]{6}$/;
-      if (!MRC_PATTERN.test(String(ebmSerialNo).toUpperCase())) {
+      if (!isSandboxOrMock && !MRC_PATTERN.test(String(ebmSerialNo).toUpperCase())) {
         return res.status(400).json({
           error: 'Invalid MRC number format. Must be BBBCCNNNNNN (3 developer + 2 certificate + 6 serial digits).',
         });

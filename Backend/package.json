@@ -22,7 +22,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "build:seed": "tsc -p tsconfig.seed.json",
     "prisma:seed": "npm run build:seed && npx prisma db seed",
-    "seed:super-admin": "tsx scripts/seed-super-admin.ts"
+    "seed:super-admin": "tsx scripts/seed-super-admin.ts",
+    "ebm:test:setup": "tsx scripts/setup-ebm-test.ts"
   },
   "prisma": {
     "seed": "node dist-seed/prisma/seed.js"
