@@ -14,13 +14,216 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from '../../../components/ui/card';
-import { RefreshCw, AlertTriangle, CheckCircle, Clock, XCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../../components/ui/select';
+import { RefreshCw, AlertTriangle, CheckCircle, Clock, XCircle, ExternalLink, Loader2, Save, ShieldCheck } from 'lucide-react';
 import { OUTBOX_STATUS_CONFIG, type EbmOutboxEntry, type EbmOutboxStatus } from '../../../types/ebm';
+import { apiClient } from '../../../lib/api-client';
+import type { Branch } from '../../../context/BranchContext';
 
 const API_BASE = import.meta.env.VITE_PUBLIC_API_URL || 'http://localhost:5000';
 
 type GroupedCounts = Record<EbmOutboxStatus, number>;
+
+interface EbmCredForm {
+  bhfId?: string | null;
+  ebmDeviceId?: string | null;
+  ebmSerialNo?: string | null;
+  vsdcUrl?: string | null;
+}
+
+function EbmCredentialsCard() {
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchId, setBranchId] = useState<number | ''>('');
+  const [orgTin, setOrgTin] = useState('');
+  const [form, setForm] = useState<EbmCredForm>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const applyBranch = (branch: Branch) => {
+    setForm({
+      bhfId: branch.bhfId ?? '',
+      ebmDeviceId: branch.ebmDeviceId ?? '',
+      ebmSerialNo: branch.ebmSerialNo ?? '',
+      vsdcUrl: branch.vsdcUrl ?? '',
+    });
+  };
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const orgId = localStorage.getItem('current_organization_id');
+    try {
+      const res = await apiClient.getBranches(true);
+      const list = Array.isArray(res) ? res : res?.data || [];
+      setBranches(list);
+      if (list.length > 0) {
+        setBranchId(list[0].id);
+        applyBranch(list[0]);
+      }
+    } catch (e) {
+      console.error('Failed to load branches for EBM config', e);
+    }
+    if (orgId) {
+      try {
+        const org = await apiClient.getOrganization(orgId);
+        setOrgTin(org?.TIN ?? org?.tin ?? '');
+      } catch (e) {
+        console.error('Failed to load organization for EBM config', e);
+      }
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const set = (key: keyof EbmCredForm, value: string) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSavedMsg(null);
+    setErrorMsg(null);
+    try {
+      await apiClient.updateOrganization({ TIN: orgTin });
+      if (branchId !== '') {
+        await apiClient.updateBranch(branchId, {
+          bhfId: form.bhfId ?? '',
+          ebmDeviceId: form.ebmDeviceId ?? '',
+          ebmSerialNo: form.ebmSerialNo ?? '',
+          vsdcUrl: form.vsdcUrl ?? '',
+        });
+      }
+      setSavedMsg('EBM / VSDC credentials saved.');
+    } catch (e: any) {
+      setErrorMsg(e?.message || e?.response?.data?.error || 'Failed to save EBM credentials.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="p-5 pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ShieldCheck className="h-4 w-4 text-blue-600" />
+          EBM / VSDC Credentials
+        </CardTitle>
+        <CardDescription className="text-sm">
+          Organization TIN and per-branch device credentials sent to the RRA VSDC gateway.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-5 pt-2 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Organization TIN</Label>
+            <Input
+              value={orgTin}
+              onChange={(e) => setOrgTin(e.target.value)}
+              placeholder="e.g. 999945560"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Branch</Label>
+            <Select
+              value={branchId === '' ? undefined : String(branchId)}
+              onValueChange={(v) => {
+                const id = Number(v);
+                setBranchId(id);
+                const b = branches.find((x) => x.id === id);
+                if (b) applyBranch(b);
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a branch" />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((b) => (
+                  <SelectItem key={b.id} value={String(b.id)}>
+                    {b.name} ({b.code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>bhfId (branch code)</Label>
+            <Input
+              value={form.bhfId ?? ''}
+              onChange={(e) => set('bhfId', e.target.value)}
+              placeholder="e.g. 00"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>dvcSrlNo / MRC (device serial)</Label>
+            <Input
+              value={form.ebmSerialNo ?? ''}
+              onChange={(e) => set('ebmSerialNo', e.target.value)}
+              placeholder="e.g. excelwartest"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>sdcId (device ID)</Label>
+            <Input
+              value={form.ebmDeviceId ?? ''}
+              onChange={(e) => set('ebmDeviceId', e.target.value)}
+              placeholder="VSDC device ID from RRA, if provided"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Per-branch VSDC URL (optional)</Label>
+            <Input
+              value={form.vsdcUrl ?? ''}
+              onChange={(e) => set('vsdcUrl', e.target.value)}
+              placeholder="Defaults to EBM_API_URL"
+            />
+          </div>
+        </div>
+
+        {loading && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" /> Loading credentials…
+          </p>
+        )}
+
+        {errorMsg && (
+          <p className="text-xs text-red-600 font-medium">{errorMsg}</p>
+        )}
+        {savedMsg && (
+          <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+            <CheckCircle className="h-3 w-3" /> {savedMsg}
+          </p>
+        )}
+
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={saving || loading}>
+            {saving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save Credentials
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function EbmOutboxDashboard() {
   const [entries, setEntries] = useState<EbmOutboxEntry[]>([]);
@@ -106,6 +309,9 @@ export function EbmOutboxDashboard() {
           Refresh
         </Button>
       </div>
+
+      {/* EBM Credentials Configuration */}
+      <EbmCredentialsCard />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">

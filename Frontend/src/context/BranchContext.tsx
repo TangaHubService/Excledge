@@ -12,6 +12,11 @@ export interface Branch {
     phone?: string;
     status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
     isPrimary?: boolean;
+    // RRA EBM / VSDC per-branch credentials
+    bhfId?: string | null;
+    ebmDeviceId?: string | null;
+    ebmSerialNo?: string | null;
+    vsdcUrl?: string | null;
     _count?: {
         sales: number;
         batches: number;
