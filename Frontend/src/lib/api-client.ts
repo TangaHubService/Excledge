@@ -1516,6 +1516,11 @@ class ApiClient {
     phone?: string;
     isDefault?: boolean;
     status?: 'ACTIVE' | 'INACTIVE';
+    // RRA EBM / VSDC per-branch credentials
+    bhfId?: string;
+    ebmDeviceId?: string;
+    ebmSerialNo?: string;
+    vsdcUrl?: string;
   }) {
     return this.request(`/branches/${this.getOrganizationId()}/${branchId}`, {
       method: 'PUT',
