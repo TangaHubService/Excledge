@@ -3,6 +3,7 @@ import { config } from '../config';
 import type { Decimal } from '@prisma/client/runtime/library';
 import type { Prisma } from '@prisma/client';
 import { buildVsdcEnvelope, saveInvc, parseVsdcResponse } from './vsdc-api.service';
+import { submitSalesToOsdc } from './rra-osdc.service';
 
 /** Any Prisma client capable of running queries — the top-level client or a $transaction callback's `tx`. */
 type PrismaClientOrTx = typeof prisma | Prisma.TransactionClient;
@@ -660,7 +661,11 @@ export async function submitInvoiceToEbm(params: {
   // saveInvc() already handles config.ebm.useMock internally (mockResult()) and
   // returns the real /trnsSales/saveSales response shape — no separate shortcut
   // here, so mock mode exercises the same response-parsing path as production.
-  if (!config.ebm.useMock && !config.ebm.apiUrl) {
+  const isOsdc = config.ebm.protocol === 'osdc';
+  const hasEndpoint = isOsdc
+    ? Boolean(config.ebm.osdcApiUrl || config.ebm.useMock)
+    : Boolean(config.ebm.apiUrl || config.ebm.useMock);
+  if (!hasEndpoint) {
     await persistFailure('EBM_API_URL is not configured');
     return { success: false, error: 'EBM_API_URL is not configured' };
   }
@@ -671,6 +676,44 @@ export async function submitInvoiceToEbm(params: {
   });
 
   try {
+    // EBM 2.1 / OSDC path: talks to the OSDC device (WAR) or the direct v2.1.
+    if (isOsdc) {
+      const osdc = await submitSalesToOsdc({
+        organizationId: params.organizationId,
+        branchId: sale.branchId,
+        sale,
+      });
+      if (!osdc.success) {
+        await persistFailure(osdc.error ?? 'OSDC gateway error', {
+          osdcResult: osdc.response,
+          requestPayload: payload,
+        });
+        return { success: false, error: osdc.error };
+      }
+      await prisma.$transaction([
+        prisma.ebmTransaction.update({
+          where: { id: txRow.id },
+          data: {
+            submissionStatus: 'SUCCESS',
+            ebmInvoiceNumber: osdc.ebmInvoiceNumber,
+            submittedAt: new Date(),
+            responseData: {
+              osdcResult: osdc.response,
+              requestPayload: payload,
+            } as object,
+          },
+        }),
+        prisma.organization.update({
+          where: { id: params.organizationId },
+          data: {
+            lastSuccessfulVdsContact: new Date(),
+            lastSyncCursor: new Date(),
+          },
+        }),
+      ]);
+      return { success: true, ebmInvoiceNumber: osdc.ebmInvoiceNumber };
+    }
+
     const envelope = await buildVsdcEnvelope(params.organizationId, sale.branchId);
     const result = await saveInvc(envelope, payload);
 
