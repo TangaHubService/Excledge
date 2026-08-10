@@ -569,6 +569,11 @@ class ApiClient {
     });
   }
 
+  /** VSDC/EBM presence status for the offline-guard indicator. */
+  async getEbmStatus() {
+    return this.request(`/organizations/${this.getOrganizationId()}/ebm-status`);
+  }
+
   // Activity Logs endpoints
   async getActivityLogs(params?: {
     startDate?: string;
@@ -600,6 +605,12 @@ class ApiClient {
   async getSale(id: string) {
     return this.request(`/sales/${this.getOrganizationId()}/${id}`);
   }
+
+  /** Composed ERP invoice payload for the modern RRA/EBM invoice renderer. */
+  async getInvoice(id: string | number) {
+    return this.request(`/sales/${this.getOrganizationId()}/invoices/${id}`);
+  }
+
   async recordPayment(id: string, data: { amount: number }) {
     return this.request(`/sales/${id}/${this.getOrganizationId()}`, {
       method: "PUT",
@@ -660,7 +671,15 @@ class ApiClient {
 
   // Customer endpoints
   async getCustomers(params?: any) {
-    const query = new URLSearchParams({ ...params }).toString();
+    const queryParams = new URLSearchParams();
+    Object.entries(params ?? {}).forEach(([key, value]) => {
+      // URLSearchParams serialises `undefined` as the literal text
+      // "undefined", which Prisma must not receive for enum filters.
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.set(key, String(value));
+      }
+    });
+    const query = queryParams.toString();
     return this.request(`/customers/${this.getOrganizationId()}?${query}`);
   }
 

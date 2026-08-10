@@ -2,6 +2,7 @@ import {
   useState, useEffect, useMemo, useCallback, memo, useRef,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { Label } from '../../../components/ui/label'
@@ -22,6 +23,9 @@ import { apiClient } from '../../../lib/api-client'
 import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response'
 import { offlineQueue } from '../../../utils/offlineQueue'
 import { PaymentModal } from '../../../components/pos/PaymentModal'
+import SaleSuccessModal, { type SaleSuccessData } from '../../../components/pos/SaleSuccessModal'
+import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice'
+import { invoiceToPdfBlob } from '../../../lib/invoice-pdf'
 import { useVsdcOnlineStatus } from '../../../hooks/useVsdcOnlineStatus'
 import { useBranch } from '../../../context/BranchContext'
 import { useOrganizationSettings } from '../../../context/OrganizationSettingsContext'
@@ -358,6 +362,7 @@ const TAX_RATE = 0.18
 
 export default function SalesForm() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { selectedBranchId } = useBranch()
   const { settings: orgSettings } = useOrganizationSettings()
   useVsdcOnlineStatus()
@@ -373,6 +378,9 @@ export default function SalesForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
+  const [isSuccessOpen, setIsSuccessOpen] = useState(false)
+  const [successSale, setSuccessSale] = useState<SaleSuccessData | null>(null)
+  const [lastCreatedSale, setLastCreatedSale] = useState<any>(null)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [isSyncing, setIsSyncing] = useState(false)
   const [displayedCount, setDisplayedCount] = useState(30)
@@ -383,6 +391,7 @@ export default function SalesForm() {
   const productsRef = useRef<HTMLDivElement | null>(null)
   const isLoadingMoreRef = useRef(false)
   const customerDropdownRef = useRef<HTMLDivElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   // Online / offline listeners
   useEffect(() => {
@@ -647,13 +656,31 @@ export default function SalesForm() {
         return
       }
 
-      await apiClient.createSale(payload)
+      const created = await apiClient.createSale(payload)
+      const createdSale = (created as any)?.data ?? created
 
-      if (remainingDebt > 0) {
-        toast.success(t('pos.paymentDebtSuccess', { paid: totalPaid, debt: remainingDebt }))
-      } else {
-        toast.success(t('pos.paymentSuccess'))
-      }
+      // Success confirmation modal replaces the transient success toast.
+      let cashierName: string | undefined
+      try {
+        const storedUser = localStorage.getItem('user')
+        if (storedUser) cashierName = (JSON.parse(storedUser).name as string) || undefined
+      } catch { /* ignore */ }
+
+      setSuccessSale({
+        id: createdSale?.id ?? created?.id ?? '',
+        invoiceNumber: createdSale?.invoiceNumber as string | null | undefined,
+        receiptNumber: undefined,
+        customerName: selectedCustomerObj?.name,
+        totalItems: cart.reduce((s, i) => s + i.quantity, 0),
+        totalAmount: Number(createdSale?.totalAmount ?? total ?? 0),
+        paymentLabel: paymentType,
+        amountPaid: cashAmount + insuranceAmount,
+        changeReturned: Math.max(0, cashAmount - total),
+        date: new Date(),
+        cashierName,
+      }) 
+      setLastCreatedSale(createdSale)
+      setIsSuccessOpen(true)
 
       setCart([])
       setIsPaymentModalOpen(false)
@@ -673,6 +700,92 @@ export default function SalesForm() {
       setIsSubmitting(false)
     }
   }, [cart, selectedCustomer, total, t, isOnline, selectedBranchId])
+
+  // ── Success modal actions ──────────────────────────────────────────────────
+
+  const buildInvoicePdfBlob = useCallback(async (base: any): Promise<{ blob: Blob; filename: string } | null> => {
+    if (!base?.id) return null
+    try {
+      const invoice = unwrapInvoice(await apiClient.getInvoice(base.id))
+      const blob = await invoiceToPdfBlob(invoice)
+      if (!blob) return null
+      return {
+        blob,
+        filename: getInvoiceFilename(invoice, base.invoiceNumber ?? base.saleNumber ?? base.id),
+      }
+    } catch (e) {
+      console.error('Failed to build sale invoice:', e)
+      toast.error(t('sales.invoiceGenerationError') || 'Failed to generate invoice')
+      return null
+    }
+  }, [t])
+
+  const handlePrintInvoice = useCallback(async () => {
+    const base = lastCreatedSale ?? successSale
+    if (!base) return
+    const result = await buildInvoicePdfBlob(base)
+    if (!result) return
+    const url = URL.createObjectURL(result.blob)
+    const w = window.open(url, '_blank')
+    if (w) {
+      w.onload = () => {
+        w.print()
+        URL.revokeObjectURL(url)
+      }
+    } else {
+      toast.error(t('sales.printWindowError') || 'Failed to open print window')
+    }
+  }, [lastCreatedSale, successSale, buildInvoicePdfBlob, t])
+
+  const handleDownloadInvoice = useCallback(async () => {
+    const base = lastCreatedSale ?? successSale
+    if (!base) return
+    const result = await buildInvoicePdfBlob(base)
+    if (!result) return
+    const url = URL.createObjectURL(result.blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = result.filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }, [lastCreatedSale, successSale, buildInvoicePdfBlob])
+
+  const handleShareInvoice = useCallback(async () => {
+    const base = lastCreatedSale ?? successSale
+    if (!base) return
+    const result = await buildInvoicePdfBlob(base)
+    if (!result) return
+    const file = new File([result.blob], result.filename, { type: 'application/pdf' })
+    const shareable = navigator as Navigator & { canShare?: (data: { files: File[] }) => boolean }
+    if (typeof shareable.share === 'function' && typeof shareable.canShare === 'function' && shareable.canShare({ files: [file] })) {
+      try {
+        await shareable.share({ files: [file], title: 'Invoice' })
+        return
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return
+        // fall through to download
+      }
+    }
+    await handleDownloadInvoice()
+  }, [lastCreatedSale, successSale, buildInvoicePdfBlob, handleDownloadInvoice])
+
+  const handleNewSale = useCallback(() => {
+    setIsSuccessOpen(false)
+    setSuccessSale(null)
+    setLastCreatedSale(null)
+    setCart([])
+    setSelectedCustomer('')
+    setSearchTerm('')
+    setIsPaymentModalOpen(false)
+    requestAnimationFrame(() => searchInputRef.current?.focus())
+  }, [])
+
+  const handleViewInvoice = useCallback(() => {
+    setIsSuccessOpen(false)
+    navigate('/dashboard/sales')
+  }, [navigate])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -697,6 +810,7 @@ export default function SalesForm() {
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
+                ref={searchInputRef}
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 placeholder="Search products by name, barcode or SKU..."
@@ -961,6 +1075,16 @@ export default function SalesForm() {
           isProcessing={isSubmitting}
         />
       )}
+
+      <SaleSuccessModal
+        isOpen={isSuccessOpen}
+        saleData={successSale}
+        onPrint={handlePrintInvoice}
+        onDownload={handleDownloadInvoice}
+        onShare={handleShareInvoice}
+        onNewSale={handleNewSale}
+        onViewInvoice={handleViewInvoice}
+      />
     </>
   )
 }

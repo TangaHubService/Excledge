@@ -522,6 +522,23 @@ export const systemOwnerController = {
         data,
       });
 
+      // Best-effort RRA EBM fiscalization of the subscription receipt when the
+      // payment is marked completed by the system owner.
+      if (status === "COMPLETED" && payment.subscription?.organizationId) {
+        try {
+          const { fiscalizeSubscriptionPayment } = await import('../services/billing-ebm.service');
+          const { isEbmEnabled } = await import('../services/rra-ebm.service');
+          if (isEbmEnabled()) {
+            await fiscalizeSubscriptionPayment({
+              paymentId: id,
+              organizationId: payment.subscription.organizationId,
+            });
+          }
+        } catch (err) {
+          console.error(`Failed to fiscalize subscription payment ${id}:`, err);
+        }
+      }
+
       console.log(`System owner updated payment ${id} status to ${status}`);
 
       res.json({ message: "Payment status updated", payment: updated });

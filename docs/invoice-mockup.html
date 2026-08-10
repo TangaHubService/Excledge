@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RRA EBM Invoice Mockup — Ingenzi Retail Ltd</title>
+<style>
+  :root {
+    --ink: #0a0a0a;
+    --ink-soft: #3f3f46;
+    --ink-mute: #71717a;
+    --paper: #ffffff;
+    --divider: #9ca3af;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: "SFMono-Regular", ui-monospace, "Menlo", "Consolas", "Liberation Mono", monospace;
+    background: #cbd5e1;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(255,255,255,.35) 0, transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(15,23,42,.12) 0, transparent 45%);
+    color: var(--ink);
+    padding: 48px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .stage { text-align: center; margin-bottom: 28px; }
+  .stage h1 { font-family: system-ui, sans-serif; font-size: 14px; letter-spacing: .22em; text-transform: uppercase; color: #334155; }
+  .stage p  { font-family: system-ui, sans-serif; font-size: 12px; color: #64748b; margin-top: 6px; }
+
+  /* The receipt — 80mm thermal strip */
+  .receipt {
+    width: 80mm;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 9.2px;
+    line-height: 1.5;
+    padding: 7mm 5.5mm 6mm;
+    box-shadow:
+      0 1px 1px rgba(2,6,23,.06),
+      0 8px 24px -6px rgba(2,6,23,.28),
+      0 24px 60px -12px rgba(2,6,23,.28);
+    position: relative;
+  }
+
+  /* subtle thermal paper tint */
+  .receipt::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(105deg, transparent 40%, rgba(255,255,255,.5) 48%, transparent 56%),
+      repeating-linear-gradient(0deg, rgba(0,0,0,.012) 0 1px, transparent 1px 3px);
+    pointer-events: none;
+  }
+
+  .center { text-align: center; }
+
+  .logo {
+    width: 15mm;
+    height: 15mm;
+    margin: 0 auto 1.5mm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #0f2744;
+  }
+  .logo svg { width: 60%; height: 60%; }
+
+  .company { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .meta { font-size: 9px; color: var(--ink-soft); }
+  .mute { color: var(--ink-mute); }
+
+  .rule {
+    border: 0;
+    border-top: 1px dashed var(--divider);
+    margin: 2.6mm 0;
+  }
+  .rule.thin { border-top-style: solid; border-top-color: #d4d4d8; }
+
+  .invoice-title {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: .34em;
+    text-indent: .34em; /* optical centering */
+    line-height: 1.15;
+  }
+  .rcpt-type {
+    display: inline-block;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    border: 1px solid var(--ink);
+    padding: 1px 7px;
+    margin-top: 2mm;
+  }
+
+  .inv-no { font-size: 10.5px; font-weight: 700; margin-top: 1.4mm; letter-spacing: .06em; }
+
+  .kv { display: grid; grid-template-columns: 30mm 1fr; row-gap: .6mm; }
+  .kv .k { color: var(--ink-mute); text-transform: uppercase; font-size: 8px; letter-spacing: .06em; padding-top: .4mm; }
+  .kv .v { font-weight: 600; word-break: break-word; }
+
+  .section-label {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-bottom: 1.6mm;
+  }
+
+  /* items table */
+  table.items { width: 100%; border-collapse: collapse; }
+  table.items thead th {
+    font-size: 7.6px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--ink-soft);
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: 1.6mm 0;
+    text-align: right;
+  }
+  table.items thead th:first-child, table.items thead th:nth-child(2) { text-align: left; }
+  table.items thead th:first-child { padding-right: 2mm; }
+  table.items td { padding: 1.3mm 0 .1mm; vertical-align: top; }
+  table.items td.num { text-align: right; white-space: nowrap; }
+  table.items td.l { text-align: left; }
+  table.items td.code { font-size: 8px; color: var(--ink-mute); padding-right: 2mm; }
+  table.items td.desc { padding-right: 1mm; }
+  table.items td.desc .d2 { color: var(--ink-mute); font-size: 7.6px; }
+
+  /* totals */
+  .totals { width: 100%; }
+  .totals .tr { display: flex; justify-content: space-between; padding: .9mm 0; }
+  .totals .tr span:last-child { font-variant-numeric: tabular-nums; }
+  .totals .grand {
+    font-size: 11px;
+    font-weight: 800;
+    border-top: 2px solid var(--ink);
+    border-bottom: 2px solid var(--ink);
+    padding: 2.2mm 0;
+    margin: 1.6mm 0 .4mm;
+    display: flex;
+    justify-content: space-between;
+    letter-spacing: .02em;
+  }
+  .totals .balance { font-weight: 700; }
+
+  /* EBM box */
+  .ebm-box {
+    border: 1px solid var(--ink);
+    padding: 2.8mm;
+    text-align: center;
+  }
+  .ebm-box .head { font-weight: 700; letter-spacing: .1em; font-size: 8.4px; margin-bottom: 2mm; }
+  .ebm-box .head small { display: block; font-weight: 600; color: var(--ink-mute); letter-spacing: .04em; margin-top: .4mm; }
+  .ebm-box .kv { text-align: left; margin: 0 auto; }
+  .ebm-box .kv .v { font-size: 7.8px; word-break: break-all; }
+  .ebm-box .sig { font-size: 7.2px; color: var(--ink-soft); word-break: break-all; margin-top: 1mm; }
+  .ebm-box .qr { width: 22mm; height: 22mm; margin: 2.4mm auto 1mm; }
+  .ebm-box .qr img { width: 100%; height: 100%; }
+  .ebm-box .foot { font-size: 7.6px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); margin-top: 1.4mm; }
+
+  /* footer */
+  .footer-thanks { text-align: center; font-size: 9.6px; font-weight: 700; letter-spacing: .02em; margin: 0 0 1.6mm; }
+  .barcode-row { display: flex; justify-content: space-between; align-items: center; }
+  .barcode-row .qr-mini { width: 12mm; height: 12mm; }
+  .barcode-row .qr-mini img { width: 100%; height: 100%; }
+  .barcode { text-align: right; }
+  .barcode svg { display: block; height: 10mm; }
+  .barcode .bc-label { font-size: 7.6px; letter-spacing: .22em; margin-top: .6mm; }
+
+  /* print */
+  @media print {
+    body { background: #fff; padding: 0; }
+    .stage { display: none; }
+    .receipt { box-shadow: none; width: 80mm; }
+    @page { size: 80mm auto; margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="stage">
+    <h1>RRA EBM Invoice — Design Mockup</h1>
+    <p>Fictional company · 80mm thermal strip · open in browser and screenshot / print</p>
+  </div>
+
+  <div class="receipt">
+
+    <!-- ── Company header ─────────────────────────────── -->
+    <div class="center">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="5" fill="none" stroke="#ffffff" stroke-width="1.6" opacity=".55"/>
+          <path d="M7 8h10M7 12h10M7 16h6" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="company">Ingenzi Retail Ltd</div>
+      <div class="meta">KG 7 Ave, Kimironko, Kigali, Rwanda</div>
+      <div class="meta">Tel: +250 788 000 111 &nbsp;·&nbsp; billing@ingenzi.rw</div>
+      <div class="meta">TIN: 103456789</div>
+      <div class="meta">MRC: 103456789</div>
+    </div>
+
+    <hr class="rule" />
+
+    <!-- ── Title ──────────────────────────────────────── -->
+    <div class="center">
+      <div class="invoice-title">INVOICE</div>
+      <span class="rcpt-type">NS — NORMAL SALE</span>
+      <div class="inv-no">INV-2026-000123</div>
+    </div>
+
+    <hr class="rule thin" />
+
+    <!-- ── Invoice details ────────────────────────────── -->
+    <div class="kv">
+      <div class="k">Invoice No</div><div class="v">INV-2026-000123</div>
+      <div class="k">Receipt No</div><div class="v">20260807000123</div>
+      <div class="k">Date</div><div class="v">07 Aug 2026</div>
+      <div class="k">Cashier</div><div class="v">Clarisse Uwase</div>
+      <div class="k">Payment</div><div class="v">MTN Mobile Money</div>
+    </div>
+
+    <hr class="rule thin" />
+
+    <!-- ── Customer ───────────────────────────────────── -->
+    <div class="section-label">Customer</div>
+    <div class="kv">
+      <div class="k">Name</div><div class="v">Mugisha Central Ltd</div>
+      <div class="k">TIN</div><div class="v">107654321</div>
+      <div class="k">Address</div><div class="v">Kimironko, Kigali, Rwanda</div>
+    </div>
+
+    <hr class="rule" />
+
+    <!-- ── Items ──────────────────────────────────────── -->
+    <table class="items">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Description</th>
+          <th>Qty</th>
+          <th>Price</th>
+          <th>VAT%</th>
+          <th>Tax</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="code">IRU-001</td><td class="desc">Irumba Polish 50ml</td><td class="num">2</td><td class="num">1,200</td><td class="num">18%</td><td class="num">432</td><td class="num">2,832</td></tr>
+        <tr><td class="code">SAC-050</td><td class="desc">Sugar 1kg</td><td class="num">5</td><td class="num">1,450</td><td class="num">18%</td><td class="num">1,305</td><td class="num">8,555</td></tr>
+        <tr><td class="code">OIL-750</td><td class="desc">Cooking Oil 750ml</td><td class="num">3</td><td class="num">1,900</td><td class="num">18%</td><td class="num">1,026</td><td class="num">6,726</td></tr>
+        <tr><td class="code">RIC-005</td><td class="desc">Rice 5kg <span class="d2">zero-rated</span></td><td class="num">1</td><td class="num">8,500</td><td class="num">0%</td><td class="num">0</td><td class="num">8,500</td></tr>
+        <tr><td class="code">SOA-300</td><td class="desc">Bath Soap 300g</td><td class="num">4</td><td class="num">700</td><td class="num">18%</td><td class="num">504</td><td class="num">3,304</td></tr>
+        <tr><td class="code">MIL-100</td><td class="desc">Fresh Milk 1L <span class="d2">exempt</span></td><td class="num">6</td><td class="num">1,200</td><td class="num">0%</td><td class="num">0</td><td class="num">7,200</td></tr>
+        <tr><td class="code">CHA-050</td><td class="desc">Charcoal 50kg</td><td class="num">2</td><td class="num">9,500</td><td class="num">18%</td><td class="num">3,420</td><td class="num">22,420</td></tr>
+      </tbody>
+    </table>
+
+    <hr class="rule thin" />
+
+    <!-- ── Totals ─────────────────────────────────────── -->
+    <div class="totals">
+      <div class="tr"><span>Subtotal</span><span>52,850 RWF</span></div>
+      <div class="tr"><span>VAT (18%)</span><span>6,687 RWF</span></div>
+      <div class="tr"><span>Discount</span><span>-1,200 RWF</span></div>
+      <div class="grand"><span>GRAND TOTAL</span><span>58,337 RWF</span></div>
+      <div class="tr"><span>Amount Paid</span><span>58,337 RWF</span></div>
+      <div class="tr balance"><span>Balance</span><span>0 RWF</span></div>
+    </div>
+
+    <hr class="rule" />
+
+    <!-- ── RRA EBM fiscal box ─────────────────────────── -->
+    <div class="ebm-box">
+      <div class="head">
+        RWANDA REVENUE AUTHORITY<br/>
+        <small>EBM FISCAL RECEIPT</small>
+      </div>
+      <div class="kv">
+        <div class="k">SDC ID</div><div class="v">RW-2026-000123-000045-000123-05</div>
+        <div class="k">MRC</div><div class="v">103456789</div>
+        <div class="k">Receipt No</div><div class="v">20260807000123</div>
+        <div class="k">Internal Data</div><div class="v">2026 0807 0001 2310 3456 7890 0000 0000 0001 2345</div>
+      </div>
+      <div class="sig">SIG: 8F2A3C9D1E7B6A4C5D8F0A91B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E7F8091A2B</div>
+      <div class="kv" style="margin-top:1.2mm;">
+        <div class="k">Date</div><div class="v">07-08-2026</div>
+        <div class="k">Time</div><div class="v">14:32:41</div>
+      </div>
+      <div class="qr"><img src="data:image/png;base64,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" alt="RRA fiscal QR" /></div>
+      <div class="foot">Powered by EBM v2</div>
+    </div>
+
+    <hr class="rule thin" />
+
+    <!-- ── Footer ─────────────────────────────────────── -->
+    <div class="footer-thanks">Thank you for your business.</div>
+    <div class="barcode-row">
+      <div class="qr-mini"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZAAAAGQCAYAAACAvzbMAAAAAklEQVR4AewaftIAABKzSURBVO3BUZIkR7IkQVWnuv+VZZv23xz0DBkxWQ1hLn9EkqT/oxNJkhZOJElaOJEkaeFEkqSFE0mSFk4kSVo4kSRp4Sf/oG3+FkA+rW2+DZBJ2zwByKRtngDkm7TN24DctM1vAeSmbT4NyBPa5m8BZHIiSdLCiSRJCyeSJC2cSJK0cCJJ0sKJJEkLP/kXgHyTttlqmycA2WibGyAbQCZtcwNkA8ikbW6AvK1tJkB+EyBPaJsNIFtAJm2z0TY3QJ4A5Ju0zcaJJEkLJ5IkLZxIkrRwIknSwokkSQsnkiQt/OQhbfMEIG8DstU2EyATIDdtMwEyaZsJkJu2+TQgW20zAXLTNr8FkP+CttkCstE236ZtngDk004kSVo4kSRp4USSpIUTSZIWTiRJWjiRJGnhRJKkhZ/oH7XNBMhW20yA3AB5G5BJ22y0zRaQSdvcAJm0zROAfFrb3ADZaJsbIL9F20yA3LTNBMh/3YkkSQsnkiQtnEiStHAiSdLCiSRJCyeSJC38RP8fkEnbbAGZtM1W23wTIJO22QIyaZutttlom28CZKttJkC22uYJQCZt8wQgmp1IkrRwIknSwokkSQsnkiQtnEiStHAiSdLCTx4C5L+gbW6ATIBsAdlom622mQCZAHkCkEnb3AD5tLa5aZsNIG9rmxsgEyCTtnkCkEnb/CZAfosTSZIWTiRJWjiRJGnhRJKkhRNJkhZOJEla+Mm/0DZ/i7aZAJm0zVbbTIDctM0EyDdpmwmQm7aZAHlC20yAbAGZtM1G29wA2QBy0zYTIBtAbtpmAuQJbTMBstU2f4MTSZIWTiRJWjiRJGnhRJKkhRNJkhZOJElaOJEkaaH8EaVtJkAmbbMFZNI2TwCy1TYbQCZtcwNko21ugHxa29wA2WibCZD/hbaZANF/w4kkSQsnkiQtnEiStHAiSdLCiSRJCyeSJC385B+0zQTIN2mbGyCfBmSrbbaATNpm0jYTIE9omye0zVbbvK1tNoBstc0GkK222QDym7TNFpCNtnkCkI0TSZIWTiRJWjiRJGnhRJKkhRNJkhZOJEla+MlD2mYLyKRtJkDe1jZPAHLTNhMgG22zBWTSNhMgN20zAfKEtnkCkEnbTNpmC8ikbbaAbLTNVttMgEzaZgvIE9pmAmQCZNI2N0A+7USSpIUTSZIWTiRJWjiRJGnhRJKkhRNJkhbKH1lqmwmQm7bZADJpmy0gG21zA+Rv0TafBuQJbXMDZKNtngDkCW3zBCAbbbMF5Ju0zQTIVttMgEzaZgvIxokkSQsnkiQtnEiStHAiSdLCiSRJCyeSJC2cSJK08JN/Acjb2mYCZKttJkDe1jY3QDba5glAJm0zaZvfBMikbd7WNjdAntA236RtngDkCW3zaUBu2mbSNhMgkxNJkhZOJElaOJEkaeFEkqSFE0mSFk4kSVoof+SibTaAvK1tvg2Qt7XNBMikbbaAPKFtJkCe0DYTIJO22QLyhLaZAHlC20yATNrmNwEyaZsbIBttMwFy0zYTIBsnkiQtnEiStHAiSdLCiSRJCyeSJC2cSJK08JOHtM0NkI22mQC5aZsNIG9rmxsgG20zAfKEttkCMmmbJwDZAHLTNhttswVk0jYTIFtAJm3zNiBbbbMB5KZtJkAmQL7JiSRJCyeSJC2cSJK0cCJJ0sKJJEkLJ5IkLZxIkrRQ/shF20yAvK1tngDkv6BtJkBu2mYCZKNttoA8oW0mQJ7QNhMgW20zAbLVNhMgk7bZAvK2tnkCkEnbTIBstc0GkMmJJEkLJ5IkLZxIkrRwIknSwokkSQsnkiQt/OQfAHlb20yAbLXNRttMgGy1zRaQDSCTtnlC27ytbW6AbLTNBMgT2mYLyKRtvgmQJ7TNFpCNtrlpm4222QLyaSeSJC2cSJK0cCJJ0sKJJEkLJ5IkLZxIkrTwk3/QNhMgk7a5AbLRNt+kbW6AbADZapsNIDdtM2mbDSBPAHLTNhMgvwWQLSBvA7LVNhMgG0C22mYCZKttJkC22mYCZONEkqSFE0mSFk4kSVo4kSRp4USSpIUTSZIWfvIvtM0EyNuAbLXNBpCbtpkA+SZtcwNk0jYTIG9rm98EyEbb3AB5W9tMgEza5m1tcwNkAmTSNjdA3gZk0jYTIJMTSZIWTiRJWjiRJGnhRJKkhRNJkhZOJElaOJEkaeEnD2mbLSCTtpm0zQ2QCZC3tc0EyLdpm09rm9+kbd4G5AltMwFy0zafBmSrbTaAbLXNVtu8rW0+7USSpIUTSZIWTiRJWjiRJGnhRJKkhRNJkhZ+8i8A2WqbDSBPaJvfpG0mQDba5gbI24BM2uZtQLba5psAeQKQjba5AbIBZNI2N0A2gNy0zQTIRtvcAJm0zcaJJEkLJ5IkLZxIkrRwIknSwokkSQsnkiQtlD9y0TZPAPJpbbMFZNI2W0De1jYTIJO2eQKQSdvcAJm0zTcB8oS2eRuQm7Z5G5BJ27wNyKRtngBk0jZbQDZOJElaOJEkaeFEkqSFE0mSFk4kSVo4kSRp4Sf/AMikbSZAbtpmA8gEyFbbTIBstc0EyDcBctM2b2ubDSBbbbPRNltAJkCe0DZvA7LVNhMgk7aZALlpm0nbbAHZaJsJkK22mQCZnEiStHAiSdLCiSRJCyeSJC2cSJK0cCJJ0sKJJEkLP3lI22wB2WibGyATIBttcwNk0jZbQN4GZNI2TwAyaZtJ29wA+TQgW22zAWQLyBOATNpmC8ikbd4GZNI2N20zAbLRNm87kSRp4USSpIUTSZIWTiRJWjiRJGnhRJKkhfJHLtpmA8hW20yAbLXNBpCttpkAmbTNFpBJ20yAbLXNBpCbtpkAmbTNFpBJ20yA3LTNBpCttpkAmbTNFpBv0jYTIP8LbTMB8oS2mQDZOJEkaeFEkqSFE0mSFk4kSVo4kSRp4USSpIXyRy7a5r8OyKRtboC8rW3eBmSjbbaATNrm2wDZaJstIBtt8zYgW23zXwBkq20mQDZOJElaOJEkaeFEkqSFE0mSFk4kSVo4kSRp4USSpIWf/AtAJm3zBCBPaJsNIL8JkEnbbLXNBpCbtnkCkE9rm622mQDZapsJkCcA+SZAttpmAuQJbfMEIJ92IknSwokkSQsnkiQtnEiStHAiSdLCiSRJCz95CJCtttlomxsgG20zAbLVNhMgN22z0TZPADJpm0nbfJu2mQD5Jm3zBCA3bfNpbfOEtpkAeULb3AD5tLa5ATJpmwmQyYkkSQsnkiQtnEiStHAiSdLCiSRJCyeSJC385B8A2WibtwF5W9vcAJkAmbTNb9I2EyC/CZAntM03aZsJkBsgG20zAXLTNhMgk7Z5G5AntM0TgGycSJK0cCJJ0sKJJEkLJ5IkLZxIkrRwIknSQvkjX6ZtvgmQSdtsAfkmbXMDZNI2EyCTtrkBstE2SoBM2mYLyKRtngDk09pGCZCNE0mSFk4kSVo4kSRp4USSpIUTSZIWTiRJWjiRJGmh/JGlttkCMmmbCZAntM0EyFbbbAC5aZsNIFtt82lAttrmbUCe0DYTIJO2uQHyX9c2W0AmbbMFZNI2G0Bu2mYDyOREkqSFE0mSFk4kSVo4kSRp4USSpIUTSZIWfvIQIDdts9E2TwAyaZsJkBsgG22zBWTSNr9J22wAuWmbT2ubGyATIBtAbtpmAmTSNltANtrmCUC22mYCZKttJkCeAGTSNhsnkiQtnEiStHAiSdLCiSRJCyeSJC2cSJK08JN/AcikbbaATNpmAmSrbSZAttpmA8hW20yATNrmBsikbTbaZgvIpG22gLytbSZAntA2EyBbbTMBMgFy0zYbbbMFZKNtttpmAuSbnEiStHAiSdLCiSRJCyeSJC2cSJK0cCJJ0sJPHgLkpm02gEza5m/RNltAJm0zAXLTNhtAJm1zA2QDyBPaZqttNtpmAmQLyFbbfFrbbAF5W9tsAdlom29yIknSwokkSQsnkiQtnEiStHAiSdLCiSRJCyeSJC2UP/KAtrkBstE2EyA3bTMBMmmbCZCbtnkCkE9rmy0g36RtngDkCW3zBCBva5snAJm0zQTIVtv8LYB82okkSQsnkiQtnEiStHAiSdLCiSRJCyeSJC385B+0zQaQrbaZAJm0zQ2QSdtMgDwByG8CZKNtJkBu2mYCZAvIp7XNE4A8oW0mQG7aZgJko23e1jZbQJ7QNhMgk7bZapsJkMmJJEkLJ5IkLZxIkrRwIknSwokkSQsnkiQt/OQfAPktgNy0zae1zQ2Qt7XNBMgEyFbbTIA8oW0mQN4G5KZtNtrm2wD5JkAmbTMBctM2G23zNiBbQDZOJElaOJEkaeFEkqSFE0mSFk4kSVo4kSRp4USSpIXyRy7aZgPIVtu8Dcjb2mYC5KZtJkAmbfM2IE9omycA2Wib3wTIpG3eBmSrbTaAPKFtboBM2uYJQCZtMwEyOZEkaeFEkqSFE0mSFk4kSVo4kSRp4USSpIXyRy7aZgJkq202gHyTtrkB8oS22QAyaZsbIG9rm98CyFbbTIBM2uYJQP4WbfMEIJO2uQHytraZANk4kSRp4USSpIUTSZIWTiRJWjiRJGnhRJKkhZ/8C20zAXID5NPa5gbIpG02gNy0zQaQGyAbbTMB8oS2mQB5ApDfBMikbSZAbtpmAmSrbSZAntA2EyAbQLbaZgLkbW1zA+TTTiRJWjiRJGnhRJKkhRNJkhZOJElaOJEkaeEn/wKQSdvcAJm0zQTIBMgWkI222QIyaZsbIJO2mQCZtM0WkAmQLSCTtpm0zQ2QT2ubJwB5QttMgHwbIG9rm7e1zQTINzmRJGnhRJKkhRNJkhZOJElaOJEkaeFEkqSFE0mSFn7yP9I2EyAbbXMD5NOA3LTNpG2eAORtbTMBstU2EyCTtnlC22wBmbTNE4BM2mYLyKe1zRaQb9I2N0AmQH6LE0mSFk4kSVo4kSRp4USSpIUTSZIWTiRJWvjJQ4DctM1G20yA3LTNbwHkpm0mQDaA3LTNBMgTgGwA2WqbDSA3bbPRNk8AMmmbGyCfBuSmbT6tbbaATNpmq202gGy1zQTI5ESSpIUTSZIWTiRJWjiRJGnhRJKkhRNJkhbKH7lomw0gN23zNiCTtpkA2WqbCZCtttkA8ra22QLytrb5JkAmbXMDZKNtboBM2uZtQDba5tsAmbTNE4BsnEiStHAiSdLCiSRJCyeSJC2cSJK0cCJJ0kL5I0ttswXkbW3zaUC22mYC5KZt3gZk0jYbQG7a5glAJm0zAbLVNhtAJm2zBWSrbSZAJm0zAXLTNhtAJm1zA2TSNltAJm2zAeRtJ5IkLZxIkrRwIknSwokkSQsnkiQtnEiStHAiSdJC+SP/A20zAbLRNm8DctM2EyBva5snANloGyVANtrmfwHIp7XNDZCNtpkAuWmbbwLkCW0zATI5kSRp4USSpIUTSZIWTiRJWjiRJGnhRJKkhZ/8jwD5NCBbbTMBsgVko22eAGTSNk9omycAmbTNDZBPa5uttvkmQHQH5Alts9E2N0AmQDZOJElaOJEkaeFEkqSFE0mSFk4kSVo4kSRp4Sf/oG3+FkAmQCZt8wQgEyA3bTMB8rcA8ra2mQDZAjJpmwmQSdvcANlomxsgk7aZANlqmw0gb2ubGyAbbbPVNhMgGyeSJC2cSJK0cCJJ0sKJJEkLJ5IkLZxIkrRwIknSwk/+BSDfpG2eAGTSNjdANtpmq202gNy0zQaQSdtstc0TgDyhbSZAJm0zAXLTNhMgEyBbQDaAPKFt3gbkbUC22mYCZHIiSdLCiSRJCyeSJC2cSJK0cCJJ0sKJJEkLP3lI2zwByH8BkJu2mQB5ApC3tc0EyKRtbtrmbUAmbbPRNt+mbSZAJm3zm7TNb9I2n3YiSdLCiSRJCyeSJC2cSJK0cCJJ0sKJJEkLP9E/apsJkCe0zbdpm7cB2QBy0zYbQJ4AZNI2EyA3bfNN2mYCZKttJkC22mYC5Alt8wQgn3YiSdLCiSRJCyeSJC2cSJK0cCJJ0sKJJEkLP9E/AjJpmxsgfwsgk7aZAJm0zU3bbAC5ATJpm0nbbAHZALIFZKNtboBMgGy0zQ2Qb9I2EyA3bbMBZNI2W0A2TiRJWjiRJGnhRJKkhRNJkhZOJElaOJEkaeFEkqSF8kcu2mYC5Ju0zQ2QjbZ5ApAntM0EyBPa5m8BZKNttoBM2mYCZKttJkCe0DYTIE9omwmQrbaZANlqmycAmbTNBMjkRJKkhRNJkhZOJElaOJEkaeFEkqSFE0mSFn7yL7TN36Jtvknb3AB5W9tsANlqmw0gN23zNiCf1jY3QCZAJm3zBCCTtrkBsgFkq22+CZAnANk4kSRp4USSpIUTSZIWTiRJWjiRJGnhRJKkhfJHJEn6PzqRJGnhRJKkhRNJkhZOJElaOJEkaeFEkqSF/wdRkgQ+ALP5uAAAAABJRU5ErkJggg==" alt="QR" /></div>
+      <div class="barcode">
+        <svg viewBox="0 0 320 64" preserveAspectRatio="none" aria-hidden="true">
+          <rect x="0" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="7" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="11" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="17" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="21" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="27" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="32" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="39" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="44" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="49" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="55" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="59" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="66" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="71" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="77" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="82" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="87" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="93" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="99" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="104" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="110" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="116" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="121" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="127" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="133" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="139" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="144" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="150" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="155" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="162" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="167" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="173" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="178" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="184" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="190" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="196" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="202" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="208" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="214" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="220" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="225" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="231" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="237" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="243" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="249" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="255" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="261" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="267" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="272" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="278" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="284" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="291" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="297" y="6" width="1.2" height="52" fill="#0a0a0a"/><rect x="302" y="6" width="2.4" height="52" fill="#0a0a0a"/><rect x="308" y="6" width="3" height="52" fill="#0a0a0a"/><rect x="315" y="6" width="1.2" height="52" fill="#0a0a0a"/>
+        </svg>
+        <div class="bc-label">103456789 20260807</div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

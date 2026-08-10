@@ -70,8 +70,28 @@ export interface BillingPayment {
         startDate?: string;
         endDate?: string;
         autoRenew?: boolean;
+        organization?: {
+            id?: string | number;
+            name?: string;
+            TIN?: string | null;
+            address?: string | null;
+        };
         [key: string]: unknown;
     };
+    // RRA EBM / VSDC fiscalization fields (persisted on the Payment row).
+    invoiceNumber?: string | null;
+    ebmInvoiceNumber?: string | null;
+    submissionStatus?: string | null;
+    submittedAt?: string | null;
+    sdcDateTime?: string | null;
+    sdcId?: string | null;
+    sdcRcptNo?: number | null;
+    totalRcptNo?: number | null;
+    internalData?: string | null;
+    receiptSignature?: string | null;
+    qrPayload?: string | null;
+    rcptLabel?: string | null;
+    errorMessage?: string | null;
 }
 
 // ⭐ Improved Styling
@@ -163,11 +183,78 @@ const styles = StyleSheet.create({
         fontSize: 9,
         color: "#777",
     },
+    fiscalBox: {
+        marginTop: 25,
+        border: "1 solid #cbd5e1",
+        borderRadius: 5,
+        padding: 12,
+        backgroundColor: "#f8fafc",
+    },
+    fiscalTitle: {
+        fontSize: 11,
+        fontWeight: "bold",
+        color: "#1e3a8a",
+        marginBottom: 6,
+        textAlign: "center",
+    },
+    fiscalMuted: {
+        fontSize: 8,
+        color: "#64748b",
+        textAlign: "center",
+        marginTop: 4,
+    },
 });
 
 interface InvoicePDFProps {
     payment: BillingPayment;
     profile: Profile | null;
+}
+
+function dashEvery4(str: string): string {
+    return str.replace(/(.{4})/g, "$1 ").trim();
+}
+
+const RCPT_LABEL_DISPLAY: Record<string, string> = {
+    NS: 'Normal Sale',
+    NR: 'Normal Refund',
+    CS: 'Copy Sale',
+    CR: 'Copy Refund',
+    TS: 'Training Sale',
+    TR: 'Training Refund',
+    PS: 'Proforma Sale',
+};
+
+interface FiscalBlock {
+    success: boolean;
+    pending: boolean;
+    failed: boolean;
+    ebmInvoiceNumber: string | null;
+    sdcRcptNo: number | null;
+    totalRcptNo: number | null;
+    sdcId: string | null;
+    internalData: string | null;
+    receiptSignature: string | null;
+    sdcDateTime: string | null;
+    rcptLabel: string | null;
+    errorMessage: string | null;
+}
+
+function fiscalBlockFromPayment(payment: BillingPayment): FiscalBlock {
+    const status = payment.submissionStatus ?? null;
+    return {
+        success: status === 'SUCCESS',
+        pending: !!status && ['PENDING', 'SUBMITTED', 'RETRYING'].includes(status),
+        failed: status === 'FAILED',
+        ebmInvoiceNumber: payment.ebmInvoiceNumber ?? null,
+        sdcRcptNo: payment.sdcRcptNo ?? null,
+        totalRcptNo: payment.totalRcptNo ?? null,
+        sdcId: payment.sdcId ?? null,
+        internalData: payment.internalData ?? null,
+        receiptSignature: payment.receiptSignature ?? null,
+        sdcDateTime: payment.sdcDateTime ?? null,
+        rcptLabel: payment.rcptLabel ?? null,
+        errorMessage: payment.errorMessage ?? null,
+    };
 }
 
 const InvoicePDF: React.FC<InvoicePDFProps> = ({ payment, profile }) => {
@@ -324,6 +411,110 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({ payment, profile }) => {
                         {payment.currency} {payment.amount.toLocaleString()}
                     </Text>
                 </View>
+
+                {/* RRA EBM / VSDC fiscal data (when present) */}
+                {(() => {
+                    const f = fiscalBlockFromPayment(payment);
+                    if (!f.success && !f.pending && !f.failed) {
+                        return null;
+                    }
+                    const counter = f.sdcRcptNo != null && f.totalRcptNo != null
+                        ? `${f.sdcRcptNo}/${f.totalRcptNo}${f.rcptLabel ? ` ${f.rcptLabel}` : ''}`
+                        : null;
+                    const tin = payment.subscription?.organization?.TIN ?? null;
+
+                    return (
+                        <View style={styles.fiscalBox}>
+                            <Text style={styles.fiscalTitle}>
+                                RWANDA REVENUE AUTHORITY
+                            </Text>
+                            <Text style={styles.fiscalTitle}>RRA EBM FISCAL RECEIPT</Text>
+
+                            {!f.success ? (
+                                <View style={{
+                                    backgroundColor: f.failed ? '#fee2e2' : '#fef3c7',
+                                    borderRadius: 3,
+                                    padding: 5,
+                                    marginBottom: 6,
+                                }}>
+                                    <Text style={{ fontSize: 9, fontWeight: 'bold', color: f.failed ? '#991b1b' : '#92400e' }}>
+                                        NOT YET FISCALIZED
+                                    </Text>
+                                    <Text style={{ fontSize: 8, color: f.failed ? '#991b1b' : '#92400e', marginTop: 2 }}>
+                                        {f.failed
+                                            ? `Last fiscal error: ${f.errorMessage ?? 'Unknown'}`
+                                            : 'Fiscal submission pending or retrying — this receipt has not yet been confirmed by RRA.'}
+                                    </Text>
+                                </View>
+                            ) : null}
+
+                            {f.rcptLabel ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Receipt Type:</Text>
+                                    <Text style={styles.value}>
+                                        {f.rcptLabel} — {RCPT_LABEL_DISPLAY[f.rcptLabel] ?? f.rcptLabel}
+                                    </Text>
+                                </View>
+                            ) : null}
+
+                            {tin ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Seller TIN:</Text>
+                                    <Text style={styles.value}>{tin}</Text>
+                                </View>
+                            ) : null}
+
+                            {payment.invoiceNumber ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Invoice #:</Text>
+                                    <Text style={styles.value}>{payment.invoiceNumber}</Text>
+                                </View>
+                            ) : null}
+
+                            {f.ebmInvoiceNumber ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>EBM Invoice #:</Text>
+                                    <Text style={styles.value}>{f.ebmInvoiceNumber}</Text>
+                                </View>
+                            ) : null}
+
+                            {counter ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Receipt Counter:</Text>
+                                    <Text style={styles.value}>{counter}</Text>
+                                </View>
+                            ) : null}
+
+                            {f.sdcId ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>SDC Device ID:</Text>
+                                    <Text style={styles.value}>{f.sdcId}</Text>
+                                </View>
+                            ) : null}
+
+                            {f.sdcDateTime ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>SDC Date/Time:</Text>
+                                    <Text style={styles.value}>{format(new Date(f.sdcDateTime), "PPP pp")}</Text>
+                                </View>
+                            ) : null}
+
+                            {f.internalData ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Internal Data:</Text>
+                                    <Text style={[styles.value, { fontSize: 7 }]}>{dashEvery4(f.internalData)}</Text>
+                                </View>
+                            ) : null}
+
+                            {f.receiptSignature ? (
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Signature:</Text>
+                                    <Text style={[styles.value, { fontSize: 7 }]}>{dashEvery4(f.receiptSignature)}</Text>
+                                </View>
+                            ) : null}
+                        </View>
+                    );
+                })()}
 
                 {/* FOOTER */}
                 <View style={styles.footer}>

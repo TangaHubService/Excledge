@@ -11,6 +11,8 @@ import {
 import { stripe } from '../lib/stripe';
 import { convertUsdToRwf } from '../utils/currencyConverter';
 import { config } from '../config';
+import { isEbmEnabled } from '../services/rra-ebm.service';
+import { fiscalizeSubscriptionPayment } from '../services/billing-ebm.service';
 
 /**
  * Get all active subscription plans with features
@@ -339,6 +341,24 @@ export const verifyPayment = async (req: Request, res: Response) => {
                 },
             }),
         ]);
+
+        // Best-effort RRA EBM fiscalization of the subscription receipt.
+        if (isEbmEnabled()) {
+            try {
+                const payment = await prisma.payment.findFirst({
+                    where: { subscriptionId: subscription.id, paymentId: session.payment_intent?.toString() || session.id },
+                    orderBy: { createdAt: 'desc' },
+                });
+                if (payment) {
+                    await fiscalizeSubscriptionPayment({
+                        paymentId: payment.id,
+                        organizationId,
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to fiscalize subscription payment:', err);
+            }
+        }
 
         return res.json({
             success: true,
@@ -938,6 +958,14 @@ export const getPaymentHistory = async (req: Request, res: Response) => {
                 include: {
                     subscription: {
                         include: {
+                            organization: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    TIN: true,
+                                    address: true,
+                                },
+                            },
                             plan: {
                                 select: {
                                     id: true,

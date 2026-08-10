@@ -8,6 +8,15 @@ import { createPreviewSession, getPreviewSession, deletePreviewSession } from ".
 import { prisma } from "../lib/prisma"
 import { getOrderBy } from "../utils/sorting"
 
+/** Treat browser query-string placeholders as absent values, never as filters. */
+const optionalQueryValue = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined
+  const normalized = value.trim()
+  return normalized && normalized !== "undefined" && normalized !== "null"
+    ? normalized
+    : undefined
+}
+
 export const getCustomers = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params?.organizationId)
@@ -21,23 +30,28 @@ export const getCustomers = async (req: BranchAuthRequest, res: Response) => {
 
     const where: any = { organizationId, deletedAt: null }
 
-    if (showInactive !== "true") {
+    const searchValue = optionalQueryValue(search)
+    const hasDebtValue = optionalQueryValue(hasDebt)
+    const showInactiveValue = optionalQueryValue(showInactive)
+    const customerTypeValue = optionalQueryValue(customerType)
+
+    if (showInactiveValue !== "true") {
       where.isActive = true
     }
 
-    if (search) {
+    if (searchValue) {
       where.OR = [
-        { name: { contains: search as string, mode: "insensitive" } },
-        { phone: { contains: search as string, mode: "insensitive" } },
-        { email: { contains: search as string, mode: "insensitive" } },
+        { name: { contains: searchValue, mode: "insensitive" } },
+        { phone: { contains: searchValue, mode: "insensitive" } },
+        { email: { contains: searchValue, mode: "insensitive" } },
       ]
     }
 
-    if (hasDebt === "true") {
+    if (hasDebtValue === "true") {
       where.balance = { gt: 0 }
     }
-    if (typeof customerType === 'string' && customerType) {
-      where.customerType = customerType
+    if (["INDIVIDUAL", "INSURANCE", "CORPORATE"].includes(customerTypeValue ?? "")) {
+      where.customerType = customerTypeValue
     }
 
     // Customers are organization-wide records (the Customer model has no
@@ -153,7 +167,7 @@ export const getCustomerById = async (req: BranchAuthRequest, res: Response) => 
 export const createCustomer = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params?.organizationId)
-    const { name, phone, email, type, tin, TIN, balance } = req.body
+    const { name, phone, email, type, tin, TIN, prcOrdCd, balance } = req.body
 
     // Validate and map customerType
     let customerType: 'INDIVIDUAL' | 'INSURANCE' | 'CORPORATE' = 'INDIVIDUAL'
@@ -167,6 +181,7 @@ export const createCustomer = async (req: BranchAuthRequest, res: Response) => {
         phone: phone || null,
         email: email || null,
         TIN: TIN || tin || null,
+        prcOrdCd: prcOrdCd || null,
         customerType,
         balance: balance || 0,
         organizationId,
@@ -192,12 +207,13 @@ export const updateCustomer = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
-    const { balance, type, tin, TIN, ...rest } = req.body
+    const { balance, type, tin, TIN, prcOrdCd, ...rest } = req.body
 
     const updateData: any = { ...rest }
     if (type !== undefined) updateData.customerType = type
     if (TIN !== undefined) updateData.TIN = TIN
     else if (tin !== undefined) updateData.TIN = tin
+    if (prcOrdCd !== undefined) updateData.prcOrdCd = prcOrdCd
 
     const existingCustomer = await prisma.customer.findFirst({
       where: { id, organizationId, deletedAt: null },

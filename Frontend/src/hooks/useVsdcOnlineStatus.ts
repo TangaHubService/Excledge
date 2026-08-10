@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useOrganization } from '../context/OrganizationContext';
+import { useEffect, useState } from 'react';
+import { apiClient } from '../lib/api-client';
 
 export type VsdcStatus = 'healthy' | 'warning' | 'blocked';
 
@@ -9,43 +9,71 @@ interface VsdcStatusResult {
   message: string | null;
 }
 
-const TWENTY_TWO_HOURS_MS = 22 * 60 * 60 * 1000;
-const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+interface EbmStatusPayload {
+  enabled: boolean;
+  reachable: boolean;
+  online: boolean;
+  lastContact: string | null;
+  offlineLimitMs: number;
+}
+
+const POLL_INTERVAL_MS = 30_000;
 
 export function useVsdcOnlineStatus(): VsdcStatusResult {
-  const { organization } = useOrganization();
+  const [payload, setPayload] = useState<EbmStatusPayload | null>(null);
 
-  return useMemo(() => {
-    const lastContact = (organization as any)?.lastSuccessfulVdsContact
-      ? new Date((organization as any).lastSuccessfulVdsContact)
-      : null;
+  useEffect(() => {
+    let cancelled = false;
 
-    if (!lastContact) {
-      return { status: 'healthy', hoursSinceSync: 0, message: null };
-    }
+    const check = async () => {
+      try {
+        const res = (await apiClient.getEbmStatus()) as { data?: EbmStatusPayload };
+        const data = res?.data;
+        if (cancelled) return;
+        setPayload(data ?? null);
+      } catch {
+        if (cancelled) return;
+        setPayload(null);
+      }
+    };
 
-    const elapsed = Date.now() - lastContact.getTime();
-    const hoursSinceSync = Math.floor(elapsed / (60 * 60 * 1000));
+    check();
+    const timer = setInterval(check, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
 
-    if (elapsed >= TWENTY_FOUR_HOURS_MS) {
-      return {
-        status: 'blocked',
-        hoursSinceSync,
-        message:
-          `CRITICAL: EBM System Locked. Receipt generation blocked due to >24h VSDC disconnection. Contact administration.`,
-      };
-    }
+  if (!payload || !payload.enabled) {
+    return { status: 'healthy', hoursSinceSync: 0, message: null };
+  }
 
-    if (elapsed >= TWENTY_TWO_HOURS_MS) {
-      const hoursUntilBlock = 24 - hoursSinceSync;
-      return {
-        status: 'warning',
-        hoursSinceSync,
-        message:
-          `EBM Connection Alert: VSDC has not synced in ${hoursSinceSync}h. System will lock in ${hoursUntilBlock}h. Check your local Tomcat container or internet connection.`,
-      };
-    }
+  const lastContact = payload.lastContact ? new Date(payload.lastContact) : null;
+  const hoursSinceSync = lastContact
+    ? Math.floor((Date.now() - lastContact.getTime()) / (60 * 60 * 1000))
+    : 0;
+  const limitHours = Math.round(payload.offlineLimitMs / (60 * 60 * 1000));
 
-    return { status: 'healthy', hoursSinceSync, message: null };
-  }, [organization]);
+  if (!payload.reachable) {
+    return {
+      status: 'warning',
+      hoursSinceSync,
+      message:
+        'EBM Connection Alert: The VSDC gateway is unreachable. Receipt fiscalisation is unavailable until connectivity is restored.',
+    };
+  }
+
+  if (!payload.online) {
+    // reachable but the last successful contact exceeded the block window
+    return {
+      status: 'blocked',
+      hoursSinceSync,
+      message:
+        `CRITICAL: EBM System Locked. No successful VSDC contact for ${hoursSinceSync}h (limit ${limitHours}h). ` +
+        `Receipt generation is blocked until the gateway acknowledges a transaction. Contact administration.`,
+    };
+  }
+
+  return { status: 'healthy', hoursSinceSync, message: null };
 }

@@ -50,6 +50,8 @@ model Organization {
   taxConfigurations        TaxConfiguration[]
   stockTransfers           StockTransfer[]
   invoiceCounters          OrganizationInvoiceCounter[]
+  vsdcDeviceCounters       VsdcDeviceCounter[]
+  purchaseCodes            OrganizationPurchaseCode[]
   lastSyncCursor           DateTime?                    @map("last_sync_cursor")
   lastSuccessfulVdsContact DateTime?                    @map("last_successful_vds_contact")
   supplierInvoices         SupplierInvoice[]
@@ -397,6 +399,21 @@ model Payment {
   updatedAt      DateTime          @updatedAt
   id             Int               @id @default(autoincrement())
   subscriptionId Int
+  // RRA EBM / VSDC fiscalization for subscription billing receipts.
+  invoiceNumber            String?            @map("invoice_number")
+  ebmInvoiceNumber         String?            @map("ebm_invoice_number")
+  submissionStatus         EbmSubmissionStatus? @map("submission_status")
+  submittedAt              DateTime?          @map("submitted_at")
+  sdcDateTime              DateTime?          @map("sdc_date_time")
+  sdcId                    String?            @map("sdc_id")
+  sdcRcptNo                Int?               @map("sdc_rcpt_no")
+  totalRcptNo              Int?               @map("total_rcpt_no")
+  internalData             String?            @map("internal_data")
+  receiptSignature         String?            @map("receipt_signature")
+  qrPayload                String?            @map("qr_payload")
+  rcptLabel                RcptLabel?
+  errorMessage             String?            @map("error_message")
+  retryCount               Int                @default(0)
   subscription   Subscription      @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@index([subscriptionId])
@@ -464,7 +481,8 @@ model Customer {
   customerType   CustomerType  @default(INDIVIDUAL)
   balance        Decimal       @default(0) @db.Decimal(10, 2)
   isActive       Boolean       @default(true)
-  TIN            String? // RRA Tax ID
+  TIN            String?       // RRA Tax ID
+  prcOrdCd       String?       // RRA purchase order code (required for B2B / business customer TINs)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?
@@ -537,6 +555,7 @@ model Sale {
   ebmQueueItems      EbmQueue[]       @relation("SaleEbmQueue")
   ebmTransactions    EbmTransaction[] @relation("SaleEbmTransactions")
   ebmOutboxItems     EbmOutbox[]
+  prcOrdCd           String?             @map("prc_ord_cd") // RRA purchase order code used for this sale (single-use)
   saleItems          SaleItem[]
   customer           Customer         @relation(fields: [customerId], references: [id])
   organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -838,6 +857,41 @@ model OrganizationInvoiceCounter {
 
   @@id([organizationId, branchId])
   @@map("organization_invoice_counters")
+}
+
+/// Atomic sequence for VSDC invoice numbers (`invcNo`), keyed by the VSDC
+/// device (`bhfId`) rather than by branch. RRA requires these numbers to be
+/// unique per device, but several branches can share one device, so a
+/// per-branch counter can re-emit a number the device already accepted → VSDCMS
+/// error 924. Seeding starts past the highest number ever used by the org.
+model VsdcDeviceCounter {
+  organizationId Int
+  deviceKey      String
+  nextSequence   Int          @default(0)
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, deviceKey])
+  @@map("vsdc_device_counters")
+}
+
+/// Organization-level RRA test purchase codes (single-use, issued per buyer TIN).
+/// Configured once at the organization (not per customer/branch) and consumed
+/// one-per-business-sale so repeat sales to the same buyer get a fresh code.
+model OrganizationPurchaseCode {
+  id             Int      @id @default(autoincrement())
+  organizationId Int
+  code           String
+  buyerTin       String
+  consumed       Boolean  @default(false)
+  consumedSaleId Int?     @map("consumed_sale_id")
+  createdAt      DateTime @default(now())
+  consumedAt     DateTime? @map("consumed_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, code])
+  @@index([organizationId, buyerTin, consumed])
+  @@map("organization_purchase_codes")
 }
 
 model EbmTransaction {

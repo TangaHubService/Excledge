@@ -39,3 +39,6 @@ coverage/
 tmp/
 temp/
 *.tmp
+
+# Local RRA VSDC/EBM sandbox WAR (large binary, obtained from RRA — not source)
+*.war

@@ -17,9 +17,9 @@ This document describes how Excledge integrates with Rwanda Revenue Authority (R
 | `EBM_API_KEY` | Client identifier or username (depends on RRA spec). |
 | `EBM_API_SECRET` | Shared secret or password (depends on RRA spec). |
 | `EBM_ENVIRONMENT` | `sandbox` or `production` (included in JSON body for traceability). |
-| `EBM_SALE_PATH` | Path for sale submission (default `/sales`). |
-| `EBM_REFUND_PATH` | Path for refund/credit note (default `/refunds`). |
-| `EBM_VOID_PATH` | Path for void/cancel (default `/voids`). |
+| `EBM_SALE_PATH` | VSDC sale submission path (default `/trnsSales/saveSales`). |
+| `EBM_REFUND_PATH` | VSDC refund path (default `/trnsSales/saveSales`; the receipt fields distinguish a refund). |
+| `EBM_VOID_PATH` | VSDC cancellation path (default `/trnsSales/saveSales`; the receipt fields distinguish a cancellation). |
 | `EBM_REQUEST_TIMEOUT_MS` | HTTP timeout in ms (default `30000`). |
 | `EBM_USE_MOCK` | If `true`, skips HTTP and returns a synthetic success (local/dev only). |
 
@@ -29,10 +29,10 @@ Authentication: Excledge sends `Authorization: Basic base64(apiKey:apiSecret)` w
 
 ### Sale (POS / create sale)
 
-1. Sale is committed in the database with internal `invoiceNumber` (per-organization sequence).
-2. `submitInvoiceToEbm()` builds a JSON payload (seller TIN, device id/serial, branch, customer TIN when corporate, line-level tax, payment breakdown).
-3. On HTTP success, `EbmTransaction` is updated to `SUCCESS` with `ebmInvoiceNumber` and full `responseData`.
-4. On failure, status `FAILED`, optional `ebm_queue` row for retry by the background job.
+1. Sale is committed in the database with internal `invoiceNumber` (per-device sequence).
+2. The transactional outbox atomically claims one pending row, then submits the VSDC `TrnsSalesSaveReq` payload to `/trnsSales/saveSales`.
+3. On HTTP success, `EbmTransaction` is updated to `SUCCESS` with the RRA receipt counters, signature, and full response data.
+4. On failure, the outbox row records the gateway message and retries with backoff; concurrent workers cannot submit the same receipt twice.
 
 ### Refund
 

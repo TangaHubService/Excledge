@@ -9,6 +9,7 @@ import {
   reprintSaleReceipt,
   regenerateInvoice,
   getEbmReceipt,
+  getInvoice,
 } from "../controllers/sales.controller";
 import { authenticate, authorize } from "../middleware/auth.middleware";
 import { branchAuth } from "../middleware/branchAuth.middleware";
@@ -113,6 +114,17 @@ router.get(
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   getEbmReceipt
+);
+
+// Composed ERP invoice payload for the modern invoice renderer
+// GET /api/organizations/:orgId/invoices/:saleId
+router.get(
+  "/:organizationId/invoices/:saleId",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  getInvoice
 );
 
 export default router;
