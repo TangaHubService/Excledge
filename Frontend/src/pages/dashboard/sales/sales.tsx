@@ -14,12 +14,9 @@ import { apiClient } from '../../../lib/api-client';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from '../../../components/ui/drawer';
 import { Label } from '../../../components/ui/label';
 import { toast } from 'react-toastify';
-import { pdf } from '@react-pdf/renderer';
-import { saveAs } from 'file-saver';
-import SalesInvoicePDF, { type SaleEbmTransaction } from '../../../components/invoice/SalesInvoicePDF';
-import { fiscalBlockFromSale } from '../../../utils/invoiceFiscal';
-import { buildInvoiceQrDataUrl } from '../../../utils/qrCode';
-import { useOrganization } from '../../../context/OrganizationContext';
+import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice';
+import { downloadInvoicePdf } from '../../../lib/invoice-pdf';
+import type { SaleEbmTransaction } from '../../../utils/invoiceFiscal';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import { useNavigate } from 'react-router-dom';
 
@@ -31,14 +28,6 @@ const getPaymentMethodLabel = (paymentType: string): string => {
     .split('_')
     .map(w => w.charAt(0) + w.slice(1).toLowerCase())
     .join(' ');
-};
-
-const getPaymentMethods = (sale: Sale): Array<{ method: string; amount: number }> => {
-  const methods: Array<{ method: string; amount: number }> = [];
-  if (parseFloat(sale.cashAmount) > 0) methods.push({ method: 'CASH', amount: parseFloat(sale.cashAmount) });
-  if (parseFloat(sale.insuranceAmount) > 0) methods.push({ method: 'INSURANCE', amount: parseFloat(sale.insuranceAmount) });
-  if (parseFloat(sale.debtAmount) > 0) methods.push({ method: 'DEBT', amount: parseFloat(sale.debtAmount) });
-  return methods;
 };
 
 const fmtCurrency = (amount: string | number) =>
@@ -99,6 +88,20 @@ type Sale = {
   ebmTransactions?: SaleEbmTransaction[];
 };
 
+type Pagination = {
+  page?: number;
+  limit?: number;
+  total?: number;
+  totalItems?: number;
+  totalPages?: number;
+};
+
+type SalesResponse = {
+  success?: boolean;
+  data?: Sale[] | { data?: Sale[]; pagination?: Pagination };
+  pagination?: Pagination;
+};
+
 // ── KPI card ──────────────────────────────────────────────────────────────────
 
 interface KpiCardProps {
@@ -130,7 +133,6 @@ const KpiCard: React.FC<KpiCardProps> = ({ icon, iconBg, label, value, trend, tr
 
 export default function SalesPage() {
   const { t } = useTranslation();
-  const { organization } = useOrganization();
   const navigate = useNavigate();
 
   const [sales, setSales] = useState<Sale[]>([]);
@@ -155,7 +157,6 @@ export default function SalesPage() {
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState<string | null>(null);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [openRowMenu, setOpenRowMenu] = useState<string | null>(null);
-
   const fetchSales = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -167,18 +168,30 @@ export default function SalesPage() {
         paymentType: paymentFilter,
         startDate,
         endDate,
-      }) as any;
+      }) as SalesResponse;
 
-      const list: Sale[] = Array.isArray(response?.data) ? response.data
-        : Array.isArray(response) ? response : [];
+      // The sales API now returns `success({ data, pagination })`. Keep the
+      // direct-array fallback for older deployments during a rolling update.
+      const payload = Array.isArray(response?.data) ? undefined : response?.data;
+      const list: Sale[] = Array.isArray(payload?.data) ? payload.data
+        : Array.isArray(response?.data) ? response.data
+        : [];
+      const pagination = payload?.pagination ?? response?.pagination;
+      const pages = typeof pagination?.totalPages === 'number' && pagination.totalPages >= 1
+        ? pagination.totalPages
+        : 1;
+      const total = Number(pagination?.total ?? pagination?.totalItems ?? list.length);
+
+      // A filter or deletion can make the active page no longer valid. Return
+      // to the final page and fetch it instead of leaving an empty table.
+      if (currentPage > pages) {
+        setCurrentPage(pages);
+        return;
+      }
 
       setSales(list);
-
-      const pagination = response?.pagination;
-      const pages = typeof pagination?.totalPages === 'number' && pagination.totalPages >= 1
-        ? pagination.totalPages : 1;
       setTotalPages(pages);
-      setTotalCount(pagination?.total ?? list.length);
+      setTotalCount(Number.isFinite(total) ? total : list.length);
 
       // compute KPIs from current response
       const totalSalesAmt = list.reduce((s: number, sale: Sale) => s + parseFloat(sale.totalAmount || '0'), 0);
@@ -251,21 +264,15 @@ export default function SalesPage() {
   const handleDownloadInvoice = async (sale: Sale) => {
     setIsDownloadingInvoice(sale.id);
     try {
-      const qrDataUrl = await buildInvoiceQrDataUrl(fiscalBlockFromSale(sale));
-      const blob = await pdf(<SalesInvoicePDF
-        sale={sale}
-        organizationName={organization?.name}
-        organizationLogo={organization?.avatar}
-        organizationTin={(organization as any)?.TIN ?? (organization as any)?.tin}
-        organizationAddress={(organization as any)?.address}
-        organizationPhone={(organization as any)?.phone}
-        organizationEmail={(organization as any)?.email}
-        organizationVrn={(organization as any)?.VRN}
-        qrDataUrl={qrDataUrl}
-      />).toBlob();
-      saveAs(blob, `invoice-${sale.saleNumber}.pdf`);
+      const invoice = unwrapInvoice(await apiClient.getInvoice(sale.id));
+      const ok = await downloadInvoicePdf(
+        invoice,
+        getInvoiceFilename(invoice, sale.saleNumber)
+      );
+      if (!ok) throw new Error('PDF generation failed');
       toast.success(t('sales.invoiceDownloadSuccess'));
-    } catch {
+    } catch (error) {
+      console.error('Failed to download invoice:', error);
       toast.error(t('sales.invoiceGenerationError'));
     } finally {
       setIsDownloadingInvoice(null);
@@ -276,6 +283,14 @@ export default function SalesPage() {
     setStartDate(''); setEndDate(''); setStatusFilter('');
     setPaymentFilter(''); setSearchTerm(''); setCurrentPage(1);
   };
+
+  const pageWindowStart = Math.max(1, Math.min(currentPage - 2, Math.max(1, totalPages - 4)));
+  const visiblePages = Array.from(
+    { length: Math.min(totalPages, 5) },
+    (_, index) => pageWindowStart + index,
+  );
+  const firstShown = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const lastShown = totalCount === 0 ? 0 : Math.min(firstShown + sales.length - 1, totalCount);
 
   // ── render ────────────────────────────────────────────────────────────────
 
@@ -339,7 +354,7 @@ export default function SalesPage() {
             <input
               type="date"
               value={startDate}
-              onChange={e => setStartDate(e.target.value)}
+              onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
               className="h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all w-38"
             />
           </div>
@@ -350,7 +365,7 @@ export default function SalesPage() {
             <input
               type="date"
               value={endDate}
-              onChange={e => setEndDate(e.target.value)}
+              onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
               className="h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all w-38"
             />
           </div>
@@ -360,7 +375,7 @@ export default function SalesPage() {
             <label className="text-xs font-medium text-gray-500">Status</label>
             <select
               value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
+              onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
               className="h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
             >
               <option value="">All Statuses</option>
@@ -375,7 +390,7 @@ export default function SalesPage() {
             <label className="text-xs font-medium text-gray-500">Method</label>
             <select
               value={paymentFilter}
-              onChange={e => setPaymentFilter(e.target.value)}
+              onChange={e => { setPaymentFilter(e.target.value); setCurrentPage(1); }}
               className="h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
             >
               <option value="">All Methods</option>
@@ -599,22 +614,21 @@ export default function SalesPage() {
         )}
 
         {/* ── Pagination ───────────────────────────────────────────── */}
-        {!isLoading && sales.length > 0 && (
+        {!isLoading && totalCount > 0 && (
           <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 bg-gray-50/50">
             <p className="text-xs text-gray-500">
-              Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalCount)} of {totalCount} transactions
+              Showing {firstShown}–{lastShown} of {totalCount} transactions
             </p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                disabled={currentPage === 1 || isLoading}
+                disabled={currentPage <= 1 || isLoading}
                 className="h-8 w-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
 
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                const page = i + 1;
+              {visiblePages.map((page) => {
                 return (
                   <button
                     key={page}
@@ -633,7 +647,7 @@ export default function SalesPage() {
 
               <button
                 onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-                disabled={currentPage === totalPages || isLoading}
+                disabled={currentPage >= totalPages || isLoading}
                 className="h-8 w-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronRight className="h-4 w-4" />
@@ -654,108 +668,106 @@ export default function SalesPage() {
 
       {/* ── Sale detail drawer ───────────────────────────────────────────── */}
       <Drawer open={!!selectedSale} onOpenChange={open => !open && setSelectedSale(null)}>
-        <DrawerContent className="sm:max-w-2xl bg-white overflow-y-auto">
-          <DrawerHeader className="border-b border-gray-100 px-5 py-4">
-            <DrawerTitle className="text-base font-bold text-gray-900">
-              {t('sales.saleDetails') || 'Sale Details'}
-            </DrawerTitle>
-            <DrawerDescription className="text-xs text-gray-400 mt-0.5">
+        <DrawerContent className="max-h-[100vh] overflow-y-auto bg-white p-0 sm:max-w-2xl">
+          <DrawerHeader className="border-b border-slate-200 px-5 py-4 pr-12">
+            <DrawerTitle className="text-base font-bold text-slate-900">Sale Details</DrawerTitle>
+            <DrawerDescription className="mt-0.5 text-xs text-slate-400">
               {selectedSale?.invoiceNumber || selectedSale?.saleNumber}
             </DrawerDescription>
           </DrawerHeader>
 
           {selectedSale && (
-            <div className="px-5 py-4 space-y-5">
-              {/* Meta grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { label: t('sales.table.dateTime'), value: format(new Date(selectedSale.createdAt), 'MMM d, yyyy HH:mm') },
-                  { label: t('sales.table.customer'), value: selectedSale.customer.name },
-                  { label: t('sales.table.method'), value: getPaymentMethodLabel(selectedSale.paymentType) },
-                  { label: t('sales.table.status'), value: selectedSale.status },
-                ].map(m => (
-                  <div key={m.label} className="bg-gray-50 rounded-xl p-3">
-                    <p className="text-[10px] font-medium text-gray-400 mb-0.5">{m.label}</p>
-                    <p className="text-xs font-bold text-gray-800">{m.value}</p>
-                  </div>
-                ))}
+            <div className="space-y-5 px-5 py-5">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sale number</p>
+                  <p className="mt-1 break-all font-mono text-sm font-semibold text-slate-800">{selectedSale.saleNumber}</p>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Date & time</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">{format(new Date(selectedSale.createdAt), 'dd MMM yyyy')}</p>
+                  <p className="text-xs text-slate-500">{format(new Date(selectedSale.createdAt), 'HH:mm')}</p>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Status</p>
+                  <span className={cn('mt-1 inline-flex rounded-md px-2 py-1 text-[11px] font-bold', statusStyle[selectedSale.status] ?? 'bg-gray-100 text-gray-600')}>
+                    {selectedSale.status.replace('_', ' ')}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Payment</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">{getPaymentMethodLabel(selectedSale.paymentType)}</p>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sold by</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">{selectedSale.user?.name || '—'}</p>
+                </div>
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-500">Total</p>
+                  <p className="mt-1 text-base font-bold text-blue-700">{fmtCurrency(selectedSale.totalAmount)}</p>
+                </div>
               </div>
 
-              {/* Items table */}
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3">
-                  {t('sales.table.items')} ({selectedSale.saleItems.length})
-                </h4>
-                <div className="rounded-xl border border-gray-100 overflow-hidden">
-                  <Table>
-                    <TableHeader className="bg-gray-50">
-                      <TableRow>
-                        <TableHead className="text-xs">{t('inventory.product')}</TableHead>
-                        <TableHead className="text-xs text-right">{t('inventory.qty')}</TableHead>
-                        <TableHead className="text-xs text-right">{t('inventory.unitPrice')}</TableHead>
-                        <TableHead className="text-xs text-right">{t('sales.table.tax') || 'Tax'}</TableHead>
-                        <TableHead className="text-xs text-right">{t('common.total')}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedSale.saleItems.map(item => (
-                        <TableRow key={item.id}>
-                          <TableCell className="text-sm font-medium">
-                            {item.serviceName || item.product?.name || 'Service'}
-                            {item.taxCode && (
-                              <span className="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-400">{item.taxCode}</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-sm text-right">{item.quantity}</TableCell>
-                          <TableCell className="text-sm text-right">{fmtCurrency(item.unitPrice)}</TableCell>
-                          <TableCell className="text-sm text-right">
-                            {parseFloat(item.taxAmount ?? '0') > 0
-                              ? <span className="text-blue-600">{fmtCurrency(item.taxAmount!)}</span>
-                              : <span className="text-gray-300">—</span>}
-                          </TableCell>
-                          <TableCell className="text-sm text-right font-semibold">{fmtCurrency(item.totalPrice)}</TableCell>
-                        </TableRow>
+              <section className="rounded-xl border border-slate-200">
+                <div className="border-b border-slate-100 px-4 py-3">
+                  <h3 className="text-sm font-bold text-slate-800">Customer</h3>
+                </div>
+                <div className="grid gap-3 px-4 py-3 text-sm sm:grid-cols-3">
+                  <div><p className="text-xs text-slate-400">Name</p><p className="mt-1 font-semibold text-slate-800">{selectedSale.customer?.name || 'Walk-in customer'}</p></div>
+                  <div><p className="text-xs text-slate-400">Phone</p><p className="mt-1 font-medium text-slate-700">{selectedSale.customer?.phone || '—'}</p></div>
+                  <div><p className="text-xs text-slate-400">Email</p><p className="mt-1 break-all font-medium text-slate-700">{selectedSale.customer?.email || '—'}</p></div>
+                </div>
+              </section>
+
+              <section className="overflow-hidden rounded-xl border border-slate-200">
+                <div className="border-b border-slate-100 px-4 py-3">
+                  <h3 className="text-sm font-bold text-slate-800">Items</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[560px] text-sm">
+                    <thead className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-4 py-2.5">Item</th>
+                        <th className="px-3 py-2.5 text-center">Qty</th>
+                        <th className="px-3 py-2.5 text-right">Unit price</th>
+                        <th className="px-3 py-2.5 text-right">Tax</th>
+                        <th className="px-4 py-2.5 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedSale.saleItems.map((item) => (
+                        <tr key={item.id} className="text-slate-700">
+                          <td className="px-4 py-3 font-medium text-slate-800">{item.serviceName || item.product?.name || 'Item'}</td>
+                          <td className="px-3 py-3 text-center">{item.quantity}</td>
+                          <td className="px-3 py-3 text-right tabular-nums">{fmtCurrency(item.unitPrice)}</td>
+                          <td className="px-3 py-3 text-right tabular-nums">{Number(item.taxAmount || 0) > 0 ? fmtCurrency(item.taxAmount || 0) : '—'}</td>
+                          <td className="px-4 py-3 text-right font-semibold tabular-nums">{fmtCurrency(item.totalPrice)}</td>
+                        </tr>
                       ))}
-                    </TableBody>
-                  </Table>
+                    </tbody>
+                  </table>
                 </div>
-              </div>
+              </section>
 
-              {/* Payment breakdown */}
-              {getPaymentMethods(selectedSale).length > 1 && (
-                <div className="p-4 rounded-xl bg-blue-50 border border-blue-100 space-y-2">
-                  <p className="text-xs font-bold text-gray-700 mb-2">{t('sales.paymentBreakdown') || 'Payment Breakdown'}</p>
-                  {getPaymentMethods(selectedSale).map((p, i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                      <span className="text-gray-600">{getPaymentMethodLabel(p.method)}</span>
-                      <span className={cn('font-semibold', p.method === 'DEBT' ? 'text-amber-600' : 'text-gray-800')}>
-                        {fmtCurrency(p.amount)}
-                      </span>
-                    </div>
-                  ))}
+              <section className="rounded-xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <span className="font-medium text-slate-500">Paid</span>
+                  <span className="font-semibold text-slate-800">{fmtCurrency(Number(selectedSale.cashAmount || 0) + Number(selectedSale.insuranceAmount || 0))}</span>
                 </div>
-              )}
-
-              {/* Total */}
-              <div className="border-t border-gray-100 pt-4 space-y-2">
-                {parseFloat(selectedSale.vatAmount ?? '0') > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Tax (VAT)</span>
-                    <span className="font-semibold text-blue-600">{fmtCurrency(selectedSale.vatAmount!)}</span>
+                {Number(selectedSale.debtAmount || 0) > 0 && (
+                  <div className="mt-3 flex items-center justify-between gap-4 border-t border-slate-100 pt-3 text-sm">
+                    <span className="font-medium text-slate-500">Outstanding debt</span>
+                    <span className="font-semibold text-rose-600">{fmtCurrency(selectedSale.debtAmount)}</span>
                   </div>
                 )}
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-gray-600">Total</span>
-                  <span className="text-xl font-bold text-gray-900">{fmtCurrency(selectedSale.totalAmount)}</span>
-                </div>
-              </div>
+              </section>
             </div>
           )}
 
-          <DrawerFooter className="border-t border-gray-100 px-5 py-4 flex-row gap-2">
+          <DrawerFooter className="flex-row flex-wrap gap-2 border-t border-slate-200 px-5 py-4">
             <button
               onClick={() => setSelectedSale(null)}
-              className="flex-1 h-10 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              className="flex-1 h-10 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 transition-colors hover:bg-white"
             >
               {t('common.close')}
             </button>
@@ -763,7 +775,7 @@ export default function SalesPage() {
               <button
                 onClick={() => handleDownloadInvoice(selectedSale)}
                 disabled={isDownloadingInvoice === selectedSale?.id}
-                className="flex-1 h-10 flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
+                className="flex-1 h-10 flex items-center justify-center gap-2 rounded-xl bg-[#1d57c8] text-sm font-semibold text-white transition-colors hover:bg-[#1748b3]"
               >
                 {isDownloadingInvoice === selectedSale?.id
                   ? <Loader2 className="h-4 w-4 animate-spin" />

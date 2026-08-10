@@ -129,7 +129,10 @@ async function getStoredCmcKey(
     select: { metadata: true },
   });
   const md = (b?.metadata as any) ?? {};
-  return md?.ebm?.cmcKey;
+  // New installations store the key under `osdc`. Keep the old `ebm` lookup
+  // as a migration fallback so an already-initialised device does not need to
+  // be enrolled again after this change.
+  return md?.osdc?.cmcKey ?? md?.ebm?.cmcKey;
 }
 
 async function storeCmcKey(

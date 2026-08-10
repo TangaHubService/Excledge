@@ -192,6 +192,35 @@ export function getBranchIdForOperation(req: BranchAuthRequest): number {
 }
 
 /**
+ * Same as `getBranchIdForOperation`, but when the caller supplies no branch ID
+ * (e.g. an org-owner/ADMIN operating at "All branches" scope) it resolves a
+ * concrete default branch instead of failing: the org's primary branch, else a
+ * branch with an EBM/VSDC device, else any single branch. Used by write flows
+ * that must always land on a real branch (e.g. sale creation for fiscalization).
+ */
+export async function resolveBranchIdForWrite(req: BranchAuthRequest): Promise<number> {
+    const explicit = req.selectedBranchId ||
+        req.body?.branchId ||
+        req.params?.branchId ||
+        req.query?.branchId;
+    if (explicit) {
+        return typeof explicit === 'string' ? parseInt(explicit) : explicit;
+    }
+
+    const orgId = parseInt(String(req.params?.organizationId ?? req.params?.id ?? req.body?.organizationId), 10);
+    if (orgId && !isNaN(orgId)) {
+        // Prefer a VSDC/EBM-enabled branch (bhfId set), else the org's default
+        // branch, else any single ACTIVE branch.
+        const scope = { organizationId: orgId, status: 'ACTIVE' as const };
+        const vsdc = await prisma.branch.findFirst({ where: { ...scope, bhfId: { not: null } }, orderBy: { isDefault: 'desc' }, select: { id: true } });
+        const any = vsdc ?? await prisma.branch.findFirst({ where: scope, orderBy: [{ isDefault: 'desc' }, { id: 'asc' }], select: { id: true } });
+        if (any) return any.id;
+    }
+
+    throw new Error('Branch ID is required for this operation');
+}
+
+/**
  * Middleware to require specific branch access
  * Use this for endpoints that MUST have a branch (e.g., creating a sale)
  */

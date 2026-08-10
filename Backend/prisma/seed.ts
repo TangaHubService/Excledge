@@ -654,7 +654,7 @@ async function seedDemoDataset() {
         unitPrice: new Prisma.Decimal("4200.00"),
         minStock: 8,
         taxCategory: "EXEMPT",
-        taxCode: "D",
+        taxCode: "A",
         measurementUnit: "PCS",
         barcode: "8901000000005",
       },

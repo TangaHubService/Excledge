@@ -2,6 +2,8 @@ import { PrismaClient, PaymentStatus, PaymentMethodType, SubscriptionStatus, Pri
 import Stripe from 'stripe';
 import { emailService } from './email.service';
 import { config } from '../config';
+import { isEbmEnabled } from './rra-ebm.service';
+import { fiscalizeSubscriptionPayment } from './billing-ebm.service';
 
 export type BillingMode = 'MONTHLY' | 'YEARLY';
 
@@ -314,6 +316,19 @@ export class SubscriptionService {
                 );
             } catch (err) {
                 console.error('Failed to send payment confirmation email:', err);
+            }
+        }
+
+        // Best-effort RRA EBM fiscalization of the subscription receipt. Never
+        // blocks payment completion: failures are recorded on the Payment row.
+        if (isEbmEnabled()) {
+            try {
+                await fiscalizeSubscriptionPayment({
+                    paymentId: payment.id,
+                    organizationId: subscription.organizationId,
+                });
+            } catch (err) {
+                console.error(`Failed to fiscalize subscription payment ${payment.id}:`, err);
             }
         }
 

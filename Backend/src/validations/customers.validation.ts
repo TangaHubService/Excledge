@@ -8,6 +8,7 @@ export const createCustomerSchema = z.object({
     address: z.string().optional(),
     customerType: z.enum(['INDIVIDUAL', 'CORPORATE']).default('INDIVIDUAL'),
     TIN: z.string().min(3, 'TIN too short').optional(),
+    prcOrdCd: z.string().min(1, 'Purchase order code too short').optional(),
   }),
   params: z.object({
     organizationId: z.coerce.number().positive('Organization ID required'),
@@ -22,6 +23,7 @@ export const updateCustomerSchema = z.object({
     address: z.string().optional(),
     customerType: z.enum(['INDIVIDUAL', 'CORPORATE']).optional(),
     TIN: z.string().min(3, 'TIN too short').optional(),
+    prcOrdCd: z.string().optional(),
   }),
   params: z.object({
     organizationId: z.coerce.number().positive('Organization ID required'),

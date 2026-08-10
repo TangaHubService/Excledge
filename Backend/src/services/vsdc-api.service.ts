@@ -171,6 +171,7 @@ async function postToEndpoint(
   path: string,
   body: Record<string, unknown>,
   baseUrl?: string,
+  options: { requiresReceiptNumber?: boolean } = {},
 ): Promise<VsdcApiResult> {
   // C3: prefer per-branch URL, fall back to global config
   const base = (baseUrl ?? config.ebm.apiUrl ?? '').replace(/\/$/, '');
@@ -211,7 +212,15 @@ async function postToEndpoint(
     }
 
     if (!res.ok) {
-      return { success: false, error: `Gateway HTTP ${res.status}`, rawStatus: res.status, rawBody: json };
+      const detail = json && typeof json === 'object'
+        ? String((json as Record<string, unknown>).resultMsg ?? (json as Record<string, unknown>).message ?? '')
+        : '';
+      return {
+        success: false,
+        error: `Gateway HTTP ${res.status}${detail ? `: ${detail}` : ''}`,
+        rawStatus: res.status,
+        rawBody: json,
+      };
     }
 
     // C2: check VSDC business-level status code (STATUS != "0" is a rejection even on HTTP 200)
@@ -226,7 +235,10 @@ async function postToEndpoint(
     }
 
     const parsed = parseVsdcResponse(json);
-    if (!parsed.rcptNo) {
+    // Only a sale submission is expected to issue a receipt counter. Product,
+    // stock, and lookup endpoints can return a successful `000` response with
+    // `data: null`, which must not be treated as a fiscalisation failure.
+    if (options.requiresReceiptNumber && !parsed.rcptNo) {
       return { success: false, error: 'Gateway response missing rcptNo', rawStatus: res.status, rawBody: json };
     }
 
@@ -312,7 +324,12 @@ export async function saveInvc(
     return mockResult('INVC', envelope.sdcId);
   }
   const { vsdcUrl, ...envelopeFields } = envelope;
-  return postToEndpoint(config.ebm.salePath || '/saveInvc', { ...envelopeFields, ...payload }, vsdcUrl);
+  return postToEndpoint(
+    config.ebm.salePath || '/trnsSales/saveSales',
+    { ...envelopeFields, ...payload },
+    vsdcUrl,
+    { requiresReceiptNumber: true },
+  );
 }
 
 /**
@@ -395,6 +412,50 @@ export async function vsdcHeartbeat(
   }
   const { vsdcUrl, ...envelopeFields } = envelope;
   return postToEndpoint(statusPath, { ...envelopeFields, operation: 'HEARTBEAT' }, vsdcUrl);
+}
+
+/**
+ * POST /reports/saveZReports — daily Z (closing) report.
+ *
+ * Endpoint path and request shape confirmed against the RRA reference sandbox
+ * (`ReportExcute.saveReportZ`, `@RequestMapping("/reports")` +
+ * `@PostMapping("/saveZReports")`): the client only sends `{tin, bhfId,
+ * rptDe}` — the device/edge software computes and stores the day's receipt
+ * counts and totals itself from what it already recorded via
+ * `/trnsSales/saveSales`, it does not take them as input.
+ *
+ * `rptDe` here is the **report generation timestamp**, `yyyyMMddHHmmss` (14
+ * digits) — confirmed by the sandbox's own validation error message when
+ * given an 8-digit date. This differs from `checkZReport`, which takes an
+ * 8-digit report *date*. Not yet observed returning a live success from this
+ * sandbox instance (see caller note) — confirm the exact contract with RRA
+ * (`cis_sdc_certification@rra.gov.rw`) before relying on it for certification
+ * evidence.
+ */
+export async function saveZReport(
+  envelope: VsdcEnvelope,
+  rptDe: string,
+): Promise<VsdcApiResult> {
+  if (config.ebm.useMock) {
+    return mockResult('ZREPORT', envelope.sdcId);
+  }
+  return postToEndpoint('/reports/saveZReports', { tin: envelope.tin, bhfId: envelope.bhfId, rptDe }, envelope.vsdcUrl);
+}
+
+/**
+ * POST /reports/checkZReport — look up a previously saved Z report.
+ * `rptDe` here is an 8-digit report **date** (`yyyyMMdd`), unlike
+ * `saveZReport`'s 14-digit timestamp — confirmed by the sandbox's validation
+ * error ("length must be between 8 and 8").
+ */
+export async function checkZReport(
+  envelope: VsdcEnvelope,
+  rptDe: string,
+): Promise<VsdcApiResult> {
+  if (config.ebm.useMock) {
+    return mockResult('ZREPORT-CHECK', envelope.sdcId);
+  }
+  return postToEndpoint('/reports/checkZReport', { tin: envelope.tin, bhfId: envelope.bhfId, rptDe }, envelope.vsdcUrl);
 }
 
 // ──────────────────────────────────────────────

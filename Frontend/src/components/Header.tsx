@@ -19,6 +19,7 @@ import { useAuth } from "../context/AuthContext";
 import { useOrganization } from "../context/OrganizationContext";
 import { useTranslation } from 'react-i18next';
 import { cn } from "../lib/utils";
+import { VsdcPresenceIndicator } from "./VsdcPresenceIndicator";
 
 /* ─── Types ─────────────────────────────────────────── */
 
@@ -120,6 +121,7 @@ export function Header({ onMenuClick, onOpenSearch }: HeaderProps) {
         )}
 
         <div className="hidden items-center gap-2 sm:flex">
+          <VsdcPresenceIndicator />
           <ThemeToggle className="text-white hover:bg-white/10 hover:text-white" />
           <LanguageSwitcher toolbar />
           <NotificationBell toolbar />

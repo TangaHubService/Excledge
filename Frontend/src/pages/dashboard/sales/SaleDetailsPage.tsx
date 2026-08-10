@@ -6,15 +6,13 @@ import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table';
-import { ArrowLeft, Loader2, Printer, Download } from 'lucide-react';
+import { ArrowLeft, Loader2, Printer, Download, Share2 } from 'lucide-react';
 import { apiClient } from '../../../lib/api-client';
 import { toast } from 'react-toastify';
-import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
-import SalesInvoicePDF, { type SaleEbmTransaction } from '../../../components/invoice/SalesInvoicePDF';
-import { fiscalBlockFromSale } from '../../../utils/invoiceFiscal';
-import { buildInvoiceQrDataUrl } from '../../../utils/qrCode';
-import { useOrganization } from '../../../context/OrganizationContext';
+import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice';
+import { invoiceToPdfBlob, shareInvoicePdf } from '../../../lib/invoice-pdf';
+import type { SaleEbmTransaction } from '../../../utils/invoiceFiscal';
 import { Badge } from '../../../components/ui/badge';
 
 type Sale = {
@@ -70,11 +68,11 @@ export default function SaleDetailsPage() {
     const navigate = useNavigate();
     const { t } = useTranslation();
     const { theme } = useTheme();
-    const { organization } = useOrganization();
     const [sale, setSale] = useState<Sale | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
     const [isPrintingInvoice, setIsPrintingInvoice] = useState(false);
+    const [isSharingInvoice, setIsSharingInvoice] = useState(false);
 
     useEffect(() => {
         if (id) {
@@ -109,6 +107,17 @@ export default function SaleDetailsPage() {
 
     const formatTime = (dateString: string) => {
         return format(new Date(dateString), 'HH:mm');
+    };
+
+    const buildInvoicePdfBlob = async () => {
+        if (!id) throw new Error('Sale ID is missing');
+
+        const invoice = unwrapInvoice(await apiClient.getInvoice(id));
+        if (!invoice) throw new Error('Invoice was not returned by the backend.');
+
+        const blob = await invoiceToPdfBlob(invoice);
+        if (!blob) throw new Error('PDF generation failed');
+        return { blob, invoice };
     };
 
     // Helper function to get payment method translation
@@ -151,20 +160,8 @@ export default function SaleDetailsPage() {
 
         setIsDownloadingInvoice(true);
         try {
-            const qrDataUrl = await buildInvoiceQrDataUrl(fiscalBlockFromSale(sale));
-            const blob = await pdf(<SalesInvoicePDF
-                sale={sale}
-                organizationName={organization?.name}
-                organizationLogo={organization?.avatar}
-                organizationTin={(organization as any)?.TIN ?? (organization as any)?.tin}
-                organizationAddress={(organization as any)?.address}
-                organizationPhone={(organization as any)?.phone}
-                organizationEmail={(organization as any)?.email}
-                organizationVrn={(organization as any)?.VRN}
-                qrDataUrl={qrDataUrl}
-            />).toBlob();
-
-            saveAs(blob, `invoice-${sale.saleNumber}.pdf`);
+            const { blob, invoice } = await buildInvoicePdfBlob();
+            saveAs(blob, getInvoiceFilename(invoice, sale.saleNumber));
             toast.success(t('sales.invoiceDownloadSuccess') || 'Invoice downloaded successfully');
         } catch (error) {
             console.error('Failed to generate invoice:', error);
@@ -179,19 +176,7 @@ export default function SaleDetailsPage() {
 
         setIsPrintingInvoice(true);
         try {
-            const qrDataUrl = await buildInvoiceQrDataUrl(fiscalBlockFromSale(sale));
-            const blob = await pdf(<SalesInvoicePDF
-                sale={sale}
-                organizationName={organization?.name}
-                organizationLogo={organization?.avatar}
-                organizationTin={(organization as any)?.TIN ?? (organization as any)?.tin}
-                organizationAddress={(organization as any)?.address}
-                organizationPhone={(organization as any)?.phone}
-                organizationEmail={(organization as any)?.email}
-                organizationVrn={(organization as any)?.VRN}
-                qrDataUrl={qrDataUrl}
-            />).toBlob();
-
+            const { blob } = await buildInvoicePdfBlob();
             const url = URL.createObjectURL(blob);
             const printWindow = window.open(url, '_blank');
             if (printWindow) {
@@ -208,6 +193,25 @@ export default function SaleDetailsPage() {
             toast.error(t('sales.invoiceGenerationError') || 'Failed to generate invoice');
         } finally {
             setIsPrintingInvoice(false);
+        }
+    };
+
+    const handleShareInvoice = async () => {
+        if (!id || !sale) return;
+
+        setIsSharingInvoice(true);
+        try {
+            const invoice = unwrapInvoice(await apiClient.getInvoice(id));
+            if (!invoice) throw new Error('Invoice was not returned by the backend.');
+            const filename = getInvoiceFilename(invoice, sale.saleNumber);
+            const shared = await shareInvoicePdf(invoice, filename);
+            toast.success(shared ? 'Invoice ready to share' : 'Your browser downloaded the invoice instead');
+        } catch (error: unknown) {
+            if (error instanceof DOMException && error.name === 'AbortError') return;
+            console.error('Failed to share invoice:', error);
+            toast.error(t('sales.invoiceGenerationError') || 'Failed to prepare invoice sharing');
+        } finally {
+            setIsSharingInvoice(false);
         }
     };
 
@@ -320,6 +324,23 @@ export default function SaleDetailsPage() {
                             <Download className="h-4 w-4 mr-2" />
                         )}
                         {t('sales.downloadInvoice') || 'Download PDF'}
+                    </Button>
+                    <Button
+                        onClick={handleShareInvoice}
+                        disabled={isSharingInvoice}
+                        variant="outline"
+                        size="sm"
+                        className={theme === 'dark'
+                            ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700 hover:text-white'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                        }
+                    >
+                        {isSharingInvoice ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                            <Share2 className="h-4 w-4 mr-2" />
+                        )}
+                        Share Invoice
                     </Button>
                 </div>
             </div>

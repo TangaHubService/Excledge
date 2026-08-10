@@ -50,6 +50,7 @@ import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import SalesForm from "./pages/dashboard/sales/pos";
 import { EbmOutboxDashboard } from "./pages/dashboard/ebm/EbmOutboxDashboard";
+import InvoicePage from "./pages/dashboard/invoice/InvoicePage";
 import DebtManagement from "./pages/dashboard/dept";
 import SubscriptionManagementPage from "./pages/billing/SubscriptionManagementPage";
 import BillingHistoryPage from "./pages/billing/BillingHistoryPage";
@@ -144,6 +145,7 @@ function App() {
                       <Route path="branches" element={<Navigate to="../organization-config" replace />} />
                       <Route path="settings" element={<Navigate to="../organization-config" replace />} />
                       <Route path="pos" element={<SalesForm />} />
+                      <Route path="invoice/:id" element={<InvoicePage />} />
                       <Route path="users" element={<UserManagement />} />
                       <Route path="activity-logs" element={<ActivityLogs />} />
                       <Route path="ebm-outbox" element={<EbmOutboxDashboard />} />
