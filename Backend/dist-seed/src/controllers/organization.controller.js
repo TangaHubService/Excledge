@@ -161,6 +161,14 @@ const createOrganization = async (req, res) => {
         if (!name || !businessType || !address || !email) {
             return res.status(400).json({ error: "All fields are required" });
         }
+        // Resolve the free-trial plan before creating anything, so a missing
+        // plan can't leave behind an organization with no subscription.
+        const freeTrialPlan = await prisma_1.prisma.subscriptionPlan.findFirst({
+            where: { name: "Free Trial" }
+        });
+        if (!freeTrialPlan) {
+            return res.status(400).json({ error: 'Free Trial plan not found. Please contact support.' });
+        }
         const organization = await prisma_1.prisma.organization.create({
             data: {
                 name,
@@ -203,15 +211,7 @@ const createOrganization = async (req, res) => {
             });
         });
         try {
-            const freeTrialPlan = await prisma_1.prisma.subscriptionPlan.findFirst({
-                where: { name: "Free Trial" }
-            });
-            if (!freeTrialPlan) {
-                return res.status(400).json({ error: 'Free Trial plan not found. Please contact support.' });
-            }
-            else {
-                await subscriptionService.createTrial(organization.id, freeTrialPlan.id);
-            }
+            await subscriptionService.createTrial(organization.id, freeTrialPlan.id);
         }
         catch (subscriptionError) {
             await prisma_1.prisma.organization.delete({ where: { id: organization.id } });

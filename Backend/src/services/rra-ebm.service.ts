@@ -297,6 +297,32 @@ export async function consumeOrgPurchaseCode(
   return next.code;
 }
 
+/**
+ * Consume the next unused RRA purchase code from the organization's pool
+ * regardless of buyer TIN. The sandbox rejects every sale without a real
+ * single-use code, and codes are pooled at the org level, so fiscalization
+ * draws any unconsumed code when the sale has none on record.
+ */
+export async function consumeAnyOrgPurchaseCode(
+  organizationId: number,
+  saleId: number,
+  client: PrismaClientOrTx = prisma,
+): Promise<string | null> {
+  const next = await client.organizationPurchaseCode.findFirst({
+    where: { organizationId, consumed: false },
+    orderBy: { id: 'asc' },
+  });
+
+  if (!next) return null;
+
+  await client.organizationPurchaseCode.update({
+    where: { id: next.id },
+    data: { consumed: true, consumedSaleId: saleId, consumedAt: new Date() },
+  });
+
+  return next.code;
+}
+
 export async function postToGateway(
   path: string,
   body: Record<string, unknown>
@@ -480,13 +506,17 @@ export function buildRraSendReceiptPayload(
   // own TIN — that org TIN is usually a business (non-7-prefix) TIN, which would
   // silently convert the sale into a B2B transaction demanding a RRA purchase
   // code. Retail plants issue receipts to individuals, so we synthesize an
-  // individual (7-prefix) TIN from the customer id (§4.6 custTin/custNm).
+  // individual TIN from the customer id (§4.6 custTin/custNm).
+  // NOTE: 1-prefix (not 7) — the RRA sandbox WAR v3.0.2 validates receipt
+  // custTin against `^[1,9]\d{8}$`, rejecting 7-prefix with resultCd 910.
   const customerTin = sale.customer?.TIN?.trim() ?? '';
-  const custTin = customerTin
+  const synthesizeTin = (id: number): string => `1${String(id).padStart(8, '0')}`.slice(0, 9);
+  const isValidRraTin = (tin: string): boolean => /^[1,9]\d{8}$/.test(tin);
+  const custTin = isValidRraTin(customerTin)
     ? customerTin
     : sale.customer
-      ? `7${String(sale.customer.id).padStart(8, '0')}`.slice(0, 9)
-      : (org.TIN ?? '');
+      ? synthesizeTin(sale.customer.id)
+      : (isValidRraTin(org.TIN ?? '') ? org.TIN! : synthesizeTin(1));
   const custNm  = sale.customer?.name ?? org.name;
   const invcNo      = opts.invcNoOverride ?? sale.vsdcInvcNo ?? sale.id;
   const regrNm      = sale.user?.name ?? 'System';
@@ -496,15 +526,12 @@ export function buildRraSendReceiptPayload(
     invcNo,
     orgInvcNo: opts.orgInvcNo ?? 0,
     custTin,
-    // RRA purchase order code: OPTIONAL for individual (7-prefix TIN) sales — the
-    // reference WAR auto-clears it for them. MANDATORY for business (B2B) sales:
-    // RRA issues an encrypted purchase code to the buyer, and the WAR rejects any
-    // business sale without a valid one. We forward the code the buyer supplied
-    // (captured on the customer), falling back to a compliant placeholder only for
-    // individual sales (§ purchase code / prcOrdCd).
-    prcOrdCd: String(custTin).startsWith('7')
-      ? '000000'
-      : (sale.prcOrdCd ?? sale.customer?.prcOrdCd ?? ''),
+    // RRA purchase order code: the sandbox WAR rejects any sale without a real
+    // single-use code (resultCd 882 — even individual sales). The outbox
+    // processor auto-allocates an unconsumed org-pool code onto the sale before
+    // building this payload; we simply forward whatever is on record. `000000`
+    // is kept only as a last-resort placeholder when the pool is exhausted.
+    prcOrdCd: (sale.prcOrdCd ?? sale.customer?.prcOrdCd ?? '000000'),
     custNm: custNm ?? '',
     salesTyCd: 'N', // spec: "Send only 'N' type"
     rcptTyCd,

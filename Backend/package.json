@@ -23,7 +23,9 @@
     "build:seed": "tsc -p tsconfig.seed.json",
     "prisma:seed": "npm run build:seed && npx prisma db seed",
     "seed:super-admin": "tsx scripts/seed-super-admin.ts",
-    "ebm:test:setup": "tsx scripts/setup-ebm-test.ts"
+    "ebm:test:setup": "tsx scripts/setup-ebm-test.ts",
+    "ebm:test:topup-codes": "tsx scripts/topup-purchase-codes.ts",
+    "ebm:test:seed-b2b-customers": "tsx scripts/create-test-b2b-customers.ts"
   },
   "prisma": {
     "seed": "node dist-seed/prisma/seed.js"

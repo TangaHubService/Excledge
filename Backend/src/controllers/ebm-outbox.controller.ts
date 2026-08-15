@@ -1,42 +1,19 @@
 import type { Response } from 'express';
 import type { BranchAuthRequest } from '../middleware/branchAuth.middleware';
 import { prisma } from '../lib/prisma';
-import { config } from '../config';
 import { isEbmEnabled } from '../services/rra-ebm.service';
 import { buildVsdcEnvelope, saveZReport, checkZReport } from '../services/vsdc-api.service';
 import { success, error as apiError } from '../utils/apiResponse';
 
 const OFFLINE_BLOCK_MS = Number(process.env.VSDC_OFFLINE_BLOCK_MS ?? 2 * 60 * 60 * 1000);
 
-/**
- * Lightweight reachability probe of the configured EBM/VSDC gateway. Any HTTP
- * response (even 4xx/redirect) means the server is present; only a network
- * error / timeout means it's offline.
- */
-async function probeGatewayReachable(): Promise<boolean> {
-  const base = (config.ebm.osdcApiUrl || config.ebm.apiUrl || '').replace(/\/$/, '');
-  if (!base) return false;
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), 3000);
-  try {
-    await fetch(`${base}/`, {
-      method: 'GET',
-      signal: controller.signal,
-    });
-    return true;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(t);
-  }
-}
-
 export async function getEbmOutbox(req: BranchAuthRequest, res: Response) {
   try {
     const organizationId = parseInt(req.params.organizationId);
+    const saleId = req.query.saleId ? parseInt(req.query.saleId as string) : undefined;
 
     const entries = await prisma.ebmOutbox.findMany({
-      where: { organizationId },
+      where: { organizationId, ...(saleId ? { saleId } : {}) },
       include: {
         sale: {
           select: {
@@ -60,8 +37,10 @@ export async function getEbmOutbox(req: BranchAuthRequest, res: Response) {
 
 /**
  * GET /:organizationId/ebm-status — VSDC presence indicator payload.
- * Combines a live reachability probe with the persisted last-contact guard state
- * so the UI can show whether the gateway is present and within the online window.
+ * Derives reachability from the persisted last-contact timestamp (updated on
+ * every real successful VSDC call/heartbeat) rather than a synthetic probe,
+ * since a bare unauthenticated GET to the gateway root is not representative
+ * of the authenticated POST endpoints actual fiscalisation traffic uses.
  */
 export async function getEbmStatus(req: BranchAuthRequest, res: Response) {
   try {
@@ -77,12 +56,10 @@ export async function getEbmStatus(req: BranchAuthRequest, res: Response) {
     const lastContact = org.lastSuccessfulVdsContact;
     const elapsedMs = lastContact ? Date.now() - lastContact.getTime() : null;
     const enabled = isEbmEnabled();
-    const reachable = enabled ? await probeGatewayReachable() : false;
-    const online = reachable && elapsedMs !== null && elapsedMs < OFFLINE_BLOCK_MS;
+    const online = enabled && elapsedMs !== null && elapsedMs < OFFLINE_BLOCK_MS;
 
     res.json(success({
       enabled,
-      reachable,
       online,
       lastContact: lastContact ? lastContact.toISOString() : null,
       offlineLimitMs: OFFLINE_BLOCK_MS,

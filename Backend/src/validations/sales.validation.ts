@@ -18,6 +18,13 @@ export const saleItemSchema = z.object({
   { message: 'productId is required for PRODUCT items', path: ['productId'] }
 );
 
+const salePaymentSchema = z.object({
+  paymentMethod: z.enum(['CASH', 'BANK', 'CARD', 'PAYPACK', 'MTN_MOMO', 'AIRTEL_MONEY', 'WALLET', 'GIFT_CARD', 'STORE_CREDIT']),
+  amount: z.coerce.number().positive('Payment amount must be positive'),
+  reference: z.string().max(200).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const createSaleSchema = z.object({
   body: z.object({
     customerId: z.coerce.number().positive('Customer ID required'),
@@ -27,6 +34,9 @@ export const createSaleSchema = z.object({
     debtAmount: z.coerce.number().nonnegative('Debt amount cannot be negative').optional(),
     insuranceAmount: z.coerce.number().nonnegative('Insurance amount cannot be negative').optional(),
     notes: z.string().optional(),
+    shiftId: z.coerce.number().positive().optional(),
+    branchId: z.coerce.number().positive().optional(),
+    payments: z.array(salePaymentSchema).optional(),
   }),
   params: z.object({
     organizationId: z.coerce.number().positive('Organization ID required'),

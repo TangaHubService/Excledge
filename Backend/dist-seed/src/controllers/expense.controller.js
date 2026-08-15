@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getExpenseById = exports.deleteExpense = exports.updateExpense = exports.getExpenses = exports.createExpense = void 0;
 const client_1 = require("@prisma/client");
 const prisma_1 = require("../lib/prisma");
+const sorting_1 = require("../utils/sorting");
 const activity_log_middleware_1 = require("../middleware/activity-log.middleware");
 const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
 /**
@@ -112,7 +113,15 @@ const getExpenses = async (req, res) => {
                         }
                     }
                 },
-                orderBy: { expenseDate: 'desc' },
+                orderBy: (0, sorting_1.getOrderBy)(req.query, {
+                    expenseDate: { expenseDate: '$direction' },
+                    category: { category: '$direction' },
+                    description: { description: '$direction' },
+                    paymentMethod: { paymentMethod: '$direction' },
+                    amount: { amount: '$direction' },
+                    user: { user: { name: '$direction' } },
+                    createdAt: { createdAt: '$direction' }
+                }, 'expenseDate', 'desc'),
                 skip,
                 take
             }),

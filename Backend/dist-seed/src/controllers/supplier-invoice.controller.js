@@ -14,6 +14,7 @@ const inventory_ledger_service_1 = require("../services/inventory-ledger.service
 const ocr_service_1 = require("../services/ocr.service");
 const invoice_analysis_service_1 = require("../services/invoice-analysis.service");
 const config_1 = require("../config");
+const sorting_1 = require("../utils/sorting");
 const UPLOADS_DIR = path_1.default.join(process.cwd(), 'uploads', 'invoices');
 // ── Upload & OCR ──────────────────────────────────────────────────────────
 const uploadAndScanInvoice = async (req, res) => {
@@ -186,7 +187,14 @@ const getInvoices = async (req, res) => {
                     files: { select: { id: true, originalName: true, mimeType: true } },
                     _count: { select: { items: true } },
                 },
-                orderBy: { createdAt: 'desc' },
+                orderBy: (0, sorting_1.getOrderBy)(req.query, {
+                    invoiceNumber: { invoiceNumber: '$direction' },
+                    supplierName: { supplierName: '$direction' },
+                    totalAmount: { totalAmount: '$direction' },
+                    status: { status: '$direction' },
+                    invoiceDate: { invoiceDate: '$direction' },
+                    createdAt: { createdAt: '$direction' },
+                }, 'createdAt', 'desc'),
                 skip,
                 take: limitNum,
             }),

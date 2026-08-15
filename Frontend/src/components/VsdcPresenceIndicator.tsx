@@ -5,7 +5,6 @@ type PresenceState = 'checking' | 'online' | 'offline' | 'disabled';
 
 interface EbmStatusPayload {
   enabled: boolean;
-  reachable: boolean;
   online: boolean;
   lastContact: string | null;
   offlineLimitMs: number;

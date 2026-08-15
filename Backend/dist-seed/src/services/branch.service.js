@@ -4,6 +4,7 @@ exports.getBranches = getBranches;
 exports.getBranchById = getBranchById;
 exports.createBranch = createBranch;
 exports.updateBranch = updateBranch;
+exports.setDefaultBranch = setDefaultBranch;
 exports.deleteBranch = deleteBranch;
 exports.assignUserToBranch = assignUserToBranch;
 exports.removeUserFromBranch = removeUserFromBranch;
@@ -109,6 +110,29 @@ async function updateBranch(branchId, organizationId, data) {
     });
 }
 /**
+ * Set a branch as the organization's default branch, unsetting any other
+ * branch previously marked as default.
+ */
+async function setDefaultBranch(branchId, organizationId) {
+    const branch = await prisma_1.prisma.branch.findFirst({
+        where: {
+            id: branchId,
+            organizationId,
+        },
+    });
+    if (!branch) {
+        throw new Error(`Branch with ID ${branchId} not found`);
+    }
+    await prisma_1.prisma.branch.updateMany({
+        where: { organizationId, isDefault: true, NOT: { id: branchId } },
+        data: { isDefault: false },
+    });
+    return await prisma_1.prisma.branch.update({
+        where: { id: branchId },
+        data: { isDefault: true },
+    });
+}
+/**
  * Delete a branch (soft delete by setting status to INACTIVE)
  */
 async function deleteBranch(branchId, organizationId) {
@@ -194,14 +218,17 @@ async function removeUserFromBranch(userId, branchId) {
 /**
  * Get all branches for a user
  */
-async function getUserBranches(userId, organizationId) {
+async function getUserBranches(userId, organizationId, includeInactive = false) {
     const where = {
         userId,
     };
-    if (organizationId) {
-        where.branch = {
-            organizationId,
-        };
+    const branchWhere = {};
+    if (organizationId)
+        branchWhere.organizationId = organizationId;
+    if (!includeInactive)
+        branchWhere.status = client_1.BranchStatus.ACTIVE;
+    if (Object.keys(branchWhere).length > 0) {
+        where.branch = branchWhere;
     }
     const userBranches = await prisma_1.prisma.userBranch.findMany({
         where,

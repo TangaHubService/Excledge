@@ -117,7 +117,7 @@ const login = async (req, res) => {
                 userId: user.id
             });
         }
-        if (!user.isActive) {
+        if (!user.isActive && user.role !== 'SYSTEM_OWNER') {
             return res.status(401).json({ error: "Account is inactive" });
         }
         const organizations = await Promise.all(user.userOrganizations.map(async (uo) => {
@@ -169,7 +169,7 @@ const login = async (req, res) => {
         const tokenPayload = {
             userId: user.id,
             email: user.email,
-            role: primaryUo ? primaryUo.role : user.role,
+            role: user.role,
             activeOrganizationId: primaryUo?.organizationId,
             organizationIds,
             organizationId: primaryUo?.organizationId ?? organizationIds,
@@ -210,7 +210,7 @@ const login = async (req, res) => {
                 id: user.id,
                 email: user.email,
                 name: user.name,
-                role: primaryUo ? primaryUo.role : user.role,
+                role: user.role,
                 requirePasswordChange: user.requirePasswordChange,
             },
             organizations: organizations.map((org, index) => ({
@@ -262,7 +262,7 @@ const refresh = async (req, res) => {
         if (!user || !user.refreshToken || user.refreshToken !== hashedRefreshToken) {
             return res.status(401).json({ error: "Invalid refresh token" });
         }
-        if (!user.isActive) {
+        if (!user.isActive && user.role !== 'SYSTEM_OWNER') {
             // Deactivated account — clear the stored token so this can't be replayed again.
             await prisma_1.prisma.user.update({
                 where: { id: user.id },
@@ -438,7 +438,7 @@ const switchOrganization = async (req, res) => {
                 id: fullUser.id,
                 email: fullUser.email,
                 name: fullUser.name,
-                role: userOrg.role,
+                role: fullUser.role,
             },
         });
     }

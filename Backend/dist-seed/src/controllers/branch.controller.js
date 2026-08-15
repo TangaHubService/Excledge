@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBranchUsersController = exports.removeUserFromBranchController = exports.assignUserToBranchController = exports.deleteBranchController = exports.updateBranchController = exports.createBranchController = exports.getUserPrimaryBranchController = exports.getUserBranchesController = exports.getBranch = exports.getBranchesController = void 0;
+exports.getBranchUsersController = exports.removeUserFromBranchController = exports.assignUserToBranchController = exports.deleteBranchController = exports.setDefaultBranchController = exports.updateBranchController = exports.createBranchController = exports.getUserPrimaryBranchController = exports.getUserBranchesController = exports.getBranch = exports.getBranchesController = void 0;
+const config_1 = require("../config");
 const branch_service_1 = require("../services/branch.service");
 const auditLogger_1 = require("../utils/auditLogger");
 /**
@@ -45,7 +46,8 @@ const getUserBranchesController = async (req, res) => {
     try {
         const userId = parseInt(req.user?.userId);
         const organizationId = req.query.organizationId ? parseInt(req.query.organizationId) : undefined;
-        const branches = await (0, branch_service_1.getUserBranches)(userId, organizationId);
+        const includeInactive = req.query.includeInactive === 'true';
+        const branches = await (0, branch_service_1.getUserBranches)(userId, organizationId, includeInactive);
         res.json(branches);
     }
     catch (error) {
@@ -120,10 +122,13 @@ const updateBranchController = async (req, res) => {
         const organizationId = parseInt(req.params.organizationId);
         const branchId = parseInt(req.params.id);
         const { name, location, address, addressLine2, phone, status, metadata, bhfId, ebmDeviceId, ebmSerialNo, vsdcUrl } = req.body;
-        // C10: MRC number format validation (RRA spec §2.1: BBBCCNNNNNN, 11 chars)
+        // C10: MRC number format validation (RRA spec §2.1: BBBCCNNNNNN, 11 chars).
+        // Relaxed in sandbox/mock: RRA test-issued device serials (e.g. "excelwartest")
+        // do not follow the BBBCCNNNNNN pattern. Strict validation stays in production.
         if (ebmSerialNo !== undefined && ebmSerialNo !== null && ebmSerialNo !== '') {
+            const isSandboxOrMock = config_1.config.ebm.environment === 'sandbox' || config_1.config.ebm.useMock;
             const MRC_PATTERN = /^[A-Z0-9]{3}[A-Z0-9]{2}[0-9]{6}$/;
-            if (!MRC_PATTERN.test(String(ebmSerialNo).toUpperCase())) {
+            if (!isSandboxOrMock && !MRC_PATTERN.test(String(ebmSerialNo).toUpperCase())) {
                 return res.status(400).json({
                     error: 'Invalid MRC number format. Must be BBBCCNNNNNN (3 developer + 2 certificate + 6 serial digits).',
                 });
@@ -159,6 +164,29 @@ const updateBranchController = async (req, res) => {
     }
 };
 exports.updateBranchController = updateBranchController;
+/**
+ * Set a branch as the organization's default branch
+ */
+const setDefaultBranchController = async (req, res) => {
+    try {
+        const organizationId = parseInt(req.params.organizationId);
+        const branchId = parseInt(req.params.id);
+        const branch = await (0, branch_service_1.setDefaultBranch)(branchId, organizationId);
+        await auditLogger_1.auditLogger.system(req, {
+            type: 'BRANCH_UPDATE',
+            description: `Branch "${branch.name}" set as default`,
+            entityType: 'Branch',
+            entityId: branch.id.toString(),
+            metadata: { name: branch.name },
+        });
+        res.json(branch);
+    }
+    catch (error) {
+        console.error('[Set Default Branch Error]:', error);
+        res.status(500).json({ error: error.message || 'Failed to set default branch' });
+    }
+};
+exports.setDefaultBranchController = setDefaultBranchController;
 /**
  * Delete a branch
  */

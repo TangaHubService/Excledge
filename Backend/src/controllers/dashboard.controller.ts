@@ -960,7 +960,7 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
     const organizationId = parseInt(req.params.organizationId)
     const { startDate, endDate } = parseDateRange(req.query)
     const branchFilter = buildBranchFilter(req)
-    const singleBranchId = typeof branchFilter.branchId === 'number' ? branchFilter.branchId : null
+    const branchIdScope = branchFilter.branchId
 
     // Org info for currency
     const org = await prisma.organization.findUnique({
@@ -979,7 +979,7 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
       where: {
         organizationId,
         status: 'ACTIVE',
-        ...(singleBranchId ? { id: singleBranchId } : {}),
+        ...(branchIdScope ? { id: branchIdScope } : {}),
       },
       select: { id: true, name: true, code: true },
       orderBy: { name: 'asc' },
@@ -1012,12 +1012,34 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
       ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
     }
 
+    const purchaseWhereCurrent = {
+      organizationId,
+      isActive: true,
+      status: { not: 'CANCELLED' as const },
+      orderedAt: { gte: startDate, lte: endDate },
+      ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
+    }
+
+    const purchaseWherePrev = {
+      organizationId,
+      isActive: true,
+      status: { not: 'CANCELLED' as const },
+      orderedAt: { gte: prevStartDate, lte: prevEndDate },
+      ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
+    }
+
     // Parallel execution of main KPI queries
     const [
       salesCurrAgg,
       salesPrevAgg,
       expCurrAgg,
       expPrevAgg,
+      purchaseCurrAgg,
+      purchasePrevAgg,
+      totalProductsCount,
+      newProductsCount,
+      totalCustomersCount,
+      newCustomersCount,
       products,
       salesListCurrent,
       expensesListCurrent,
@@ -1030,6 +1052,12 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
       prisma.sale.aggregate({ where: saleWherePrev, _sum: { totalAmount: true }, _count: { id: true } }),
       prisma.expense.aggregate({ where: expenseWhereCurrent, _sum: { amount: true } }),
       prisma.expense.aggregate({ where: expenseWherePrev, _sum: { amount: true } }),
+      prisma.purchaseOrder.aggregate({ where: purchaseWhereCurrent, _sum: { totalAmount: true } }),
+      prisma.purchaseOrder.aggregate({ where: purchaseWherePrev, _sum: { totalAmount: true } }),
+      prisma.product.count({ where: { organizationId, deletedAt: null, isActive: true } }),
+      prisma.product.count({ where: { organizationId, deletedAt: null, isActive: true, createdAt: { gte: startDate, lte: endDate } } }),
+      prisma.customer.count({ where: { organizationId, deletedAt: null, isActive: true } }),
+      prisma.customer.count({ where: { organizationId, deletedAt: null, isActive: true, createdAt: { gte: startDate, lte: endDate } } }),
       prisma.product.findMany({
         where: { organizationId, deletedAt: null, isActive: true },
         select: { id: true, name: true, quantity: true, minStock: true, expiryDate: true },
@@ -1061,7 +1089,16 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
         where: { organizationId, ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}) },
         take: 10,
         orderBy: { createdAt: 'desc' },
-        select: { id: true, saleNumber: true, invoiceNumber: true, totalAmount: true, createdAt: true, user: { select: { name: true } } },
+        select: {
+          id: true,
+          saleNumber: true,
+          invoiceNumber: true,
+          totalAmount: true,
+          status: true,
+          paymentType: true,
+          createdAt: true,
+          user: { select: { name: true } },
+        },
       }),
       prisma.customer.findMany({
         where: { organizationId, deletedAt: null },
@@ -1083,6 +1120,12 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
     const expensesVal = Number(expCurrAgg._sum.amount ?? 0)
     const prevExpensesVal = Number(expPrevAgg._sum.amount ?? 0)
     const expensesChange = prevExpensesVal > 0 ? Math.round(((expensesVal - prevExpensesVal) / prevExpensesVal) * 100) : 0
+
+    const totalPurchasesVal = Number(purchaseCurrAgg._sum.totalAmount ?? 0)
+    const prevPurchasesVal = Number(purchasePrevAgg._sum.totalAmount ?? 0)
+    const purchasesChange = prevPurchasesVal > 0
+      ? Math.round(((totalPurchasesVal - prevPurchasesVal) / prevPurchasesVal) * 100)
+      : 0
 
     // Stock Alerts
     let lowStockCount = 0
@@ -1284,6 +1327,12 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
           sparkline: alertsSparkline,
         },
       },
+      summary: {
+        totalSales: { value: totalSalesVal, changePercentage: salesChange },
+        totalPurchases: { value: totalPurchasesVal, changePercentage: purchasesChange },
+        totalProducts: { value: totalProductsCount, newCount: newProductsCount },
+        totalCustomers: { value: totalCustomersCount, newCount: newCustomersCount },
+      },
       branchPerformance: {
         hasActivity: hasBranchActivity,
         branches: branchPerformanceList,
@@ -1296,11 +1345,18 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
         outOfStock: { count: outOfStockCount, label: 'Out of Stock', subtext: 'Items out of stock' },
       },
       recentActivities: recentActivitiesList,
+      recentTransactions: recentSales.slice(0, 5).map((sale) => ({
+        id: sale.id,
+        number: sale.invoiceNumber || sale.saleNumber,
+        totalAmount: Number(sale.totalAmount),
+        status: sale.status,
+        paymentType: sale.paymentType,
+        createdAt: sale.createdAt.toISOString(),
+        cashier: sale.user?.name ?? null,
+      })),
     })
   } catch (error: any) {
     console.error('[Overview Dashboard Error]:', error)
     res.status(500).json({ error: 'Failed to fetch overview dashboard stats' })
   }
 }
-
-

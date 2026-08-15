@@ -37,6 +37,9 @@ const expense_routes_1 = __importDefault(require("./routes/expense.routes"));
 const supplier_payment_routes_1 = __importDefault(require("./routes/supplier-payment.routes"));
 const stock_transfer_routes_1 = __importDefault(require("./routes/stock-transfer.routes"));
 const ebm_outbox_routes_1 = __importDefault(require("./routes/ebm-outbox.routes"));
+const shift_routes_1 = __importDefault(require("./routes/shift.routes"));
+const held_sale_routes_1 = __importDefault(require("./routes/held-sale.routes"));
+const device_routes_1 = __importDefault(require("./routes/device.routes"));
 const error_middleware_1 = require("./middleware/error.middleware");
 const paypack_webhook_routes_1 = __importDefault(require("./routes/paypack-webhook.routes"));
 const subscription_job_1 = require("./jobs/subscription.job");
@@ -47,6 +50,7 @@ const vsdc_heartbeat_job_1 = require("./jobs/vsdc-heartbeat.job");
 const pesapal_route_1 = __importDefault(require("./routes/pesapal.route"));
 const upload_route_1 = __importDefault(require("./routes/upload.route"));
 const supplier_invoice_routes_1 = __importDefault(require("./routes/supplier-invoice.routes"));
+const supplier_portal_routes_1 = __importDefault(require("./routes/supplier-portal.routes"));
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app);
 const PORT = process.env.PORT || 5000;
@@ -129,6 +133,10 @@ app.use("/api/supplier-payments", supplier_payment_routes_1.default);
 app.use("/api/stock-transfers", stock_transfer_routes_1.default);
 app.use("/api/organizations", ebm_outbox_routes_1.default);
 app.use("/api/supplier-invoices", supplier_invoice_routes_1.default);
+app.use("/api/supplier-portal", supplier_portal_routes_1.default);
+app.use("/api/shifts", shift_routes_1.default);
+app.use("/api/held-sales", held_sale_routes_1.default);
+app.use("/api/devices", device_routes_1.default);
 // Serve uploaded files statically
 app.use('/uploads', express_1.default.static('uploads'));
 /* ----------------------------------
@@ -149,6 +157,10 @@ if (process.env.RUN_JOBS !== "false") {
     ebm_queue_job_1.ebmQueueJob.start();
     ebm_outbox_job_1.ebmOutboxJob.start();
     vsdc_heartbeat_job_1.vsdcHeartbeatJob.start();
+    // Run an immediate subscription status transition on boot so that
+    // overdue statuses (TRIALING, ACTIVE, GRACE_PERIOD) are always caught
+    // even if the hourly cron was down for a while.
+    (0, subscription_job_1.runImmediateSubscriptionTransition)().catch((err) => console.error("Boot-time subscription transition failed:", err));
 }
 /* ----------------------------------
    🚀 START SERVER

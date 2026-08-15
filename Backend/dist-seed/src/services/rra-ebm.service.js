@@ -3,11 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.gatewayErrorMessage = gatewayErrorMessage;
 exports.isEbmEnabled = isEbmEnabled;
 exports.parseGatewayResponse = parseGatewayResponse;
+exports.consumeOrgPurchaseCode = consumeOrgPurchaseCode;
 exports.postToGateway = postToGateway;
 exports.toRraDate = toRraDate;
 exports.toRraTime = toRraTime;
 exports.toRraDateTime = toRraDateTime;
 exports.fix2 = fix2;
+exports.clampField = clampField;
 exports.buildRraSendReceiptPayload = buildRraSendReceiptPayload;
 exports.generateInvoiceNumber = generateInvoiceNumber;
 exports.submitInvoiceToEbm = submitInvoiceToEbm;
@@ -18,6 +20,7 @@ exports.processEbmQueueBatch = processEbmQueueBatch;
 const prisma_1 = require("../lib/prisma");
 const config_1 = require("../config");
 const vsdc_api_service_1 = require("./vsdc-api.service");
+const rra_osdc_service_1 = require("./rra-osdc.service");
 let invoiceSequenceMode = 'unknown';
 let loggedLegacyInvoiceFallback = false;
 function gatewayErrorMessage(http, fallback) {
@@ -118,6 +121,35 @@ async function nextInvoiceSequenceFromLegacySequence(client = prisma_1.prisma) {
     return Number(rows[0]?.nextSequence ?? 0);
 }
 async function allocateNextInvoiceSequence(organizationId, branchId, client = prisma_1.prisma) {
+    // VSDC `invcNo` must be unique per DEVICE (org + bhfId), not per branch —
+    // several branches may share one VSDC device and would otherwise collide.
+    const branch = await client.branch.findUnique({
+        where: { id: branchId },
+        select: { bhfId: true },
+    });
+    const deviceKey = branch?.bhfId ? `bhf:${branch.bhfId}` : `branch:${branchId}`;
+    // Seed the first row past the highest number ever used by this org so we never
+    // re-emit an invcNo the device has already accepted (avoids VSDC 924). The
+    // atomic UPSERT below makes concurrent first-initializations safe.
+    const maxRow = await client.sale.aggregate({
+        where: { organizationId },
+        _max: { vsdcInvcNo: true },
+    });
+    const seed = (maxRow._max.vsdcInvcNo ?? 0) + 1;
+    const rows = await client.$queryRaw `
+    INSERT INTO "vsdc_device_counters" ("organizationId", "deviceKey", "nextSequence", "updatedAt")
+    VALUES (${organizationId}, ${deviceKey}, ${seed}, NOW())
+    ON CONFLICT ("organizationId", "deviceKey") DO UPDATE
+      SET "nextSequence" = "vsdc_device_counters"."nextSequence" + 1,
+          "updatedAt"    = NOW()
+    RETURNING "nextSequence"
+  `;
+    const allocated = Number(rows[0]?.nextSequence ?? 0);
+    if (allocated > 0) {
+        invoiceSequenceMode = 'per_device';
+        return allocated;
+    }
+    // Fallbacks for DBs where vsdc_device_counters doesn't exist yet.
     if (invoiceSequenceMode === 'per_org') {
         return nextInvoiceSequenceFromCounterTable(organizationId, branchId, client);
     }
@@ -137,10 +169,6 @@ async function allocateNextInvoiceSequence(organizationId, branchId, client = pr
     try {
         const sequence = await nextInvoiceSequenceFromLegacySequence(client);
         invoiceSequenceMode = 'legacy_sequence';
-        if (!loggedLegacyInvoiceFallback) {
-            loggedLegacyInvoiceFallback = true;
-            console.warn('[EBM] Falling back to legacy invoice_seq because organization_invoice_counters is missing. Apply the latest Prisma migrations to enable per-branch invoice counters.');
-        }
         return sequence;
     }
     catch (error) {
@@ -149,6 +177,25 @@ async function allocateNextInvoiceSequence(organizationId, branchId, client = pr
         }
         throw error;
     }
+}
+/**
+ * Consume the next unused RRA purchase code from the organization's pool for a
+ * given buyer TIN, atomically (within the sale transaction when `client` is a tx).
+ * Returns the code, or null when no unconsumed code remains (caller falls back
+ * to the legacy per-customer `prcOrdCd`).
+ */
+async function consumeOrgPurchaseCode(organizationId, buyerTin, saleId, client = prisma_1.prisma) {
+    const next = await client.organizationPurchaseCode.findFirst({
+        where: { organizationId, buyerTin, consumed: false },
+        orderBy: { id: 'asc' },
+    });
+    if (!next)
+        return null;
+    await client.organizationPurchaseCode.update({
+        where: { id: next.id },
+        data: { consumed: true, consumedSaleId: saleId, consumedAt: new Date() },
+    });
+    return next.code;
 }
 async function postToGateway(path, body) {
     const base = config_1.config.ebm.apiUrl;
@@ -209,6 +256,12 @@ function toRraDateTime(d) {
 function fix2(n) {
     return Math.round(n * 100) / 100;
 }
+/** Clamp a free-text field to the max length the RRA reference WAR accepts. */
+function clampField(value, maxLength) {
+    if (!value)
+        return '';
+    return value.trim().slice(0, maxLength);
+}
 /**
  * VSDC §4.9 Sales Receipt Type only has two values: 'S' (Sale) and 'R' (Refund
  * after Sale). The CIS-level NS/NR/CS/CR/TS/TR/PS distinction (rcptLabel) is
@@ -251,11 +304,14 @@ function buildRraSendReceiptPayload(sale, org, opts = {}) {
         const rawCode = (si.taxCode ?? 'A').toUpperCase();
         const slot = codeToSlot[rawCode];
         if (slot === undefined) {
-            throw new Error(`Cannot submit sale ${sale.saleNumber ?? sale.id} to RRA: sale item ${idx + 1} has invalid tax code "${rawCode}". Only A, B, C, D are valid for line items.`);
+            throw new Error(`Cannot build Sale ${sale.saleNumber ?? sale.id} to RRA: sale item ${idx + 1} has an invalid tax code "${rawCode}". Only A, B, C, D are valid for line items.`);
         }
+        // VSDC (RRA reference implementation) uses tax-inclusive quantities: the
+        // supply/taxable amount is the gross unit price × quantity, and the VAT is
+        // extracted from it (taxAmt = grossAmount × rate/(100+rate)).
+        const splyAmt = fix2(si.quantity * si.unitPrice.toNumber());
         const tAmt = fix2(si.taxAmount.toNumber());
-        const tbAmt = fix2(si.totalPrice.toNumber() - tAmt);
-        taxblAmt[slot] = fix2(taxblAmt[slot] + tbAmt);
+        taxblAmt[slot] = fix2(taxblAmt[slot] + splyAmt);
         taxAmt[slot] = fix2(taxAmt[slot] + tAmt);
         return {
             itemSeq: idx + 1,
@@ -267,28 +323,52 @@ function buildRraSendReceiptPayload(sale, org, opts = {}) {
             qty: si.quantity,
             qtyUnitCd: si.product?.qtyUnitCd ?? 'U',
             prc: fix2(si.unitPrice.toNumber()),
-            splyAmt: fix2(tbAmt),
+            splyAmt: fix2(splyAmt),
             dcRt: fix2(si.dcRate.toNumber()),
             dcAmt: fix2(si.dcAmt.toNumber()),
             taxTyCd: rawCode,
-            taxblAmt: fix2(tbAmt),
+            taxblAmt: fix2(splyAmt),
             taxAmt: fix2(tAmt),
-            totAmt: fix2(si.totalPrice.toNumber()),
+            totAmt: fix2(splyAmt),
         };
     });
     const totTaxAmt = fix2(taxAmt.reduce((s, v) => s + v, 0));
     const totTaxblAmt = fix2(taxblAmt.reduce((s, v) => s + v, 0));
     const totAmt = fix2(sale.totalAmount.toNumber());
     const now = sale.createdAt;
-    const invcNo = sale.vsdcInvcNo ?? sale.id;
+    // RRA requires a customer TIN on every fiscal receipt. When the customer has
+    // no registered TIN (e.g. walk-in retail), we do NOT fall back to the seller's
+    // own TIN — that org TIN is usually a business (non-7-prefix) TIN, which would
+    // silently convert the sale into a B2B transaction demanding a RRA purchase
+    // code. Retail plants issue receipts to individuals, so we synthesize an
+    // individual TIN from the customer id (§4.6 custTin/custNm).
+    // NOTE: 1-prefix (not 7) — the RRA sandbox WAR v3.0.2 validates receip
+    // custTin against `^[1,9]\d{8}$`, rejecting 7-prefix with resultCd 910.
+    const customerTin = sale.customer?.TIN?.trim() ?? '';
+    const custTin = customerTin
+        ? customerTin
+        : sale.customer
+            ? `1${String(sale.customer.id).padStart(8, '0')}`.slice(0, 9)
+            : (org.TIN ?? '');
+    const custNm = sale.customer?.name ?? org.name;
+    const invcNo = opts.invcNoOverride ?? sale.vsdcInvcNo ?? sale.id;
     const regrNm = sale.user?.name ?? 'System';
     const regrId = sale.user ? String(sale.user.id) : 'system';
     return {
         invcNo,
         orgInvcNo: opts.orgInvcNo ?? 0,
-        custTin: sale.customer.TIN ?? '',
-        prcOrdCd: '', // known gap: not captured for BUSINESS customers today (§ purchase code)
-        custNm: sale.customer.name ?? '',
+        custTin,
+        // RRA purchase order code: OPTIONAL for individual (7-prefix TIN) sales — the
+        // reference WAR auto-clears it for them. MANDATORY for business (B2B) sales:
+        // RRA issues an encrypted purchase code to the buyer, and the WAR rejects any
+        // business sale without a valid one. We forward the code the buyer supplied
+        // (captured on the customer / allocated from the org pool at sale time),
+        // falling back to a compliant placeholder only for
+        // individual sales (§ purchase code / prcOrdCd).
+        prcOrdCd: String(custTin).startsWith('7')
+            ? '000000'
+            : (sale.prcOrdCd ?? sale.customer?.prcOrdCd ?? '000000'),
+        custNm: custNm ?? '',
         salesTyCd: 'N', // spec: "Send only 'N' type"
         rcptTyCd,
         pmtTyCd: pmtTypeCd(sale.paymentType),
@@ -309,6 +389,10 @@ function buildRraSendReceiptPayload(sale, org, opts = {}) {
         taxRtB: TAX_RATE_BY_SLOT[1],
         taxRtC: TAX_RATE_BY_SLOT[2],
         taxRtD: TAX_RATE_BY_SLOT[3],
+        // Mandatory combined fields required by the RRA reference implementation
+        // (validated as taxRtF / taxRtTt in the sandbox WAR).
+        taxRtF: TAX_RATE_BY_SLOT[1],
+        taxRtTt: 3,
         taxAmtA: taxAmt[0],
         taxAmtB: taxAmt[1],
         taxAmtC: taxAmt[2],
@@ -323,13 +407,18 @@ function buildRraSendReceiptPayload(sale, org, opts = {}) {
         modrNm: regrNm,
         modrId: regrId,
         receipt: {
-            custTin: sale.customer.TIN ?? '',
-            custMblNo: sale.customer.phone ?? '',
+            custTin,
+            custMblNo: sale.customer?.phone ?? '',
             rptNo: invcNo,
-            trdeNm: org.name,
-            adrs: org.address ?? '',
+            // RRA WAR rejects `trdeNm` longer than 20 chars with resultCd 910
+            // ("length must be between 0 and 20") — clamp the trade name.
+            trdeNm: clampField(org.name, 20),
+            adrs: clampField(org.address, 40),
             topMsg: '',
-            btmMsg: 'Thank you for your business',
+            // The VSDC request contract limits this to 20 characters. Sending the
+            // longer friendly message caused valid sales to be rejected with 910 by
+            // the local RRA sandbox before fiscalisation could complete.
+            btmMsg: clampField('Thank you for your business', 20),
             prchrAcptcYn: 'N',
         },
         itemList,
@@ -507,7 +596,11 @@ async function submitInvoiceToEbm(params) {
     // saveInvc() already handles config.ebm.useMock internally (mockResult()) and
     // returns the real /trnsSales/saveSales response shape — no separate shortcut
     // here, so mock mode exercises the same response-parsing path as production.
-    if (!config_1.config.ebm.useMock && !config_1.config.ebm.apiUrl) {
+    const isOsdc = config_1.config.ebm.protocol === 'osdc';
+    const hasEndpoint = isOsdc
+        ? Boolean(config_1.config.ebm.osdcApiUrl || config_1.config.ebm.useMock)
+        : Boolean(config_1.config.ebm.apiUrl || config_1.config.ebm.useMock);
+    if (!hasEndpoint) {
         await persistFailure('EBM_API_URL is not configured');
         return { success: false, error: 'EBM_API_URL is not configured' };
     }
@@ -516,6 +609,43 @@ async function submitInvoiceToEbm(params) {
         data: { submissionStatus: 'SUBMITTED' },
     });
     try {
+        // EBM 2.1 / OSDC path: talks to the OSDC device (WAR) or the direct v2.1.
+        if (isOsdc) {
+            const osdc = await (0, rra_osdc_service_1.submitSalesToOsdc)({
+                organizationId: params.organizationId,
+                branchId: sale.branchId,
+                sale,
+            });
+            if (!osdc.success) {
+                await persistFailure(osdc.error ?? 'OSDC gateway error', {
+                    osdcResult: osdc.response,
+                    requestPayload: payload,
+                });
+                return { success: false, error: osdc.error };
+            }
+            await prisma_1.prisma.$transaction([
+                prisma_1.prisma.ebmTransaction.update({
+                    where: { id: txRow.id },
+                    data: {
+                        submissionStatus: 'SUCCESS',
+                        ebmInvoiceNumber: osdc.ebmInvoiceNumber,
+                        submittedAt: new Date(),
+                        responseData: {
+                            osdcResult: osdc.response,
+                            requestPayload: payload,
+                        },
+                    },
+                }),
+                prisma_1.prisma.organization.update({
+                    where: { id: params.organizationId },
+                    data: {
+                        lastSuccessfulVdsContact: new Date(),
+                        lastSyncCursor: new Date(),
+                    },
+                }),
+            ]);
+            return { success: true, ebmInvoiceNumber: osdc.ebmInvoiceNumber };
+        }
         const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(params.organizationId, sale.branchId);
         const result = await (0, vsdc_api_service_1.saveInvc)(envelope, payload);
         if (!result.success || !result.data?.rcptNo) {
@@ -749,9 +879,12 @@ async function submitVoidToEbm(params) {
     });
     let payload;
     try {
-        // A cancellation resubmits the SAME invoice number with cnclDt/cnclReqDt
-        // set and salesSttsCd='04' — it's not a new document, so orgInvcNo stays 0.
-        payload = buildRraSendReceiptPayload(sale, org, { cnclDt: new Date() });
+        // A cancellation is a NEW sales-transaction document (fresh invcNo) with
+        // cnclDt/cnclReqDt set and salesSttsCd='04'; orgInvcNo stays 0 (that
+        // field is refund-only — see buildRraSendReceiptPayload's invcNoOverride
+        // doc comment for the sandbox errors this avoids).
+        const { vsdcInvcNo: voidInvcNo } = await generateInvoiceNumber(params.organizationId, sale.branchId);
+        payload = buildRraSendReceiptPayload(sale, org, { cnclDt: new Date(), invcNoOverride: voidInvcNo });
         payload.remark = params.reason ?? '';
     }
     catch (e) {

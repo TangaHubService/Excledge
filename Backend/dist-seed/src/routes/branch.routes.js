@@ -20,6 +20,8 @@ router.get('/:organizationId/:id', orgAccess, (0, feature_access_middleware_1.re
 router.post('/:organizationId', orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), (0, auth_middleware_1.authorize)('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'), branch_controller_1.createBranchController);
 // Update branch (Admin/Manager only)
 router.put('/:organizationId/:id', orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), (0, auth_middleware_1.authorize)('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'), branch_controller_1.updateBranchController);
+// Set default branch (Admin/Manager only)
+router.put('/:organizationId/:id/default', orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), (0, auth_middleware_1.authorize)('ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'), branch_controller_1.setDefaultBranchController);
 // Delete branch (Admin only)
 router.delete('/:organizationId/:id', orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), (0, auth_middleware_1.authorize)('ADMIN'), branch_controller_1.deleteBranchController);
 // Assign user to branch

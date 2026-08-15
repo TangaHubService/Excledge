@@ -16,9 +16,12 @@ router.patch("/organizations/:id/status", system_owner_controller_1.systemOwnerC
 // Subscription management
 router.get("/subscriptions", system_owner_controller_1.systemOwnerController.getAllSubscriptions);
 router.get("/subscriptions/expiring", system_owner_controller_1.systemOwnerController.getExpiringSubscriptions);
+router.patch("/subscriptions/:id/extend", system_owner_controller_1.systemOwnerController.extendSubscription);
 // Payment management
 router.get("/payments", system_owner_controller_1.systemOwnerController.getAllPayments);
 router.get("/payments/pending", system_owner_controller_1.systemOwnerController.getPendingPayments);
+router.patch("/payments/:id/status", system_owner_controller_1.systemOwnerController.updatePaymentStatus);
+router.post("/payments/:id/resend-invoice", system_owner_controller_1.systemOwnerController.resendInvoice);
 // Analytics
 router.get("/analytics/revenue", system_owner_controller_1.systemOwnerController.getRevenueAnalytics);
 router.get("/analytics/growth", system_owner_controller_1.systemOwnerController.getGrowthAnalytics);

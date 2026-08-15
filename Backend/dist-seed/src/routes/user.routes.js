@@ -28,4 +28,5 @@ router.put("/profile-image/:id", auth_middleware_1.authenticate, (0, auth_middle
     });
 }, user_controller_1.updateUserProfileImage);
 router.delete("/:id", auth_middleware_1.authenticate, (0, auth_middleware_1.authorize)("ADMIN"), user_controller_1.deleteUser);
+router.put("/:organizationId/reactivate/:id", auth_middleware_1.authenticate, orgAccess, (0, auth_middleware_1.authorize)("ADMIN", "BRANCH_MANAGER"), user_controller_1.reactivateUser);
 exports.default = router;

@@ -3,24 +3,33 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateUserProfileImage = exports.deleteUser = exports.updateUser = exports.createUser = exports.getUserById = exports.getUsers = void 0;
+exports.updateUserProfileImage = exports.reactivateUser = exports.deleteUser = exports.updateUser = exports.createUser = exports.getUserById = exports.getUsers = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const auditLogger_1 = require("../utils/auditLogger");
 const cloudinary_1 = require("../config/cloudinary");
 const prisma_1 = require("../lib/prisma");
+const sorting_1 = require("../utils/sorting");
 const getUsers = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
         const search = req.query.search;
+        const status = req.query.status;
         const { page = "1", limit = "50" } = req.query;
-        // Apply pagination defaults and caps
         const limitNum = Math.min(Math.max(Number.parseInt(limit) || 50, 1), 500);
         const pageNum = Math.max(Number.parseInt(page) || 1, 1);
         const skip = (pageNum - 1) * limitNum;
         const whereClause = {
             organizationId,
-            user: { isActive: true, deletedAt: null }
+            user: { deletedAt: null }
         };
+        // Filter by status: active, disabled, or all
+        if (status === 'active') {
+            whereClause.user.isActive = true;
+        }
+        else if (status === 'disabled') {
+            whereClause.user.isActive = false;
+        }
+        // 'all' or undefined shows both active and disabled
         if (search) {
             whereClause.OR = [
                 { user: { name: { contains: search, mode: "insensitive" } } },
@@ -38,10 +47,18 @@ const getUsers = async (req, res) => {
                             name: true,
                             isActive: true,
                             createdAt: true,
+                            disabledAt: true,
+                            reactivatedAt: true,
                         },
                     },
                 },
-                orderBy: { createdAt: "desc" },
+                orderBy: (0, sorting_1.getOrderBy)(req.query, {
+                    name: { user: { name: '$direction' } },
+                    email: { user: { email: '$direction' } },
+                    status: { user: { isActive: '$direction' } },
+                    role: { role: '$direction' },
+                    createdAt: { user: { createdAt: '$direction' } },
+                }, 'createdAt', 'desc'),
                 skip,
                 take: limitNum,
             }),
@@ -279,14 +296,14 @@ const deleteUser = async (req, res) => {
         }
         await prisma_1.prisma.user.update({
             where: { id },
-            data: { isActive: false, deletedAt: new Date() }
+            data: { isActive: false, deletedAt: new Date(), disabledAt: new Date(), reactivatedAt: null }
         });
         await auditLogger_1.auditLogger.users(req, {
             type: 'USER_ACCOUNT_DISABLED',
             description: `User account disabled: ${id} by user ${requesterId}`,
             entityType: 'User',
             entityId: id,
-            metadata: { actorId: requesterId },
+            metadata: { actorId: requesterId, disabledAt: new Date().toISOString() },
         });
         res.json({ message: "User deleted successfully" });
     }
@@ -296,6 +313,43 @@ const deleteUser = async (req, res) => {
     }
 };
 exports.deleteUser = deleteUser;
+const reactivateUser = async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const organizationId = parseInt(req.params.organizationId);
+        const requesterId = parseInt(String(req.user.userId));
+        const userOrganization = await prisma_1.prisma.userOrganization.findFirst({
+            where: { userId: id, organizationId },
+        });
+        if (!userOrganization) {
+            return res.status(404).json({ error: "User not found in this organization" });
+        }
+        const user = await prisma_1.prisma.user.findUnique({ where: { id } });
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        if (user.isActive) {
+            return res.status(400).json({ error: "User is already active" });
+        }
+        await prisma_1.prisma.user.update({
+            where: { id },
+            data: { isActive: true, deletedAt: null, reactivatedAt: new Date() }
+        });
+        await auditLogger_1.auditLogger.users(req, {
+            type: 'USER_ACCOUNT_ENABLED',
+            description: `User account reactivated: ${id} by user ${requesterId}`,
+            entityType: 'User',
+            entityId: id,
+            metadata: { actorId: requesterId, reactivatedAt: new Date().toISOString() },
+        });
+        res.json({ message: "User reactivated successfully" });
+    }
+    catch (error) {
+        console.error("[Reactivate User Error]:", error);
+        res.status(500).json({ error: "Failed to reactivate user" });
+    }
+};
+exports.reactivateUser = reactivateUser;
 const updateUserProfileImage = async (req, res) => {
     try {
         const id = parseInt(req.params.id);

@@ -25,6 +25,11 @@ router.post("/:id/refund/:organizationId", auth_middleware_1.authenticate, orgAc
 router.post("/:organizationId/:saleId/cancel", auth_middleware_1.authenticate, orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, (0, auth_middleware_1.authorize)("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), (0, validate_middleware_1.validate)(sales_validation_1.cancelSaleSchema), sales_controller_1.cancelSale);
 // Reprint a sale receipt (increments reprintCount, returns isCopy=true)
 router.post("/:organizationId/:saleId/reprint", auth_middleware_1.authenticate, orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, (0, auth_middleware_1.authorize)("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), sales_controller_1.reprintSaleReceipt);
+// Regenerate invoice (new invoice number, preserves history)
+router.post("/:organizationId/:saleId/regenerate-invoice", auth_middleware_1.authenticate, orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, (0, auth_middleware_1.authorize)("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), sales_controller_1.regenerateInvoice);
 // E3: Get EBM/SDC fiscal data for a sale (polls after outbox worker runs)
 router.get("/:organizationId/:saleId/ebm-receipt", auth_middleware_1.authenticate, orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, (0, auth_middleware_1.authorize)("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), sales_controller_1.getEbmReceipt);
+// Composed ERP invoice payload for the modern invoice renderer
+// GET /api/organizations/:orgId/invoices/:saleId
+router.get("/:organizationId/invoices/:saleId", auth_middleware_1.authenticate, orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, (0, auth_middleware_1.authorize)("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), sales_controller_1.getInvoice);
 exports.default = router;

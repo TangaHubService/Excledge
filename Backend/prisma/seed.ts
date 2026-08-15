@@ -399,7 +399,8 @@ async function seedDemoDataset() {
       name: "Exceledge Demo Pharmacy",
       businessType: "PHARMACY",
       currency: "RWF",
-      TIN: "11919467890123",
+      // RRA VSDC test TIN (matches Backend/.env test creds: tin 999945560)
+      TIN: "999945560",
       address: "KG 123 St, Kigali",
       phone: "+250788000000",
       email: "demo.shop@exceledge.test",
@@ -445,6 +446,9 @@ async function seedDemoDataset() {
       code: "MAIN",
       location: "Kigali City Center",
       status: "ACTIVE",
+      // RRA VSDC test device (matching working demo org): bhfId "00", serial "excelwartest"
+      bhfId: "00",
+      ebmSerialNo: "excelwartest",
     },
   })
 
@@ -733,7 +737,10 @@ async function seedDemoDataset() {
       phone: "+250788333002",
       email: "accounts@creditwholesale.test",
       customerType: CustomerType.CORPORATE,
-      TIN: "222222222",
+      // Valid RRA VSDC test TIN (1-prefix; v3.0.2 sandbox rejects 7-prefix with
+      // 910). The RRA purchase code below is required for this B2B buyer.
+      TIN: "100000000",
+      prcOrdCd: "010301",
       balance: new Prisma.Decimal("0"),
     },
   })
@@ -747,6 +754,16 @@ async function seedDemoDataset() {
       balance: new Prisma.Decimal("0"),
     },
   })
+
+  // Org-level RRA purchase-code pool for buyer TIN 100000000. The local v3.0.2
+  // sandbox issues these codes bound to that buyer; each business sale consumes
+  // one via consumeOrgPurchaseCode(). Codes 010307–010310 are unused in the
+  // sandbox, so a fresh seed can fiscalize repeat sales to Credit Wholesale Ltd.
+  for (const code of ["010307", "010308", "010309", "010310"]) {
+    await prisma.organizationPurchaseCode.create({
+      data: { organizationId: org.id, code, buyerTin: "100000000" },
+    })
+  }
 
   const ctx: DemoIds = {
     orgId: org.id,

@@ -16,6 +16,8 @@ router.get("/:organizationId", orgAccess, (0, feature_access_middleware_1.requir
 router.get("/:organizationId/:id", orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, purchaseOrder_controller_1.getPurchaseOrder);
 // Create purchase order (Admin/Manager only)
 router.post("/:organizationId", orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, (0, auth_middleware_1.authorize)("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), purchaseOrder_controller_1.createPurchaseOrder);
+// Update purchase order details (items, notes, expected date)
+router.put("/:organizationId/:id", orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, (0, auth_middleware_1.authorize)("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), purchaseOrder_controller_1.updatePurchaseOrder);
 // Update purchase order status (Admin/Manager only)
 router.patch("/:organizationId/:id/status", orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, (0, auth_middleware_1.authorize)("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"), purchaseOrder_controller_1.updatePurchaseOrderStatus);
 // Delete purchase order (Admin only)

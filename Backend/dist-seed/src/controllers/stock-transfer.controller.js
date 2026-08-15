@@ -82,6 +82,17 @@ const createStockTransfer = async (req, res) => {
         if (!fromB || !toB) {
             return res.status(400).json((0, apiResponse_1.error)("Invalid or inactive branch"));
         }
+        const productIds = items.map((i) => parseInt(String(i.productId)));
+        if (productIds.some((id) => Number.isNaN(id))) {
+            return res.status(400).json((0, apiResponse_1.error)("Invalid product in items"));
+        }
+        const validProducts = await prisma_1.prisma.product.findMany({
+            where: { id: { in: productIds }, organizationId },
+            select: { id: true },
+        });
+        if (validProducts.length !== new Set(productIds).size) {
+            return res.status(400).json((0, apiResponse_1.error)("One or more products were not found"));
+        }
         const transfer = await prisma_1.prisma.stockTransfer.create({
             data: {
                 organizationId,

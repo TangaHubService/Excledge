@@ -4,6 +4,7 @@ import {
   type SaleWithRelations,
   buildRraSendReceiptPayload,
   generateInvoiceNumber,
+  consumeAnyOrgPurchaseCode,
   isEbmEnabled,
   gatewayErrorMessage,
 } from './rra-ebm.service';
@@ -14,6 +15,7 @@ import {
   vsdcHeartbeat,
 } from './vsdc-api.service';
 import { buildElectronicJournal } from './electronic-journal.service';
+import logger from '../utils/logger';
 
 export { isEbmEnabled };
 import { TaxService } from './tax.service';
@@ -46,6 +48,7 @@ export interface SaleOutboxInput {
   cashAmount: number;
   insuranceAmount: number;
   debtAmount: number;
+  shiftId?: number;
 }
 
 type OutboxPayloadV1 = {
@@ -79,7 +82,7 @@ function generateIdempotencyKey(orgId: number, operation: EbmOperation, saleId: 
 export async function createSaleWithOutbox(input: SaleOutboxInput) {
   const {
     organizationId, branchId, userId, customerId,
-    items, paymentType, cashAmount, insuranceAmount, debtAmount,
+    items, paymentType, cashAmount, insuranceAmount, debtAmount, shiftId,
   } = input;
 
   const totalAmount = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
@@ -147,6 +150,7 @@ export async function createSaleWithOutbox(input: SaleOutboxInput) {
         cashAmount,
         insuranceAmount,
         debtAmount,
+        shiftId,
         totalAmount,
         vatAmount: taxSummary.vatAmount,
         taxableAmount: taxSummary.taxableAmount,
@@ -305,6 +309,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
   failed: number;
 }> {
   if (!isEbmEnabled()) {
+    logger.info('[EBM-OUTBOX] processEbmOutboxBatch skipped: EBM disabled');
     return { processed: 0, succeeded: 0, failed: 0 };
   }
 
@@ -331,6 +336,8 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
   let succeeded = 0;
   let failed = 0;
 
+  logger.info(`[EBM-OUTBOX] processEbmOutboxBatch: fetched ${rows.length} due row(s) (limit=${limit})`);
+
   for (const row of rows) {
     // Claim the row before building its payload or calling VSDC. The previous
     // implementation selected then updated it, allowing simultaneous requests
@@ -342,10 +349,12 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       data: { status: 'PROCESSING' },
     });
     if (claim.count !== 1) {
+      logger.warn(`[EBM-OUTBOX] row ${row.id} (op=${row.operation}) not claimed (concurrent worker) — skipping`);
       continue;
     }
 
     processed += 1;
+    logger.info(`[EBM-OUTBOX] row ${row.id} (op=${row.operation}, saleId=${row.saleId}, org=${row.organizationId}) claimed — processing (status=${row.status}, retry=${row.retryCount})`);
 
     // ── Orphan reconciliaition ──
     if (row.status === 'PROCESSING') {
@@ -380,9 +389,12 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         where: { id: row.id },
         data: { status: 'DEAD_LETTER', lastError: 'Sale not found' },
       });
+      logger.error(`[EBM-OUTBOX] row ${row.id}: sale ${row.saleId} not found — DEAD_LETTER`);
       failed += 1;
       continue;
     }
+
+    logger.info(`[EBM-OUTBOX] row ${row.id}: sale ${sale.id} loaded (invoice=${sale.invoiceNumber}, vsdcInvcNo=${sale.vsdcInvcNo ?? 'N/A'}, custTin=${sale.customer?.TIN ?? 'N/A'}, cust prcOrdCd=${sale.customer?.prcOrdCd ?? 'N/A'}, sale prcOrdCd=${sale.prcOrdCd ?? 'N/A'})`);
 
     // For SALE operations only: skip if the sale was voided/refunded before we submitted it.
     // For REFUND/VOID operations the sale status is *expected* to be REFUNDED/CANCELLED.
@@ -407,6 +419,31 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       });
       failed += 1;
       continue;
+    }
+
+    // ── Auto-allocate an RRA purchase code when the sale has none on record ──
+    // The sandbox rejects every sale without a real single-use code (882), and
+    // purchase codes were historically only pooled for business TINs. For
+    // fiscalization we draw any unconsumed code from the org pool regardless of
+    // buyer TIN, falling back to the legacy per-customer code when the pool is
+    // exhausted. Only persists when an allocation is actually made, so retries
+    // reuse the same code (a consumed code cannot be re-submitted: 883).
+    if (row.operation === 'SALE') {
+      const needsCode = !(sale.prcOrdCd?.trim())
+        && !(sale.customer?.prcOrdCd?.trim());
+      logger.info(`[EBM-OUTBOX] row ${row.id}: SALE code check — needsCode=${needsCode}`);
+      if (needsCode) {
+        const allocated = await consumeAnyOrgPurchaseCode(row.organizationId, sale.id)
+          ?? (sale.customer?.prcOrdCd ?? null);
+        logger.info(`[EBM-OUTBOX] row ${row.id}: allocated purchase code = ${allocated ?? 'NONE (pool empty, no customer fallback)'}`);
+        if (allocated) {
+          await prisma.sale.update({
+            where: { id: sale.id },
+            data: { prcOrdCd: allocated },
+          });
+          (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd = allocated;
+        }
+      }
     }
 
     // Build gateway payload based on operation type
@@ -550,10 +587,13 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       }
 
       const envelope = await buildVsdcEnvelope(row.organizationId, sale.branchId);
+      logger.info(`[EBM-OUTBOX] row ${row.id}: calling saveInvc (${config.ebm.apiUrl ?? ''}/trnsSales/saveSales) — prcOrdCd=${payload.prcOrdCd ?? 'N/A'}, custTin=${(payload.receipt as any)?.custTin ?? 'N/A'}, invcNo=${(payload as any).invcNo ?? 'N/A'}`);
       const result = await saveInvc(envelope, payload);
+      logger.info(`[EBM-OUTBOX] row ${row.id}: saveInvc returned success=${result.success} error=${result.error ?? 'none'} rawStatus=${result.rawStatus} rawBody=${JSON.stringify(result.rawBody)?.slice(0, 500)}`);
 
       if (!result.success || !result.data?.rcptNo) {
         const msg = result.error ?? 'VSDC gateway error';
+        logger.warn(`[EBM-OUTBOX] row ${row.id}: submission FAILED — ${msg}`);
         await failSubmission(txRow.id, msg);
 
         const nextRetry = scheduleNextRetry(row.retryCount);
@@ -569,7 +609,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
           },
         });
 
-        if (isDead) failed += 1;
+        failed += 1;
         continue;
       }
 
@@ -631,8 +671,10 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       ]);
 
       succeeded += 1;
+      logger.info(`[EBM-OUTBOX] row ${row.id}: SUCCEEDED — rcptNo=${vsdc.rcptNo}, sdcId=${vsdc.sdcId ?? 'N/A'}, sdcDateTime=${sdcDateTime?.toISOString() ?? 'N/A'}`);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'EBM request failed';
+      logger.error(`[EBM-OUTBOX] row ${row.id}: EXCEPTION during submission — ${message}`);
       await failSubmission(txRow.id, message);
 
       const nextRetry = scheduleNextRetry(row.retryCount);
@@ -648,10 +690,11 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         },
       });
 
-      if (isDead) failed += 1;
+      failed += 1;
     }
   }
 
+  logger.info(`[EBM-OUTBOX] processEbmOutboxBatch done: processed=${processed} succeeded=${succeeded} failed=${failed}`);
   return { processed, succeeded, failed };
 }
 

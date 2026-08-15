@@ -30,7 +30,7 @@ exports.vsdcHeartbeatJob = node_cron_1.default.schedule(`*/${HEARTBEAT_MINUTES} 
                 isActive: true,
                 trainingMode: false,
                 TIN: { not: null },
-                ebmDeviceId: { not: null },
+                OR: [{ ebmDeviceId: { not: null } }, { ebmSerialNo: { not: null } }],
             },
             select: { id: true, TIN: true, ebmDeviceId: true, ebmSerialNo: true, name: true },
         });

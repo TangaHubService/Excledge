@@ -40,28 +40,45 @@ const XLSX = __importStar(require("xlsx"));
 const import_validation_service_1 = require("../services/import-validation.service");
 const preview_session_service_1 = require("../services/preview-session.service");
 const prisma_1 = require("../lib/prisma");
+const sorting_1 = require("../utils/sorting");
+/** Treat browser query-string placeholders as absent values, never as filters. */
+const optionalQueryValue = (value) => {
+    if (typeof value !== "string")
+        return undefined;
+    const normalized = value.trim();
+    return normalized && normalized !== "undefined" && normalized !== "null"
+        ? normalized
+        : undefined;
+};
 const getCustomers = async (req, res) => {
     try {
         const organizationId = parseInt(req.params?.organizationId);
-        const { search, hasDebt, showInactive } = req.query;
+        const { search, hasDebt, showInactive, customerType } = req.query;
         const { page = "1", limit = "50" } = req.query;
         // Apply pagination defaults and caps
         const limitNum = Math.min(Math.max(Number.parseInt(limit) || 50, 1), 500);
         const pageNum = Math.max(Number.parseInt(page) || 1, 1);
         const skip = (pageNum - 1) * limitNum;
         const where = { organizationId, deletedAt: null };
-        if (showInactive !== "true") {
+        const searchValue = optionalQueryValue(search);
+        const hasDebtValue = optionalQueryValue(hasDebt);
+        const showInactiveValue = optionalQueryValue(showInactive);
+        const customerTypeValue = optionalQueryValue(customerType);
+        if (showInactiveValue !== "true") {
             where.isActive = true;
         }
-        if (search) {
+        if (searchValue) {
             where.OR = [
-                { name: { contains: search, mode: "insensitive" } },
-                { phone: { contains: search, mode: "insensitive" } },
-                { email: { contains: search, mode: "insensitive" } },
+                { name: { contains: searchValue, mode: "insensitive" } },
+                { phone: { contains: searchValue, mode: "insensitive" } },
+                { email: { contains: searchValue, mode: "insensitive" } },
             ];
         }
-        if (hasDebt === "true") {
+        if (hasDebtValue === "true") {
             where.balance = { gt: 0 };
+        }
+        if (["INDIVIDUAL", "INSURANCE", "CORPORATE"].includes(customerTypeValue ?? "")) {
+            where.customerType = customerTypeValue;
         }
         // Customers are organization-wide records (the Customer model has no
         // branchId column), so no branch filter is applied here. Filtering by
@@ -84,7 +101,16 @@ const getCustomers = async (req, res) => {
                     select: { sales: true },
                 },
             },
-            orderBy: { createdAt: "desc" },
+            orderBy: (0, sorting_1.getOrderBy)(req.query, {
+                name: { name: '$direction' },
+                phone: { phone: '$direction' },
+                email: { email: '$direction' },
+                customerType: { customerType: '$direction' },
+                TIN: { TIN: '$direction' },
+                balance: { balance: '$direction' },
+                isActive: { isActive: '$direction' },
+                createdAt: { createdAt: '$direction' },
+            }, 'createdAt', 'desc'),
             skip,
             take: limitNum,
         });
@@ -162,7 +188,7 @@ exports.getCustomerById = getCustomerById;
 const createCustomer = async (req, res) => {
     try {
         const organizationId = parseInt(req.params?.organizationId);
-        const { name, phone, email, type, tin, TIN, balance } = req.body;
+        const { name, phone, email, type, tin, TIN, prcOrdCd, balance } = req.body;
         // Validate and map customerType
         let customerType = 'INDIVIDUAL';
         if (type === 'INSURANCE' || type === 'CORPORATE') {
@@ -174,6 +200,7 @@ const createCustomer = async (req, res) => {
                 phone: phone || null,
                 email: email || null,
                 TIN: TIN || tin || null,
+                prcOrdCd: prcOrdCd || null,
                 customerType,
                 balance: balance || 0,
                 organizationId,
@@ -198,7 +225,7 @@ const updateCustomer = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const organizationId = parseInt(req.params.organizationId);
-        const { balance, type, tin, TIN, ...rest } = req.body;
+        const { balance, type, tin, TIN, prcOrdCd, ...rest } = req.body;
         const updateData = { ...rest };
         if (type !== undefined)
             updateData.customerType = type;
@@ -206,6 +233,8 @@ const updateCustomer = async (req, res) => {
             updateData.TIN = TIN;
         else if (tin !== undefined)
             updateData.TIN = tin;
+        if (prcOrdCd !== undefined)
+            updateData.prcOrdCd = prcOrdCd;
         const existingCustomer = await prisma_1.prisma.customer.findFirst({
             where: { id, organizationId, deletedAt: null },
         });

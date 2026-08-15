@@ -9,8 +9,7 @@ const apiResponse_1 = require("../utils/apiResponse");
 const getSalesReport = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
-        const { startDate, endDate, category, status, sellerId, product, page, limit } = req.query;
-        // Base where clause
+        const { startDate, endDate, category, status, sellerId, product, sortBy = 'date', sortOrder = 'desc', page = '1', limit = '10' } = req.query;
         const where = {
             organizationId,
             ...(0, branchAuth_middleware_1.buildBranchFilter)(req),
@@ -19,53 +18,58 @@ const getSalesReport = async (req, res) => {
                 const end = new Date(endDate);
                 if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
                     end.setHours(23, 59, 59, 999);
-                    return {
-                        createdAt: {
-                            gte: start,
-                            lte: end,
-                        }
-                    };
+                    return { createdAt: { gte: start, lte: end } };
                 }
                 return null;
             })()),
-            ...(status && status !== 'all' && {
-                status: status
-            }),
-            ...(sellerId && sellerId !== 'all' && {
-                userId: parseInt(sellerId)
-            })
+            ...(status && status !== 'all' && { status: status }),
+            ...(sellerId && sellerId !== 'all' && { userId: parseInt(sellerId) })
         };
-        // Get all sales with line items, product details, and user (seller) info
-        // Hard cap at 2000 rows to prevent heap OOM — use date ranges to narrow large datasets
+        const pageNum = Math.max(parseInt(page) || 1, 1);
+        const limitNum = Math.min(Math.max(parseInt(limit) || 10, 1), 500);
+        const skip = (pageNum - 1) * limitNum;
+        const totalSalesCount = await prisma_1.prisma.sale.count({ where });
         const sales = await prisma_1.prisma.sale.findMany({
             where,
             include: {
-                user: {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true
-                    }
-                },
+                user: { select: { id: true, name: true, email: true } },
                 saleItems: {
                     include: {
-                        product: {
-                            select: {
-                                id: true,
-                                name: true,
-                                category: true
-                            }
-                        }
+                        product: { select: { id: true, name: true, category: true } }
                     }
-                }
+                },
+                salePayments: { select: { paymentMethod: true, amount: true } },
             },
-            orderBy: {
-                createdAt: 'desc'
-            },
-            take: 2000,
+            orderBy: sortBy === 'date' ? { createdAt: sortOrder === 'asc' ? 'asc' : 'desc' }
+                : sortBy === 'amount' ? { totalAmount: sortOrder === 'asc' ? 'asc' : 'desc' }
+                    : { createdAt: 'desc' },
+            skip,
+            take: limitNum,
         });
-        // Map transactions with all IDs and apply filters (skip service items)
-        let transactions = sales.flatMap(sale => sale.saleItems
+        // Calculate summary from ALL matching sales (not just paginated)
+        const [aggregateTotals, refundAgg, vatAgg] = await Promise.all([
+            prisma_1.prisma.sale.aggregate({
+                where,
+                _sum: { totalAmount: true, cashAmount: true, debtAmount: true, insuranceAmount: true, vatAmount: true, taxableAmount: true },
+                _count: { id: true },
+            }),
+            prisma_1.prisma.sale.aggregate({
+                where: { ...where, status: 'REFUNDED' },
+                _sum: { totalAmount: true },
+            }),
+            prisma_1.prisma.sale.aggregate({
+                where: { ...where, NOT: { status: 'REFUNDED' } },
+                _sum: { vatAmount: true, taxableAmount: true },
+            }),
+        ]);
+        const totalRevenue = Number(aggregateTotals._sum.totalAmount || 0);
+        const totalRefunds = Math.abs(Number(refundAgg._sum.totalAmount || 0));
+        const netRevenue = totalRevenue - totalRefunds;
+        const totalVat = Number(vatAgg._sum.vatAmount || 0);
+        const totalTaxable = Number(vatAgg._sum.taxableAmount || 0);
+        const totalTransactions = aggregateTotals._count.id || 0;
+        const avgTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
+        const transactions = sales.flatMap(sale => sale.saleItems
             .filter(item => item.product)
             .map(item => ({
             id: item.id,
@@ -77,52 +81,60 @@ const getSalesReport = async (req, res) => {
             category: item.product.category || 'Uncategorized',
             quantity: item.quantity,
             unitPrice: item.unitPrice.toNumber(),
-            total: (item.quantity * item.unitPrice.toNumber()),
+            total: item.quantity * item.unitPrice.toNumber(),
+            costPrice: item.costPrice.toNumber(),
+            profit: item.profit.toNumber(),
+            taxAmount: item.taxAmount.toNumber(),
+            taxRate: item.taxRate.toNumber(),
             status: sale.status,
             seller: sale.user.name,
             sellerEmail: sale.user.email,
+            paymentType: sale.paymentType,
+            saleNumber: sale.saleNumber,
+            invoiceNumber: sale.invoiceNumber,
+            payments: sale.salePayments.map(p => ({ method: p.paymentMethod, amount: Number(p.amount) })),
         })));
-        // Apply client-side filters (category, product search, maxAmount)
+        let filteredTransactions = transactions;
         if (category && category !== 'all') {
-            transactions = transactions.filter(t => t.category === category);
+            filteredTransactions = filteredTransactions.filter(t => t.category === category);
         }
         if (product) {
             const productSearch = product.toLowerCase();
-            transactions = transactions.filter(t => t.product.toLowerCase().includes(productSearch));
+            filteredTransactions = filteredTransactions.filter(t => t.product.toLowerCase().includes(productSearch));
         }
-        // Get total count before pagination
-        const totalItems = transactions.length;
-        // Apply pagination
-        const pageNum = page ? parseInt(page) : 1;
-        const limitNum = limit ? parseInt(limit) : 10;
-        const skip = (pageNum - 1) * limitNum;
-        const paginatedTransactions = transactions.slice(skip, skip + limitNum);
-        // Calculate summary statistics (from all transactions, not just paginated)
-        const totalSales = transactions.reduce((sum, t) => sum + (t.status === 'REFUNDED' ? -t.total : t.total), 0);
-        const totalQuantity = transactions.reduce((sum, t) => sum + (t.status === 'REFUNDED' ? -t.quantity : t.quantity), 0);
-        const totalTransactions = new Set(transactions.map(t => t.saleId)).size;
-        const avgTransaction = totalTransactions > 0 ? totalSales / totalTransactions : 0;
-        // Extract unique values for filter dropdowns (from all transactions)
-        const uniqueCategories = Array.from(new Set(transactions.map(t => t.category).filter(Boolean))).sort();
-        const uniqueSellers = Array.from(new Map(transactions.map(t => [t.sellerId, { id: t.sellerId, name: t.seller, email: t.sellerEmail }])).values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        const uniqueProducts = Array.from(new Map(transactions.map(t => [t.productId, { id: t.productId, name: t.product, category: t.category }])).values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        // Prepare the response
+        const uniqueCategories = Array.from(new Set(filteredTransactions.map(t => t.category).filter(Boolean))).sort();
+        const uniqueSellers = Array.from(new Map(filteredTransactions.map(t => [t.sellerId, { id: t.sellerId, name: t.seller, email: t.sellerEmail }])).values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        const uniqueProducts = Array.from(new Map(filteredTransactions.map(t => [t.productId, { id: t.productId, name: t.product, category: t.category }])).values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         const response = {
             summary: {
-                totalSales,
-                totalQuantity,
+                totalRevenue,
+                totalRefunds,
+                netRevenue,
+                totalVat,
+                totalTaxable,
+                totalQuantity: filteredTransactions.reduce((sum, t) => sum + t.quantity, 0),
                 totalTransactions,
-                avgTransaction
+                avgTransaction,
+                totalCost: filteredTransactions.reduce((sum, t) => sum + t.costPrice, 0),
+                totalProfit: filteredTransactions.reduce((sum, t) => sum + t.profit, 0),
+                totalDiscount: 0,
             },
-            transactions: paginatedTransactions,
-            totalItems,
+            transactions: filteredTransactions,
+            totalItems: filteredTransactions.length,
+            totalCount: totalSalesCount,
+            pagination: {
+                page: pageNum,
+                limit: limitNum,
+                total: totalSalesCount,
+                totalPages: Math.ceil(totalSalesCount / limitNum),
+            },
             filters: {
                 categories: uniqueCategories,
                 sellers: uniqueSellers,
-                products: uniqueProducts
-            }
+                products: uniqueProducts,
+            },
         };
-        res.json((0, apiResponse_1.success)(response));
+        res.json(response);
     }
     catch (error) {
         console.error('Error generating sales report:', error);
@@ -177,13 +189,21 @@ const getInventoryReport = async (req, res) => {
                 name: 'asc',
             },
         });
-        // Get restock history (assuming you have a restock model)
-        const restocks = await prisma_1.prisma.$queryRaw `
-      SELECT id, "productId", quantity, "createdAt"
-      FROM "restocks"
-      WHERE "organizationId" = ${organizationId}
-      ORDER BY "createdAt" DESC
-    `.catch(() => []);
+        // Get restock history from inventory ledger
+        const restocks = await prisma_1.prisma.inventoryLedger.findMany({
+            where: {
+                organizationId,
+                movementType: { in: ['PURCHASE', 'TRANSFER_IN', 'ADJUSTMENT'] },
+                direction: 'IN',
+            },
+            select: {
+                id: true,
+                productId: true,
+                quantity: true,
+                createdAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+        });
         // Transform products to match frontend format
         const inventoryData = await Promise.all(products.map(async (product) => {
             // Get previous stock (from 30 days ago)
@@ -200,7 +220,7 @@ const getInventoryReport = async (req, res) => {
                 note: `Sale #${item.sale.saleNumber}`,
             }));
             const restockChanges = restocks
-                .filter((r) => r.productId === product.id)
+                .filter((r) => r.productId === Number(product.id))
                 .map((restock) => ({
                 date: restock.createdAt.toISOString().split('T')[0],
                 type: 'restock',
@@ -277,7 +297,7 @@ const getInventoryReport = async (req, res) => {
         const lowStockItems = filteredData.filter((item) => item.status === 'low' || item.status === 'critical').length;
         // Get unique categories
         const categories = [...new Set(filteredData.map((item) => item.category).filter(Boolean))];
-        res.json((0, apiResponse_1.success)({
+        res.json({
             inventoryData: filteredData,
             summary: {
                 totalValue,
@@ -286,7 +306,7 @@ const getInventoryReport = async (req, res) => {
                 lowStockItems,
             },
             categories,
-        }));
+        });
     }
     catch (error) {
         console.error('[Inventory Report Error]:', error);
@@ -692,7 +712,7 @@ exports.getDebtPaymentsReport = getDebtPaymentsReport;
 const getCashFlowReport = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
-        const { startDate, endDate } = req.query;
+        const { startDate, endDate, sortBy = 'date', sortOrder = 'asc' } = req.query;
         const start = new Date(startDate);
         const end = new Date(new Date(endDate).setHours(23, 59, 59, 999));
         // 1. Calculate Opening Balance
@@ -705,10 +725,40 @@ const getCashFlowReport = async (req, res) => {
         const allTransactions = [...inflows, ...outflows].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         // 5. Calculate running balance
         let runningBalance = openingBalance;
-        const transactions = allTransactions.map(t => {
+        const transactionsWithBalances = allTransactions.map(t => {
             runningBalance += t.amount; // amount is positive for inflows, negative for outflows
             return { ...t, balance: runningBalance };
         });
+        // Running balances must always be calculated chronologically. Sorting is
+        // applied only to the presentation rows afterwards so accounting remains valid.
+        const allowedSortFields = new Set([
+            'date', 'description', 'category', 'subcategory', 'type', 'amount',
+            'balance', 'paymentMethod', 'reference',
+        ]);
+        const sortField = typeof sortBy === 'string' && allowedSortFields.has(sortBy) ? sortBy : 'date';
+        const direction = sortOrder === 'desc' ? -1 : 1;
+        const transactions = transactionsWithBalances
+            .map((transaction, index) => ({ transaction, index }))
+            .sort((leftEntry, rightEntry) => {
+            const left = leftEntry.transaction;
+            const right = rightEntry.transaction;
+            // Amount is rendered without its accounting sign in the UI, so order by
+            // the same absolute value users actually see.
+            const a = sortField === 'amount' ? Math.abs(left.amount) : left[sortField];
+            const b = sortField === 'amount' ? Math.abs(right.amount) : right[sortField];
+            if (a == null && b == null)
+                return 0;
+            if (a == null)
+                return direction;
+            if (b == null)
+                return -direction;
+            const comparison = typeof a === 'number' && typeof b === 'number'
+                ? a - b
+                : String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+            // Preserve chronological accounting order when displayed values match.
+            return comparison === 0 ? leftEntry.index - rightEntry.index : comparison * direction;
+        })
+            .map(entry => entry.transaction);
         // 6. Calculate summary
         const totalInflows = inflows.reduce((sum, t) => sum + t.amount, 0);
         const totalOutflows = Math.abs(outflows.reduce((sum, t) => sum + t.amount, 0));
@@ -738,7 +788,8 @@ const getCashFlowReport = async (req, res) => {
                 calculated: closingBalance,
                 actual: calculatedClosing,
                 balanced
-            }
+            },
+            sorting: { sortBy: sortField, sortOrder: direction === 1 ? 'asc' : 'desc' }
         });
     }
     catch (error) {

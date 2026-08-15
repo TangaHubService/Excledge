@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deletePurchaseOrder = exports.updatePurchaseOrderStatus = exports.createPurchaseOrder = exports.getPurchaseOrder = exports.getPurchaseOrders = void 0;
+exports.deletePurchaseOrder = exports.updatePurchaseOrderStatus = exports.updatePurchaseOrder = exports.createPurchaseOrder = exports.getPurchaseOrder = exports.getPurchaseOrders = void 0;
 const prisma_1 = require("../lib/prisma");
 const email_service_1 = require("../services/email.service");
 const auditLogger_1 = require("../utils/auditLogger");
@@ -140,7 +140,7 @@ const createPurchaseOrder = async (req, res) => {
         const creatorEmail = req.user.email;
         try {
             const orderAny = order;
-            await email_service_1.emailService.sendPurchaseOrderToSupplier(orderAny.supplier.email, orderAny.supplier.name, orderAny.organization.name, orderAny.orderNumber, orderAny.items, Number(orderAny.totalAmount), orderAny.notes || undefined, orderAny.expectedDate || undefined, creatorEmail);
+            await email_service_1.emailService.sendPurchaseOrderToSupplier(orderAny.supplier.email, orderAny.supplier.name, orderAny.organization.name, orderAny.orderNumber, orderAny.items, Number(orderAny.totalAmount), orderAny.notes || undefined, orderAny.expectedDate || undefined, creatorEmail, 'created');
         }
         catch (emailError) {
             console.error("Failed to send email to supplier:", emailError);
@@ -177,22 +177,146 @@ const createPurchaseOrder = async (req, res) => {
     }
 };
 exports.createPurchaseOrder = createPurchaseOrder;
-// Update purchase order status
+// Update purchase order (items, expected date, notes, etc.)
+const updatePurchaseOrder = async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const organizationId = parseInt(req.params.organizationId);
+        const branchFilter = (0, branchAuth_middleware_1.buildBranchFilter)(req);
+        const { items, notes, expectedDate } = req.body;
+        const order = await prisma_1.prisma.purchaseOrder.findFirst({
+            where: { id, organizationId, ...branchFilter },
+            include: {
+                supplier: true,
+                items: true,
+                organization: true,
+                user: true,
+            },
+        });
+        if (!order) {
+            return res.status(404).json({ message: "Purchase order not found" });
+        }
+        if (order.status === 'COMPLETED' || order.status === 'CANCELLED') {
+            return res.status(400).json({ message: `Cannot update a ${order.status.toLowerCase()} purchase order` });
+        }
+        const updatedOrder = await prisma_1.prisma.$transaction(async (tx) => {
+            // Delete existing items
+            await tx.purchaseOrderItem.deleteMany({
+                where: { purchaseOrderId: id },
+            });
+            const totalAmount = items
+                ? items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
+                : order.totalAmount;
+            const result = await tx.purchaseOrder.update({
+                where: { id },
+                data: {
+                    totalAmount,
+                    notes: notes !== undefined ? notes : order.notes,
+                    expectedDate: expectedDate ? new Date(expectedDate) : order.expectedDate,
+                    items: items ? {
+                        create: await Promise.all(items.map(async (item) => {
+                            let taxCode;
+                            let taxRate;
+                            if (item.productId) {
+                                const product = await tx.product.findFirst({
+                                    where: { id: item.productId, organizationId },
+                                    select: { taxCode: true, taxCategory: true },
+                                });
+                                if (product) {
+                                    taxCode = product.taxCode ?? (product.taxCategory === 'STANDARD' ? 'B' :
+                                        product.taxCategory === 'ZERO_RATED' ? 'C' :
+                                            product.taxCategory === 'EXEMPT' ? 'A' :
+                                                product.taxCategory === 'NON_TAXABLE' ? 'D' : 'A');
+                                    taxRate = taxCode === 'B' ? 18 : 0;
+                                }
+                            }
+                            return {
+                                productId: item.productId,
+                                productName: item.productName,
+                                quantity: item.quantity,
+                                unitPrice: item.unitPrice,
+                                totalPrice: item.quantity * item.unitPrice,
+                                taxCode: item.taxCode ?? taxCode ?? 'A',
+                                taxRate: item.taxRate ?? taxRate ?? 0,
+                            };
+                        })),
+                    } : undefined,
+                },
+                include: {
+                    supplier: true,
+                    items: true,
+                    organization: true,
+                },
+            });
+            return result;
+        });
+        // Send email to supplier about the update
+        try {
+            const orderAny = updatedOrder;
+            await email_service_1.emailService.sendPurchaseOrderToSupplier(orderAny.supplier.email, orderAny.supplier.name, orderAny.organization.name, orderAny.orderNumber, orderAny.items, Number(orderAny.totalAmount), orderAny.notes || undefined, orderAny.expectedDate || undefined, req.user.email, 'updated');
+        }
+        catch (emailError) {
+            console.error("Failed to send update email to supplier:", emailError);
+        }
+        // Send email to organization
+        try {
+            const orderAny = updatedOrder;
+            const organizationEmail = orderAny.organization.email;
+            if (organizationEmail) {
+                const changesSummary = items
+                    ? `Items updated (${items.length} items)`
+                    : notes
+                        ? 'Notes updated'
+                        : expectedDate
+                            ? 'Expected delivery date updated'
+                            : 'Purchase order updated';
+                await email_service_1.emailService.sendPurchaseOrderUpdatedNotification(organizationEmail, orderAny.organization.name, orderAny.orderNumber, orderAny.supplier.name, req.user.name || req.user.email, new Date(), order.status, changesSummary, req.user.email);
+            }
+        }
+        catch (emailError) {
+            console.error("Failed to send update notification to organization:", emailError);
+        }
+        await auditLogger_1.auditLogger.purchaseOrders(req, {
+            type: 'PURCHASE_ORDER_UPDATE',
+            description: `Purchase Order ${order.orderNumber} updated`,
+            entityType: 'PurchaseOrder',
+            entityId: id,
+            metadata: {
+                orderNumber: order.orderNumber,
+                itemCount: items?.length || 0,
+            }
+        });
+        await notificationService.createNotification({
+            organizationId: order.organizationId,
+            title: 'Purchase Order Updated',
+            message: `Purchase Order ${order.orderNumber} has been updated`,
+            type: 'PURCHASE_ORDER',
+            data: { orderId: id },
+            recipientId: order.userId,
+        });
+        res.json(updatedOrder);
+    }
+    catch (error) {
+        console.error("Error updating purchase order:", error);
+        res.status(500).json({ message: "Failed to update purchase order" });
+    }
+};
+exports.updatePurchaseOrder = updatePurchaseOrder;
+// Update purchase order status with partial receiving support
 const updatePurchaseOrderStatus = async (req, res) => {
     const id = parseInt(req.params.id);
     const organizationId = parseInt(req.params.organizationId);
     const branchFilter = (0, branchAuth_middleware_1.buildBranchFilter)(req);
     const { status, branchId, receivedItems } = req.body;
-    // Define valid status values
     const validStatuses = [
         'PENDING',
         'APPROVED',
         'REJECTED',
         'PROCESSING',
         'COMPLETED',
-        'CANCELLED'
+        'CANCELLED',
+        'PARTIALLY_RECEIVED',
     ];
-    // Validate status
     if (!validStatuses.includes(status)) {
         return res.status(400).json({
             message: 'Invalid status',
@@ -200,42 +324,45 @@ const updatePurchaseOrderStatus = async (req, res) => {
         });
     }
     try {
-        // Check if purchase order exists
         const order = await prisma_1.prisma.purchaseOrder.findFirst({
             where: { id, organizationId, ...branchFilter },
             include: {
                 supplier: true,
                 user: true,
                 organization: true,
+                items: true,
             },
         });
         if (!order) {
             return res.status(404).json({ message: "Purchase order not found" });
         }
-        // Once received, a PO is terminal — re-running this (retry, double-click,
-        // resubmission) would re-run the stock-receiving loop below and create a
-        // second batch + double-add the received quantity to inventory.
         if (order.status === 'COMPLETED') {
             return res.status(400).json({ message: "This purchase order has already been completed and received" });
         }
+        if (order.status === 'CANCELLED') {
+            return res.status(400).json({ message: "This purchase order has been cancelled" });
+        }
         const userId = req.user.userId;
         const effectiveBranchId = branchId ? parseInt(String(branchId)) : null;
-        if (status === 'COMPLETED' && !effectiveBranchId) {
-            return res.status(400).json({ message: "branchId is required to complete a purchase order" });
+        if ((status === 'COMPLETED' || status === 'PARTIALLY_RECEIVED') && !effectiveBranchId) {
+            return res.status(400).json({ message: "branchId is required to receive items" });
         }
+        // Track receiving history
+        const receivingHistory = [];
         const updatedOrder = await prisma_1.prisma.$transaction(async (tx) => {
-            // Conditional update guards against two concurrent requests both completing
-            // this PO: only the request that finds status still != COMPLETED at the DB
-            // level (row-locked by this UPDATE) succeeds; the loser gets count === 0.
+            const terminalStatuses = ['COMPLETED', 'CANCELLED'];
             const updateResult = await tx.purchaseOrder.updateMany({
-                where: { id: order.id, status: { not: 'COMPLETED' } },
+                where: {
+                    id: order.id,
+                    status: { notIn: terminalStatuses },
+                },
                 data: {
-                    status,
-                    receivedAt: status === "COMPLETED" ? new Date() : order.receivedAt,
+                    status: status,
+                    receivedAt: (status === 'COMPLETED' || status === 'PARTIALLY_RECEIVED') ? new Date() : order.receivedAt,
                 },
             });
             if (updateResult.count === 0) {
-                throw new Error("This purchase order has already been completed and received");
+                throw new Error("This purchase order has already been completed or cancelled");
             }
             const po = await tx.purchaseOrder.findUniqueOrThrow({
                 where: { id: order.id },
@@ -244,8 +371,8 @@ const updatePurchaseOrderStatus = async (req, res) => {
                     items: true,
                 },
             });
-            // Add items to stock if completed - now branch + batch aware
-            if (status === 'COMPLETED' && effectiveBranchId) {
+            // Handle receiving items (partial or full)
+            if ((status === 'COMPLETED' || status === 'PARTIALLY_RECEIVED') && effectiveBranchId) {
                 const branch = await tx.branch.findFirst({
                     where: { id: effectiveBranchId, organizationId: order.organizationId, status: "ACTIVE" }
                 });
@@ -299,13 +426,41 @@ const updatePurchaseOrderStatus = async (req, res) => {
                         expiryDate: recvExpiryDate || undefined,
                         reference: order.orderNumber,
                         referenceType: 'PURCHASE_ORDER',
-                        note: `Purchase Order #${order.orderNumber} received at branch ${effectiveBranchId}`,
+                        note: `Purchase Order #${order.orderNumber} - ${status === 'PARTIALLY_RECEIVED' ? 'Partial' : 'Full'} receive at branch ${effectiveBranchId}`,
                         tx,
                     });
+                    const newTotalReceived = (item.quantityReceived || 0) + recvQty;
+                    await tx.purchaseOrderItem.update({
+                        where: { id: item.id },
+                        data: { quantityReceived: newTotalReceived },
+                    });
+                    receivingHistory.push({
+                        itemId: item.id,
+                        productId: item.productId,
+                        productName: item.productName,
+                        orderedQty: item.quantity,
+                        previouslyReceivedQty: item.quantityReceived || 0,
+                        newlyReceivedQty: recvQty,
+                        totalReceivedQty: newTotalReceived,
+                        remainingQty: item.quantity - newTotalReceived,
+                        unitCost: recvUnitCost,
+                        batchNumber: recvBatchNumber,
+                    });
+                }
+                // Determine if this should be PARTIALLY_RECEIVED based on received quantities
+                if (status === 'COMPLETED') {
+                    const allFullyReceived = receivingHistory.every(r => r.remainingQty <= 0);
+                    if (!allFullyReceived) {
+                        await tx.purchaseOrder.update({
+                            where: { id: po.id },
+                            data: { status: 'PARTIALLY_RECEIVED' },
+                        });
+                    }
                 }
             }
             return po;
         });
+        // Send emails
         try {
             await email_service_1.emailService.sendPurchaseOrderStatusUpdate(order.user.email, order.organization.name, order.orderNumber, status, order.supplier.name);
         }
@@ -315,16 +470,15 @@ const updatePurchaseOrderStatus = async (req, res) => {
         try {
             const organizationEmail = order.organization.email;
             if (organizationEmail) {
-                await email_service_1.emailService.sendPurchaseOrderUpdatedNotification(organizationEmail, order.organization.name, order.orderNumber, order.supplier.name, req.user.name || req.user.email, new Date(), status, `Status changed from ${order.status} to ${status}`, order.user.email);
+                await email_service_1.emailService.sendPurchaseOrderUpdatedNotification(organizationEmail, order.organization.name, order.orderNumber, order.supplier.name, req.user.name || req.user.email, new Date(), status, `Status changed from ${order.status} to ${status}${receivingHistory.length > 0 ? ` (${receivingHistory.length} items received)` : ''}`, order.user.email);
             }
             else {
-                console.warn(`Purchase order ${order.orderNumber}: organization ${order.organizationId} has no configured email, skipping update notification`);
+                console.warn(`Purchase order ${order.orderNumber}: organization has no configured email, skipping update notification`);
             }
         }
         catch (emailError) {
             console.error("Failed to send purchase order update notification to organization:", emailError);
         }
-        // Map status to specific ActivityType if possible
         let activityType = 'PURCHASE_ORDER_UPDATE';
         if (status === 'APPROVED')
             activityType = 'PURCHASE_ORDER_APPROVED';
@@ -334,6 +488,8 @@ const updatePurchaseOrderStatus = async (req, res) => {
             activityType = 'PURCHASE_ORDER_COMPLETED';
         if (status === 'CANCELLED')
             activityType = 'PURCHASE_ORDER_CANCELLED';
+        if (status === 'PARTIALLY_RECEIVED')
+            activityType = 'PURCHASE_ORDER_UPDATE';
         await auditLogger_1.auditLogger.purchaseOrders(req, {
             type: activityType,
             description: `Purchase Order ${order.orderNumber} status updated to ${status}`,
@@ -342,9 +498,9 @@ const updatePurchaseOrderStatus = async (req, res) => {
             metadata: {
                 status,
                 orderNumber: order.orderNumber,
+                receivingHistory,
             }
         });
-        // Create in-app notification for status change
         await notificationService.createNotification({
             organizationId: order.organizationId,
             title: 'Purchase Order Status Updated',
@@ -358,7 +514,9 @@ const updatePurchaseOrderStatus = async (req, res) => {
     catch (error) {
         console.error("Error updating purchase order:", error);
         if (error?.message === "This purchase order has already been completed and received" ||
-            error?.message === "Invalid or inactive branch for receiving") {
+            error?.message === "Invalid or inactive branch for receiving" ||
+            error?.message === "This purchase order has already been completed or cancelled" ||
+            error?.message === "This purchase order has been cancelled") {
             return res.status(400).json({ message: error.message });
         }
         res.status(500).json({ message: "Failed to update purchase order" });
