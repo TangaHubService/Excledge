@@ -8,6 +8,7 @@ const feature_access_middleware_1 = require("../middleware/feature-access.middle
 const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
 const router = (0, express_1.Router)();
 const orgAccess = (0, organizationAccess_middleware_1.requireOrganizationAccess)();
+router.get("/overview/:organizationId", auth_middleware_1.authenticate, orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, dashboard_controller_1.getOverviewDashboard);
 router.get("/stats/:organizationId", auth_middleware_1.authenticate, orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, dashboard_controller_1.getDashboardStats);
 router.get("/sales-trend/:organizationId", auth_middleware_1.authenticate, orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, dashboard_controller_1.getSalesTrend);
 router.get("/notifications/:organizationId", auth_middleware_1.authenticate, orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, dashboard_controller_1.getNotifications);

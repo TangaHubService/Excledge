@@ -31,7 +31,7 @@ function generateIdempotencyKey(orgId, operation, saleId) {
  *  - Sale is always completed; VSDC submission is async via the outbox.
  */
 async function createSaleWithOutbox(input) {
-    const { organizationId, branchId, userId, customerId, items, paymentType, cashAmount, insuranceAmount, debtAmount, } = input;
+    const { organizationId, branchId, userId, customerId, items, paymentType, cashAmount, insuranceAmount, debtAmount, shiftId, } = input;
     const totalAmount = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
     const saleNumber = `SALE-${Date.now()}`;
     const operation = 'SALE';
@@ -87,6 +87,7 @@ async function createSaleWithOutbox(input) {
                 cashAmount,
                 insuranceAmount,
                 debtAmount,
+                shiftId,
                 totalAmount,
                 vatAmount: taxSummary.vatAmount,
                 taxableAmount: taxSummary.taxableAmount,
@@ -222,11 +223,18 @@ async function processEbmOutboxBatch(limit = 25) {
     if (!(0, rra_ebm_service_1.isEbmEnabled)()) {
         return { processed: 0, succeeded: 0, failed: 0 };
     }
+    // A VSDC call can take up to the configured request timeout. Do not let the
+    // cron job (or another checkout) reclaim a row that is still being sent by a
+    // live worker. Only genuinely stale PROCESSING rows are reconciled.
+    const staleProcessingBefore = new Date(Date.now() - Math.max(config_1.config.ebm.requestTimeoutMs * 2, 60000));
     const rows = await prisma_1.prisma.ebmOutbox.findMany({
         where: {
-            status: { in: ['PENDING', 'PROCESSING', 'FAILED'] },
             nextAttemptAt: { lte: new Date() },
             retryCount: { lt: config_1.config.ebm.maxQueueRetries },
+            OR: [
+                { status: { in: ['PENDING', 'FAILED'] } },
+                { status: 'PROCESSING', updatedAt: { lte: staleProcessingBefore } },
+            ],
         },
         orderBy: [{ retryCount: 'asc' }, { createdAt: 'asc' }],
         take: limit,
@@ -235,6 +243,18 @@ async function processEbmOutboxBatch(limit = 25) {
     let succeeded = 0;
     let failed = 0;
     for (const row of rows) {
+        // Claim the row before building its payload or calling VSDC. The previous
+        // implementation selected then updated it, allowing simultaneous requests
+        // from the immediate checkout worker and the cron worker to both submit the
+        // same fiscal receipt. `updatedAt` makes this conditional update a lease for
+        // stale PROCESSING rows as well.
+        const claim = await prisma_1.prisma.ebmOutbox.updateMany({
+            where: { id: row.id, status: row.status, updatedAt: row.updatedAt },
+            data: { status: 'PROCESSING' },
+        });
+        if (claim.count !== 1) {
+            continue;
+        }
         processed += 1;
         // ── Orphan reconciliaition ──
         if (row.status === 'PROCESSING') {
@@ -330,7 +350,7 @@ async function processEbmOutboxBatch(limit = 25) {
                         status: isDead ? 'DEAD_LETTER' : 'FAILED',
                         retryCount: { increment: 1 },
                         lastError: 'Original invoice not yet fiscalized — deferring refund',
-                        nextAttemptAt: isDead ? null : nextRetry,
+                        nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
                     },
                 });
                 if (isDead)
@@ -376,9 +396,13 @@ async function processEbmOutboxBatch(limit = 25) {
                 continue;
             }
             try {
-                // A cancellation resubmits the SAME invoice number with cnclDt/cnclReqDt
-                // set and salesSttsCd='04' — it's not a new document.
-                payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org, { cnclDt: new Date() });
+                // A cancellation is a NEW sales-transaction document (fresh invcNo)
+                // with cnclDt/cnclReqDt set and salesSttsCd='04' — the sandbox
+                // rejects a resubmitted invcNo (924) and rejects orgInvcNo on a void
+                // (910: orgInvcNo is refund-only). Confirmed against the RRA VSDC
+                // sandbox 2026-08-10.
+                const { vsdcInvcNo: voidInvcNo } = await (0, rra_ebm_service_1.generateInvoiceNumber)(row.organizationId, sale.branchId);
+                payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org, { cnclDt: new Date(), invcNoOverride: voidInvcNo });
                 payload.remark = row.payload?.reason ?? '';
                 payload.idempotencyKey = row.idempotencyKey;
             }
@@ -391,20 +415,29 @@ async function processEbmOutboxBatch(limit = 25) {
                 continue;
             }
         }
-        // ── Mark in-flight ──
-        await prisma_1.prisma.ebmOutbox.update({
-            where: { id: row.id },
-            data: { status: 'PROCESSING' },
-        });
         // ── Record attempt in EbmTransaction (audit trail) ──
-        const txRow = await prisma_1.prisma.ebmTransaction.create({
-            data: {
+        // Retries re-use the transaction row created on the first attempt
+        // (idempotencyKey is unique), resetting it to SUBMITTED instead of failing
+        // the duplicate insert.
+        const txRow = await prisma_1.prisma.ebmTransaction.upsert({
+            where: { idempotencyKey: row.idempotencyKey },
+            create: {
                 organizationId: row.organizationId,
                 saleId: row.saleId,
                 invoiceNumber: sale.invoiceNumber,
                 operation: row.operation,
                 submissionStatus: 'SUBMITTED',
                 idempotencyKey: row.idempotencyKey,
+            },
+            update: {
+                submissionStatus: 'SUBMITTED',
+                ebmInvoiceNumber: null,
+                errorMessage: null,
+                sdcRcptNo: null,
+                totalRcptNo: null,
+                sdcId: null,
+                internalData: null,
+                receiptSignature: null,
             },
         });
         try {
@@ -435,7 +468,7 @@ async function processEbmOutboxBatch(limit = 25) {
                         status: isDead ? 'DEAD_LETTER' : 'FAILED',
                         retryCount: { increment: 1 },
                         lastError: msg,
-                        nextAttemptAt: isDead ? null : nextRetry,
+                        nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
                     },
                 });
                 if (isDead)
@@ -509,7 +542,7 @@ async function processEbmOutboxBatch(limit = 25) {
                     status: isDead ? 'DEAD_LETTER' : 'FAILED',
                     retryCount: { increment: 1 },
                     lastError: message,
-                    nextAttemptAt: isDead ? null : nextRetry,
+                    nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
                 },
             });
             if (isDead)
@@ -534,4 +567,13 @@ async function failSubmission(ebmTransactionId, message) {
 function scheduleNextRetry(currentRetryCount) {
     const delayMs = Math.min(60 * 60 * 1000, 2 * 60 * 1000 * Math.pow(2, currentRetryCount));
     return new Date(Date.now() + delayMs);
+}
+/**
+ * Sentinel `nextAttemptAt` for a DEAD_LETTER row. `nextAttemptAt` is a
+ * non-nullable `DateTime`, so instead of `null` we store a far-future timestamp
+ * meaning "never retry" — the worker only selects PENDING/PROCESSING/FAILED
+ * rows whose `nextAttemptAt` is in the past, so DEAD_LETTER entries stay put.
+ */
+function deadLetterAttemptAt() {
+    return new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000);
 }

@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.subscriptionStatusTransitionJob = exports.subscriptionReminderJob = void 0;
+exports.runImmediateSubscriptionTransition = runImmediateSubscriptionTransition;
 const node_cron_1 = __importDefault(require("node-cron"));
 const prisma_1 = require("../lib/prisma");
 const email_service_1 = require("../services/email.service");
@@ -50,17 +51,17 @@ exports.subscriptionReminderJob = node_cron_1.default.schedule("0 9 * * *", asyn
     console.log(`Sent ${sent} subscription reminders`);
 });
 /**
- * Hourly status-transition job — the single place that flips subscriptions
- * ACTIVE -> GRACE_PERIOD -> EXPIRED as their dates pass, and deactivates the
- * organization once the grace window is fully spent. requireActiveSubscription
- * and every other consumer trust `status` alone (not endDate), so this job is
- * what keeps that status honest.
+ * Run one round of subscription status transitions
+ * (ACTIVE/TRIALING -> GRACE_PERIOD -> EXPIRED) and deactivate orgs with no
+ * remaining valid subscription.
+ *
+ * Exported so it can be called both from the hourly cron AND at server boot.
  */
-exports.subscriptionStatusTransitionJob = node_cron_1.default.schedule("0 * * * *", async () => {
+async function runImmediateSubscriptionTransition() {
     const now = new Date();
-    // ACTIVE -> GRACE_PERIOD
+    // ACTIVE / TRIALING -> GRACE_PERIOD
     const enteringGrace = await prisma_1.prisma.subscription.findMany({
-        where: { status: "ACTIVE", endDate: { lte: now } },
+        where: { status: { in: ["ACTIVE", "TRIALING"] }, endDate: { lte: now } },
         include: {
             organization: {
                 include: { userOrganizations: { where: { isOwner: true }, include: { user: true } } },
@@ -139,4 +140,10 @@ exports.subscriptionStatusTransitionJob = node_cron_1.default.schedule("0 * * * 
     if (expiring.length) {
         console.log(`Expired ${expiring.length} subscription(s)`);
     }
-});
+}
+/**
+ * Hourly status-transition job — delegates to runImmediateSubscriptionTransition.
+ * requireActiveSubscription and every other consumer trust `status` alone (not
+ * endDate), so this job is what keeps that status honest.
+ */
+exports.subscriptionStatusTransitionJob = node_cron_1.default.schedule("0 * * * *", runImmediateSubscriptionTransition);

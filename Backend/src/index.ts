@@ -35,6 +35,9 @@ import expenseRoutes from "./routes/expense.routes";
 import supplierPaymentRoutes from "./routes/supplier-payment.routes";
 import stockTransferRoutes from "./routes/stock-transfer.routes";
 import ebmOutboxRoutes from "./routes/ebm-outbox.routes";
+import shiftRoutes from "./routes/shift.routes";
+import heldSaleRoutes from "./routes/held-sale.routes";
+import deviceRoutes from "./routes/device.routes";
 
 import { errorHandler } from "./middleware/error.middleware";
 import webhookRoutes from "./routes/paypack-webhook.routes";
@@ -150,6 +153,9 @@ app.use("/api/stock-transfers", stockTransferRoutes);
 app.use("/api/organizations", ebmOutboxRoutes);
 app.use("/api/supplier-invoices", supplierInvoiceRoutes);
 app.use("/api/supplier-portal", supplierPortalRoutes);
+app.use("/api/shifts", shiftRoutes);
+app.use("/api/held-sales", heldSaleRoutes);
+app.use("/api/devices", deviceRoutes);
 
 // Serve uploaded files statically
 app.use('/uploads', express.static('uploads'));

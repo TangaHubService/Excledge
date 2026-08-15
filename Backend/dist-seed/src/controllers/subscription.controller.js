@@ -40,6 +40,8 @@ const stripe_service_1 = require("../services/stripe.service");
 const stripe_1 = require("../lib/stripe");
 const currencyConverter_1 = require("../utils/currencyConverter");
 const config_1 = require("../config");
+const rra_ebm_service_1 = require("../services/rra-ebm.service");
+const billing_ebm_service_1 = require("../services/billing-ebm.service");
 /**
  * Get all active subscription plans with features
  * @route GET /api/subscriptions/plans
@@ -344,6 +346,24 @@ const verifyPayment = async (req, res) => {
                 },
             }),
         ]);
+        // Best-effort RRA EBM fiscalization of the subscription receipt.
+        if ((0, rra_ebm_service_1.isEbmEnabled)()) {
+            try {
+                const payment = await prisma_1.prisma.payment.findFirst({
+                    where: { subscriptionId: subscription.id, paymentId: session.payment_intent?.toString() || session.id },
+                    orderBy: { createdAt: 'desc' },
+                });
+                if (payment) {
+                    await (0, billing_ebm_service_1.fiscalizeSubscriptionPayment)({
+                        paymentId: payment.id,
+                        organizationId,
+                    });
+                }
+            }
+            catch (err) {
+                console.error('Failed to fiscalize subscription payment:', err);
+            }
+        }
         return res.json({
             success: true,
             message: 'Payment verified and subscription activated',
@@ -891,6 +911,14 @@ const getPaymentHistory = async (req, res) => {
                 include: {
                     subscription: {
                         include: {
+                            organization: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    TIN: true,
+                                    address: true,
+                                },
+                            },
                             plan: {
                                 select: {
                                     id: true,

@@ -1,6 +1,39 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTaxCodes = exports.processExpiredStock = exports.markAsDamage = exports.adjustStock = exports.getLowStockProducts = exports.getExpiredProducts = exports.getExpiringProducts = exports.deleteProduct = exports.updateProduct = exports.createProducts = exports.createProduct = exports.getProductById = exports.getProducts = void 0;
+exports.getTaxCodes = exports.processExpiredStock = exports.markAsDamage = exports.adjustStock = exports.getLowStockProducts = exports.getExpiredProducts = exports.getExpiringProducts = exports.deleteProduct = exports.updateProductImage = exports.updateProduct = exports.createProducts = exports.createProduct = exports.getProductById = exports.getProducts = void 0;
 const prisma_1 = require("../lib/prisma");
 const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
 const auditLogger_1 = require("../utils/auditLogger");
@@ -8,6 +41,7 @@ const inventory_ledger_service_1 = require("../services/inventory-ledger.service
 const product_sync_service_1 = require("../services/product-sync.service");
 const apiResponse_1 = require("../utils/apiResponse");
 const organization_settings_service_1 = require("../services/organization-settings.service");
+const sorting_1 = require("../utils/sorting");
 const getProducts = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -73,7 +107,20 @@ const getProducts = async (req, res) => {
         const [products, totalCount] = await Promise.all([
             prisma_1.prisma.product.findMany({
                 where,
-                orderBy: { expiryDate: "asc" },
+                orderBy: (0, sorting_1.getOrderBy)(req.query, {
+                    id: { id: '$direction' },
+                    name: { name: '$direction' },
+                    sku: { sku: '$direction' },
+                    batchNumber: { batchNumber: '$direction' },
+                    barcode: { barcode: '$direction' },
+                    category: { category: '$direction' },
+                    sellingPrice: { sellingPrice: '$direction' },
+                    costPrice: { costPrice: '$direction' },
+                    minStock: { minStock: '$direction' },
+                    quantity: { quantity: '$direction' },
+                    expiryDate: { expiryDate: '$direction' },
+                    createdAt: { createdAt: '$direction' },
+                }, 'expiryDate', 'asc'),
                 skip,
                 take: limitNum,
             }),
@@ -547,6 +594,62 @@ const updateProduct = async (req, res) => {
     }
 };
 exports.updateProduct = updateProduct;
+const updateProductImage = async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const organizationId = parseInt(req.params.organizationId);
+        const existingProduct = await prisma_1.prisma.product.findFirst({
+            where: { id, organizationId, deletedAt: null },
+        });
+        if (!existingProduct) {
+            return res.status(404).json((0, apiResponse_1.error)("Product not found"));
+        }
+        let imageUrl = existingProduct.imageUrl;
+        // Handle image removal
+        if (req.body.removeImage === 'true' || req.body.removeImage === true) {
+            imageUrl = null;
+            if (existingProduct.imageUrl) {
+                try {
+                    const { deleteFromCloudinary } = await Promise.resolve().then(() => __importStar(require("../config/cloudinary")));
+                    await deleteFromCloudinary(existingProduct.imageUrl);
+                }
+                catch (e) {
+                    console.warn("Failed to delete old image from cloudinary:", e);
+                }
+            }
+        }
+        // Handle file upload
+        if (req.file) {
+            try {
+                // Delete old image if exists
+                if (existingProduct.imageUrl) {
+                    const { deleteFromCloudinary } = await Promise.resolve().then(() => __importStar(require("../config/cloudinary")));
+                    await deleteFromCloudinary(existingProduct.imageUrl);
+                }
+                const { uploadToCloudinary } = await Promise.resolve().then(() => __importStar(require("../config/cloudinary")));
+                const result = await uploadToCloudinary(req.file);
+                imageUrl = result.secure_url || result.url;
+            }
+            catch (uploadError) {
+                console.error("Failed to upload image:", uploadError);
+                return res.status(500).json((0, apiResponse_1.error)("Failed to upload image"));
+            }
+        }
+        if (!req.file && !req.body.removeImage) {
+            return res.status(400).json((0, apiResponse_1.error)("No image provided"));
+        }
+        const product = await prisma_1.prisma.product.update({
+            where: { id },
+            data: { imageUrl },
+        });
+        res.json((0, apiResponse_1.success)(product));
+    }
+    catch (error) {
+        console.error("[Update Product Image Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)("Failed to update product image"));
+    }
+};
+exports.updateProductImage = updateProductImage;
 const deleteProduct = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
@@ -605,7 +708,14 @@ const getExpiringProducts = async (req, res) => {
         const [products, totalCount] = await Promise.all([
             prisma_1.prisma.product.findMany({
                 where,
-                orderBy: { expiryDate: "asc" },
+                orderBy: (0, sorting_1.getOrderBy)(req.query, {
+                    id: { id: '$direction' },
+                    name: { name: '$direction' },
+                    batchNumber: { batchNumber: '$direction' },
+                    expiryDate: { expiryDate: '$direction' },
+                    quantity: { quantity: '$direction' },
+                    sellingPrice: { sellingPrice: '$direction' },
+                }, 'expiryDate', 'asc'),
                 skip,
                 take,
             }),
@@ -653,7 +763,14 @@ const getExpiredProducts = async (req, res) => {
         const [products, totalCount] = await Promise.all([
             prisma_1.prisma.product.findMany({
                 where,
-                orderBy: { expiryDate: "desc" },
+                orderBy: (0, sorting_1.getOrderBy)(req.query, {
+                    id: { id: '$direction' },
+                    name: { name: '$direction' },
+                    batchNumber: { batchNumber: '$direction' },
+                    expiryDate: { expiryDate: '$direction' },
+                    quantity: { quantity: '$direction' },
+                    sellingPrice: { sellingPrice: '$direction' },
+                }, 'expiryDate', 'desc'),
                 skip,
                 take,
             }),

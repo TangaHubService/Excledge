@@ -1,0 +1,17 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_middleware_1 = require("../middleware/auth.middleware");
+const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
+const organizationAccess_middleware_1 = require("../middleware/organizationAccess.middleware");
+const feature_access_middleware_1 = require("../middleware/feature-access.middleware");
+const shift_controller_1 = require("../controllers/shift.controller");
+const router = (0, express_1.Router)();
+const orgAccess = (0, organizationAccess_middleware_1.requireOrganizationAccess)();
+const roles = (0, auth_middleware_1.authorize)('ADMIN', 'SELLER', 'ACCOUNTANT', 'BRANCH_MANAGER');
+router.use(auth_middleware_1.authenticate);
+router.post('/:organizationId', orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, roles, shift_controller_1.openShiftController);
+router.get('/:organizationId/active', orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, roles, shift_controller_1.getActiveShiftController);
+router.get('/:organizationId/:id/summary', orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, roles, shift_controller_1.getShiftSummaryController);
+router.put('/:organizationId/:id/close', orgAccess, (0, feature_access_middleware_1.requireActiveSubscription)(), branchAuth_middleware_1.branchAuth, roles, shift_controller_1.closeShiftController);
+exports.default = router;

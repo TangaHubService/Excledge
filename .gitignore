@@ -1,3 +1,6 @@
+# Standalone repo, pushed separately (see vsdc-edge-service/README.md)
+/vsdc-edge-service/
+
 # Logs
 logs
 *.log

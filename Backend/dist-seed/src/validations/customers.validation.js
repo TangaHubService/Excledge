@@ -10,6 +10,7 @@ exports.createCustomerSchema = zod_1.z.object({
         address: zod_1.z.string().optional(),
         customerType: zod_1.z.enum(['INDIVIDUAL', 'CORPORATE']).default('INDIVIDUAL'),
         TIN: zod_1.z.string().min(3, 'TIN too short').optional(),
+        prcOrdCd: zod_1.z.string().min(1, 'Purchase order code too short').optional(),
     }),
     params: zod_1.z.object({
         organizationId: zod_1.z.coerce.number().positive('Organization ID required'),
@@ -23,6 +24,7 @@ exports.updateCustomerSchema = zod_1.z.object({
         address: zod_1.z.string().optional(),
         customerType: zod_1.z.enum(['INDIVIDUAL', 'CORPORATE']).optional(),
         TIN: zod_1.z.string().min(3, 'TIN too short').optional(),
+        prcOrdCd: zod_1.z.string().optional(),
     }),
     params: zod_1.z.object({
         organizationId: zod_1.z.coerce.number().positive('Organization ID required'),

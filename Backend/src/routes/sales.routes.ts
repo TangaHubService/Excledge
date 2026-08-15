@@ -18,10 +18,45 @@ import { requireActiveSubscription } from '../middleware/feature-access.middlewa
 import { vsdcOnlineGuard } from "../middleware/vsdc-offline-guard.middleware";
 import { validate } from "../middleware/validate.middleware";
 import { createSaleSchema, cancelSaleSchema } from "../validations/sales.validation";
+import {
+  initiateMobileMoneyPayment,
+  getMobileMoneyPaymentStatus,
+  cancelMobileMoneyPayment,
+} from "../controllers/mobile-money.controller";
 
 const router = Router();
 
 const orgAccess = requireOrganizationAccess();
+
+// Initiate and monitor a POS mobile-money collection using the configured
+// Paypack or direct MTN MoMo provider. The sale is created only after the
+// provider confirms that the collection completed.
+router.post(
+  "/:organizationId/mobile-money/initiate",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  initiateMobileMoneyPayment
+);
+
+router.get(
+  "/:organizationId/mobile-money/:transactionId/status",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  getMobileMoneyPaymentStatus
+);
+
+router.post(
+  "/:organizationId/mobile-money/:transactionId/cancel",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  cancelMobileMoneyPayment
+);
 
 // Create a new sale (vsdcOnlineGuard blocks if VSDC unreachable > 24h, per RRA requirement)
 router.post(

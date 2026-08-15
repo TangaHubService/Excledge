@@ -7,6 +7,8 @@ exports.SubscriptionService = void 0;
 const stripe_1 = __importDefault(require("stripe"));
 const email_service_1 = require("./email.service");
 const config_1 = require("../config");
+const rra_ebm_service_1 = require("./rra-ebm.service");
+const billing_ebm_service_1 = require("./billing-ebm.service");
 class SubscriptionService {
     /**
      * Verifies a Stripe webhook event using the provided payload, signature, and secret
@@ -222,6 +224,19 @@ class SubscriptionService {
                 console.error('Failed to send payment confirmation email:', err);
             }
         }
+        // Best-effort RRA EBM fiscalization of the subscription receipt. Never
+        // blocks payment completion: failures are recorded on the Payment row.
+        if ((0, rra_ebm_service_1.isEbmEnabled)()) {
+            try {
+                await (0, billing_ebm_service_1.fiscalizeSubscriptionPayment)({
+                    paymentId: payment.id,
+                    organizationId: subscription.organizationId,
+                });
+            }
+            catch (err) {
+                console.error(`Failed to fiscalize subscription payment ${payment.id}:`, err);
+            }
+        }
         return { ...updatedSubscription, payments: [payment, ...updatedSubscription.payments] };
     }
     /**
@@ -237,6 +252,7 @@ class SubscriptionService {
                 subscriptionStatus: null,
                 subscriptionEndDate: null,
                 daysUntilExpiry: null,
+                hoursUntilExpiry: null,
                 graceDaysRemaining: null,
                 graceDayLabel: null,
                 warningLevel: 'none',
@@ -244,8 +260,13 @@ class SubscriptionService {
             };
         }
         const msPerDay = 1000 * 60 * 60 * 24;
+        const msPerHour = 1000 * 60 * 60;
+        const diffMs = subscription.endDate ? subscription.endDate.getTime() - now.getTime() : 0;
         const daysUntilExpiry = subscription.endDate
-            ? Math.ceil((subscription.endDate.getTime() - now.getTime()) / msPerDay)
+            ? Math.ceil(diffMs / msPerDay)
+            : null;
+        const hoursUntilExpiry = subscription.endDate
+            ? Math.max(0, Math.floor(diffMs / msPerHour))
             : null;
         const isGrace = subscription.status === 'GRACE_PERIOD';
         const isActive = subscription.status === 'ACTIVE' || subscription.status === 'TRIALING';
@@ -268,13 +289,17 @@ class SubscriptionService {
             warningLevel = 'red';
             const daysAgo = daysUntilExpiry !== null ? Math.abs(daysUntilExpiry) : 0;
             const expiryPhrase = daysAgo === 0 ? 'expired today' : daysAgo === 1 ? 'expired yesterday' : `expired ${daysAgo} days ago`;
-            const remaining = graceDaysRemaining ?? (subscription.gracePeriodDays || config_1.config.subscription.gracePeriodDays);
-            warningMessage = `Your subscription ${expiryPhrase}. You have ${remaining} grace day${remaining === 1 ? '' : 's'} remaining.`;
+            if (isGrace && graceDaysRemaining !== null) {
+                warningMessage = `Your subscription ${expiryPhrase}. You have ${graceDaysRemaining} grace day${graceDaysRemaining === 1 ? '' : 's'} remaining.`;
+            }
+            else {
+                warningMessage = `Your subscription ${expiryPhrase}.`;
+            }
         }
         else if (isActive && daysUntilExpiry !== null) {
             if (daysUntilExpiry <= 3) {
                 warningLevel = 'orange';
-                warningMessage = `Your subscription expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? '' : 's'}.`;
+                warningMessage = `Your subscription expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? '' : 's'} (${hoursUntilExpiry} hours).`;
             }
             else if (daysUntilExpiry <= 7) {
                 warningLevel = 'yellow';
@@ -286,6 +311,7 @@ class SubscriptionService {
             subscriptionStatus: subscription.status,
             subscriptionEndDate: subscription.endDate,
             daysUntilExpiry,
+            hoursUntilExpiry,
             graceDaysRemaining,
             graceDayLabel,
             warningLevel,
@@ -361,7 +387,6 @@ class SubscriptionService {
         return !!subscription;
     }
     async createTrial(organizationId, planId) {
-        // Check if organization already has an active or trial subscription
         const existingSubscription = await this.prisma.subscription.findFirst({
             where: {
                 organizationId,
@@ -373,7 +398,6 @@ class SubscriptionService {
         if (existingSubscription) {
             throw new Error('Organization already has an active or trial subscription');
         }
-        // Get the plan with features
         const plan = await this.prisma.subscriptionPlan.findUnique({
             where: {
                 id: planId,
@@ -392,11 +416,10 @@ class SubscriptionService {
         if (!plan) {
             throw new Error('Plan not found');
         }
-        // Calculate trial end date (7 days from now)
-        const startDate = new Date();
-        const endDate = new Date();
-        endDate.setDate(startDate.getDate() + 7);
-        // Get organization with users
+        // Calculate trial end date: exactly 7 days from now, UTC-based for consistency
+        const now = new Date();
+        const startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()));
+        const endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
         const organization = await this.prisma.organization.findUnique({
             where: { id: organizationId },
             include: {
@@ -410,7 +433,6 @@ class SubscriptionService {
         if (!organization) {
             throw new Error('Organization not found');
         }
-        // Create trial subscription with payment
         const [subscription] = await this.prisma.$transaction([
             this.prisma.subscription.create({
                 data: {
@@ -437,7 +459,6 @@ class SubscriptionService {
                 }
             })
         ]);
-        // Get the full subscription with relations for return type
         const fullSubscription = await this.prisma.subscription.findUnique({
             where: { id: subscription.id },
             include: {
@@ -457,7 +478,6 @@ class SubscriptionService {
         if (!fullSubscription) {
             throw new Error('Failed to create trial subscription');
         }
-        // Send welcome email with trial information
         const owner = organization.userOrganizations.find((uo) => uo.isOwner)?.user;
         if (owner) {
             await this.sendTrialExpiryNotification(owner.email, endDate, fullSubscription);

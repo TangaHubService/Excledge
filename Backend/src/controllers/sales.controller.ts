@@ -24,7 +24,7 @@ import QRCode from "qrcode"
 
 export const createSale = async (req: BranchAuthRequest, res: Response) => {
   try {
-    const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma, payments: splitPayments } = req.body
+    const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma, payments: splitPayments, shiftId } = req.body
     // @ts-ignore
     const userId = parseInt(req.user?.userId as string)
     const organizationId = parseInt(req.params.organizationId)
@@ -34,6 +34,20 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
     // Validate items
     if (!items || items.length === 0) {
       return res.status(400).json(apiError("Sale must have at least one item"))
+    }
+
+    // If the mobile POS sent a shiftId, it must be this user's own open shift —
+    // prevents attributing a sale to someone else's till or a already-closed shift.
+    let resolvedShiftId: number | undefined
+    if (shiftId !== undefined && shiftId !== null && shiftId !== '') {
+      const shift = await prisma.shift.findFirst({
+        where: { id: parseInt(shiftId), organizationId, userId, status: 'OPEN' },
+        select: { id: true },
+      })
+      if (!shift) {
+        return res.status(400).json(apiError("Shift is not open or does not belong to you"))
+      }
+      resolvedShiftId = shift.id
     }
 
     // ── B2B purchase-code pre-check ──
@@ -295,6 +309,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
           cashAmount: cashAmount || 0,
           insuranceAmount: insuranceAmount || 0,
           debtAmount: debtAmount || 0,
+          shiftId: resolvedShiftId,
           totalAmount: computedTotal,
           vatAmount: taxSummary.vatAmount,
           taxableAmount: taxSummary.taxableAmount,
@@ -598,6 +613,17 @@ export const getSaleById = async (req: BranchAuthRequest, res: Response) => {
         },
         saleItems: {
           include: { product: true },
+        },
+        salePayments: {
+          orderBy: { createdAt: "asc" },
+        },
+        originalSale: {
+          select: {
+            id: true,
+            saleNumber: true,
+            invoiceNumber: true,
+            createdAt: true,
+          },
         },
         ebmTransactions: {
           orderBy: { createdAt: "desc" },
@@ -1089,7 +1115,7 @@ export const getEbmReceipt = async (req: BranchAuthRequest, res: Response) => {
         saleId,
         organizationId,
         submissionStatus: 'SUCCESS',
-        operation: 'SALE',
+        operation: { in: ['SALE', 'REFUND'] },
       },
       orderBy: { createdAt: 'desc' },
     });

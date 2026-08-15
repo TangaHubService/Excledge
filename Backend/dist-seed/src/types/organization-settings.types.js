@@ -12,7 +12,6 @@ exports.DEFAULT_SETTINGS = {
     sidebarConfig: {
         home: true,
         dashboard: true,
-        executiveDashboard: true,
         pos: true,
         sales: true,
         customers: true,

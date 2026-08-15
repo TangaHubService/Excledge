@@ -1,9 +1,15 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getEbmOutbox = getEbmOutbox;
+exports.getEbmStatus = getEbmStatus;
 exports.checkEbmOutboxStatus = checkEbmOutboxStatus;
+exports.submitZReport = submitZReport;
+exports.getZReportStatus = getZReportStatus;
 const prisma_1 = require("../lib/prisma");
+const rra_ebm_service_1 = require("../services/rra-ebm.service");
+const vsdc_api_service_1 = require("../services/vsdc-api.service");
 const apiResponse_1 = require("../utils/apiResponse");
+const OFFLINE_BLOCK_MS = Number(process.env.VSDC_OFFLINE_BLOCK_MS ?? 2 * 60 * 60 * 1000);
 async function getEbmOutbox(req, res) {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -27,6 +33,39 @@ async function getEbmOutbox(req, res) {
     catch (error) {
         console.error('[EbmOutbox] Failed to fetch:', error);
         res.status(500).json((0, apiResponse_1.error)('Failed to fetch EBM outbox entries'));
+    }
+}
+/**
+ * GET /:organizationId/ebm-status — VSDC presence indicator payload.
+ * Derives reachability from the persisted last-contact timestamp (updated on
+ * every real successful VSDC call/heartbeat) rather than a synthetic probe,
+ * since a bare unauthenticated GET to the gateway root is not representative
+ * of the authenticated POST endpoints actual fiscalisation traffic uses.
+ */
+async function getEbmStatus(req, res) {
+    try {
+        const organizationId = parseInt(req.params.organizationId);
+        const org = await prisma_1.prisma.organization.findUnique({
+            where: { id: organizationId },
+            select: { lastSuccessfulVdsContact: true },
+        });
+        if (!org) {
+            return res.status(404).json((0, apiResponse_1.error)('Organization not found'));
+        }
+        const lastContact = org.lastSuccessfulVdsContact;
+        const elapsedMs = lastContact ? Date.now() - lastContact.getTime() : null;
+        const enabled = (0, rra_ebm_service_1.isEbmEnabled)();
+        const online = enabled && elapsedMs !== null && elapsedMs < OFFLINE_BLOCK_MS;
+        res.json((0, apiResponse_1.success)({
+            enabled,
+            online,
+            lastContact: lastContact ? lastContact.toISOString() : null,
+            offlineLimitMs: OFFLINE_BLOCK_MS,
+        }));
+    }
+    catch (error) {
+        console.error('[EbmStatus] Failed to read VSDC status:', error);
+        res.status(500).json((0, apiResponse_1.error)('Failed to read VSDC status'));
     }
 }
 async function checkEbmOutboxStatus(req, res) {
@@ -66,5 +105,64 @@ async function checkEbmOutboxStatus(req, res) {
     catch (error) {
         console.error('[EbmOutbox] Status check failed:', error);
         res.status(500).json((0, apiResponse_1.error)('Failed to check outbox status'));
+    }
+}
+const pad2 = (n) => String(n).padStart(2, '0');
+/** `yyyyMMddHHmmss` — the report-generation timestamp `saveZReports` expects. */
+function toRptDeTimestamp(d) {
+    return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
+}
+/** `yyyyMMdd` — the report-date `checkZReport` expects. */
+function toRptDeDate(d) {
+    return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+}
+/**
+ * POST /:organizationId/z-report — trigger the daily Z (closing) report for
+ * a branch's VSDC device. Manually triggered for now; day-end cutoff timing
+ * is an operational policy decision (per-branch closing hour) that isn't
+ * automated yet.
+ */
+async function submitZReport(req, res) {
+    try {
+        if (!(0, rra_ebm_service_1.isEbmEnabled)()) {
+            return res.status(400).json((0, apiResponse_1.error)('EBM is not enabled for this organization'));
+        }
+        const organizationId = parseInt(req.params.organizationId);
+        const branchId = req.body?.branchId != null ? parseInt(req.body.branchId) : undefined;
+        const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(organizationId, branchId);
+        const rptDe = toRptDeTimestamp(new Date());
+        const result = await (0, vsdc_api_service_1.saveZReport)(envelope, rptDe);
+        if (!result.success) {
+            return res.status(502).json((0, apiResponse_1.error)(result.error ?? 'Z-report submission failed'));
+        }
+        res.json((0, apiResponse_1.success)({ rptDe, response: result.rawBody }));
+    }
+    catch (error) {
+        console.error('[EbmZReport] Submission failed:', error);
+        res.status(500).json((0, apiResponse_1.error)('Failed to submit Z-report'));
+    }
+}
+/**
+ * GET /:organizationId/z-report?branchId=&date=yyyyMMdd — look up a
+ * previously saved Z report for a given day (defaults to today).
+ */
+async function getZReportStatus(req, res) {
+    try {
+        if (!(0, rra_ebm_service_1.isEbmEnabled)()) {
+            return res.status(400).json((0, apiResponse_1.error)('EBM is not enabled for this organization'));
+        }
+        const organizationId = parseInt(req.params.organizationId);
+        const branchId = req.query.branchId != null ? parseInt(req.query.branchId) : undefined;
+        const rptDe = req.query.date || toRptDeDate(new Date());
+        const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(organizationId, branchId);
+        const result = await (0, vsdc_api_service_1.checkZReport)(envelope, rptDe);
+        if (!result.success) {
+            return res.status(502).json((0, apiResponse_1.error)(result.error ?? 'Z-report lookup failed'));
+        }
+        res.json((0, apiResponse_1.success)({ rptDe, response: result.rawBody }));
+    }
+    catch (error) {
+        console.error('[EbmZReport] Lookup failed:', error);
+        res.status(500).json((0, apiResponse_1.error)('Failed to check Z-report status'));
     }
 }

@@ -1,27 +1,68 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cancelSale = exports.getEbmReceipt = exports.reprintSaleReceipt = exports.refundSale = exports.payDebt = exports.getSaleById = exports.getSales = exports.createSale = void 0;
+exports.getInvoice = exports.cancelSale = exports.getEbmReceipt = exports.regenerateInvoice = exports.reprintSaleReceipt = exports.refundSale = exports.payDebt = exports.getSaleById = exports.getSales = exports.createSale = void 0;
 const prisma_1 = require("../lib/prisma");
 const auditLogger_1 = require("../utils/auditLogger");
 const inventory_ledger_service_1 = require("../services/inventory-ledger.service");
 const rra_ebm_service_1 = require("../services/rra-ebm.service");
+const ebm_outbox_service_1 = require("../services/ebm-outbox.service");
 const batch_service_1 = require("../services/batch.service");
 const cost_price_service_1 = require("../services/cost-price.service");
 const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
 const apiResponse_1 = require("../utils/apiResponse");
 const tax_service_1 = require("../services/tax.service");
 const organization_settings_service_1 = require("../services/organization-settings.service");
+const invoice_render_service_1 = require("../services/invoice-render.service");
+const qrcode_1 = __importDefault(require("qrcode"));
 const createSale = async (req, res) => {
     try {
-        const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma } = req.body;
+        const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma, payments: splitPayments, shiftId } = req.body;
         // @ts-ignore
         const userId = parseInt(req.user?.userId);
         const organizationId = parseInt(req.params.organizationId);
-        const branchId = (0, branchAuth_middleware_1.getBranchIdForOperation)(req);
+        const branchId = await (0, branchAuth_middleware_1.resolveBranchIdForWrite)(req);
         const orgSettings = await (0, organization_settings_service_1.getOrganizationSettings)(organizationId);
         // Validate items
         if (!items || items.length === 0) {
             return res.status(400).json((0, apiResponse_1.error)("Sale must have at least one item"));
+        }
+        // If the mobile POS sent a shiftId, it must be this user's own open shift —
+        // prevents attributing a sale to someone else's till or a already-closed shift.
+        let resolvedShiftId;
+        if (shiftId !== undefined && shiftId !== null && shiftId !== '') {
+            const shift = await prisma_1.prisma.shift.findFirst({
+                where: { id: parseInt(shiftId), organizationId, userId, status: 'OPEN' },
+                select: { id: true },
+            });
+            if (!shift) {
+                return res.status(400).json((0, apiResponse_1.error)("Shift is not open or does not belong to you"));
+            }
+            resolvedShiftId = shift.id;
+        }
+        // ── B2B purchase-code pre-check ──
+        // RRA rejects (resultCd 910) any business-TIN (non-7-prefix) sale
+        // submitted without a valid 6-character prcOrdCd — confirmed against the
+        // sandbox. Catching this before the sale commits avoids completing a
+        // checkout (payment taken, stock deducted) that can never be fiscalized.
+        if ((0, rra_ebm_service_1.isEbmEnabled)() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+            const customer = await prisma_1.prisma.customer.findUnique({
+                where: { id: parseInt(customerId) },
+                select: { TIN: true, prcOrdCd: true },
+            });
+            const custTin = customer?.TIN?.trim() ?? '';
+            if (custTin && !custTin.startsWith('7')) {
+                const poolCount = await prisma_1.prisma.organizationPurchaseCode.count({
+                    where: { organizationId, buyerTin: custTin, consumed: false },
+                });
+                const fallbackCode = customer?.prcOrdCd?.trim();
+                const hasValidFallback = !!fallbackCode && fallbackCode.length === 6;
+                if (poolCount === 0 && !hasValidFallback) {
+                    return res.status(400).json((0, apiResponse_1.error)(`This customer has a business TIN (${custTin}) but no RRA purchase order code on file. Add a 6-character purchase code for this customer before completing the sale.`));
+                }
+            }
         }
         // Separate product items from service items
         const productItems = items.filter((i) => i.itemType !== 'SERVICE');
@@ -228,6 +269,7 @@ const createSale = async (req, res) => {
                     cashAmount: cashAmount || 0,
                     insuranceAmount: insuranceAmount || 0,
                     debtAmount: debtAmount || 0,
+                    shiftId: resolvedShiftId,
                     totalAmount: computedTotal,
                     vatAmount: taxSummary.vatAmount,
                     taxableAmount: taxSummary.taxableAmount,
@@ -241,6 +283,22 @@ const createSale = async (req, res) => {
                     customer: true,
                 },
             });
+            // 4b. Consume an organization-level RRA purchase code for business (B2B)
+            // buyers. Test codes are configured once at the org level (not per customer)
+            // and are single-use, so each business sale draws a fresh unused code. Falls
+            // back to the legacy per-customer prcOrdCd when the org pool is empty.
+            const custTin = newSale.customer?.TIN?.trim() ?? '';
+            if (custTin && !custTin.startsWith('7')) {
+                const allocated = await (0, rra_ebm_service_1.consumeOrgPurchaseCode)(organizationId, custTin, newSale.id, tx)
+                    ?? (newSale.customer?.prcOrdCd ?? null);
+                if (allocated) {
+                    await tx.sale.update({
+                        where: { id: newSale.id },
+                        data: { prcOrdCd: allocated },
+                    });
+                    newSale.prcOrdCd = allocated;
+                }
+            }
             // 5. Record stock movements for PRODUCT items only (MODULE 2.4: guard reference)
             for (const item of productItems) {
                 const saleItem = newSale.saleItems?.find((si) => si.productId === parseInt(item.productId));
@@ -290,7 +348,41 @@ const createSale = async (req, res) => {
             maxWait: 30000, // 30 seconds
             timeout: 60000, // 60 seconds
         });
-        // 6. Log activity (outside transaction for performance, but after successful sale)
+        // Fire the outbox worker immediately (fire-and-forget) so the invoice hits
+        // the WAR right at sale time instead of waiting for the 2-minute cron tick.
+        // The outbox row stays the single source of truth, so idempotency is kept
+        // and the cron job remains a retry/backstop if this run fails or times out.
+        if ((0, rra_ebm_service_1.isEbmEnabled)() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+            void (0, ebm_outbox_service_1.processEbmOutboxBatch)(50).catch((e) => {
+                console.error('[EBM] immediate fiscalization error:', e);
+            });
+        }
+        // 7. Record split payments if provided
+        if (splitPayments && Array.isArray(splitPayments) && splitPayments.length > 0) {
+            const validPaymentMethods = ['CASH', 'BANK', 'CARD', 'PAYPACK', 'MTN_MOMO', 'AIRTEL_MONEY', 'WALLET', 'GIFT_CARD', 'STORE_CREDIT'];
+            let totalSplitAmount = 0;
+            for (const pmt of splitPayments) {
+                if (!validPaymentMethods.includes(pmt.paymentMethod))
+                    continue;
+                const amount = Number(pmt.amount) || 0;
+                if (amount <= 0)
+                    continue;
+                totalSplitAmount += amount;
+                await prisma_1.prisma.salePayment.create({
+                    data: {
+                        saleId: sale.id,
+                        organizationId,
+                        amount,
+                        paymentMethod: pmt.paymentMethod,
+                        reference: pmt.reference || null,
+                        status: 'COMPLETED',
+                        processedAt: new Date(),
+                        metadata: pmt.metadata || null,
+                    },
+                });
+            }
+        }
+        // 8. Log activity (outside transaction for performance, but after successful sale)
         await auditLogger_1.auditLogger.sales(req, {
             type: 'SALE_COMPLETED',
             description: `Sale completed (Invoice #${sale.invoiceNumber || saleNumber})`,
@@ -299,10 +391,20 @@ const createSale = async (req, res) => {
             metadata: {
                 invoiceNumber: sale.invoiceNumber,
                 totalAmount: sale.totalAmount,
-                paymentType: sale.paymentType
+                paymentType: sale.paymentType,
+                splitPayments: splitPayments?.length || 0,
             }
         });
-        res.status(201).json((0, apiResponse_1.success)(sale));
+        // Fetch the complete sale with payments
+        const completeSale = await prisma_1.prisma.sale.findUnique({
+            where: { id: sale.id },
+            include: {
+                saleItems: { include: { product: true, batch: true } },
+                customer: true,
+                salePayments: true,
+            },
+        });
+        res.status(201).json((0, apiResponse_1.success)(completeSale || sale));
     }
     catch (error) {
         console.error("[Create Sale Error]:", error);
@@ -323,7 +425,15 @@ exports.createSale = createSale;
 const getSales = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
-        const { startDate, endDate, customerId, limit, search, status, paymentType } = req.query;
+        const { startDate, endDate, customerId, page, limit, search, status, paymentType } = req.query;
+        const requestedPage = Number(page);
+        const pageNumber = Number.isFinite(requestedPage) && requestedPage > 0
+            ? Math.floor(requestedPage)
+            : 1;
+        const requestedLimit = Number(limit);
+        const pageSize = Number.isFinite(requestedLimit) && requestedLimit > 0
+            ? Math.min(Math.floor(requestedLimit), 500)
+            : 50;
         const where = {
             organizationId,
             ...(0, branchAuth_middleware_1.buildBranchFilter)(req)
@@ -359,39 +469,51 @@ const getSales = async (req, res) => {
                 }
             ];
         }
-        const sales = await prisma_1.prisma.sale.findMany({
-            where,
-            include: {
-                customer: {
-                    select: {
-                        id: true,
-                        name: true,
-                        phone: true,
-                        TIN: true,
-                        customerType: true
+        const [sales, total] = await Promise.all([
+            prisma_1.prisma.sale.findMany({
+                where,
+                include: {
+                    customer: {
+                        select: {
+                            id: true,
+                            name: true,
+                            phone: true,
+                            TIN: true,
+                            customerType: true
+                        }
+                    },
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            role: true
+                        }
+                    },
+                    saleItems: {
+                        include: { product: true },
+                    },
+                    ebmTransactions: {
+                        orderBy: { createdAt: "desc" },
+                        take: 1,
                     }
                 },
-                user: {
-                    select: {
-                        id: true,
-                        name: true,
-                        role: true
-                    }
+                orderBy: {
+                    createdAt: 'desc',
                 },
-                saleItems: {
-                    include: { product: true },
-                },
-                ebmTransactions: {
-                    orderBy: { createdAt: "desc" },
-                    take: 1,
-                },
+                skip: (pageNumber - 1) * pageSize,
+                take: pageSize,
+            }),
+            prisma_1.prisma.sale.count({ where }),
+        ]);
+        res.json((0, apiResponse_1.success)({
+            data: sales,
+            pagination: {
+                page: pageNumber,
+                limit: pageSize,
+                total,
+                totalPages: Math.max(1, Math.ceil(total / pageSize)),
             },
-            orderBy: {
-                createdAt: 'asc',
-            },
-            take: Math.min(Number(limit) || 50, 500),
-        });
-        res.json((0, apiResponse_1.success)(sales));
+        }));
     }
     catch (error) {
         console.error("[Get Sales Error]:", error);
@@ -784,6 +906,88 @@ const reprintSaleReceipt = async (req, res) => {
 };
 exports.reprintSaleReceipt = reprintSaleReceipt;
 /**
+ * Regenerate invoice for a sale — creates a new invoice number, updates the sale,
+ * generates new EBM transaction, preserves history, and prevents duplicate numbers.
+ */
+const regenerateInvoice = async (req, res) => {
+    try {
+        const saleId = parseInt(req.params.saleId);
+        const organizationId = parseInt(req.params.organizationId);
+        const branchId = await (0, branchAuth_middleware_1.resolveBranchIdForWrite)(req);
+        const sale = await prisma_1.prisma.sale.findFirst({
+            where: { id: saleId, organizationId, ...(0, branchAuth_middleware_1.buildBranchFilter)(req) },
+            include: { ebmTransactions: { orderBy: { createdAt: 'desc' } } },
+        });
+        if (!sale) {
+            return res.status(404).json((0, apiResponse_1.error)("Sale not found"));
+        }
+        if (sale.status === 'CANCELLED' || sale.status === 'REFUNDED') {
+            return res.status(400).json((0, apiResponse_1.error)(`Cannot regenerate invoice for a ${sale.status.toLowerCase()} sale`));
+        }
+        const result = await prisma_1.prisma.$transaction(async (tx) => {
+            // Generate new invoice number
+            const { invoiceNumber, vsdcInvcNo } = await (0, rra_ebm_service_1.generateInvoiceNumber)(organizationId, branchId, tx);
+            // Update sale with new invoice number
+            const updatedSale = await tx.sale.update({
+                where: { id: saleId },
+                data: {
+                    invoiceNumber,
+                    vsdcInvcNo,
+                    reprintCount: { increment: 1 },
+                    updatedAt: new Date(),
+                },
+            });
+            // Create a new EBM transaction record for the regenerated invoice
+            if ((0, rra_ebm_service_1.isEbmEnabled)()) {
+                const idempotencyKey = `ebm-REGEN-${organizationId}-${saleId}-${Date.now()}`;
+                await tx.ebmOutbox.create({
+                    data: {
+                        organizationId,
+                        saleId,
+                        operation: 'SALE',
+                        idempotencyKey,
+                        payload: {
+                            version: 1,
+                            saleId,
+                            organizationId,
+                            operation: 'SALE',
+                            invoiceNumber,
+                            regenerated: true,
+                        },
+                        status: 'PENDING',
+                        nextAttemptAt: new Date(),
+                    },
+                });
+            }
+            return updatedSale;
+        });
+        await auditLogger_1.auditLogger.sales(req, {
+            type: 'SALE_UPDATE',
+            description: `Invoice regenerated for Sale #${sale.saleNumber} - New invoice: ${result.invoiceNumber}`,
+            entityType: 'Sale',
+            entityId: saleId,
+            metadata: {
+                previousInvoice: sale.invoiceNumber,
+                newInvoice: result.invoiceNumber,
+                reprintCount: result.reprintCount,
+            },
+        });
+        res.json((0, apiResponse_1.success)({
+            ...result,
+            previousInvoiceNumber: sale.invoiceNumber,
+            isRegenerated: true,
+        }));
+    }
+    catch (error) {
+        console.error("[Regenerate Invoice Error]:", error);
+        if (error.code === 'P2002') {
+            return res.status(500).json((0, apiResponse_1.error)("Invoice number conflict. Please try again."));
+        }
+        res.status(500).json((0, apiResponse_1.error)("Failed to regenerate invoice"));
+    }
+};
+exports.regenerateInvoice = regenerateInvoice;
+/**
  * E2/E3: GET /api/organizations/:orgId/sales/:saleId/ebm-receipt
  * Returns the latest successful SDC fiscalization data for a sale.
  * The frontend polls this after sale creation once the outbox worker has run.
@@ -976,3 +1180,271 @@ const cancelSale = async (req, res) => {
     }
 };
 exports.cancelSale = cancelSale;
+/** Build the RRA QR string per CIS/VSDC spec (§4.2): ddmmyyyy#hhmmss#sdcId#sdcRcptNo#internalData#receiptSignature */
+function buildRraQrString(p) {
+    if (!p.sdcDateTime || !p.sdcId || p.sdcRcptNo == null || !p.internalData || !p.receiptSignature)
+        return null;
+    const dt = p.sdcDateTime instanceof Date ? p.sdcDateTime : new Date(p.sdcDateTime);
+    if (Number.isNaN(dt.getTime()))
+        return null;
+    const p2 = (x) => String(x).padStart(2, "0");
+    return [
+        `${p2(dt.getDate())}${p2(dt.getMonth() + 1)}${dt.getFullYear()}`,
+        `${p2(dt.getHours())}${p2(dt.getMinutes())}${p2(dt.getSeconds())}`,
+        p.sdcId,
+        String(p.sdcRcptNo),
+        p.internalData,
+        p.receiptSignature,
+    ].join("#");
+}
+const RCT_LABEL_DISPLAY = {
+    NS: "Normal Sale",
+    NR: "Normal Refund",
+    CS: "Copy Sale",
+    CR: "Copy Refund",
+    TS: "Training Sale",
+    TR: "Training Refund",
+    PS: "Proforma Sale",
+};
+const PAYMENT_METHOD_LABEL = {
+    CASH: "Cash",
+    MOBILE_MONEY: "Mobile Money",
+    MTN_MOMO: "MTN Mobile Money",
+    CARD: "Card",
+    CREDIT_CARD: "Credit Card",
+    DEBIT_CARD: "Debit Card",
+    BANK_TRANSFER: "Bank Transfer",
+    PAYPACK: "PayPack",
+    CREDIT: "Credit",
+    DEBT: "Credit",
+    MIXED: "Mixed",
+};
+/**
+ * Composed invoice payload used by the modern ERP invoice renderer.
+ *
+ * GET /api/organizations/:orgId/invoices/:saleId
+ *
+ * Returns a single, fully-mapped document so the frontend renders ONLY values
+ * coming from the API — no hardcoded business data anywhere in the UI.
+ * All money arithmetic (subtotal, discount, VAT, tax, paid, balance, grand
+ * total) is performed here in the backend; the frontend merely displays it.
+ */
+const getInvoice = async (req, res) => {
+    try {
+        const saleId = parseInt(req.params.saleId ?? req.params.id);
+        const organizationId = parseInt(req.params.organizationId);
+        const sale = await prisma_1.prisma.sale.findFirst({
+            where: { id: saleId, organizationId, ...(0, branchAuth_middleware_1.buildBranchFilter)(req) },
+            include: {
+                customer: { select: { id: true, name: true, phone: true, TIN: true, email: true, address: true } },
+                user: { select: { id: true, name: true } },
+                saleItems: { include: { product: true } },
+                ebmTransactions: { orderBy: { createdAt: "desc" } },
+            },
+        });
+        if (!sale)
+            return res.status(404).json((0, apiResponse_1.error)("Sale not found"));
+        const [org, branch] = await Promise.all([
+            prisma_1.prisma.organization.findUnique({
+                where: { id: organizationId },
+                select: { name: true, avatar: true, address: true, phone: true, email: true, TIN: true, VRN: true, currency: true, ebmDeviceId: true, ebmSerialNo: true },
+            }),
+            prisma_1.prisma.branch.findUnique({
+                where: { id: sale.branchId },
+                select: { name: true, bhfId: true, ebmDeviceId: true, ebmSerialNo: true, address: true },
+            }),
+        ]);
+        const fiscalTx = (sale.ebmTransactions ?? []).find((t) => t.submissionStatus === "SUCCESS" && (!t.operation || t.operation === "SALE"));
+        const responseData = fiscalTx?.responseData;
+        const norm = responseData?.normalized;
+        const mrcNo = branch?.ebmSerialNo ?? org?.ebmSerialNo ?? null;
+        // Prefer the ID stamped in the successful RRA response. Configured device
+        // values are a fallback only; this keeps the printed SDC identifier aligned
+        // with the actual fiscal receipt.
+        const sdcId = fiscalTx?.sdcId ?? branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null;
+        const sdcRcptNo = fiscalTx?.sdcRcptNo ?? null;
+        const totalRcptNo = fiscalTx?.totalRcptNo ?? null;
+        const internalData = fiscalTx?.internalData ?? norm?.intrlData ?? null;
+        const receiptSignature = fiscalTx?.receiptSignature ?? norm?.vsdcSignature ?? norm?.verificationCode ?? null;
+        const sdcDateTime = fiscalTx?.sdcDateTime ?? norm?.sdcDateTime ?? null;
+        const ebmInvoiceNumber = fiscalTx?.ebmInvoiceNumber ?? norm?.ebmInvoiceNumber ?? sale.invoiceNumber ?? null;
+        const rcptLabel = fiscalTx?.rcptLabel ?? sale.rcptLabel ?? null;
+        const fiscalReceiptNumber = sdcRcptNo != null
+            ? `${sdcRcptNo}/${totalRcptNo ?? sdcRcptNo}${rcptLabel ? ` ${rcptLabel}` : ""}`
+            : sale.saleNumber;
+        const fiscalInvoiceNumber = fiscalTx && sdcId && sdcRcptNo != null
+            ? `${sdcId}-${sdcRcptNo}`
+            : ebmInvoiceNumber ?? sale.invoiceNumber ?? sale.saleNumber;
+        const currency = org?.currency ?? "RWF";
+        const toNumber = (v) => (v == null ? 0 : typeof v === "number" ? v : Number(String(v)));
+        const totalAmount = toNumber(sale.totalAmount);
+        const cashAmount = toNumber(sale.cashAmount);
+        const debtAmount = toNumber(sale.debtAmount);
+        const insuranceAmount = toNumber(sale.insuranceAmount);
+        const vatAmount = toNumber(sale.vatAmount);
+        const taxableAmount = toNumber(sale.taxableAmount);
+        const discountAmount = Math.max(0, totalAmount - cashAmount - debtAmount - insuranceAmount - vatAmount - taxableAmount);
+        const items = (sale.saleItems ?? []).map((line, index) => {
+            const qty = toNumber(line.quantity);
+            const unitPrice = toNumber(line.unitPrice);
+            const gross = qty * unitPrice;
+            const dcAmt = toNumber(line.dcAmt);
+            const dcRate = toNumber(line.dcRate);
+            const taxAmt = toNumber(line.taxAmount);
+            const taxRate = toNumber(line.taxRate);
+            const net = gross - dcAmt;
+            return {
+                id: String(line.id),
+                line: index + 1,
+                code: line.product?.itemCd ?? line.product?.sku ?? line.product?.barcode ?? line.product?.name ?? line.serviceName ?? "",
+                description: line.serviceName ?? line.product?.name ?? line.serviceDescription ?? "",
+                quantity: qty,
+                unit: line.measurementUnit ?? "PCS",
+                unitPrice,
+                discountPct: dcRate,
+                discountAmt: dcAmt,
+                taxCode: line.taxCode ?? null,
+                vatPct: taxRate,
+                taxAmount: taxAmt,
+                subtotal: gross,
+                net,
+                // Unit prices and `sale.totalAmount` are VAT-inclusive throughout the
+                // checkout flow. The tax is an extraction from the gross line, not an
+                // amount to add again on the printed invoice.
+                total: net,
+                itemType: line.itemType ?? "PRODUCT",
+            };
+        });
+        const subtotal = items.reduce((s, i) => s + i.subtotal, 0);
+        const itemDiscount = items.reduce((s, i) => s + i.discountAmt, 0);
+        const lineTax = items.reduce((s, i) => s + i.taxAmount, 0);
+        const discount = Math.max(0, Math.round(itemDiscount + discountAmount));
+        const grandTotal = Math.round(totalAmount);
+        const paid = Math.round(cashAmount + insuranceAmount);
+        const balance = Math.round(debtAmount);
+        // QR image is generated server-side — the frontend only renders the image returned by the API.
+        const qrRaw = fiscalTx?.qrPayload ?? buildRraQrString({ sdcDateTime, sdcId, sdcRcptNo, internalData, receiptSignature });
+        const qrCodeImage = qrRaw
+            ? await qrcode_1.default.toDataURL(qrRaw, { errorCorrectionLevel: "M", margin: 1, width: 220, color: { dark: "#000000", light: "#FFFFFF" } })
+            : null;
+        const isCertified = !!fiscalTx;
+        const verificationUrl = isCertified && sdcId ? `https://esbm.rra.gov.rw/tax-invoice/verification?sdcId=${encodeURIComponent(sdcId)}&receipt=${encodeURIComponent(String(sdcRcptNo))}` : null;
+        const dateObj = new Date(sale.createdAt);
+        const p2 = (x) => String(x).padStart(2, "0");
+        const time = `${p2(dateObj.getHours())}:${p2(dateObj.getMinutes())}:${p2(dateObj.getSeconds())}`;
+        const invoiceDate = dateObj.toISOString();
+        const paymentMethodLabel = PAYMENT_METHOD_LABEL[sale.paymentType] ?? sale.paymentType ?? "";
+        const invoiceData = {
+            company: {
+                logo: org?.avatar ?? null,
+                name: org?.name ?? "",
+                address: branch?.address ?? org?.address ?? "",
+                branchName: branch?.name ?? null,
+                bhfId: branch?.bhfId ?? null,
+                phone: org?.phone ?? null,
+                email: org?.email ?? null,
+                tin: org?.TIN ?? null,
+                vrn: org?.VRN ?? null,
+                mrc: mrcNo,
+                website: null,
+                currency,
+            },
+            customer: {
+                name: sale.customer?.name ?? "",
+                tin: sale.customer?.TIN ?? null,
+                phone: sale.customer?.phone ?? null,
+                email: sale.customer?.email ?? null,
+                address: sale.customer?.address ?? null,
+                vatNo: sale.customer?.TIN ?? null,
+            },
+            invoice: {
+                id: String(sale.id),
+                saleNumber: sale.saleNumber,
+                invoiceNumber: fiscalInvoiceNumber,
+                receiptNumber: fiscalReceiptNumber,
+                invoiceDate,
+                time,
+                paymentMethod: paymentMethodLabel,
+                cashier: sale.user?.name ?? "",
+                status: sale.status,
+                rcptLabel,
+                rcptLabelText: rcptLabel ? RCT_LABEL_DISPLAY[rcptLabel] ?? rcptLabel : null,
+                isProforma: sale.isProforma,
+                isCopy: (sale.reprintCount ?? 0) > 0,
+                currency,
+            },
+            items,
+            totals: {
+                subtotal: Math.round(subtotal),
+                discount,
+                taxable: Math.round(taxableAmount),
+                vat: Math.round(vatAmount),
+                tax: Math.round(lineTax),
+                shipping: 0,
+                paid,
+                balance,
+                grandTotal,
+            },
+            charges: {
+                vatAmount: Math.round(vatAmount),
+                taxableAmount: Math.round(taxableAmount),
+                discountAmount: Math.round(discountAmount),
+                cashAmount: Math.round(cashAmount),
+                insuranceAmount: Math.round(insuranceAmount),
+                debtAmount: Math.round(debtAmount),
+                totalAmount: Math.round(totalAmount),
+                shipping: 0,
+            },
+            payment: {
+                method: sale.paymentType ?? "",
+                methodLabel: paymentMethodLabel,
+                reference: null,
+                bank: null,
+                cashAmount: Math.round(cashAmount),
+                insuranceAmount: Math.round(insuranceAmount),
+                debtAmount: Math.round(debtAmount),
+            },
+            sdcInformation: {
+                sdcId,
+                mrcNo,
+                receiptNumber: sdcRcptNo != null ? fiscalReceiptNumber : null,
+                receiptSignature,
+                internalData,
+                sdcDateTime: sdcDateTime ? String(sdcDateTime) : null,
+                date: sdcDateTime ? new Date(sdcDateTime).toISOString() : null,
+                time: sdcDateTime ? `${p2(new Date(sdcDateTime).getHours())}:${p2(new Date(sdcDateTime).getMinutes())}:${p2(new Date(sdcDateTime).getSeconds())}` : null,
+                ebmInvoiceNumber: ebmInvoiceNumber,
+                rcptLabel,
+                poweredBy: null,
+            },
+            certification: {
+                isCertified,
+                certificateImage: null,
+                certificateText: isCertified ? "This is a fiscalized EBM receipt certified by the Rwanda Revenue Authority." : null,
+            },
+            verification: {
+                qrCodeImage,
+                qrPayload: qrRaw,
+                verificationUrl,
+            },
+            branding: {
+                primaryColor: "#1565C0",
+                rraLogo: null,
+                poweredBy: "EXCEL EDGE ERP",
+            },
+            footer: {
+                message: "Thank you for your business.",
+                note: null,
+            },
+        };
+        res.json((0, apiResponse_1.success)({
+            ...invoiceData,
+            renderedHtml: (0, invoice_render_service_1.renderSalesInvoiceHtml)(invoiceData),
+        }));
+    }
+    catch (error) {
+        console.error("[Get Invoice Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)("Failed to get invoice"));
+    }
+};
+exports.getInvoice = getInvoice;

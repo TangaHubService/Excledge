@@ -59,6 +59,10 @@ model Organization {
   settings                 OrganizationSetting?
   supplierAccessTokens     SupplierAccessToken[]
   salePayments             SalePayment[]
+  shifts                   Shift[]
+  heldSales                HeldSale[]
+  devices                  Device[]
+  fuelDispensers           FuelDispenser[]
 
   @@map("organizations")
 }
@@ -120,6 +124,9 @@ model Branch {
   receiptCounters   BranchReceiptCounter[]
   supplierInvoices  SupplierInvoice[]
   invoiceImportLogs InvoiceImportLog[]
+  shifts            Shift[]
+  heldSales         HeldSale[]
+  fuelDispensers    FuelDispenser[]
 
   @@unique([organizationId, bhfId])
   @@unique([organizationId, code])
@@ -147,21 +154,21 @@ model UserBranch {
 }
 
 model Supplier {
-  name             String
-  email            String
-  phone            String?
-  address          String?
-  contactPerson    String?
-  isActive         Boolean           @default(true)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  id               Int               @id @default(autoincrement())
-  organizationId   Int
-  products            Product[]
-  purchaseOrders      PurchaseOrder[]
-  supplierInvoices    SupplierInvoice[]
+  name                 String
+  email                String
+  phone                String?
+  address              String?
+  contactPerson        String?
+  isActive             Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  id                   Int                   @id @default(autoincrement())
+  organizationId       Int
+  products             Product[]
+  purchaseOrders       PurchaseOrder[]
+  supplierInvoices     SupplierInvoice[]
   supplierAccessTokens SupplierAccessToken[]
-  organization        Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@map("suppliers")
@@ -200,18 +207,18 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  productName         String
-  quantity            Int
-  quantityReceived    Int           @default(0)
-  unitPrice           Decimal       @db.Decimal(10, 2)
-  totalPrice          Decimal       @db.Decimal(10, 2)
-  taxCode             RraTaxCode?   @default(A)
-  taxRate             Decimal?      @db.Decimal(5, 2)
-  id                  Int           @id @default(autoincrement())
-  purchaseOrderId     Int
-  productId           Int?
-  product             Product?      @relation(fields: [productId], references: [id])
-  purchaseOrder       PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productName      String
+  quantity         Int
+  quantityReceived Int           @default(0)
+  unitPrice        Decimal       @db.Decimal(10, 2)
+  totalPrice       Decimal       @db.Decimal(10, 2)
+  taxCode          RraTaxCode?   @default(A)
+  taxRate          Decimal?      @db.Decimal(5, 2)
+  id               Int           @id @default(autoincrement())
+  purchaseOrderId  Int
+  productId        Int?
+  product          Product?      @relation(fields: [productId], references: [id])
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
   @@index([purchaseOrderId])
   @@index([productId])
@@ -259,6 +266,9 @@ model User {
   createdInvoices          SupplierInvoice[]
   invoiceImportLogs        InvoiceImportLog[]
   createdSubscriptions     Subscription[]           @relation("SubscriptionCreatedBy")
+  shifts                   Shift[]
+  heldSales                HeldSale[]
+  devices                  Device[]
 
   @@index([deletedAt])
   @@index([passwordResetToken])
@@ -387,34 +397,34 @@ model Subscription {
 }
 
 model Payment {
-  amount         Float
-  currency       String            @default("USD")
-  paymentMethod  PaymentMethodType
-  paymentId      String?
-  status         PaymentStatus     @default(PENDING)
-  receiptUrl     String?
-  metadata       Json?
-  processedAt    DateTime?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  id             Int               @id @default(autoincrement())
-  subscriptionId Int
+  amount           Float
+  currency         String               @default("USD")
+  paymentMethod    PaymentMethodType
+  paymentId        String?
+  status           PaymentStatus        @default(PENDING)
+  receiptUrl       String?
+  metadata         Json?
+  processedAt      DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  id               Int                  @id @default(autoincrement())
+  subscriptionId   Int
   // RRA EBM / VSDC fiscalization for subscription billing receipts.
-  invoiceNumber            String?            @map("invoice_number")
-  ebmInvoiceNumber         String?            @map("ebm_invoice_number")
-  submissionStatus         EbmSubmissionStatus? @map("submission_status")
-  submittedAt              DateTime?          @map("submitted_at")
-  sdcDateTime              DateTime?          @map("sdc_date_time")
-  sdcId                    String?            @map("sdc_id")
-  sdcRcptNo                Int?               @map("sdc_rcpt_no")
-  totalRcptNo              Int?               @map("total_rcpt_no")
-  internalData             String?            @map("internal_data")
-  receiptSignature         String?            @map("receipt_signature")
-  qrPayload                String?            @map("qr_payload")
-  rcptLabel                RcptLabel?
-  errorMessage             String?            @map("error_message")
-  retryCount               Int                @default(0)
-  subscription   Subscription      @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  invoiceNumber    String?              @map("invoice_number")
+  ebmInvoiceNumber String?              @map("ebm_invoice_number")
+  submissionStatus EbmSubmissionStatus? @map("submission_status")
+  submittedAt      DateTime?            @map("submitted_at")
+  sdcDateTime      DateTime?            @map("sdc_date_time")
+  sdcId            String?              @map("sdc_id")
+  sdcRcptNo        Int?                 @map("sdc_rcpt_no")
+  totalRcptNo      Int?                 @map("total_rcpt_no")
+  internalData     String?              @map("internal_data")
+  receiptSignature String?              @map("receipt_signature")
+  qrPayload        String?              @map("qr_payload")
+  rcptLabel        RcptLabel?
+  errorMessage     String?              @map("error_message")
+  retryCount       Int                  @default(0)
+  subscription     Subscription         @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@index([subscriptionId])
   @@index([paymentId])
@@ -461,6 +471,7 @@ model Product {
   stockTransferItems   StockTransferItem[]
   stockMovements       StockMovement[]
   supplierInvoiceItems SupplierInvoiceItem[]
+  fuelDispensers       FuelDispenser[]
 
   @@index([name])
   @@index([sku])
@@ -481,8 +492,8 @@ model Customer {
   customerType   CustomerType  @default(INDIVIDUAL)
   balance        Decimal       @default(0) @db.Decimal(10, 2)
   isActive       Boolean       @default(true)
-  TIN            String?       // RRA Tax ID
-  prcOrdCd       String?       // RRA purchase order code (required for B2B / business customer TINs)
+  TIN            String? // RRA Tax ID
+  prcOrdCd       String? // RRA purchase order code (required for B2B / business customer TINs)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?
@@ -544,6 +555,8 @@ model Sale {
   refundedById       Int?             @map("refunded_by")
   cancelledById      Int?             @map("cancelled_by")
   originalSaleId     Int?             @map("original_sale_id")
+  shiftId            Int?             @map("shift_id")
+  originHeldSaleId   Int?             @unique @map("origin_held_sale_id")
   isProforma         Boolean          @default(false)
   reprintCount       Int              @default(0)
   invoiceNumber      String?          @unique @map("invoice_number")
@@ -555,15 +568,17 @@ model Sale {
   ebmQueueItems      EbmQueue[]       @relation("SaleEbmQueue")
   ebmTransactions    EbmTransaction[] @relation("SaleEbmTransactions")
   ebmOutboxItems     EbmOutbox[]
-  prcOrdCd           String?             @map("prc_ord_cd") // RRA purchase order code used for this sale (single-use)
+  prcOrdCd           String?          @map("prc_ord_cd") // RRA purchase order code used for this sale (single-use)
   saleItems          SaleItem[]
   customer           Customer         @relation(fields: [customerId], references: [id])
   organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   branch             Branch           @relation(fields: [branchId], references: [id]) // NEW
   originalSale       Sale?            @relation("RefundRelation", fields: [originalSaleId], references: [id])
   refunds            Sale[]           @relation("RefundRelation")
-  user             User             @relation(fields: [userId], references: [id])
-  salePayments     SalePayment[]
+  user               User             @relation(fields: [userId], references: [id])
+  salePayments       SalePayment[]
+  shift              Shift?           @relation(fields: [shiftId], references: [id])
+  originHeldSale     HeldSale?        @relation(fields: [originHeldSaleId], references: [id])
 
   @@index([organizationId, status, createdAt])
   @@index([invoiceNumber])
@@ -879,14 +894,14 @@ model VsdcDeviceCounter {
 /// Configured once at the organization (not per customer/branch) and consumed
 /// one-per-business-sale so repeat sales to the same buyer get a fresh code.
 model OrganizationPurchaseCode {
-  id             Int      @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   organizationId Int
   code           String
   buyerTin       String
-  consumed       Boolean  @default(false)
-  consumedSaleId Int?     @map("consumed_sale_id")
-  createdAt      DateTime @default(now())
-  consumedAt     DateTime? @map("consumed_at")
+  consumed       Boolean      @default(false)
+  consumedSaleId Int?         @map("consumed_sale_id")
+  createdAt      DateTime     @default(now())
+  consumedAt     DateTime?    @map("consumed_at")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, code])
@@ -1005,17 +1020,17 @@ model Expense {
 }
 
 model SalePayment {
-  id             Int              @id @default(autoincrement())
+  id             Int                   @id @default(autoincrement())
   saleId         Int
   organizationId Int
-  amount         Decimal          @db.Decimal(10, 2)
+  amount         Decimal               @db.Decimal(10, 2)
   paymentMethod  SalePaymentMethodType
   reference      String?
-  status         String           @default("COMPLETED")
-  processedAt    DateTime         @default(now())
+  status         String                @default("COMPLETED")
+  processedAt    DateTime              @default(now())
   metadata       Json?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
 
   sale         Sale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1027,15 +1042,15 @@ model SalePayment {
 }
 
 model SupplierAccessToken {
-  id             Int      @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   supplierId     Int
   organizationId Int
-  token          String   @unique
+  token          String    @unique
   expiresAt      DateTime
-  isActive       Boolean  @default(true)
+  isActive       Boolean   @default(true)
   lastUsedAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   supplier     Supplier     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1086,6 +1101,106 @@ model CashBalance {
   @@index([branchId]) // NEW
   @@index([branchId, balanceDate]) // NEW
   @@map("cash_balances")
+}
+
+model Shift {
+  id             Int         @id @default(autoincrement())
+  organizationId Int
+  branchId       Int
+  userId         Int
+  deviceId       Int?
+  openingFloat   Decimal     @db.Decimal(10, 2)
+  openedAt       DateTime    @default(now())
+  closedAt       DateTime?
+  expectedCash   Decimal?    @db.Decimal(10, 2)
+  actualCash     Decimal?    @db.Decimal(10, 2)
+  difference     Decimal?    @db.Decimal(10, 2)
+  closingNotes   String?
+  status         ShiftStatus @default(OPEN)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+  device       Device?      @relation(fields: [deviceId], references: [id])
+  sales        Sale[]
+  heldSales    HeldSale[]
+
+  @@index([organizationId, branchId, status])
+  @@index([userId, status])
+  @@map("shifts")
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+model HeldSale {
+  id               Int      @id @default(autoincrement())
+  organizationId   Int
+  branchId         Int
+  userId           Int
+  shiftId          Int?
+  reference        String   @unique
+  cartSnapshot     Json     @map("cart_snapshot")
+  customerSnapshot Json?    @map("customer_snapshot")
+  itemCount        Int      @default(0) @map("item_count")
+  totalAmount      Decimal  @map("total_amount") @db.Decimal(10, 2)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch        Branch       @relation(fields: [branchId], references: [id])
+  user          User         @relation(fields: [userId], references: [id])
+  shift         Shift?       @relation(fields: [shiftId], references: [id])
+  resultingSale Sale?
+
+  @@index([organizationId, branchId])
+  @@index([userId])
+  @@map("held_sales")
+}
+
+model Device {
+  id             Int       @id @default(autoincrement())
+  organizationId Int
+  userId         Int?
+  name           String?
+  platform       String
+  deviceHash     String    @unique @map("device_hash")
+  isActive       Boolean   @default(true)
+  registeredAt   DateTime  @default(now())
+  lastSeenAt     DateTime? @map("last_seen_at")
+  deactivatedAt  DateTime? @map("deactivated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id])
+  shifts       Shift[]
+
+  @@index([organizationId])
+  @@index([userId])
+  @@map("devices")
+}
+
+model FuelDispenser {
+  id             Int      @id @default(autoincrement())
+  organizationId Int
+  branchId       Int
+  pumpNumber     String   @map("pump_number")
+  nozzleNumber   String   @map("nozzle_number")
+  fuelProductId  Int      @map("fuel_product_id")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id])
+  fuelProduct  Product      @relation(fields: [fuelProductId], references: [id])
+
+  @@unique([branchId, pumpNumber, nozzleNumber])
+  @@index([organizationId, branchId])
+  @@map("fuel_dispensers")
 }
 
 enum OrderStatus {
@@ -1268,6 +1383,7 @@ enum ActivityType {
   EXPENSE_CREATE
   EXPENSE_UPDATE
   EXPENSE_DELETE
+  SALE_REPRINTED
 }
 
 enum SalePaymentType {

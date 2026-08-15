@@ -25,6 +25,7 @@ exports.createSaleSchema = zod_1.z.object({
         debtAmount: zod_1.z.coerce.number().nonnegative('Debt amount cannot be negative').optional(),
         insuranceAmount: zod_1.z.coerce.number().nonnegative('Insurance amount cannot be negative').optional(),
         notes: zod_1.z.string().optional(),
+        shiftId: zod_1.z.coerce.number().positive().optional(),
     }),
     params: zod_1.z.object({
         organizationId: zod_1.z.coerce.number().positive('Organization ID required'),

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../lib/api-client';
 
-export type VsdcStatus = 'healthy' | 'warning' | 'blocked';
+export type VsdcStatus = 'healthy' | 'blocked';
 
 interface VsdcStatusResult {
   status: VsdcStatus;
@@ -11,7 +11,6 @@ interface VsdcStatusResult {
 
 interface EbmStatusPayload {
   enabled: boolean;
-  reachable: boolean;
   online: boolean;
   lastContact: string | null;
   offlineLimitMs: number;
@@ -55,17 +54,8 @@ export function useVsdcOnlineStatus(): VsdcStatusResult {
     : 0;
   const limitHours = Math.round(payload.offlineLimitMs / (60 * 60 * 1000));
 
-  if (!payload.reachable) {
-    return {
-      status: 'warning',
-      hoursSinceSync,
-      message:
-        'EBM Connection Alert: The VSDC gateway is unreachable. Receipt fiscalisation is unavailable until connectivity is restored.',
-    };
-  }
-
   if (!payload.online) {
-    // reachable but the last successful contact exceeded the block window
+    // last successful VSDC contact exceeded the block window
     return {
       status: 'blocked',
       hoursSinceSync,
