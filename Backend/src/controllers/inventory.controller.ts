@@ -36,13 +36,16 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
       where.itemType = itemType
     }
 
-    if (branchFilter.branchId) {
-      where.batches = {
-        some: {
-          branchId: branchFilter.branchId
+    // SERVICE items carry no batch rows (not stock-tracked), so the branch
+    // scoping must not exclude them — only PRODUCT rows need a matching batch.
+    const branchCondition = branchFilter.branchId
+      ? {
+          OR: [
+            { itemType: 'SERVICE' },
+            { batches: { some: { branchId: branchFilter.branchId } } },
+          ],
         }
-      }
-    }
+      : null
 
     if (search) {
       where.OR = [
@@ -79,6 +82,10 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
         ? [expiryFilter, { OR: where.OR }]
         : [expiryFilter]
       delete where.OR
+    }
+
+    if (branchCondition) {
+      where.AND = where.AND ? [...where.AND, branchCondition] : [branchCondition]
     }
 
     const [products, totalCount] = await Promise.all([
