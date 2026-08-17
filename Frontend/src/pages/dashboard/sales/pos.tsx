@@ -45,7 +45,10 @@ interface Product {
   imageUrl?: string
   category?: string
   taxCode?: string
+  itemType?: 'PRODUCT' | 'SERVICE'
 }
+
+const isSellable = (p: Product) => p.itemType === 'SERVICE' || p.quantity > 0
 
 interface Customer {
   id: string
@@ -75,8 +78,9 @@ const ProductCard = memo(({
   isFavorite: boolean
   onToggleFavorite: (id: string) => void
 }) => {
-  const isLowStock = product.quantity > 0 && product.quantity <= 5
-  const isOutOfStock = product.quantity <= 0
+  const isService = product.itemType === 'SERVICE'
+  const isLowStock = !isService && product.quantity > 0 && product.quantity <= 5
+  const isOutOfStock = !isService && product.quantity <= 0
 
   return (
     <div className="relative flex flex-col rounded-2xl border border-gray-100 bg-white overflow-hidden group transition-all duration-200 hover:shadow-md hover:border-blue-200">
@@ -122,7 +126,7 @@ const ProductCard = memo(({
           'text-[10px] mt-1 font-medium',
           isOutOfStock ? 'text-red-500' : isLowStock ? 'text-amber-500' : 'text-emerald-500',
         )}>
-          {isOutOfStock ? 'Out of stock' : isLowStock ? `Low: ${product.quantity} left` : `${product.quantity} in stock`}
+          {isService ? 'Service' : isOutOfStock ? 'Out of stock' : isLowStock ? `Low: ${product.quantity} left` : `${product.quantity} in stock`}
         </p>
       </button>
     </div>
@@ -187,7 +191,7 @@ const CartItemRow = memo(({
           <input
             type="number"
             min={1}
-            max={item.product.quantity}
+            max={item.product.itemType === 'SERVICE' ? undefined : item.product.quantity}
             value={quantityInput}
             onChange={e => setQuantityInput(e.target.value)}
             onBlur={commitQty}
@@ -427,7 +431,7 @@ export default function SalesForm() {
         apiClient.getProducts({ page: 1, limit: 10000, search: '', branchId: selectedBranchId }),
         apiClient.getCustomers({ page: 1, limit: 100, search: '' }),
       ])
-      const all = productsFromInventoryResponse(productsData).filter((p: Product) => p.quantity > 0)
+      const all = productsFromInventoryResponse(productsData).filter(isSellable)
       setProducts(all)
       setDisplayedCount(30)
       const allCustomers = customersData.customers || []
@@ -486,7 +490,7 @@ export default function SalesForm() {
           return
         }
         const res = await apiClient.getProducts({ page: 1, limit: 10000, search: searchTerm, branchId: selectedBranchId })
-        setProducts(productsFromInventoryResponse(res).filter((p: Product) => p.quantity > 0))
+        setProducts(productsFromInventoryResponse(res).filter(isSellable))
         setDisplayedCount(30)
       } catch { toast.error(t('pos.searchError')) }
       finally { setIsLoading(false) }
@@ -498,7 +502,7 @@ export default function SalesForm() {
   useEffect(() => {
     const el = productsRef.current
     if (!el) return
-    const inStock = products.filter(p => p.quantity > 0)
+    const inStock = products.filter(isSellable)
     const onScroll = () => {
       if (isLoadingMoreRef.current || displayedCount >= inStock.length) return
       const { scrollTop, scrollHeight, clientHeight } = el
@@ -522,7 +526,8 @@ export default function SalesForm() {
 
   // Cart helpers
   const addToCart = useCallback((product: Product) => {
-    const allowNegativeStock = orgSettings.featureFlags.allowNegativeStock
+    const isService = product.itemType === 'SERVICE'
+    const allowNegativeStock = isService || orgSettings.featureFlags.allowNegativeStock
     if (!allowNegativeStock && (!product.quantity || product.quantity < 1)) { toast.error(t('pos.outOfStock')); return }
     setCart(prev => {
       const ex = prev.find(i => i.product.id === product.id)
@@ -544,7 +549,8 @@ export default function SalesForm() {
     if (qty < 1) return
     setCart(prev => prev.map(i => {
       if (i.product.id !== id) return i
-      if (!orgSettings.featureFlags.allowNegativeStock && qty > i.product.quantity) {
+      const isService = i.product.itemType === 'SERVICE'
+      if (!isService && !orgSettings.featureFlags.allowNegativeStock && qty > i.product.quantity) {
         toast.error(t('pos.lowStockWarning', { count: i.product.quantity })); return i
       }
       return { ...i, quantity: qty }
@@ -590,7 +596,7 @@ export default function SalesForm() {
   )
 
   const inStockProducts = useMemo(() => {
-    const base = products.filter(p => p.quantity > 0)
+    const base = products.filter(isSellable)
     if (activeCategory === 'All') return base
     return base.filter(p => p.category?.toLowerCase() === activeCategory.toLowerCase())
   }, [products, activeCategory])
@@ -686,14 +692,14 @@ export default function SalesForm() {
       setIsPaymentModalOpen(false)
 
       const res = await apiClient.getProducts({ page: 1, limit: 10000, search: '', branchId: selectedBranchId })
-      setProducts(productsFromInventoryResponse(res).filter((p: Product) => p.quantity > 0))
+      setProducts(productsFromInventoryResponse(res).filter(isSellable))
     } catch (error: any) {
       const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || t('pos.paymentError')
       toast.error(msg)
       if (msg.includes('stock')) {
         try {
           const res = await apiClient.getProducts({ page: 1, limit: 10000, search: '', branchId: selectedBranchId })
-          setProducts(productsFromInventoryResponse(res).filter((p: Product) => p.quantity > 0))
+          setProducts(productsFromInventoryResponse(res).filter(isSellable))
         } catch { /* silent */ }
       }
     } finally {
