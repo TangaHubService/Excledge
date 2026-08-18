@@ -126,6 +126,7 @@ app.use("/api/auth/reset-password", authLimiter);
 app.use("/api/auth/verify-email", authLimiter);
 app.use("/api/auth/resend-verification", authLimiter);
 app.use("/api/auth/request-password-reset", authLimiter);
+app.use("/api/auth/verify-password-reset-code", authLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/organizations", organizationRoutes);

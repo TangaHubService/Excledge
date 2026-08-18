@@ -52,12 +52,14 @@ export default function ResetPasswordPage() {
         setIsLoading(true);
         try {
             const code = searchParams.get("token");
-            if (!code) {
-                throw new Error("Invalid or missing reset token");
+            const email = searchParams.get("email") || undefined;
+            if (!code || !email) {
+                throw new Error("Invalid or incomplete reset link");
             }
 
             await apiClient.resetPassword({
                 code,
+                email,
                 newPassword: data.newPassword,
             });
             showToast("Password reset successfully! You can now log in.", "success");

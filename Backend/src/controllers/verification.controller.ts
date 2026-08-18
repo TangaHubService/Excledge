@@ -117,7 +117,7 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
             return res.status(404).json({ error: "No account found with this email address" });
         }
 
-        // Generate password reset token (opaque random token)
+        // Generate a password reset OTP and only store its hash.
         const { token, expires } = generatePasswordResetToken();
         const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
@@ -133,7 +133,7 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
         // Send password reset email
         await emailService.sendPasswordResetEmail(user.email, user.name, token);
 
-        console.log(`[Password Reset] Requested for user=${user.email} userId=${user.id} tokenPrefix=${token.slice(0, 8)}...`);
+        console.log(`[Password Reset] Requested for user=${user.email} userId=${user.id}`);
 
         return res.json({ message: "Password reset email sent successfully" });
     } catch (error) {
@@ -142,13 +142,49 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     }
 };
 
-// Reset password with token
+// Verify a mobile password-reset OTP without consuming it. The OTP is consumed
+// only after the user submits a valid new password through resetPassword.
+export const verifyPasswordResetCode = async (req: Request, res: Response) => {
+    try {
+        const { email, code } = req.body;
+
+        if (!email || !code) {
+            return res.status(400).json({ error: "Email and verification code are required" });
+        }
+
+        const normalizedCode = String(code).trim();
+        if (!/^\d{6}$/.test(normalizedCode)) {
+            return res.status(400).json({ error: "Enter the 6-digit verification code" });
+        }
+
+        const incomingTokenHash = crypto.createHash('sha256').update(normalizedCode).digest('hex');
+        const user = await prisma.user.findFirst({
+            where: {
+                email,
+                passwordResetToken: incomingTokenHash,
+                passwordResetExpiry: { gt: new Date() },
+            },
+            select: { id: true },
+        });
+
+        if (!user) {
+            return res.status(400).json({ error: "Invalid or expired verification code" });
+        }
+
+        return res.json({ message: "Verification code is valid" });
+    } catch (error) {
+        console.error("[Verify Password Reset Code Error]:", error);
+        return res.status(500).json({ error: "Failed to verify password reset code" });
+    }
+};
+
+// Reset password with the email-bound OTP.
 export const resetPassword = async (req: Request, res: Response) => {
     try {
-        const { code, newPassword } = req.body;
+        const { email, code, newPassword } = req.body;
 
-        if (!code || !newPassword) {
-            return res.status(400).json({ error: "Verification code and new password are required" });
+        if (!email || !code || !newPassword) {
+            return res.status(400).json({ error: "Email, verification code, and new password are required" });
         }
 
         // Validate password strength
@@ -156,11 +192,17 @@ export const resetPassword = async (req: Request, res: Response) => {
             return res.status(400).json({ error: "Password must be at least 8 characters long" });
         }
 
-        // Hash incoming token and look up user by stored hash
-        const incomingTokenHash = crypto.createHash('sha256').update(code).digest('hex');
+        const normalizedCode = String(code).trim();
+        if (!/^\d{6}$/.test(normalizedCode)) {
+            return res.status(400).json({ error: "Enter the 6-digit verification code" });
+        }
+
+        // Hash incoming OTP and look up the matching user/reset request.
+        const incomingTokenHash = crypto.createHash('sha256').update(normalizedCode).digest('hex');
 
         const user = await prisma.user.findFirst({
             where: {
+                email,
                 passwordResetToken: incomingTokenHash,
                 passwordResetExpiry: { gt: new Date() },
             },

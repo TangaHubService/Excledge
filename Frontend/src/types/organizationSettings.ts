@@ -46,6 +46,7 @@ export interface IPreferences {
     dateFormat: string;
     defaultLandingPage: string;
     lowStockThresholdOverride: number | null;
+    enabledPaymentMethods: string[];
 }
 
 export interface IOrganizationSettings {
@@ -155,5 +156,6 @@ export const DEFAULT_ORGANIZATION_SETTINGS: IOrganizationSettings = {
         dateFormat: 'DD/MM/YYYY',
         defaultLandingPage: 'dashboard',
         lowStockThresholdOverride: null,
+        enabledPaymentMethods: ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK_TRANSFER', 'DEBT'],
     },
 };

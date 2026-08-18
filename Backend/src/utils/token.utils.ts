@@ -15,7 +15,9 @@ export const generateVerificationToken = () => {
 
 
 export const generatePasswordResetToken = () => {
-    const token = crypto.randomBytes(32).toString('hex');
+    // A cryptographically secure six-digit OTP that is easy to enter on mobile.
+    // The stored value is still SHA-256 hashed by the controller.
+    const token = crypto.randomInt(100000, 1000000).toString();
     const expires = addHours(new Date(), 1);
     return { token, expires };
 };

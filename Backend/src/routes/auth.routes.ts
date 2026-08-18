@@ -13,6 +13,7 @@ import {
     verifyAccount,
     resendVerification,
     requestPasswordReset,
+    verifyPasswordResetCode,
     resetPassword
 } from "../controllers/verification.controller"
 import { authenticate } from "../middleware/auth.middleware"
@@ -33,6 +34,7 @@ router.post("/switch-organization", authenticate, switchOrganization)
 router.post("/verify-account", verifyAccount)
 router.post("/resend-verification", resendVerification)
 router.post("/request-password-reset", requestPasswordReset)
+router.post("/verify-password-reset-code", verifyPasswordResetCode)
 router.post("/reset-password", resetPassword)
 
 export default router
