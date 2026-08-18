@@ -433,7 +433,12 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         && !(sale.customer?.prcOrdCd?.trim());
       logger.info(`[EBM-OUTBOX] row ${row.id}: SALE code check — needsCode=${needsCode}`);
       if (needsCode) {
-        const allocated = await consumeAnyOrgPurchaseCode(row.organizationId, sale.id)
+        const allocated = await consumeAnyOrgPurchaseCode(
+          row.organizationId,
+          sale.id,
+          prisma,
+          sale.customer?.TIN?.trim() ?? undefined,
+        )
           ?? (sale.customer?.prcOrdCd ?? null);
         logger.info(`[EBM-OUTBOX] row ${row.id}: allocated purchase code = ${allocated ?? 'NONE (pool empty, no customer fallback)'}`);
         if (allocated) {
@@ -494,6 +499,22 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       try {
         // §4.16 Refund Reason Code: '06' = Refund (generic — the free-text
         // reason from the outbox row payload goes into `remark` instead).
+        //
+        // A refund is a fresh fiscal document (new invcNo, salesSttsCd=05),
+        // so it needs its own unconsumed purchase code for the customer TIN —
+        // the '000000' placeholder or a code already consumed by the original
+        // sale is rejected (882/883).
+        const refundCustTin = sale.customer?.TIN?.trim() ?? '';
+        const refundCode = await consumeAnyOrgPurchaseCode(
+          row.organizationId,
+          sale.id,
+          prisma,
+          refundCustTin || undefined,
+        );
+        if (refundCode) {
+          await prisma.sale.update({ where: { id: sale.id }, data: { prcOrdCd: refundCode } });
+          (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd = refundCode;
+        }
         payload = buildRraSendReceiptPayload(sale, org, {
           orgInvcNo: originalSale?.vsdcInvcNo ?? undefined,
           rfdDt: new Date(),
@@ -530,6 +551,21 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         // rejects a resubmitted invcNo (924) and rejects orgInvcNo on a void
         // (910: orgInvcNo is refund-only). Confirmed against the RRA VSDC
         // sandbox 2026-08-10.
+        //
+        // A void is a fresh submission, so it needs a fresh unconsumed
+        // purchase code too: reusing the original sale's (already consumed)
+        // code is rejected with 883. Allocate a new valid one for the buyer.
+        const voidCustTin = sale.customer?.TIN?.trim() ?? '';
+        const voidCode = await consumeAnyOrgPurchaseCode(
+          row.organizationId,
+          sale.id,
+          prisma,
+          voidCustTin || undefined,
+        );
+        if (voidCode) {
+          await prisma.sale.update({ where: { id: sale.id }, data: { prcOrdCd: voidCode } });
+          (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd = voidCode;
+        }
         const { vsdcInvcNo: voidInvcNo } = await generateInvoiceNumber(row.organizationId, sale.branchId);
         payload = buildRraSendReceiptPayload(sale, org, { cnclDt: new Date(), invcNoOverride: voidInvcNo });
         payload.remark = (row.payload as { reason?: string })?.reason ?? '';
@@ -588,32 +624,65 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
 
       const envelope = await buildVsdcEnvelope(row.organizationId, sale.branchId);
       logger.info(`[EBM-OUTBOX] row ${row.id}: calling saveInvc (${config.ebm.apiUrl ?? ''}/trnsSales/saveSales) — prcOrdCd=${payload.prcOrdCd ?? 'N/A'}, custTin=${(payload.receipt as any)?.custTin ?? 'N/A'}, invcNo=${(payload as any).invcNo ?? 'N/A'}`);
-      const result = await saveInvc(envelope, payload);
+      let result = await saveInvc(envelope, payload);
       logger.info(`[EBM-OUTBOX] row ${row.id}: saveInvc returned success=${result.success} error=${result.error ?? 'none'} rawStatus=${result.rawStatus} rawBody=${JSON.stringify(result.rawBody)?.slice(0, 500)}`);
 
       if (!result.success || !result.data?.rcptNo) {
         const msg = result.error ?? 'VSDC gateway error';
-        logger.warn(`[EBM-OUTBOX] row ${row.id}: submission FAILED — ${msg}`);
-        await failSubmission(txRow.id, msg);
 
-        const nextRetry = scheduleNextRetry(row.retryCount);
-        const isDead = row.retryCount + 1 >= (config.ebm.maxQueueRetries ?? 10);
+        // Idempotency: resultCd 924 ("Invoice number already exists.") means
+        // this invcNo was already fiscalized by a prior attempt (or a manual
+        // re-submission) — treat it as a success, not a failure.
+        const raw = result.rawBody as Record<string, unknown> | null;
+        const replayed = raw && String(raw.resultCd) === '924';
+        const replayedVsdc = replayed ? parseVsdcResponse(raw) : null;
+        if (replayedVsdc?.rcptNo) {
+          result = { ...result, success: true, data: replayedVsdc };
+          logger.info(`[EBM-OUTBOX] row ${row.id}: already fiscalized (924) — treating as SUCCEEDED rcptNo=${replayedVsdc.rcptNo}`);
+        } else {
+          logger.warn(`[EBM-OUTBOX] row ${row.id}: submission FAILED — ${msg}`);
 
-        await prisma.ebmOutbox.update({
-          where: { id: row.id },
-          data: {
-            status: isDead ? 'DEAD_LETTER' : 'FAILED',
-            retryCount: { increment: 1 },
-            lastError: msg,
-            nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
-          },
-        });
+          // 882/883 = the purchase code itself is bad (invalid checksum, or
+          // already burned in the sandbox ledger by a prior probe). Burning it
+          // in the pool prevents every future allocation from re-drawing the
+          // same poisoned code. Also clear it from the sale so the next retry
+          // allocates a fresh valid one instead of re-sending the same code.
+          if (/VSDC error (882|883):/.test(msg)) {
+            const usedCode = (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd?.trim();
+            if (usedCode) {
+              await prisma.organizationPurchaseCode.updateMany({
+                where: { organizationId: row.organizationId, code: usedCode, consumed: false },
+                data: { consumed: true, consumedSaleId: sale.id, consumedAt: new Date() },
+              });
+              await prisma.sale.update({
+                where: { id: sale.id },
+                data: { prcOrdCd: null },
+              });
+              logger.warn(`[EBM-OUTBOX] row ${row.id}: burned purchase code ${usedCode} (${msg}) — cleared from sale for re-allocation`);
+            }
+          }
 
-        failed += 1;
-        continue;
+          await failSubmission(txRow.id, msg);
+
+          const nextRetry = scheduleNextRetry(row.retryCount);
+          const isDead = row.retryCount + 1 >= (config.ebm.maxQueueRetries ?? 10);
+
+          await prisma.ebmOutbox.update({
+            where: { id: row.id },
+            data: {
+              status: isDead ? 'DEAD_LETTER' : 'FAILED',
+              retryCount: { increment: 1 },
+              lastError: msg,
+              nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
+            },
+          });
+
+          failed += 1;
+          continue;
+        }
       }
 
-      const { data: vsdc } = result;
+      const vsdc = result.data!;
       const sdcDateTime: Date | null = vsdc.sdcDateTime ? new Date(vsdc.sdcDateTime) : null;
 
       // C8: build electronic journal text

@@ -19,6 +19,7 @@
  */
 import dotenv from "dotenv"
 import { PrismaClient } from "@prisma/client"
+import { generateValidPurchaseCodes, isValidPurchaseCode } from "../src/services/purchase-code.checksum"
 
 dotenv.config()
 
@@ -61,6 +62,11 @@ async function main() {
     throw new Error("No organization found. Create one first (e.g. npm run prisma:seed).")
   }
 
+  const sellerTin = org.TIN?.trim()
+  if (!sellerTin) {
+    throw new Error(`Organization "${org.name}" (id=${org.id}) has no TIN — required to derive valid purchase codes.`)
+  }
+
   // Existing codes for this org, so we generate fresh ones instead of colliding
   // with (org.id, code) unique constraint on repeated runs.
   const existing = await prisma.organizationPurchaseCode.findMany({
@@ -69,23 +75,9 @@ async function main() {
   })
   const existingCodes = new Set(existing.map((c) => c.code))
 
-  // 6-digit numeric codes in the 01xxxx range, matching the seeded style
-  // (010301, 010307-010310, ...). Start past the highest existing numeric
-  // code so runs are additive rather than reused.
-  const highestSeen = existing
-    .map((c) => parseInt(c.code, 10))
-    .filter((n) => Number.isFinite(n))
-    .reduce((max, n) => Math.max(max, n), 10300)
-
-  const newCodes: string[] = []
-  let next = highestSeen + 1
-  while (newCodes.length < count) {
-    const code = String(next).padStart(6, "0")
-    if (!existingCodes.has(code)) {
-      newCodes.push(code)
-    }
-    next++
-  }
+  // Generate codes that satisfy the sandbox's TIN-derived checksum — sequential
+  // numbers (the old behavior) are rejected with resultCd 882.
+  const newCodes = generateValidPurchaseCodes(buyerTin, sellerTin, count, existingCodes)
 
   await prisma.organizationPurchaseCode.createMany({
     data: newCodes.map((code) => ({
@@ -101,8 +93,10 @@ async function main() {
 
   console.log("Purchase-code pool topped up:")
   console.log(`  Organization      : ${org.name} (id=${org.id})`)
+  console.log(`  Seller TIN        : ${sellerTin}`)
   console.log(`  Buyer TIN         : ${buyerTin}`)
-  console.log(`  Codes added       : ${newCodes.length} (${newCodes[0]}..${newCodes[newCodes.length - 1]})`)
+  console.log(`  Codes added       : ${newCodes.length} (${newCodes[0] ?? 'none'}..${newCodes[newCodes.length - 1] ?? ''})`)
+  console.log(`  All checksum-valid: ${newCodes.every((c) => isValidPurchaseCode(c, buyerTin, sellerTin))}`)
   console.log(`  Unconsumed in pool: ${poolCount}`)
 }
 
