@@ -62,6 +62,8 @@ export interface IPreferences {
   dateFormat: string;
   defaultLandingPage: string;
   lowStockThresholdOverride: number | null;
+  /** Payment method codes the organization accepts at the point of sale. */
+  enabledPaymentMethods: string[];
 }
 
 export interface IOrganizationSettings {
@@ -121,6 +123,7 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
     dateFormat: "DD/MM/YYYY",
     defaultLandingPage: "dashboard",
     lowStockThresholdOverride: null,
+    enabledPaymentMethods: ["CASH", "MOBILE_MONEY", "CARD", "BANK_TRANSFER", "DEBT"],
   },
 };
 

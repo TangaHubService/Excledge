@@ -21,7 +21,7 @@ export const saleItemSchema = z.object({
 const salePaymentSchema = z.object({
   paymentMethod: z.enum(['CASH', 'BANK', 'CARD', 'PAYPACK', 'MTN_MOMO', 'AIRTEL_MONEY', 'WALLET', 'GIFT_CARD', 'STORE_CREDIT']),
   amount: z.coerce.number().positive('Payment amount must be positive'),
-  reference: z.string().max(200).optional(),
+  reference: z.string().max(200).nullish(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 

@@ -389,6 +389,7 @@ export default function SalesForm() {
   const [isSyncing, setIsSyncing] = useState(false)
   const [displayedCount, setDisplayedCount] = useState(30)
   const [activeCategory, setActiveCategory] = useState('All')
+  const [productTypeFilter, setProductTypeFilter] = useState<'ALL' | 'PRODUCT' | 'SERVICE'>('ALL')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
 
   const LOAD_STEP = 15
@@ -597,9 +598,12 @@ export default function SalesForm() {
 
   const inStockProducts = useMemo(() => {
     const base = products.filter(isSellable)
-    if (activeCategory === 'All') return base
-    return base.filter(p => p.category?.toLowerCase() === activeCategory.toLowerCase())
-  }, [products, activeCategory])
+    const typed = productTypeFilter === 'ALL'
+      ? base
+      : base.filter(p => (p.itemType ?? 'PRODUCT') === productTypeFilter)
+    if (activeCategory === 'All') return typed
+    return typed.filter(p => p.category?.toLowerCase() === activeCategory.toLowerCase())
+  }, [products, activeCategory, productTypeFilter])
 
   const handleOpenPayment = useCallback(() => {
     if (cart.length === 0) { toast.error(t('pos.noItemsInCart')); return }
@@ -638,7 +642,7 @@ export default function SalesForm() {
           return {
             paymentMethod,
             amount: p.amount,
-            reference: p.reference || null,
+            reference: p.reference || undefined,
           }
         })
       if (remainingDebt > 0) debtAmount += remainingDebt
@@ -831,6 +835,23 @@ export default function SalesForm() {
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
+            </div>
+            <div className="flex items-center rounded-lg bg-gray-100 p-0.5 flex-shrink-0">
+              {(['ALL', 'PRODUCT', 'SERVICE'] as const).map(type => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setProductTypeFilter(type)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-md text-xs font-semibold transition-all duration-150',
+                    productTypeFilter === type
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700',
+                  )}
+                >
+                  {type === 'ALL' ? 'All' : type === 'PRODUCT' ? 'Products' : 'Services'}
+                </button>
+              ))}
             </div>
             <span className="text-xs text-gray-400 whitespace-nowrap tabular-nums bg-gray-100 px-2.5 py-1 rounded-lg">
               {inStockProducts.length} items
