@@ -946,6 +946,16 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
       });
     });
 
+    // Fire the outbox worker immediately (fire-and-forget) so the refund hits
+    // the WAR right at refund time instead of waiting for the 2-minute cron tick.
+    // The outbox row stays the single source of truth for idempotency; the cron
+    // job remains a retry/backstop if this run fails or times out.
+    if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+      void processEbmOutboxBatch(50).catch((e) => {
+        console.error('[EBM] immediate refund fiscalization error:', e);
+      });
+    }
+
     res.status(200).json(success(result));
   } catch (error: any) {
     console.error("[Refund Error]:", error);
@@ -1302,6 +1312,16 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
       }
     });
 
+    // Fire the outbox worker immediately (fire-and-forget) so the void hits
+    // the WAR right at cancel time instead of waiting for the cron tick. The
+    // outbox row stays the single source of truth for idempotency; the cron
+    // job remains a retry/backstop if this run fails or times out.
+    if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+      void processEbmOutboxBatch(50).catch((e) => {
+        console.error('[EBM] immediate void fiscalization error:', e);
+      });
+    }
+
     res.status(200).json(success({ message: "Sale cancelled successfully" }));
   } catch (error) {
     console.error("[Cancel Sale Error]:", error);
@@ -1393,7 +1413,7 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
       }),
     ])
 
-    const fiscalTx = (sale.ebmTransactions ?? []).find((t) => t.submissionStatus === "SUCCESS" && (!t.operation || t.operation === "SALE"))
+    const fiscalTx = (sale.ebmTransactions ?? []).find((t) => t.submissionStatus === "SUCCESS" && (!t.operation || t.operation === "SALE" || t.operation === "REFUND"))
     const responseData = fiscalTx?.responseData as { normalized?: { ebmInvoiceNumber?: string; verificationCode?: string; sdcDateTime?: string; intrlData?: string; vsdcSignature?: string } } | null | undefined
     const norm = responseData?.normalized
 

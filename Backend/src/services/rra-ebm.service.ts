@@ -4,6 +4,7 @@ import type { Decimal } from '@prisma/client/runtime/library';
 import type { Prisma } from '@prisma/client';
 import { buildVsdcEnvelope, saveInvc, parseVsdcResponse } from './vsdc-api.service';
 import { submitSalesToOsdc } from './rra-osdc.service';
+import { isValidPurchaseCode } from './purchase-code.checksum';
 
 /** Any Prisma client capable of running queries — the top-level client or a $transaction callback's `tx`. */
 type PrismaClientOrTx = typeof prisma | Prisma.TransactionClient;
@@ -273,8 +274,11 @@ async function allocateNextInvoiceSequence(organizationId: number, branchId: num
 /**
  * Consume the next unused RRA purchase code from the organization's pool for a
  * given buyer TIN, atomically (within the sale transaction when `client` is a tx).
- * Returns the code, or null when no unconsumed code remains (caller falls back
- * to the legacy per-customer `prcOrdCd`).
+ * Only codes that pass the sandbox checksum for `buyerTin` are handed out — the
+ * pool may still contain legacy invalid codes, and allocating one would be
+ * rejected by the device with 882. Returns the code, or null when no valid
+ * unconsumed code remains (caller falls back to the legacy per-customer
+ * `prcOrdCd`).
  */
 export async function consumeOrgPurchaseCode(
   organizationId: number,
@@ -282,19 +286,27 @@ export async function consumeOrgPurchaseCode(
   saleId: number,
   client: PrismaClientOrTx = prisma,
 ): Promise<string | null> {
-  const next = await client.organizationPurchaseCode.findFirst({
+  const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { TIN: true } });
+  const sellerTin = org?.TIN?.trim() ?? '';
+
+  const candidates = await client.organizationPurchaseCode.findMany({
     where: { organizationId, buyerTin, consumed: false },
     orderBy: { id: 'asc' },
+    take: 100,
   });
 
-  if (!next) return null;
+  for (const next of candidates) {
+    if (sellerTin && !isValidPurchaseCode(next.code, buyerTin, sellerTin)) {
+      continue;
+    }
+    await client.organizationPurchaseCode.update({
+      where: { id: next.id },
+      data: { consumed: true, consumedSaleId: saleId, consumedAt: new Date() },
+    });
+    return next.code;
+  }
 
-  await client.organizationPurchaseCode.update({
-    where: { id: next.id },
-    data: { consumed: true, consumedSaleId: saleId, consumedAt: new Date() },
-  });
-
-  return next.code;
+  return null;
 }
 
 /**
@@ -302,25 +314,55 @@ export async function consumeOrgPurchaseCode(
  * regardless of buyer TIN. The sandbox rejects every sale without a real
  * single-use code, and codes are pooled at the org level, so fiscalization
  * draws any unconsumed code when the sale has none on record.
+ *
+ * `buyerTin` is the sale's actual custTin: only codes that pass the checksum
+ * for it are returned, since a code pooled under a different buyer TIN would be
+ * rejected by the device with 882.
  */
 export async function consumeAnyOrgPurchaseCode(
   organizationId: number,
   saleId: number,
   client: PrismaClientOrTx = prisma,
+  buyerTin?: string,
 ): Promise<string | null> {
-  const next = await client.organizationPurchaseCode.findFirst({
-    where: { organizationId, consumed: false },
-    orderBy: { id: 'asc' },
-  });
+  const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { TIN: true } });
+  const sellerTin = org?.TIN?.trim() ?? '';
 
-  if (!next) return null;
+  // Prefer codes pooled for this exact buyer TIN — regenerated codes sit at high
+  // ids while stale legacy codes (lower ids, other buyers) would otherwise crowd
+  // out a scan window. Fall back to any unconsumed code when the buyer's own
+  // pool is empty.
+  const targetTin = buyerTin?.trim() || '';
+  const buyerScoped = targetTin
+    ? await client.organizationPurchaseCode.findMany({
+        where: { organizationId, buyerTin: targetTin, consumed: false },
+        orderBy: { id: 'asc' },
+        take: 100,
+      })
+    : [];
 
-  await client.organizationPurchaseCode.update({
-    where: { id: next.id },
-    data: { consumed: true, consumedSaleId: saleId, consumedAt: new Date() },
-  });
+  let candidates = buyerScoped;
+  if (!buyerScoped.length) {
+    candidates = await client.organizationPurchaseCode.findMany({
+      where: { organizationId, consumed: false },
+      orderBy: { id: 'asc' },
+      take: 500,
+    });
+  }
 
-  return next.code;
+  for (const next of candidates) {
+    const tin = targetTin || next.buyerTin;
+    if (sellerTin && tin && !isValidPurchaseCode(next.code, tin, sellerTin)) {
+      continue;
+    }
+    await client.organizationPurchaseCode.update({
+      where: { id: next.id },
+      data: { consumed: true, consumedSaleId: saleId, consumedAt: new Date() },
+    });
+    return next.code;
+  }
+
+  return null;
 }
 
 export async function postToGateway(
@@ -471,8 +513,17 @@ export function buildRraSendReceiptPayload(
     // VSDC (RRA reference implementation) uses tax-inclusive quantities: the
     // supply/taxable amount is the gross unit price × quantity, and the VAT is
     // extracted from it (taxAmt = grossAmount × rate/(100+rate)).
-    const splyAmt = fix2(si.quantity * si.unitPrice.toNumber());
-    const tAmt = fix2(si.taxAmount.toNumber());
+    //
+    // Refunds store negative amounts (the controller mirrors the original sale
+    // with negated totals), but the RRA sandbox validates each line as
+    // `dcAmt <= splyAmt` etc. against POSITIVE amounts and rejects negative
+    // supply amounts with resultCd 910. A refund document is a fresh positive
+    // sales-transaction record marked `salesSttsCd=05` (see §4.11/§4.16), so
+    // abs() every amount and quantity when building a refund payload.
+    const qty = Math.abs(Number(si.quantity));
+    const prc = Math.abs(si.unitPrice.toNumber());
+    const splyAmt = fix2(qty * prc);
+    const tAmt = Math.abs(fix2(si.taxAmount.toNumber()));
     taxblAmt[slot] = fix2(taxblAmt[slot] + splyAmt);
     taxAmt[slot]   = fix2(taxAmt[slot] + tAmt);
 
@@ -481,14 +532,14 @@ export function buildRraSendReceiptPayload(
       itemCd:     si.product?.itemCd ?? `P${si.productId ?? idx + 1}`,
       itemClsCd:  si.product?.itemClsCd ?? '5020230302',
       itemNm:     si.product?.name ?? 'Item',
-      pkg:        si.quantity,
+      pkg:        qty,
       pkgUnitCd:  si.product?.pkgUnitCd ?? 'CT',
-      qty:        si.quantity,
+      qty,
       qtyUnitCd:  si.product?.qtyUnitCd ?? 'U',
-      prc:        fix2(si.unitPrice.toNumber()),
+      prc,
       splyAmt:    fix2(splyAmt),
-      dcRt:       fix2(si.dcRate.toNumber()),
-      dcAmt:      fix2(si.dcAmt.toNumber()),
+      dcRt:       fix2(Math.abs(si.dcRate.toNumber())),
+      dcAmt:      fix2(Math.abs(si.dcAmt.toNumber())),
       taxTyCd:    rawCode,
       taxblAmt:   fix2(splyAmt),
       taxAmt:     fix2(tAmt),
@@ -498,7 +549,7 @@ export function buildRraSendReceiptPayload(
 
   const totTaxAmt   = fix2(taxAmt.reduce((s, v) => s + v, 0));
   const totTaxblAmt = fix2(taxblAmt.reduce((s, v) => s + v, 0));
-  const totAmt      = fix2(sale.totalAmount.toNumber());
+  const totAmt      = fix2(Math.abs(sale.totalAmount.toNumber()));
   const now         = sale.createdAt;
 
   // RRA requires a customer TIN on every fiscal receipt. When the customer has

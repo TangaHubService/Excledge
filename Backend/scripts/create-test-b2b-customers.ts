@@ -20,6 +20,7 @@
  */
 import dotenv from "dotenv"
 import { CustomerType, PrismaClient } from "@prisma/client"
+import { generateValidPurchaseCodes, isValidPurchaseCode } from "../src/services/purchase-code.checksum"
 
 dotenv.config()
 
@@ -66,18 +67,18 @@ async function main() {
     throw new Error("No organization found. Create one first (e.g. npm run prisma:seed).")
   }
 
-  // Purchase codes are numbered org-wide (unique on organizationId+code), so
-  // track the running counter across all customers in this run rather than
-  // resetting it per TIN.
+  // Existing codes are tracked org-wide (unique on organizationId+code) so the
+  // checksum-valid generator never collides with prior runs.
   const existingCodeRows = await prisma.organizationPurchaseCode.findMany({
     where: { organizationId: org.id },
     select: { code: true },
   })
   const existingCodes = new Set(existingCodeRows.map((c) => c.code))
-  let nextCodeNum = existingCodeRows
-    .map((c) => parseInt(c.code, 10))
-    .filter((n) => Number.isFinite(n))
-    .reduce((max, n) => Math.max(max, n), 10300) + 1
+
+  const sellerTin = org.TIN?.trim()
+  if (!sellerTin) {
+    throw new Error(`Organization "${org.name}" (id=${org.id}) has no TIN — required to derive valid purchase codes.`)
+  }
 
   const summary: { tin: string; customerId: number; created: boolean; codesAdded: number; poolSize: number }[] = []
 
@@ -105,15 +106,7 @@ async function main() {
 
     let codesAdded = 0
     if (codesPerCustomer > 0) {
-      const newCodes: string[] = []
-      while (newCodes.length < codesPerCustomer) {
-        const code = String(nextCodeNum).padStart(6, "0")
-        nextCodeNum++
-        if (!existingCodes.has(code)) {
-          existingCodes.add(code)
-          newCodes.push(code)
-        }
-      }
+      const newCodes = generateValidPurchaseCodes(tin, sellerTin, codesPerCustomer, existingCodes)
 
       await prisma.organizationPurchaseCode.createMany({
         data: newCodes.map((code) => ({
