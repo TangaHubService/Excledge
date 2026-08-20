@@ -404,21 +404,24 @@ export function ProductForm({
               </FieldRow>
               <FieldRow>
                 <FieldGroup>
-                  <Label htmlFor="taxCode">Tax Code</Label>
+                  <Label htmlFor="taxCode">Tax Category</Label>
                   <Select
                     value={values.taxCode}
                     onValueChange={v => setField('taxCode', v)}
                   >
                     <SelectTrigger className="h-11">
-                      <SelectValue placeholder="Select tax code" />
+                      <SelectValue placeholder="Select tax category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="A">Exempted (0%)</SelectItem>
-                      <SelectItem value="B">Standard (18%)</SelectItem>
-                      <SelectItem value="C">Zero-rated (0%)</SelectItem>
-                      <SelectItem value="D">Exempted Entity (0%)</SelectItem>
+                      <SelectItem value="B">B — Standard VAT (18%)</SelectItem>
+                      <SelectItem value="A">A — VAT Exempt (0%)</SelectItem>
+                      <SelectItem value="C">C — Export / Zero-rated (0%)</SelectItem>
+                      <SelectItem value="D">D — Not VAT Registered (0%)</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-gray-400">
+                    RRA EBM category. If this business is not VAT registered, sales use code D automatically.
+                  </p>
                 </FieldGroup>
                 <FieldGroup>
                   {values.taxCode === 'C' && (

@@ -9,6 +9,7 @@ import {
   addStock as ledgerAddStock
 } from "../services/inventory-ledger.service"
 import { syncProductToRraAsync } from "../services/product-sync.service"
+import { TaxService } from "../services/tax.service"
 import { success, error as apiError } from "../utils/apiResponse"
 import { getOrganizationSettings } from "../services/organization-settings.service"
 import { getOrderBy } from "../utils/sorting"
@@ -274,6 +275,17 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       }
     }
 
+    // Tax category is the RRA code A/B/C/D. Validate it, then keep the legacy
+    // TaxCategory enum in sync (A=EXEMPT, B=STANDARD, C=ZERO_RATED, D=NON_TAXABLE).
+    const normalizedTaxCode = taxCode
+      ? String(taxCode).toUpperCase()
+      : (taxCategory ? TaxService.getTaxCode(taxCategory) : 'B');
+    if (!TaxService.ALLOWED_TAX_CODES.has(normalizedTaxCode as any)) {
+      return res.status(400).json(apiError(
+        `Invalid tax category "${taxCode}". Must be one of A, B, C or D.`
+      ));
+    }
+
     // Use transaction to ensure product creation, batch, and ledger are atomic
     const result = await prisma.$transaction(async (tx) => {
       const product = await tx.product.create({
@@ -289,8 +301,8 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
           minStock: isService ? 0 : (minStock || 10),
           organizationId: organizationId!,
           sku,
-          taxCategory: taxCategory || 'STANDARD',
-          taxCode,
+          taxCategory: TaxService.getTaxCategory(normalizedTaxCode as any),
+          taxCode: normalizedTaxCode as any,
           measurementUnit: measurementUnit || 'OTHER',
           itemType,
           barcode,
@@ -580,7 +592,16 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
     if (category !== undefined) data.category = category
     if (description !== undefined) data.description = description
     if (minStock !== undefined) data.minStock = minStock
-    if (taxCode !== undefined) data.taxCode = taxCode
+    if (taxCode !== undefined) {
+      const normalizedTaxCode = String(taxCode).toUpperCase();
+      if (!TaxService.ALLOWED_TAX_CODES.has(normalizedTaxCode as any)) {
+        return res.status(400).json(apiError(
+          `Invalid tax category "${taxCode}". Must be one of A, B, C or D.`
+        ));
+      }
+      data.taxCode = normalizedTaxCode;
+      data.taxCategory = TaxService.getTaxCategory(normalizedTaxCode as any);
+    }
     if (measurementUnit !== undefined) data.measurementUnit = measurementUnit
     if (exemptionReference !== undefined) data.exemptionReference = exemptionReference
     if (itemType !== undefined) data.itemType = itemType
@@ -1098,10 +1119,10 @@ export const processExpiredStock = async (req: BranchAuthRequest, res: Response)
 
 export const getTaxCodes = async (_req: Request, res: Response) => {
   const codes = [
-    { code: 'A', label: 'Exempted (0%)', rate: 0, category: 'EXEMPT' },
-    { code: 'B', label: 'Standard (18%)', rate: 18, category: 'STANDARD' },
-    { code: 'C', label: 'Zero-rated (0%)', rate: 0, category: 'ZERO_RATED' },
-    { code: 'D', label: 'Exempted Entity (0%)', rate: 0, category: 'EXEMPT' },
+    { code: 'A', label: 'A — VAT Exempt (0%)', rate: 0, category: 'EXEMPT' },
+    { code: 'B', label: 'B — Standard VAT (18%)', rate: 18, category: 'STANDARD' },
+    { code: 'C', label: 'C — Export / Zero-rated (0%)', rate: 0, category: 'ZERO_RATED' },
+    { code: 'D', label: 'D — Not VAT Registered (0%)', rate: 0, category: 'NON_TAXABLE' },
   ];
   res.json(codes);
 };

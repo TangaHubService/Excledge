@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import ConfirmDialog from '../common/ConfirmDialog';
 import {
   Loader2, Check, Plus, X, Shield, Smartphone, CreditCard,
   FileText, Wallet, Lock,
@@ -40,7 +41,9 @@ export function PaymentModal({
   const { t } = useTranslation();
   const [payments, setPayments] = useState<PaymentEntry[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
   const submittingRef = useRef(false);
+  const pendingPaymentsRef = useRef<PaymentEntry[]>([]);
 
   /* ── reset on open ─────────────────────────────────────────────── */
   useEffect(() => {
@@ -101,9 +104,21 @@ export function PaymentModal({
         const msg = rem > 0
           ? t('pos.confirmPartialPayment') || `Amount is incomplete (${rem.toLocaleString()} RWF remaining). Continue?`
           : t('pos.confirmOverpayment')    || `Amount exceeds total. Continue?`;
-        if (!window.confirm(msg)) { submittingRef.current = false; return; }
+        pendingPaymentsRef.current = valid;
+        setConfirmMsg(msg);
+        return;
       }
       await onProcessPayment(valid);
+    } finally {
+      submittingRef.current = false;
+    }
+  };
+
+  const handleConfirmProcess = async () => {
+    setConfirmMsg(null);
+    submittingRef.current = true;
+    try {
+      await onProcessPayment(pendingPaymentsRef.current);
     } finally {
       submittingRef.current = false;
     }
@@ -358,6 +373,16 @@ export function PaymentModal({
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmMsg !== null}
+        onClose={() => setConfirmMsg(null)}
+        onConfirm={handleConfirmProcess}
+        title={t('pos.confirmPaymentTitle') || 'Confirm Payment'}
+        message={confirmMsg ?? ''}
+        confirmText={t('pos.continue') || 'Continue'}
+        variant="warning"
+      />
     </div>
   );
 }

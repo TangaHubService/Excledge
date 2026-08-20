@@ -12,6 +12,7 @@ model Organization {
   businessType             BusinessType                 @default(PHARMACY)
   TIN                      String? // 9-digit RRA Tax Identification Number
   VRN                      String? // VAT Registration Number (for VAT-registered orgs)
+  vatRegistered            Boolean                    @default(true) // Business/taxpayer is registered for VAT → product tax categories A/B/C apply; if false every sale uses tax code D
   currency                 String?
   ebmDeviceId              String? // Legacy: org-level fallback (use Branch.ebmDeviceId per branch)
   ebmSerialNo              String? // Legacy: org-level fallback (use Branch.ebmSerialNo per branch)
@@ -60,6 +61,7 @@ model Organization {
   supplierAccessTokens     SupplierAccessToken[]
   salePayments             SalePayment[]
   shifts                   Shift[]
+  cashMovements            CashMovement[]
   heldSales                HeldSale[]
   devices                  Device[]
   fuelDispensers           FuelDispenser[]
@@ -114,6 +116,7 @@ model Branch {
   stockMovements    StockMovement[]
   expenses          Expense[]
   cashBalances      CashBalance[]
+  cashMovements     CashMovement[]
   activityLogs      ActivityLog[]
   batches           Batch[]
   inventoryLedgers  InventoryLedger[]
@@ -267,6 +270,9 @@ model User {
   invoiceImportLogs        InvoiceImportLog[]
   createdSubscriptions     Subscription[]           @relation("SubscriptionCreatedBy")
   shifts                   Shift[]
+  shiftsClosed             Shift[]                  @relation("ShiftClosedBy")
+  shiftsApproved           Shift[]                  @relation("ShiftApprovedBy")
+  cashMovements            CashMovement[]
   heldSales                HeldSale[]
   devices                  Device[]
 
@@ -998,6 +1004,7 @@ model Expense {
   organizationId Int
   userId         Int
   branchId       Int // NEW: Branch association
+  shiftId        Int?
   category       ExpenseCategory
   amount         Decimal         @db.Decimal(10, 2)
   paymentMethod  String
@@ -1010,12 +1017,14 @@ model Expense {
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User            @relation(fields: [userId], references: [id])
   branch         Branch          @relation(fields: [branchId], references: [id]) // NEW
+  shift          Shift?          @relation(fields: [shiftId], references: [id])
 
   @@index([organizationId, expenseDate])
   @@index([category])
   @@index([paymentMethod])
   @@index([branchId]) // NEW
   @@index([branchId, expenseDate]) // NEW
+  @@index([shiftId])
   @@map("expenses")
 }
 
@@ -1104,37 +1113,88 @@ model CashBalance {
 }
 
 model Shift {
-  id             Int         @id @default(autoincrement())
-  organizationId Int
-  branchId       Int
-  userId         Int
-  deviceId       Int?
-  openingFloat   Decimal     @db.Decimal(10, 2)
-  openedAt       DateTime    @default(now())
-  closedAt       DateTime?
-  expectedCash   Decimal?    @db.Decimal(10, 2)
-  actualCash     Decimal?    @db.Decimal(10, 2)
-  difference     Decimal?    @db.Decimal(10, 2)
-  closingNotes   String?
-  status         ShiftStatus @default(OPEN)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  id                 Int          @id @default(autoincrement())
+  shiftNumber        String?      @unique @map("shift_number")
+  organizationId     Int
+  branchId           Int
+  userId             Int
+  deviceId           Int?
+  openingFloat       Decimal      @db.Decimal(10, 2)
+  openingMobileMoney Decimal      @default(0) @db.Decimal(10, 2)
+  openingNotes       String?      @map("opening_notes")
+  openedAt           DateTime     @default(now())
+  closedAt           DateTime?
+  closingStartedAt   DateTime?    @map("closing_started_at")
+  closingSubmittedAt DateTime?    @map("closing_submitted_at")
+  closedById         Int?         @map("closed_by")
+  approvedById       Int?         @map("approved_by")
+  approvedAt         DateTime?    @map("approved_at")
+  approvalDecision   String?      @map("approval_decision")
+  approvalReason     String?      @map("approval_reason")
+  varianceReason     String?      @map("variance_reason")
+  expectedCash       Decimal?     @db.Decimal(10, 2)
+  actualCash         Decimal?     @db.Decimal(10, 2)
+  actualMobileMoney  Decimal?     @db.Decimal(10, 2)
+  difference         Decimal?     @db.Decimal(10, 2)
+  cashIn             Decimal?     @db.Decimal(10, 2)
+  cashOut            Decimal?     @db.Decimal(10, 2)
+  expenseTotal       Decimal?     @db.Decimal(10, 2)
+  denominationCounts Json?        @map("denomination_counts")
+  closingNotes       String?
+  status             ShiftStatus  @default(OPEN)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   branch       Branch       @relation(fields: [branchId], references: [id])
   user         User         @relation(fields: [userId], references: [id])
   device       Device?      @relation(fields: [deviceId], references: [id])
+  closedBy     User?        @relation("ShiftClosedBy", fields: [closedById], references: [id])
+  approvedBy   User?        @relation("ShiftApprovedBy", fields: [approvedById], references: [id])
   sales        Sale[]
   heldSales    HeldSale[]
+  cashMovements CashMovement[]
+  expenses     Expense[]
 
   @@index([organizationId, branchId, status])
   @@index([userId, status])
   @@map("shifts")
 }
 
+model CashMovement {
+  id             Int        @id @default(autoincrement())
+  organizationId Int
+  branchId       Int
+  shiftId        Int
+  userId         Int
+  type           CashMovementType
+  amount         Decimal    @db.Decimal(10, 2)
+  reason         String?
+  reference      String?
+  createdAt      DateTime   @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id])
+  shift        Shift        @relation(fields: [shiftId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId, shiftId])
+  @@index([shiftId, createdAt])
+  @@map("cash_movements")
+}
+
+enum CashMovementType {
+  CASH_IN
+  CASH_OUT
+}
+
 enum ShiftStatus {
   OPEN
+  CLOSING
+  PENDING_APPROVAL
   CLOSED
+  REOPENED
+  CANCELLED
 }
 
 model HeldSale {

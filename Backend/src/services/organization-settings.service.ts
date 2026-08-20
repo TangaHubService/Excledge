@@ -23,13 +23,14 @@ function toTypedSettings(row: {
   sidebarConfig: Prisma.JsonValue;
   featureFlags: Prisma.JsonValue;
   preferences: Prisma.JsonValue;
-} | null): IOrganizationSettings {
-  if (!row) return DEFAULT_SETTINGS;
+} | null, vatRegistered: boolean): IOrganizationSettings {
+  if (!row) return { ...DEFAULT_SETTINGS, vatRegistered };
 
   return {
     sidebarConfig: withDefaults<ISidebarConfig>(DEFAULT_SETTINGS.sidebarConfig, row.sidebarConfig),
     featureFlags: withDefaults<IFeatureFlags>(DEFAULT_SETTINGS.featureFlags, row.featureFlags),
     preferences: withDefaults<IPreferences>(DEFAULT_SETTINGS.preferences, row.preferences),
+    vatRegistered,
   };
 }
 
@@ -39,12 +40,18 @@ function toTypedSettings(row: {
 export async function getOrganizationSettings(
   organizationId: number
 ): Promise<IOrganizationSettings> {
-  const row = await prisma.organizationSetting.findUnique({
-    where: { organizationId },
-    select: { sidebarConfig: true, featureFlags: true, preferences: true },
-  });
+  const [row, org] = await Promise.all([
+    prisma.organizationSetting.findUnique({
+      where: { organizationId },
+      select: { sidebarConfig: true, featureFlags: true, preferences: true },
+    }),
+    prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { vatRegistered: true },
+    }),
+  ]);
 
-  return toTypedSettings(row);
+  return toTypedSettings(row, org?.vatRegistered ?? false);
 }
 
 /**
@@ -86,5 +93,10 @@ export async function upsertOrganizationSettings(
     RETURNING "sidebarConfig", "featureFlags", "preferences"
   `);
 
-  return toTypedSettings(rows[0] ?? null);
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { vatRegistered: true },
+  });
+
+  return toTypedSettings(rows[0] ?? null, org?.vatRegistered ?? false);
 }

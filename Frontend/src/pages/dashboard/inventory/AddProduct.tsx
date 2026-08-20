@@ -23,6 +23,7 @@ import {
 } from '../../../components/ui/popover'
 import { toast } from 'react-toastify'
 import { apiClient } from '../../../lib/api-client'
+import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response'
 import { useBranch } from '../../../context/BranchContext'
 import { BranchRequiredNotice } from '../../../components/BranchRequiredNotice'
 import { MEASUREMENT_UNIT_OPTIONS } from '../../../types/ebm'
@@ -52,10 +53,14 @@ const addProductSchema = yup.object({
         .positive('Must be positive'),
     taxCode: yup
         .string()
-        .required('RRA Tax Code is required')
+        .required('Tax category is required')
         .oneOf(['A', 'B', 'C', 'D'], 'Must be A, B, C, or D'),
     batchNumber: yup.string().max(50),
-    expiryDate: yup.date().nullable().min(new Date(), 'Expiry must be in the future'),
+    expiryDate: yup
+        .date()
+        .nullable()
+        .transform((value, originalValue) => (originalValue === '' || originalValue == null ? null : value))
+        .min(new Date(), 'Expiry must be in the future'),
     quantity: yup
         .number()
         .typeError('Must be a number')
@@ -169,6 +174,8 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
     const watchUnitPrice = watch('unitPrice')
     const watchTaxCode = watch('taxCode')
 
+    const taxOptions = taxCodes.filter((t) => t.code !== 'D' || watchTaxCode === 'D')
+
     useEffect(() => {
         setItemType(watchItemType as 'PRODUCT' | 'SERVICE')
     }, [watchItemType])
@@ -197,10 +204,10 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
     useEffect(() => {
         apiClient.getTaxCodes().then(setTaxCodes).catch(() => {
             setTaxCodes([
-                { code: 'A', label: 'A — Exempted (0%)', rate: 0, category: 'EXEMPT' },
-                { code: 'B', label: 'B — Standard (18%)', rate: 18, category: 'STANDARD' },
-                { code: 'C', label: 'C — Zero-rated (0%)', rate: 0, category: 'ZERO_RATED' },
-                { code: 'D', label: 'D — Non-Taxable (0%)', rate: 0, category: 'EXEMPT' },
+                { code: 'A', label: 'A — VAT Exempt (0%)', rate: 0, category: 'EXEMPT' },
+                { code: 'B', label: 'B — Standard VAT (18%)', rate: 18, category: 'STANDARD' },
+                { code: 'C', label: 'C — Export / Zero-rated (0%)', rate: 0, category: 'ZERO_RATED' },
+                { code: 'D', label: 'D — Not VAT Registered (0%)', rate: 0, category: 'NON_TAXABLE' },
             ])
         })
     }, [])
@@ -209,13 +216,13 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
         if (!selectedBranchId) return
         apiClient.getProducts({ page: 1, limit: 200, branchId: selectedBranchId })
             .then((res: any) => {
-                const items = res?.items || res?.data || []
+                const items = parseInventoryGetProductsResponse(res).items as Array<{ category?: string; name?: string }>
                 const cats = Array.from(new Set(
-                    items.filter((p: any) => p.category).map((p: any) => p.category)
+                    items.filter((p) => p.category).map((p) => p.category)
                 )) as string[]
                 setExistingCategories(cats.sort())
                 const names = Array.from(new Set(
-                    items.filter((p: any) => p.name).map((p: any) => p.name)
+                    items.filter((p) => p.name).map((p) => p.name)
                 )) as string[]
                 setExistingNames(names.sort())
             })
@@ -667,7 +674,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            RRA Tax Code <span className="text-red-500">*</span>
+                                            Tax Category <span className="text-red-500">*</span>
                                         </label>
                                         <select
                                             {...bindField('taxCode', 'batchNumber')}
@@ -675,8 +682,8 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                                 errors.taxCode ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
                                             }`}
                                         >
-                                            <option value="">Select Tax Code</option>
-                                            {taxCodes.map(tc => (
+                                            <option value="">Select tax category (A, B or C)</option>
+                                            {taxOptions.map(tc => (
                                                 <option key={tc.code} value={tc.code}>{tc.label}</option>
                                             ))}
                                         </select>
@@ -813,7 +820,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                     </div>
                                     <div className="px-4 py-3 space-y-2.5">
                                         <ReviewRow label="Unit Price" value={watch('unitPrice') ? `RWF ${Number(watch('unitPrice')).toLocaleString()}` : '-'} />
-                                        <ReviewRow label="Tax Code" value={watch('taxCode') ? taxCodes.find(t => t.code === watch('taxCode'))?.label || watch('taxCode') : '-'} />
+                                        <ReviewRow label="Tax Category" value={watch('taxCode') ? taxCodes.find(t => t.code === watch('taxCode'))?.label || watch('taxCode') : '-'} />
                                         {watch('unitPrice') && watch('taxCode') && (
                                             <>
                                                 <ReviewRow label="Taxable Amount" value={`RWF ${taxPreview.taxable.toFixed(2)}`} />
@@ -888,7 +895,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                 <button
                                     type="button"
                                     disabled={isSubmitting || isUploadingImage}
-                                    onClick={handleSubmit(onSubmit)}
+                                    onClick={handleSubmit(onSubmit, () => toast.error('Please fix the highlighted fields before saving'))}
                                     className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20"
                                 >
                                     {isSubmitting ? (

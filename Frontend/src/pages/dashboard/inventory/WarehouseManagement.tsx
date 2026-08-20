@@ -32,6 +32,7 @@ import {
   Building2,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import ConfirmDialog from '../../../components/common/ConfirmDialog';
 
 interface Warehouse {
   id: number;
@@ -52,6 +53,7 @@ export default function WarehouseManagement() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null);
+  const [warehouseToDelete, setWarehouseToDelete] = useState<Warehouse | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -131,7 +133,6 @@ export default function WarehouseManagement() {
   };
 
   const handleDelete = async (warehouse: Warehouse) => {
-    if (!confirm(`Are you sure you want to delete "${warehouse.name}"?`)) return;
     try {
       await apiClient.deleteWarehouse(warehouse.id);
       toast.success('Warehouse deleted successfully');
@@ -354,7 +355,7 @@ export default function WarehouseManagement() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(warehouse)}
+                          onClick={() => setWarehouseToDelete(warehouse)}
                           className="h-8 w-8 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                           title="Delete"
                         >
@@ -449,6 +450,16 @@ export default function WarehouseManagement() {
           </form>
         </DrawerContent>
       </Drawer>
+
+      <ConfirmDialog
+        open={warehouseToDelete !== null}
+        onClose={() => setWarehouseToDelete(null)}
+        onConfirm={() => { if (warehouseToDelete) handleDelete(warehouseToDelete); }}
+        title="Delete Warehouse"
+        message={warehouseToDelete ? `Are you sure you want to delete "${warehouseToDelete.name}"?` : ''}
+        confirmText="Delete"
+        variant="destructive"
+      />
     </div>
   );
 }

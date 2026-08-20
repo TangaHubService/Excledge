@@ -239,6 +239,8 @@ export const updateOrganization = async (req: Request, res: Response) => {
       phone,
       email,
       TIN,
+      VRN,
+      vatRegistered,
       currency,
       ebmDeviceId,
       ebmSerialNo,
@@ -277,6 +279,12 @@ export const updateOrganization = async (req: Request, res: Response) => {
         email,
         TIN,
         currency,
+        ...(VRN !== undefined
+          ? { VRN: VRN === "" ? null : VRN }
+          : {}),
+        ...(vatRegistered !== undefined
+          ? { vatRegistered: !!vatRegistered }
+          : {}),
         ...(ebmDeviceId !== undefined
           ? { ebmDeviceId: ebmDeviceId === "" ? null : ebmDeviceId }
           : {}),

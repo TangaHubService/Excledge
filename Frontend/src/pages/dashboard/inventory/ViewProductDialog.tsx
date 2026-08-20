@@ -108,13 +108,13 @@ export default function ViewProductDialog({
                     className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
                       }`}
                   >
-                    RRA Tax Code
+                    Tax Category
                   </p>
                   <p className="mt-1">
-                    {viewProduct.taxCode === 'A' ? 'Exempted (0%)' :
-                     viewProduct.taxCode === 'B' ? 'Standard (18%)' :
-                     viewProduct.taxCode === 'C' ? 'Zero-rated (0%)' :
-                     viewProduct.taxCode === 'D' ? 'Exempted Entity (0%)' :
+                    {viewProduct.taxCode === 'A' ? 'A — VAT Exempt (0%)' :
+                     viewProduct.taxCode === 'B' ? 'B — Standard VAT (18%)' :
+                     viewProduct.taxCode === 'C' ? 'C — Export / Zero-rated (0%)' :
+                     viewProduct.taxCode === 'D' ? 'D — Not VAT Registered (0%)' :
                      viewProduct.taxCode}
                   </p>
                 </div>

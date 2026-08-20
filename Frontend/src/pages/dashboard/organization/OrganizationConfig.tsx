@@ -56,6 +56,8 @@ type OrganizationData = {
     phone?: string;
     email?: string;
     TIN?: string;
+    VRN?: string;
+    vatRegistered?: boolean;
     ebmDeviceId?: string | null;
     ebmSerialNo?: string | null;
     currency?: string;
@@ -444,6 +446,42 @@ export function OrganizationConfig() {
                                             className="rounded-xl"
                                         />
                                     </div>
+
+                                    <div className="space-y-2 md:col-span-2">
+                                        <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-4 py-3">
+                                            <div>
+                                                <Label className="flex items-center gap-2 text-gray-800 dark:text-gray-200">
+                                                    <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                                    VAT Registered
+                                                </Label>
+                                                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                                    When off, every sale uses RRA tax code D (not VAT registered).
+                                                    When on, each product's tax category (A/B/C) applies.
+                                                </p>
+                                            </div>
+                                            <Switch
+                                                checked={organization?.vatRegistered ?? true}
+                                                onCheckedChange={(checked) => setOrganization(prev => prev ? { ...prev, vatRegistered: checked } : null)}
+                                                disabled={!isAuthorized || isSavingOrg}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {organization?.vatRegistered && (
+                                        <div className="space-y-2">
+                                            <Label className="flex items-center gap-2">
+                                                <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                                VAT Registration Number (VRN)
+                                            </Label>
+                                            <Input
+                                                value={organization?.VRN || ''}
+                                                onChange={(e) => setOrganization(prev => prev ? { ...prev, VRN: e.target.value } : null)}
+                                                disabled={!isAuthorized || isSavingOrg}
+                                                placeholder="e.g. VRN-100123456"
+                                                className="rounded-xl"
+                                            />
+                                        </div>
+                                    )}
 
                                     <div className="space-y-2 md:col-span-2">
                                         <Label className="flex items-center gap-2">

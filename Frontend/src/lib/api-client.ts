@@ -624,6 +624,118 @@ class ApiClient {
     })
   }
 
+  // Shift endpoints
+  async getActiveShift() {
+    return this.request(`/shifts/${this.getOrganizationId()}/active`);
+  }
+
+  async openShift(data: {
+    openingFloat: number;
+    openingMobileMoney?: number;
+    branchId?: number | null;
+    deviceId?: number;
+    openingNotes?: string;
+  }) {
+    return this.request(`/shifts/${this.getOrganizationId()}`, {
+      method: "POST",
+      body: JSON.stringify({
+        openingFloat: data.openingFloat,
+        openingMobileMoney: data.openingMobileMoney ?? 0,
+        branchId: data.branchId ?? undefined,
+        deviceId: data.deviceId ?? undefined,
+        openingNotes: data.openingNotes ?? undefined,
+      }),
+    });
+  }
+
+  async getShiftSummary(id: string | number) {
+    return this.request(`/shifts/${this.getOrganizationId()}/${id}/summary`);
+  }
+
+  async getShiftDetails(id: string | number) {
+    return this.request(`/shifts/${this.getOrganizationId()}/${id}/details`);
+  }
+
+  async listShifts(params?: Record<string, any>) {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return this.request(`/shifts/${this.getOrganizationId()}${query}`);
+  }
+
+  async getDailyShiftSummary(params?: Record<string, any>) {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return this.request(`/shifts/${this.getOrganizationId()}/daily${query}`);
+  }
+
+  async startShiftClose(id: string | number) {
+    return this.request(`/shifts/${this.getOrganizationId()}/${id}/start-close`, {
+      method: "POST",
+    });
+  }
+
+  async submitShiftClose(
+    id: string | number,
+    data: {
+      actualCash: number;
+      actualMobileMoney?: number;
+      varianceReason?: string;
+      closingNotes?: string;
+      denominationCounts?: Record<string, number>;
+    }
+  ) {
+    return this.request(`/shifts/${this.getOrganizationId()}/${id}/submit-close`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async approveShift(id: string | number, reason?: string) {
+    return this.request(`/shifts/${this.getOrganizationId()}/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  async rejectShift(id: string | number, reason?: string) {
+    return this.request(`/shifts/${this.getOrganizationId()}/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  async reopenShift(id: string | number, reason?: string) {
+    return this.request(`/shifts/${this.getOrganizationId()}/${id}/reopen`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  async cancelShift(id: string | number) {
+    return this.request(`/shifts/${this.getOrganizationId()}/${id}/cancel`, {
+      method: "POST",
+    });
+  }
+
+  async createCashMovement(data: {
+    shiftId: string | number;
+    type: "CASH_IN" | "CASH_OUT";
+    amount: number;
+    reason?: string;
+    reference?: string;
+    branchId?: number | null;
+  }) {
+    return this.request(`/shifts/${this.getOrganizationId()}/cash-movements`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async closeShift(id: string | number, data: { actualCash: number; closingNotes?: string }) {
+    return this.request(`/shifts/${this.getOrganizationId()}/${id}/close`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
   // Inventory endpoints
   async getProducts(params?: Record<string, any>) {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";

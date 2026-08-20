@@ -47,12 +47,20 @@ export interface IPreferences {
     defaultLandingPage: string;
     lowStockThresholdOverride: number | null;
     enabledPaymentMethods: string[];
+    shiftConfig?: {
+        approvalRequired: boolean;
+        denominationsEnabled: boolean;
+        varianceThreshold: number;
+    };
 }
 
 export interface IOrganizationSettings {
     sidebarConfig: ISidebarConfig;
     featureFlags: IFeatureFlags;
     preferences: IPreferences;
+    /** Business/taxpayer is registered for VAT. False → every sale uses RRA tax
+     *  code D regardless of product category. */
+    vatRegistered: boolean;
 }
 
 /** One entry per real sidebar link, grouped the same way the sidebar itself
@@ -158,4 +166,8 @@ export const DEFAULT_ORGANIZATION_SETTINGS: IOrganizationSettings = {
         lowStockThresholdOverride: null,
         enabledPaymentMethods: ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK_TRANSFER', 'DEBT'],
     },
+    // Defaults to true: matches the existing behavior where VAT-registered
+    // products charge 18%, so organizations that never touch this setting keep
+    // their current tax treatment.
+    vatRegistered: true,
 };

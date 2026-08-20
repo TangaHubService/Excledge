@@ -136,13 +136,14 @@ const ProductCard = memo(({
 // ── CartItemRow ───────────────────────────────────────────────────────────────
 
 const CartItemRow = memo(({
-  item, onRemove, onUpdateQuantity, onUpdatePrice, priceEditable = true,
+  item, onRemove, onUpdateQuantity, onUpdatePrice, priceEditable = true, vatRegistered = true,
 }: {
   item: CartItem
   onRemove: (id: string) => void
   onUpdateQuantity: (id: string, qty: number) => void
   onUpdatePrice: (id: string, price: number | string) => void
   priceEditable?: boolean
+  vatRegistered?: boolean
 }) => {
   const [quantityInput, setQuantityInput] = useState(String(item.quantity))
   const [editingQty, setEditingQty] = useState(false)
@@ -155,6 +156,7 @@ const CartItemRow = memo(({
   }
 
   const lineTotal = (item.unitPrice * item.quantity).toLocaleString()
+  const effectiveTaxCode = vatRegistered ? (item.product.taxCode ?? 'B') : 'D'
 
   return (
     <div className="flex items-center gap-3 py-3.5 border-b border-gray-50 last:border-b-0">
@@ -175,6 +177,9 @@ const CartItemRow = memo(({
         <p className="text-xs text-blue-600 font-medium tabular-nums mt-0.5">
           {item.unitPrice.toLocaleString()} RWF
         </p>
+        <span className={`inline-block mt-0.5 rounded px-1 py-px text-[10px] font-bold ${effectiveTaxCode === 'B' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+          {effectiveTaxCode}
+        </span>
       </div>
 
       {/* Qty Controls */}
@@ -362,7 +367,6 @@ const AddCustomerDrawer = memo(({
 // ── Main Component ────────────────────────────────────────────────────────────
 
 const CATEGORIES = ['All', 'Medicines', 'Health & Care', 'Baby Care', 'Vitamins', 'Medical Devices', 'Supplements']
-const TAX_RATE = 0.18
 
 export default function SalesForm() {
   const { t } = useTranslation()
@@ -578,7 +582,16 @@ export default function SalesForm() {
   }, [])
 
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0), [cart])
-  const taxAmount = useMemo(() => Math.round(subtotal - subtotal / (1 + TAX_RATE)), [subtotal])
+  // The business's VAT registration decides the treatment: when the taxpayer is
+  // not VAT registered every line is tax code D (0%). When VAT registered, only
+  // code B items carry 18% VAT (tax-inclusive: VAT = gross − gross/1.18).
+  const vatRegistered = orgSettings.vatRegistered
+  const taxAmount = useMemo(() => cart.reduce((s, i) => {
+    const code = vatRegistered ? (i.product.taxCode ?? 'B') : 'D'
+    if (code !== 'B') return s
+    const gross = i.unitPrice * i.quantity
+    return s + Math.round(gross - gross / 1.18)
+  }, 0), [cart, vatRegistered])
   const total = useMemo(() => subtotal, [subtotal])
 
   const selectedCustomerObj = useMemo(
@@ -1043,6 +1056,7 @@ export default function SalesForm() {
                 onUpdateQuantity={updateQuantity}
                 onUpdatePrice={updatePrice}
                 priceEditable={orgSettings.featureFlags.allowManualDiscounts}
+                vatRegistered={vatRegistered}
               />
             ))}
           </div>
@@ -1057,7 +1071,7 @@ export default function SalesForm() {
 
             {/* Tax */}
             <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>Tax (18%)</span>
+              <span>{vatRegistered ? (taxAmount > 0 ? 'VAT (18%)' : 'VAT (0%)') : 'VAT (Not registered — D)'}</span>
               <span className="font-semibold text-gray-800 tabular-nums">{taxAmount.toLocaleString()} RWF</span>
             </div>
 

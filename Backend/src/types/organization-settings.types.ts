@@ -64,12 +64,24 @@ export interface IPreferences {
   lowStockThresholdOverride: number | null;
   /** Payment method codes the organization accepts at the point of sale. */
   enabledPaymentMethods: string[];
+  /** Shift-management business rules (stored alongside preferences JSON). */
+  shiftConfig: {
+    /** Require manager approval before a submitted closing becomes CLOSED. */
+    approvalRequired: boolean;
+    /** Enable the detailed denomination cash-counting interface at closing. */
+    denominationsEnabled: boolean;
+    /** Variance (RWF) above which a closing always requires approval. */
+    varianceThreshold: number;
+  };
 }
 
 export interface IOrganizationSettings {
   sidebarConfig: ISidebarConfig;
   featureFlags: IFeatureFlags;
   preferences: IPreferences;
+  /** Business/taxpayer is registered for VAT. False → every sale uses RRA tax
+   *  code D regardless of product category. Mirrors Organization.vatRegistered. */
+  vatRegistered: boolean;
 }
 
 /** Fallback applied to any record — including rows created before a given key
@@ -124,7 +136,16 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
     defaultLandingPage: "dashboard",
     lowStockThresholdOverride: null,
     enabledPaymentMethods: ["CASH", "MOBILE_MONEY", "CARD", "BANK_TRANSFER", "DEBT"],
+    shiftConfig: {
+      approvalRequired: false,
+      denominationsEnabled: false,
+      varianceThreshold: 0,
+    },
   },
+  // Defaults to true: matches the existing behavior where VAT-registered
+  // products charge 18%, so organizations that never touch this setting keep
+  // their current tax treatment.
+  vatRegistered: true,
 };
 
 /** Partial update payloads: every leaf is optional so callers can patch a
