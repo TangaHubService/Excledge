@@ -7,10 +7,10 @@ export enum RraTaxCode {
 }
 
 export const RRA_TAX_CODE_LABELS: Record<RraTaxCode, string> = {
-  [RraTaxCode.A]: 'A — Exempted (0%)',
-  [RraTaxCode.B]: 'B — Standard (18%)',
-  [RraTaxCode.C]: 'C — Zero-rated (0%)',
-  [RraTaxCode.D]: 'D — Exempted Entity (0%)',
+  [RraTaxCode.A]: 'A — VAT Exempt (0%)',
+  [RraTaxCode.B]: 'B — Standard VAT (18%)',
+  [RraTaxCode.C]: 'C — Export / Zero-rated (0%)',
+  [RraTaxCode.D]: 'D — Not VAT Registered (0%)',
   [RraTaxCode.E]: 'E — Other',
 };
 

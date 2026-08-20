@@ -160,6 +160,8 @@
         "activityLogs": "Activity Logs",
         "companySettings": "Company Settings",
         "pos": "POS",
+        "openShift": "Open Shift",
+        "shifts": "Shift Summary",
         "debtManagement": "Debt Management",
         "billing": "BILLING",
         "subscription": "Subscription",

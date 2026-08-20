@@ -29,6 +29,7 @@ import {
   Wallet,
   ScanLine,
   FileText,
+  Clock,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -92,6 +93,7 @@ const baseNavigation: NavItem[] = [
 
   { id: "sales-header", name: "nav.salesHeader", href: "", type: "header" },
   { id: "pos", name: "nav.pos", href: "pos", icon: ShoppingCart, moduleKey: "pos" },
+  { id: "shifts", name: "nav.shifts", href: "shifts", icon: Clock },
   { id: "sales", name: "nav.sales", href: "sales", icon: Receipt, moduleKey: "sales" },
   { id: "customers", name: "nav.customers", href: "customers", icon: User, moduleKey: "customers" },
   { id: "debt-management", name: "nav.debtManagement", href: "debt", icon: Receipt, moduleKey: "debtManagement" },

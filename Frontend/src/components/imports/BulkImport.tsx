@@ -10,6 +10,7 @@ import {
 } from '../ui/select';
 import { Badge } from '../ui/badge';
 import { cn } from '../../lib/utils';
+import { toast } from 'react-toastify';
 import {
   Upload,
   CheckCircle2,
@@ -152,7 +153,7 @@ export function BulkImport({
 
   const handleFile = useCallback((file: File) => {
     if (!file.name.endsWith('.csv')) {
-      alert('Please upload a CSV file');
+      toast.error('Please upload a CSV file');
       return;
     }
 
@@ -162,7 +163,7 @@ export function BulkImport({
       const { headers, rows } = parseCSV(text);
 
       if (headers.length === 0) {
-        alert('Could not parse CSV. Check the file format.');
+        toast.error('Could not parse CSV. Check the file format.');
         return;
       }
 
@@ -294,7 +295,7 @@ export function BulkImport({
       await onImport(finalRows);
       setStep('done');
     } catch (err: any) {
-      alert(err?.message || 'Import failed');
+      toast.error(err?.message || 'Import failed');
     } finally {
       setImporting(false);
     }

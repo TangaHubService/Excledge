@@ -29,8 +29,8 @@ import { RefreshCw, AlertTriangle, CheckCircle, Clock, XCircle, ExternalLink, Lo
 import { OUTBOX_STATUS_CONFIG, type EbmOutboxEntry, type EbmOutboxStatus } from '../../../types/ebm';
 import { apiClient } from '../../../lib/api-client';
 import type { Branch } from '../../../context/BranchContext';
-
-const API_BASE = import.meta.env.VITE_PUBLIC_API_URL || 'http://localhost:5000';
+import ConfirmDialog from '../../../components/common/ConfirmDialog';
+import { toast } from 'react-toastify';
 
 type GroupedCounts = Record<EbmOutboxStatus, number>;
 
@@ -41,6 +41,8 @@ interface EbmCredForm {
   vsdcUrl?: string | null;
 }
 
+const CRED_PAGE_SIZES = [5, 8, 10, 25];
+
 function EbmCredentialsCard() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchId] = useState<number | ''>('');
@@ -50,6 +52,8 @@ function EbmCredentialsCard() {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [credPage, setCredPage] = useState(1);
+  const [credPageSize, setCredPageSize] = useState(8);
 
   const applyBranch = (branch: Branch) => {
     setForm({
@@ -110,6 +114,23 @@ function EbmCredentialsCard() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const credPageCount = Math.max(1, Math.ceil(branches.length / credPageSize));
+  const credPageSafe = Math.min(credPage, credPageCount);
+  const credPageRows = branches.slice(
+    (credPageSafe - 1) * credPageSize,
+    credPageSafe * credPageSize,
+  );
+
+  const changeCredPageSize = (value: string) => {
+    setCredPageSize(Number(value));
+    setCredPage(1);
+  };
+
+  const editBranchCredentials = (branch: Branch) => {
+    setBranchId(branch.id);
+    applyBranch(branch);
   };
 
   return (
@@ -195,6 +216,94 @@ function EbmCredentialsCard() {
           </div>
         </div>
 
+        {branches.length > 0 && (
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Per-branch device credentials</p>
+              <p className="text-xs text-muted-foreground">
+                {branches.length} branch{branches.length === 1 ? '' : 'es'}
+              </p>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Branch</TableHead>
+                    <TableHead>bhfId</TableHead>
+                    <TableHead>Serial (MRC)</TableHead>
+                    <TableHead>sdcId</TableHead>
+                    <TableHead>VSDC URL</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {credPageRows.map((branch) => (
+                    <TableRow key={branch.id}>
+                      <TableCell className="font-medium">
+                        {branch.name}
+                        <span className="ml-1 text-xs text-muted-foreground">({branch.code})</span>
+                      </TableCell>
+                      <TableCell>{branch.bhfId || '—'}</TableCell>
+                      <TableCell>{branch.ebmSerialNo || '—'}</TableCell>
+                      <TableCell>{branch.ebmDeviceId || '—'}</TableCell>
+                      <TableCell className="max-w-[180px] truncate">{branch.vsdcUrl || '—'}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => editBranchCredentials(branch)}
+                        >
+                          Edit
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Rows per page</span>
+                <Select value={String(credPageSize)} onValueChange={changeCredPageSize}>
+                  <SelectTrigger className="h-8 w-[76px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CRED_PAGE_SIZES.map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Page {credPageSafe} of {credPageCount} · {branches.length} branches
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={credPageSafe <= 1}
+                  onClick={() => setCredPage(credPageSafe - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={credPageSafe >= credPageCount}
+                  onClick={() => setCredPage(credPageSafe + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {loading && (
           <p className="text-xs text-muted-foreground flex items-center gap-1">
             <Loader2 className="h-3 w-3 animate-spin" /> Loading credentials…
@@ -229,16 +338,16 @@ export function EbmOutboxDashboard() {
   const [entries, setEntries] = useState<EbmOutboxEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkingId, setCheckingId] = useState<number | null>(null);
+  const [reversalEntry, setReversalEntry] = useState<EbmOutboxEntry | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const fetchOutbox = useCallback(async () => {
     setLoading(true);
     try {
-      const orgId = localStorage.getItem('current_organization_id');
-      const res = await fetch(`${API_BASE}/api/organizations/${orgId}/ebm-outbox`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
-      });
-      const data = await res.json();
-      setEntries(Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []);
+      const orgId = apiClient.getOrganizationId();
+      const res = await apiClient.request(`/organizations/${orgId}/ebm-outbox`);
+      setEntries(Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []);
     } catch {
       console.error('Failed to fetch EBM outbox');
     } finally {
@@ -256,16 +365,22 @@ export function EbmOutboxDashboard() {
     DEAD_LETTER: entries.filter((e) => e.status === 'DEAD_LETTER').length,
   };
 
+  const pageCount = Math.max(1, Math.ceil(entries.length / pageSize));
+  const pageSafe = Math.min(page, pageCount);
+  const pageRows = entries.slice((pageSafe - 1) * pageSize, pageSafe * pageSize);
+
+  const changePageSize = (value: string) => {
+    const size = Number(value);
+    setPageSize(size);
+    setPage(1);
+  };
+
   const handleStatusCheck = async (entry: EbmOutboxEntry) => {
     setCheckingId(entry.id);
     try {
-      const orgId = localStorage.getItem('current_organization_id');
-      await fetch(`${API_BASE}/api/organizations/${orgId}/ebm-outbox/${entry.id}/check-status`, {
+      const orgId = apiClient.getOrganizationId();
+      await apiClient.request(`/organizations/${orgId}/ebm-outbox/${entry.id}/check-status`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
-        },
         body: JSON.stringify({ idempotencyKey: entry.idempotencyKey }),
       });
       await fetchOutbox();
@@ -360,7 +475,7 @@ export function EbmOutboxDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {entries.map((entry) => (
+                  {pageRows.map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="font-mono text-xs">
                         {entry.sale?.saleNumber ?? `#${entry.saleId}`}
@@ -416,7 +531,7 @@ export function EbmOutboxDashboard() {
                             variant="destructive"
                             size="sm"
                             className="bg-rose-600 hover:bg-rose-700 text-white"
-                            onClick={() => alert('Compensation flow: reverse inventory & customer balance for sale #' + entry.saleId)}
+                            onClick={() => setReversalEntry(entry)}
                           >
                             Request Reversal
                           </Button>
@@ -428,8 +543,66 @@ export function EbmOutboxDashboard() {
               </Table>
             </div>
           )}
+
+          {entries.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Rows per page</span>
+                <Select value={String(pageSize)} onValueChange={changePageSize}>
+                  <SelectTrigger className="h-8 w-[76px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[10, 25, 50, 100].map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Page {pageSafe} of {pageCount} · {entries.length} entries
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pageSafe <= 1}
+                  onClick={() => setPage(pageSafe - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pageSafe >= pageCount}
+                  onClick={() => setPage(pageSafe + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={reversalEntry !== null}
+        onClose={() => setReversalEntry(null)}
+        onConfirm={() => {
+          if (reversalEntry) {
+            toast.info(`Compensation flow requested for sale #${reversalEntry.saleId}: reverse inventory & customer balance`);
+          }
+          setReversalEntry(null);
+        }}
+        title="Request Reversal"
+        message={reversalEntry
+          ? `This will reverse inventory and customer balance for sale #${reversalEntry.saleId}. Continue?`
+          : ''}
+        confirmText="Confirm Reversal"
+        variant="destructive"
+      />
     </div>
   );
 }

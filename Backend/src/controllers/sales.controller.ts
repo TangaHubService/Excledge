@@ -41,13 +41,22 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
     let resolvedShiftId: number | undefined
     if (shiftId !== undefined && shiftId !== null && shiftId !== '') {
       const shift = await prisma.shift.findFirst({
-        where: { id: parseInt(shiftId), organizationId, userId, status: 'OPEN' },
+        where: { id: parseInt(shiftId), organizationId, userId, status: { in: ['OPEN', 'REOPENED'] } },
         select: { id: true },
       })
       if (!shift) {
         return res.status(400).json(apiError("Shift is not open or does not belong to you"))
       }
       resolvedShiftId = shift.id
+    } else {
+      // Business rule: every transaction belongs to a shift. When the caller
+      // does not supply one, attach this user's currently active shift (if any).
+      const active = await prisma.shift.findFirst({
+        where: { organizationId, userId, status: { in: ['OPEN', 'REOPENED'] } },
+        orderBy: { openedAt: 'desc' },
+        select: { id: true },
+      })
+      resolvedShiftId = active?.id
     }
 
     // ── B2B purchase-code pre-check ──
@@ -159,7 +168,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
     // C6: determine receipt type label (NS/TS/PS)
     const org = await prisma.organization.findUnique({
       where: { id: organizationId! },
-      select: { trainingMode: true },
+      select: { trainingMode: true, vatRegistered: true },
     });
     const rcptLabel = isProforma ? 'PS' : (org?.trainingMode ? 'TS' : 'NS');
 
@@ -194,14 +203,16 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         }
       }
 
-      // 2. Server-side tax computation with Decimal arithmetic
+      // 2. Server-side tax computation with Decimal arithmetic.
+      // The business's VAT-registration status decides whether the products'
+      // A/B/C categories apply, or whether every line is forced to tax code D.
       const allItemsForTax = items.map((i: any) => ({
         productId: i.productId ? parseInt(i.productId) : undefined,
         quantity: i.quantity,
         unitPrice: i.unitPrice,
         itemType: i.itemType || 'PRODUCT',
       }));
-      const taxSummary = await TaxService.calculateSaleTax(organizationId!, allItemsForTax);
+      const taxSummary = await TaxService.calculateSaleTax(organizationId!, allItemsForTax, org?.vatRegistered ?? false);
 
       // ── MODULE 2.2: Reconcile server-computed total vs client total ──
       const computedTotal = taxSummary.items.reduce(
@@ -837,6 +848,7 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             refundReason: reason,
             rcptLabel: refundRcptLabel as any,
             originalSaleId: id, // Link to original sale
+            shiftId: (sale as any).shiftId ?? undefined, // Refund belongs to the original sale's shift
             saleItems: {
               create: itemsToRefund.map((item: any) => ({
                 productId: item.productId || undefined,

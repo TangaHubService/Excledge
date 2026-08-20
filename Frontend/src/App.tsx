@@ -38,6 +38,7 @@ import { CreateOrderPage } from "./pages/dashboard/orders/CreateOrderPage";
 import { ChangePasswordPage } from "./pages/auth/ChangePassword";
 import LandingPage from "./pages/LandingPage";
 import SalesPage from "./pages/dashboard/sales/sales";
+import ShiftSummaryPage from "./pages/dashboard/shifts/ShiftSummaryPage";
 import { SubscriptionProvider } from "./context/SubscriptionContext";
 import SubscriptionPage from "./pages/SubscriptionPage";
 import SubscriptionSuccess from "./pages/PaymentCompleted";
@@ -139,6 +140,8 @@ function App() {
                       <Route path="warehouses" element={<WarehouseManagement />} />
                       <Route path="sales" element={<SalesPage />} />
                       <Route path="sales/:id" element={<Navigate to="/dashboard/sales" replace />} />
+                      <Route path="shifts" element={<ShiftSummaryPage />} />
+                      <Route path="open-shift" element={<Navigate to="shifts" replace />} />
                       <Route path="organization-config" element={<OrganizationConfig />} />
 
                       {/* Redirect legacy routes */}

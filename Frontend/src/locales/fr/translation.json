@@ -162,6 +162,8 @@
         "activityLogs": "Journaux d'activité",
         "companySettings": "Paramètres de l'entreprise",
         "pos": "Point de vente",
+        "openShift": "Ouvrir le poste",
+        "shifts": "Résumé des postes",
         "debtManagement": "Gestion des dettes",
         "billing": "FACTURATION",
         "subscription": "Abonnement",
