@@ -569,6 +569,15 @@ class ApiClient {
     });
   }
 
+  /** Void/cancel a sale (marks it CANCELLED, restores stock, fiscalizes a VOID invoice). */
+  async cancelSale(saleId: string, data: { reason: string }) {
+    const organizationId = this.getOrganizationId();
+    return this.request(`/sales/${organizationId}/${saleId}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   /** VSDC/EBM presence status for the offline-guard indicator. */
   async getEbmStatus() {
     return this.request(`/organizations/${this.getOrganizationId()}/ebm-status`);

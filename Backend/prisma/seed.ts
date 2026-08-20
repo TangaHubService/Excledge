@@ -520,6 +520,18 @@ async function seedDemoDataset() {
     },
   })
 
+  const eastSellerUser = await prisma.user.create({
+    data: {
+      email: "demo.eastseller@exceledge.test",
+      password: passwordHash,
+      name: "Demo East Seller",
+      phone: "+250788000005",
+      role: UserRole.SELLER,
+      isActive: true,
+      isEmailVerified: true,
+    },
+  })
+
   await prisma.userOrganization.createMany({
     data: [
       {
@@ -541,6 +553,12 @@ async function seedDemoDataset() {
         isOwner: false,
       },
       {
+        userId: eastSellerUser.id,
+        organizationId: org.id,
+        role: UserRole.SELLER,
+        isOwner: false,
+      },
+      {
         userId: accountantUser.id,
         organizationId: org.id,
         role: UserRole.ACCOUNTANT,
@@ -555,6 +573,7 @@ async function seedDemoDataset() {
       { userId: adminUser.id, branchId: eastBranch.id, isPrimary: false },
       { userId: managerUser.id, branchId: eastBranch.id, isPrimary: true },
       { userId: sellerUser.id, branchId: mainBranch.id, isPrimary: true },
+      { userId: eastSellerUser.id, branchId: eastBranch.id, isPrimary: true },
       { userId: accountantUser.id, branchId: mainBranch.id, isPrimary: true },
       { userId: accountantUser.id, branchId: eastBranch.id, isPrimary: false },
     ],
@@ -1102,6 +1121,7 @@ async function seedDemoDataset() {
   console.log(`  ${DEMO_ADMIN_EMAIL} (ADMIN)`)
   console.log(`  demo.manager@exceledge.test (BRANCH_MANAGER)`)
   console.log(`  demo.seller@exceledge.test (SELLER)`)
+  console.log(`  demo.eastseller@exceledge.test (SELLER, East Branch)`)
   console.log(`  demo.accountant@exceledge.test (ACCOUNTANT)`)
   console.log(`Sample sales: cash, mixed/debt + partial debt payment, insurance, proforma`)
   console.log(`Purchase orders: pending #${pendingPo.id}, completed #${completedPo.id} + supplier payment`)

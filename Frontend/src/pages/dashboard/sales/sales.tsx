@@ -153,6 +153,10 @@ export default function SalesPage() {
   const [saleToRefund, setSaleToRefund] = useState<Sale | null>(null);
   const [refundReason, setRefundReason] = useState('');
   const [isRefunding, setIsRefunding] = useState(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [saleToCancel, setSaleToCancel] = useState<Sale | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState<string | null>(null);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
@@ -258,6 +262,29 @@ export default function SalesPage() {
       toast.error(msg);
     } finally {
       setIsRefunding(false);
+    }
+  };
+
+  const handleOpenCancelModal = (sale: Sale) => {
+    setSaleToCancel(sale);
+    setCancelReason('');
+    setIsCancelModalOpen(true);
+  };
+
+  const handleCancelSubmit = async () => {
+    if (!saleToCancel) return;
+    if (cancelReason.trim().length < 5) { toast.error(t('sales.cancelReasonRequired') || 'Cancellation reason is required (at least 5 characters)'); return; }
+    try {
+      setIsCancelling(true);
+      await apiClient.cancelSale(saleToCancel.id, { reason: cancelReason.trim() });
+      toast.success(t('sales.cancelSuccess') || 'Sale cancelled successfully');
+      await fetchSales();
+      setIsCancelModalOpen(false);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : t('sales.cancelError');
+      toast.error(msg);
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -601,6 +628,15 @@ export default function SalesPage() {
                                   Refund Sale
                                 </button>
                               )}
+                              {sale.status === 'COMPLETED' && (
+                                <button
+                                  onClick={() => { handleOpenCancelModal(sale); setOpenRowMenu(null); }}
+                                  className="w-full text-left px-3 py-2 flex items-center gap-2 text-red-600 hover:bg-red-50 transition-colors"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  Cancel Sale (Void)
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -823,6 +859,51 @@ export default function SalesPage() {
             >
               {isRefunding ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               {t('sales.processRefund') || 'Process Refund'}
+            </button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+
+      {/* ── Cancel (Void) drawer ──────────────────────────────────────────── */}
+      <Drawer open={isCancelModalOpen} onOpenChange={setIsCancelModalOpen}>
+        <DrawerContent className="sm:max-w-lg bg-white">
+          <DrawerHeader>
+            <DrawerTitle>{t('sales.processCancel', { number: saleToCancel?.saleNumber }) || `Cancel Sale ${saleToCancel?.saleNumber ?? ''}`}</DrawerTitle>
+            <DrawerDescription>
+              {t('sales.cancelDesc') || 'The original invoice will be voided, stock restored, and a VOID receipt sent to the VSDC. This cannot be undone.'}
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="space-y-4 px-5 py-4">
+            <div className="p-4 bg-red-50 border border-red-100 rounded-xl">
+              <p className="text-sm text-red-800 font-medium">
+                {t('sales.cancelWarning') || 'Only use this when the sale was made in error (e.g. wrong items or customer). For genuine returns, use Refund Sale instead.'}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cancelReason">{t('sales.cancelReason') || 'Cancellation reason'}</Label>
+              <Input
+                id="cancelReason"
+                placeholder={t('sales.cancelReasonPlaceholder') || 'Why is this sale being cancelled? (min 5 characters)'}
+                value={cancelReason}
+                onChange={e => setCancelReason(e.target.value)}
+                className="focus:ring-red-500 border-red-200"
+              />
+            </div>
+          </div>
+          <DrawerFooter className="flex-row gap-2 border-t border-gray-100 px-5 py-4">
+            <button
+              onClick={() => setIsCancelModalOpen(false)}
+              className="flex-1 h-10 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={handleCancelSubmit}
+              disabled={isCancelling}
+              className="flex-1 h-10 flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
+            >
+              {isCancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+              {t('sales.processCancel') || 'Cancel Sale'}
             </button>
           </DrawerFooter>
         </DrawerContent>
