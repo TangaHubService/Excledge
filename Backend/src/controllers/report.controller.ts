@@ -188,6 +188,7 @@ interface ProductWithSales {
   category: string | null
   quantity: number
   unitPrice: any // Prisma.Decimal
+  purchasePrice: any // Prisma.Decimal | null
   minStock: number
   maxStock?: number | null
   organizationId: string
@@ -390,7 +391,9 @@ export const getInventoryReport = async (req: BranchAuthRequest, res: Response) 
           lastRestocked: restocks[0]?.createdAt.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
           changes: changesWithStock.slice(0, 5), // Only return last 5 changes
           status: itemStatus,
-          stockValue: Number(product.unitPrice) * product.quantity,
+          // Stock value at cost (purchase price), not retail — falls back to
+          // sales price only when no purchase price has been recorded.
+          stockValue: (product.purchasePrice != null ? Number(product.purchasePrice) : Number(product.unitPrice)) * product.quantity,
         } as InventoryItem
       })
     )
@@ -1198,6 +1201,7 @@ export const getStockReport = async (req: BranchAuthRequest, res: Response) => {
         batchNumber: true,
         quantity: true, // Current stock
         unitPrice: true,
+        purchasePrice: true,
       }
     });
 
@@ -1271,7 +1275,7 @@ export const getStockReport = async (req: BranchAuthRequest, res: Response) => {
         stockIn: moves.in,
         stockOut: moves.out,
         closingStock,
-        stockValue: closingStock * product.unitPrice.toNumber(),
+        stockValue: closingStock * (product.purchasePrice != null ? product.purchasePrice.toNumber() : product.unitPrice.toNumber()),
       };
     });
 

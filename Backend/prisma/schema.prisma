@@ -13,6 +13,8 @@ model Organization {
   TIN                      String? // 9-digit RRA Tax Identification Number
   VRN                      String? // VAT Registration Number (for VAT-registered orgs)
   vatRegistered            Boolean                    @default(true) // Business/taxpayer is registered for VAT → product tax categories A/B/C apply; if false every sale uses tax code D
+  isTaxExempt              Boolean                    @default(false) // Legally tax-exempt entity (e.g. NGO/diplomatic) → every sale uses tax code A regardless of vatRegistered or product category
+  taxExemptionReason       String? // Free-text reason/certificate reference for the exemption
   currency                 String?
   ebmDeviceId              String? // Legacy: org-level fallback (use Branch.ebmDeviceId per branch)
   ebmSerialNo              String? // Legacy: org-level fallback (use Branch.ebmSerialNo per branch)
@@ -443,7 +445,8 @@ model Product {
   sku                  String?
   batchNumber          String?
   quantity             Int                   @default(0)
-  unitPrice            Decimal               @db.Decimal(10, 2)
+  unitPrice            Decimal               @db.Decimal(10, 2) // Sales price
+  purchasePrice        Decimal?              @db.Decimal(10, 2) // Cost/purchase price — seeds the initial batch's unitCost
   expiryDate           DateTime?
   category             String?
   description          String?
@@ -468,6 +471,7 @@ model Product {
   itemCd               String? // Unique item code registered with RRA
   pkgUnitCd            String? // Packaging unit code (e.g. "CT", "BT")
   qtyUnitCd            String? // Quantity unit code (e.g. "U", "KG")
+  packagingQty         Int? // Quantity per packaging unit (e.g. 24 pieces per carton)
   batches              Batch[]
   inventoryLedgers     InventoryLedger[]
   organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)

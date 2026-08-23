@@ -50,6 +50,7 @@ import { apiClient } from "../../lib/api-client";
 import { parseInventoryGetProductsResponse } from "../../lib/inventory-response";
 import { useDebounce } from "use-debounce";
 import { type Product } from "../../types";
+import { PACKAGING_UNIT_LABELS } from "../../types/ebm";
 import AddProduct from "./inventory/AddProduct";
 import ViewProductDialog from "./inventory/ViewProductDialog";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
@@ -218,6 +219,10 @@ export const InventoryManagement = () => {
         "Description",
         "Expiry Date (YYYY/MM/DD) - Optional",
         "Batch Number",
+        "Purchase Price - Optional",
+        "Barcode - Optional",
+        "Packaging Unit Code - Optional (e.g. CT, BX, BO)",
+        "Qty per Package - Optional",
       ],
       [
         "Paracetamol",
@@ -228,6 +233,10 @@ export const InventoryManagement = () => {
         "Pain reliever",
         "2025/12/31",
         "BATCH001",
+        "3.50",
+        "6001234567890",
+        "CT",
+        "24",
       ],
       [
         "Bandage",
@@ -238,6 +247,10 @@ export const InventoryManagement = () => {
         "For wounds",
         "2025/12/31",
         "BATCH002",
+        "1.20",
+        "",
+        "",
+        "",
       ],
     ];
 
@@ -253,6 +266,10 @@ export const InventoryManagement = () => {
       { wch: 30 },
       { wch: 20 },
       { wch: 15 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 14 },
     ];
 
     XLSX.utils.book_append_sheet(wb, ws, "Products Template");
@@ -315,6 +332,11 @@ export const InventoryManagement = () => {
             }
           }
 
+          const purchasePriceRaw = row[8];
+          const barcodeRaw = String(row[9] || "").trim();
+          const pkgUnitCdRaw = String(row[10] || "").trim();
+          const packagingQtyRaw = row[11];
+
           const product = {
             name: String(row[0] || "").trim(),
             category: String(row[1] || "").trim(),
@@ -324,6 +346,14 @@ export const InventoryManagement = () => {
             description: String(row[5] || "").trim(),
             expiryDate: expiryDate ? expiryDate.toISOString() : "",
             batchNumber: String(row[7] || `BATCH-${Date.now()}-${i}`).trim(),
+            purchasePrice: purchasePriceRaw !== undefined && purchasePriceRaw !== "" && !isNaN(Number(purchasePriceRaw))
+              ? Number(purchasePriceRaw)
+              : undefined,
+            barcode: barcodeRaw || undefined,
+            pkgUnitCd: pkgUnitCdRaw || undefined,
+            packagingQty: packagingQtyRaw !== undefined && packagingQtyRaw !== "" && !isNaN(Number(packagingQtyRaw))
+              ? Number(packagingQtyRaw)
+              : undefined,
           };
 
           processedProducts.push(product);
@@ -677,9 +707,17 @@ export const InventoryManagement = () => {
 
                     {/* Category Pill */}
                     <TableCell className="py-3.5">
-                      <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold", pillClass)}>
-                        {prod.category || "Unassigned"}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold w-fit", pillClass)}>
+                          {prod.category || "Unassigned"}
+                        </span>
+                        {prod.pkgUnitCd && (
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                            {PACKAGING_UNIT_LABELS[prod.pkgUnitCd] || prod.pkgUnitCd}
+                            {prod.packagingQty ? ` × ${prod.packagingQty}` : ""}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
 
                     {/* Quantity */}
@@ -690,6 +728,11 @@ export const InventoryManagement = () => {
                     {/* Price */}
                     <TableCell className="py-3.5 text-xs font-bold tabular-nums text-gray-900 dark:text-white">
                       {(prod.unitPrice ?? 0).toLocaleString()} <span className="font-normal text-gray-400">Frw</span>
+                      {prod.purchasePrice != null && (
+                        <div className="text-[10px] font-normal text-gray-400 dark:text-gray-500">
+                          Cost: {Number(prod.purchasePrice).toLocaleString()} Frw
+                        </div>
+                      )}
                     </TableCell>
 
                     {/* Expiry Date */}

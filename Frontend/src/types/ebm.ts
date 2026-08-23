@@ -49,6 +49,71 @@ export const MEASUREMENT_UNIT_OPTIONS = Object.entries(MEASUREMENT_UNIT_LABELS).
   ([value, label]) => ({ value: value as MeasurementUnit, label }),
 );
 
+/**
+ * RRA/EBM packaging unit codes (product `pkgUnitCd`). This is how a product is
+ * physically packaged for sale/purchase — e.g. a carton of bottles — distinct
+ * from `MeasurementUnit`, which is the base unit the product is measured/sold in.
+ */
+export const PACKAGING_UNIT_LABELS: Record<string, string> = {
+  BA: 'Bag',
+  BE: 'Bundle',
+  BG: 'Bag',
+  BJ: 'Bucket',
+  BL: 'Bale',
+  BO: 'Bottle',
+  BX: 'Box',
+  CA: 'Can',
+  CR: 'Crate',
+  CS: 'Case',
+  CT: 'Carton',
+  CY: 'Cylinder',
+  DR: 'Drum',
+  EA: 'Piece / Each',
+  EN: 'Envelope',
+  JR: 'Jar',
+  JU: 'Jug',
+  KG: 'Keg',
+  PA: 'Packet',
+  PK: 'Pack',
+  PO: 'Pot',
+  RL: 'Roll',
+  SA: 'Sack',
+  SE: 'Set',
+  TB: 'Tube',
+  TC: 'Tetrapack',
+  TK: 'Tank',
+  TY: 'Tray',
+  VI: 'Vial',
+  NT: 'Not Available',
+};
+
+export const PACKAGING_UNIT_OPTIONS = Object.entries(PACKAGING_UNIT_LABELS).map(
+  ([value, label]) => ({ value, label: `${label} (${value})` }),
+);
+
+/**
+ * RRA/EBM quantity unit codes (product `qtyUnitCd`) — the unit each item inside
+ * the package is counted/measured in.
+ */
+export const QUANTITY_UNIT_LABELS: Record<string, string> = {
+  U: 'Unit / Piece',
+  KG: 'Kilogram',
+  G: 'Gram',
+  L: 'Litre',
+  ML: 'Millilitre',
+  M: 'Metre',
+  M2: 'Square metre',
+  M3: 'Cubic metre',
+  TN: 'Tonne',
+  PA: 'Pair',
+  DZ: 'Dozen',
+  NT: 'Not Available',
+};
+
+export const QUANTITY_UNIT_OPTIONS = Object.entries(QUANTITY_UNIT_LABELS).map(
+  ([value, label]) => ({ value, label: `${label} (${value})` }),
+);
+
 export type EbmOutboxStatus = 'PENDING' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'DEAD_LETTER';
 
 export const OUTBOX_STATUS_CONFIG: Record<EbmOutboxStatus, { label: string; color: string }> = {

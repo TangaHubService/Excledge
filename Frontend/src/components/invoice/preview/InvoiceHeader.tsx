@@ -10,10 +10,15 @@ type HeaderData = Pick<EbmInvoice, "company">
  * Top invoice masthead. The RRA artwork is deliberately limited to the supplied
  * mark on the left; the right-side certification area stays empty until a real
  * RRA EBM certificate is issued.
+ *
+ * The RRA mark itself only renders when the branch/org is actually configured
+ * with RRA/EBM device credentials (`company.ebmLinked`) — an account that has
+ * never been linked to RRA must never display RRA branding on its invoices.
  */
 export function InvoiceHeader({ data }: { data: HeaderData }) {
   const company = data.company
   const companyName = safeText(company?.name)
+  const isEbmLinked = Boolean(company?.ebmLinked)
   const contactLines = [
     { Icon: MapPin, value: safeText(company?.address) },
     { Icon: Phone, value: safeText(company?.phone) },
@@ -24,15 +29,17 @@ export function InvoiceHeader({ data }: { data: HeaderData }) {
   return (
     <header style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
       <div style={{ display: "flex", alignItems: "stretch", minHeight: 156 }}>
-        <div style={{ width: 166, minWidth: 166, borderRight: `1px solid ${C.muted}`, padding: "2px 18px 0 0", boxSizing: "border-box", textAlign: "center" }}>
-          <img
-            src="/rra.png"
-            alt="Rwanda Revenue Authority"
-            style={{ display: "block", width: 118, height: 114, margin: "0 auto", objectFit: "contain" }}
-          />
-          <div style={{ color: C.navy, fontSize: 9.5, fontWeight: 900, lineHeight: 1.25, textTransform: "uppercase", whiteSpace: "nowrap" }}>Rwanda Revenue Authority</div>
-          <div style={{ color: C.navy, fontSize: 7, fontWeight: 700, lineHeight: 1.35, marginTop: 4, textTransform: "uppercase", whiteSpace: "nowrap" }}>Taxes for Growth and Development</div>
-        </div>
+        {isEbmLinked && (
+          <div style={{ width: 166, minWidth: 166, borderRight: `1px solid ${C.muted}`, padding: "2px 18px 0 0", boxSizing: "border-box", textAlign: "center" }}>
+            <img
+              src="/rra.png"
+              alt="Rwanda Revenue Authority"
+              style={{ display: "block", width: 118, height: 114, margin: "0 auto", objectFit: "contain" }}
+            />
+            <div style={{ color: C.navy, fontSize: 9.5, fontWeight: 900, lineHeight: 1.25, textTransform: "uppercase", whiteSpace: "nowrap" }}>Rwanda Revenue Authority</div>
+            <div style={{ color: C.navy, fontSize: 7, fontWeight: 700, lineHeight: 1.35, marginTop: 4, textTransform: "uppercase", whiteSpace: "nowrap" }}>Taxes for Growth and Development</div>
+          </div>
+        )}
 
         <div style={{ flex: 1, minWidth: 0, padding: "3px 24px 0 28px" }}>
           <h1 style={{ margin: 0, color: C.ink, fontWeight: 900, fontSize: 25, lineHeight: 1.12, letterSpacing: 0.25, textTransform: "uppercase", overflowWrap: "anywhere" }}>

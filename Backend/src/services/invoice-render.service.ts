@@ -13,6 +13,8 @@ export interface RenderInvoiceCompany {
   mrc?: NullableString
   website?: NullableString
   currency?: NullableString
+  /** Whether the branch/org is actually configured with RRA/EBM device credentials. */
+  ebmLinked?: boolean
 }
 
 export interface RenderInvoiceCustomer {
@@ -348,6 +350,7 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
   const logoHtml = data.company.logo
     ? `<img src="${escapeHtml(data.company.logo)}" alt="${companyName} logo" class="company-logo" />`
     : ""
+  const isEbmLinked = Boolean(data.company.ebmLinked)
 
   const customerRows = [
     row("Client Name", customerName),
@@ -936,9 +939,9 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
       <div class="sheet">
         <div class="top-grid">
           <div class="brand">
-            ${rraLogoSvg()}
+            ${isEbmLinked ? `${rraLogoSvg()}
             <div class="brand-name">Rwanda Revenue Authority</div>
-            <div class="brand-tag">Taxes for Growth and Development</div>
+            <div class="brand-tag">Taxes for Growth and Development</div>` : ""}
           </div>
 
           <div class="company">
@@ -955,9 +958,9 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
           </div>
 
           <div class="cert">
-            ${ebmSealSvg(Boolean(data.certification.isCertified))}
+            ${isEbmLinked ? `${ebmSealSvg(Boolean(data.certification.isCertified))}
             <div class="cert-label">RRA | EBM</div>
-            <div class="cert-label">CERTIFIED</div>
+            <div class="cert-label">CERTIFIED</div>` : ""}
           </div>
         </div>
 

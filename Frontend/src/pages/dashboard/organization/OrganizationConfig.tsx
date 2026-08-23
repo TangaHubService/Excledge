@@ -58,6 +58,8 @@ type OrganizationData = {
     TIN?: string;
     VRN?: string;
     vatRegistered?: boolean;
+    isTaxExempt?: boolean;
+    taxExemptionReason?: string | null;
     ebmDeviceId?: string | null;
     ebmSerialNo?: string | null;
     currency?: string;
@@ -478,6 +480,43 @@ export function OrganizationConfig() {
                                                 onChange={(e) => setOrganization(prev => prev ? { ...prev, VRN: e.target.value } : null)}
                                                 disabled={!isAuthorized || isSavingOrg}
                                                 placeholder="e.g. VRN-100123456"
+                                                className="rounded-xl"
+                                            />
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-2 md:col-span-2">
+                                        <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-4 py-3">
+                                            <div>
+                                                <Label className="flex items-center gap-2 text-gray-800 dark:text-gray-200">
+                                                    <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                                    Tax Exempt Entity
+                                                </Label>
+                                                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                                    For legally tax-exempt organizations (e.g. NGO, diplomatic mission).
+                                                    When on, every sale uses RRA tax code A (VAT exempt), regardless of
+                                                    VAT-registration status or product tax category.
+                                                </p>
+                                            </div>
+                                            <Switch
+                                                checked={organization?.isTaxExempt ?? false}
+                                                onCheckedChange={(checked) => setOrganization(prev => prev ? { ...prev, isTaxExempt: checked } : null)}
+                                                disabled={!isAuthorized || isSavingOrg}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {organization?.isTaxExempt && (
+                                        <div className="space-y-2 md:col-span-2">
+                                            <Label className="flex items-center gap-2">
+                                                <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                                Exemption Reason / Certificate Reference
+                                            </Label>
+                                            <Input
+                                                value={organization?.taxExemptionReason || ''}
+                                                onChange={(e) => setOrganization(prev => prev ? { ...prev, taxExemptionReason: e.target.value } : null)}
+                                                disabled={!isAuthorized || isSavingOrg}
+                                                placeholder="e.g. NGO exemption certificate #123"
                                                 className="rounded-xl"
                                             />
                                         </div>

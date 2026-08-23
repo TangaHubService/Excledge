@@ -58,11 +58,14 @@ export class TaxService {
     /**
      * Determine the effective RRA tax code for a product on a sale.
      *
-     * The business's VAT-registration status and the product's own tax category
-     * are two independent concepts:
-     *  - When the taxpayer is NOT VAT registered, every line uses code D
-     *    ("Taxpayer not registered for VAT") regardless of the product category.
-     *  - When the taxpayer IS VAT registered, the product's configured tax
+     * The business's tax configuration and the product's own tax category are
+     * independent concepts, applied in this order of precedence:
+     *  - When the taxpayer/entity is legally tax-exempt (e.g. NGO, diplomatic
+     *    mission), every line uses code A ("VAT exempt") regardless of the
+     *    product's own category or VAT-registration status.
+     *  - Otherwise, when the taxpayer is NOT VAT registered, every line uses
+     *    code D ("Taxpayer not registered for VAT") regardless of category.
+     *  - Otherwise (VAT registered, not exempt), the product's configured tax
      *    category (A = VAT exempt, B = 18% standard, C = export/zero-rated)
      *    applies. A product is never silently downgraded to D just because it
      *    has no tax-registration number of its own.
@@ -70,8 +73,10 @@ export class TaxService {
     static resolveProductTaxCode(
         productTaxCode: RraTaxCode | null | undefined,
         category: TaxCategory,
-        vatRegistered: boolean
+        vatRegistered: boolean,
+        isTaxExempt = false
     ): RraTaxCode {
+        if (isTaxExempt) return RraTaxCode.A;
         if (!vatRegistered) return RraTaxCode.D;
         return productTaxCode ?? this.getTaxCode(category);
     }
@@ -155,7 +160,8 @@ export class TaxService {
     static async calculateSaleTax(
         organizationId: number,
         items: Array<{ productId: number; quantity: number; unitPrice: number }>,
-        vatRegistered = true
+        vatRegistered = true,
+        isTaxExempt = false
     ): Promise<SaleTaxSummary> {
         const standardRate = await this.getVatRate(organizationId);
 
@@ -174,8 +180,9 @@ export class TaxService {
         for (const item of items) {
             const product = productMap.get(item.productId);
             const category = product?.taxCategory || 'STANDARD';
-            // Effective code: forced to D when the taxpayer is not VAT registered.
-            const effectiveCode = this.resolveProductTaxCode(product?.taxCode ?? null, category, vatRegistered);
+            // Effective code: forced to A when the entity is tax-exempt, else D
+            // when the taxpayer is not VAT registered, else the product category.
+            const effectiveCode = this.resolveProductTaxCode(product?.taxCode ?? null, category, vatRegistered, isTaxExempt);
             const result = this.calculateItemTax(item.unitPrice, item.quantity, category, standardRate, effectiveCode);
 
             totalTaxable = totalTaxable.plus(result.taxableAmount);
