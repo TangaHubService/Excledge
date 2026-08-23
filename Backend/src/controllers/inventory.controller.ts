@@ -248,7 +248,7 @@ export const getProductById = async (req: BranchAuthRequest, res: Response) => {
 export const createProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId)
-    const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode, itemType } = req.body
+    const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode, itemType, pkgUnitCd, qtyUnitCd, packagingQty } = req.body
     const userId = parseInt((req as any).user?.userId as string)
     const branchId = getBranchIdForOperation(req)
     const isService = itemType === 'SERVICE'
@@ -275,6 +275,25 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       }
     }
 
+    // Duplicate barcode check — a barcode identifies a specific physical item,
+    // so two active products in the same org must never share one.
+    if (barcode) {
+      const existingBarcode = await prisma.product.findFirst({
+        where: {
+          organizationId,
+          barcode,
+          deletedAt: null,
+        },
+        select: { id: true, name: true },
+      });
+
+      if (existingBarcode) {
+        return res.status(400).json(apiError(
+          `Product with barcode "${barcode}" already exists (${existingBarcode.name})`
+        ));
+      }
+    }
+
     // Tax category is the RRA code A/B/C/D. Validate it, then keep the legacy
     // TaxCategory enum in sync (A=EXEMPT, B=STANDARD, C=ZERO_RATED, D=NON_TAXABLE).
     const normalizedTaxCode = taxCode
@@ -294,6 +313,7 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
           batchNumber: isService ? null : batchNumber,
           quantity: isService ? 0 : (quantity || 0),
           unitPrice,
+          purchasePrice: isService ? null : (purchasePrice != null && purchasePrice !== '' ? purchasePrice : null),
           expiryDate: isService ? null : (expiryDate ? new Date(expiryDate) : null),
           category: category || (isService ? 'Services' : undefined),
           description,
@@ -306,13 +326,20 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
           measurementUnit: measurementUnit || 'OTHER',
           itemType,
           barcode,
+          pkgUnitCd: isService ? null : (pkgUnitCd || null),
+          qtyUnitCd: isService ? null : (qtyUnitCd || null),
+          packagingQty: isService ? null : (packagingQty != null && packagingQty !== '' ? packagingQty : null),
         },
       })
 
       // Skip batch and ledger for SERVICE items — no inventory tracking
       if (!isService) {
-        // Create batch record to link product to branch
-        const batchUnitCost = unitPrice ? Number(unitPrice) : 0;
+        // Create batch record to link product to branch. Cost basis is the
+        // purchase price (what was actually paid for stock) — falling back to
+        // the sales price only when no purchase price was provided.
+        const batchUnitCost = purchasePrice != null && purchasePrice !== ''
+          ? Number(purchasePrice)
+          : (unitPrice ? Number(unitPrice) : 0);
         const batchName = batchNumber || `DEFAULT-${product.id}`;
         await tx.batch.upsert({
           where: {
@@ -454,6 +481,42 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
       }
     }
 
+    // Duplicate barcode check — both against existing products and within
+    // the incoming batch itself (two rows in the same upload sharing one code).
+    const incomingBarcodes: string[] = products
+      .map((p: any) => p.barcode)
+      .filter((b: any) => typeof b === 'string' && b.trim() !== '');
+
+    if (incomingBarcodes.length > 0) {
+      const seen = new Set<string>();
+      const withinBatchDupes = new Set<string>();
+      for (const b of incomingBarcodes) {
+        if (seen.has(b)) withinBatchDupes.add(b);
+        seen.add(b);
+      }
+      if (withinBatchDupes.size > 0) {
+        return res.status(400).json(apiError(
+          `Duplicate barcode(s) within the upload: ${[...withinBatchDupes].join(', ')}`
+        ));
+      }
+
+      const existingBarcodeProducts = await prisma.product.findMany({
+        where: {
+          organizationId,
+          barcode: { in: incomingBarcodes },
+          deletedAt: null,
+        },
+        select: { barcode: true, name: true },
+      });
+
+      if (existingBarcodeProducts.length > 0) {
+        const duplicates = existingBarcodeProducts.map(p => `${p.barcode} (${p.name})`).join(', ');
+        return res.status(400).json(apiError(
+          `Barcode(s) already in use: ${duplicates}`
+        ));
+      }
+    }
+
     // Use transaction to ensure all products, batches, and ledger entries are atomic
     const result = await prisma.$transaction(async (tx) => {
       await tx.product.createMany({
@@ -464,6 +527,7 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
             batchNumber: isService ? null : product.batchNumber,
             quantity: isService ? 0 : (product.quantity || 0),
             unitPrice: product.unitPrice,
+            purchasePrice: isService ? null : (product.purchasePrice != null && product.purchasePrice !== '' ? product.purchasePrice : null),
             category: product.category || (isService ? 'Services' : undefined),
             description: product.description,
             imageUrl: product.imageUrl,
@@ -476,6 +540,8 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
             measurementUnit: product.measurementUnit || 'OTHER',
             itemType: product.itemType || 'PRODUCT',
             barcode: isService ? null : product.barcode,
+            pkgUnitCd: isService ? null : (product.pkgUnitCd || null),
+            packagingQty: isService ? null : (product.packagingQty != null && product.packagingQty !== '' ? product.packagingQty : null),
           };
         }),
       });
@@ -495,7 +561,9 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
       for (const product of createdProducts) {
         if (product.itemType === 'SERVICE') continue;
 
-        const batchUnitCost = product.unitPrice ? Number(product.unitPrice) : 0;
+        const batchUnitCost = product.purchasePrice != null
+          ? Number(product.purchasePrice)
+          : (product.unitPrice ? Number(product.unitPrice) : 0);
         const batchName = product.batchNumber || `DEFAULT-${product.id}`;
         await tx.batch.upsert({
           where: {
@@ -570,7 +638,7 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
-    const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock, taxCode, measurementUnit, exemptionReference, itemType } = req.body
+    const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, barcode, taxCode, measurementUnit, itemType, pkgUnitCd, qtyUnitCd, packagingQty } = req.body
 
     const existingProduct = await prisma.product.findFirst({
       where: { id, organizationId, deletedAt: null },
@@ -584,14 +652,36 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
       return res.status(400).json(apiError("Expiry date cannot be in the past"))
     }
 
+    // Duplicate barcode check — exclude this product itself.
+    if (barcode) {
+      const existingBarcode = await prisma.product.findFirst({
+        where: {
+          organizationId,
+          barcode,
+          deletedAt: null,
+          id: { not: id },
+        },
+        select: { id: true, name: true },
+      });
+
+      if (existingBarcode) {
+        return res.status(400).json(apiError(
+          `Product with barcode "${barcode}" already exists (${existingBarcode.name})`
+        ));
+      }
+    }
+
     const data: any = {}
     if (name !== undefined) data.name = name
     if (batchNumber !== undefined) data.batchNumber = batchNumber
     if (quantity !== undefined) data.quantity = quantity
     if (unitPrice !== undefined) data.unitPrice = unitPrice
+    if (purchasePrice !== undefined) data.purchasePrice = purchasePrice === '' ? null : purchasePrice
     if (category !== undefined) data.category = category
     if (description !== undefined) data.description = description
     if (minStock !== undefined) data.minStock = minStock
+    if (sku !== undefined) data.sku = sku
+    if (barcode !== undefined) data.barcode = barcode === '' ? null : barcode
     if (taxCode !== undefined) {
       const normalizedTaxCode = String(taxCode).toUpperCase();
       if (!TaxService.ALLOWED_TAX_CODES.has(normalizedTaxCode as any)) {
@@ -603,7 +693,9 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
       data.taxCategory = TaxService.getTaxCategory(normalizedTaxCode as any);
     }
     if (measurementUnit !== undefined) data.measurementUnit = measurementUnit
-    if (exemptionReference !== undefined) data.exemptionReference = exemptionReference
+    if (pkgUnitCd !== undefined) data.pkgUnitCd = pkgUnitCd === '' ? null : pkgUnitCd
+    if (qtyUnitCd !== undefined) data.qtyUnitCd = qtyUnitCd === '' ? null : qtyUnitCd
+    if (packagingQty !== undefined) data.packagingQty = packagingQty === '' ? null : packagingQty
     if (itemType !== undefined) data.itemType = itemType
     data.expiryDate = expiryDate ? new Date(expiryDate) : null
     if (imageUrl !== undefined) data.imageUrl = imageUrl

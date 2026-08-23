@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { History, Edit } from "lucide-react";
 import InventoryHistoryDialog from "./InventoryHistoryDialog";
 import StockAdjustmentDialog from "./StockAdjustmentDialog";
+import { PACKAGING_UNIT_LABELS } from "../../../types/ebm";
 
 
 // Helper function to compute remaining days
@@ -102,6 +103,17 @@ export default function ViewProductDialog({
                 </p>
                 <p className="mt-1">{viewProduct.unitPrice} Frw</p>
               </div>
+              {viewProduct.purchasePrice != null && (
+                <div>
+                  <p
+                    className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                      }`}
+                  >
+                    Purchase Price
+                  </p>
+                  <p className="mt-1">{viewProduct.purchasePrice} Frw</p>
+                </div>
+              )}
               {viewProduct.taxCode && (
                 <div>
                   <p
@@ -151,6 +163,33 @@ export default function ViewProductDialog({
                   {t('inventory.batchNumber')}
                 </p>
                 <p className="mt-1 font-mono">{viewProduct.batchNumber}</p>
+              </div>
+            )}
+
+            {viewProduct.barcode && (
+              <div>
+                <p
+                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                    }`}
+                >
+                  Barcode
+                </p>
+                <p className="mt-1 font-mono">{viewProduct.barcode}</p>
+              </div>
+            )}
+
+            {viewProduct.pkgUnitCd && (
+              <div>
+                <p
+                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                    }`}
+                >
+                  Packaging
+                </p>
+                <p className="mt-1">
+                  {PACKAGING_UNIT_LABELS[viewProduct.pkgUnitCd] || viewProduct.pkgUnitCd}
+                  {viewProduct.packagingQty ? ` × ${viewProduct.packagingQty}` : ''}
+                </p>
               </div>
             )}
 

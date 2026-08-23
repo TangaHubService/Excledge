@@ -168,7 +168,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
     // C6: determine receipt type label (NS/TS/PS)
     const org = await prisma.organization.findUnique({
       where: { id: organizationId! },
-      select: { trainingMode: true, vatRegistered: true },
+      select: { trainingMode: true, vatRegistered: true, isTaxExempt: true },
     });
     const rcptLabel = isProforma ? 'PS' : (org?.trainingMode ? 'TS' : 'NS');
 
@@ -212,7 +212,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         unitPrice: i.unitPrice,
         itemType: i.itemType || 'PRODUCT',
       }));
-      const taxSummary = await TaxService.calculateSaleTax(organizationId!, allItemsForTax, org?.vatRegistered ?? false);
+      const taxSummary = await TaxService.calculateSaleTax(organizationId!, allItemsForTax, org?.vatRegistered ?? false, org?.isTaxExempt ?? false);
 
       // ── MODULE 2.2: Reconcile server-computed total vs client total ──
       const computedTotal = taxSummary.items.reduce(
@@ -1425,6 +1425,15 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
       }),
     ])
 
+    // "Linked to RRA/EBM" means the VSDC device credentials actually used to
+    // talk to RRA (see getOsdcCreds/getVsdcCreds: org.TIN + branch.ebmSerialNo,
+    // falling back to org.ebmSerialNo) are configured — NOT ebmDeviceId, which
+    // is just the SDC ID RRA hands back after a successful transaction and is
+    // still empty for a freshly-registered device that hasn't fiscalized yet.
+    // bhfId defaults to "00" everywhere else in the codebase, so it alone
+    // can't signal registration either.
+    const isEbmLinked = Boolean(org?.TIN && (branch?.ebmSerialNo || org?.ebmSerialNo))
+
     const fiscalTx = (sale.ebmTransactions ?? []).find((t) => t.submissionStatus === "SUCCESS" && (!t.operation || t.operation === "SALE" || t.operation === "REFUND"))
     const responseData = fiscalTx?.responseData as { normalized?: { ebmInvoiceNumber?: string; verificationCode?: string; sdcDateTime?: string; intrlData?: string; vsdcSignature?: string } } | null | undefined
     const norm = responseData?.normalized
@@ -1528,6 +1537,7 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
         mrc: mrcNo,
         website: null,
         currency,
+        ebmLinked: isEbmLinked,
       },
       customer: {
         name: sale.customer?.name ?? "",

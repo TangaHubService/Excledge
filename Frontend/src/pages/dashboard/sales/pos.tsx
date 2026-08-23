@@ -30,6 +30,7 @@ import { useVsdcOnlineStatus } from '../../../hooks/useVsdcOnlineStatus'
 import { useBranch } from '../../../context/BranchContext'
 import { useOrganizationSettings } from '../../../context/OrganizationSettingsContext'
 import { cn } from '../../../lib/utils'
+import { PACKAGING_UNIT_LABELS } from '../../../types/ebm'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,10 @@ interface Product {
   category?: string
   taxCode?: string
   itemType?: 'PRODUCT' | 'SERVICE'
+  barcode?: string
+  sku?: string
+  pkgUnitCd?: string
+  packagingQty?: number
 }
 
 const isSellable = (p: Product) => p.itemType === 'SERVICE' || p.quantity > 0
@@ -119,6 +124,12 @@ const ProductCard = memo(({
         <p className="text-xs font-semibold text-gray-800 line-clamp-2 leading-snug mb-2 flex-1">
           {product.name}
         </p>
+        {product.pkgUnitCd && (
+          <p className="text-[10px] text-gray-400 mb-0.5">
+            {PACKAGING_UNIT_LABELS[product.pkgUnitCd] || product.pkgUnitCd}
+            {product.packagingQty ? ` × ${product.packagingQty}` : ''}
+          </p>
+        )}
         <p className="text-sm font-bold text-blue-600 tabular-nums">
           {(product.unitPrice ?? product.price ?? 0).toLocaleString()} <span className="text-xs font-normal text-gray-400">RWF</span>
         </p>
@@ -491,7 +502,12 @@ export default function SalesForm() {
         setIsLoading(true)
         if (!isOnline) {
           const cached = offlineQueue.getProducts()
-          setProducts(cached.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())))
+          const term = searchTerm.toLowerCase()
+          setProducts(cached.filter(p =>
+            p.name.toLowerCase().includes(term)
+            || p.barcode?.toLowerCase().includes(term)
+            || p.sku?.toLowerCase().includes(term)
+          ))
           return
         }
         const res = await apiClient.getProducts({ page: 1, limit: 10000, search: searchTerm, branchId: selectedBranchId })
@@ -617,6 +633,22 @@ export default function SalesForm() {
     if (activeCategory === 'All') return typed
     return typed.filter(p => p.category?.toLowerCase() === activeCategory.toLowerCase())
   }, [products, activeCategory, productTypeFilter])
+
+  // A USB/Bluetooth barcode scanner behaves like a keyboard: it types the
+  // barcode digits into whichever input is focused, then sends Enter. Since
+  // the search box already filters by barcode (server-side), Enter here just
+  // needs to add the scanned/matched product straight to the cart.
+  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter' || !searchTerm.trim()) return
+    e.preventDefault()
+    const term = searchTerm.trim()
+    const exactBarcodeMatch = products.find(p => p.barcode && p.barcode === term)
+    const candidate = exactBarcodeMatch ?? (inStockProducts.length === 1 ? inStockProducts[0] : null)
+    if (!candidate) return
+    addToCart(candidate)
+    setSearchTerm('')
+    requestAnimationFrame(() => searchInputRef.current?.focus())
+  }, [searchTerm, products, inStockProducts, addToCart])
 
   const handleOpenPayment = useCallback(() => {
     if (cart.length === 0) { toast.error(t('pos.noItemsInCart')); return }
@@ -836,7 +868,8 @@ export default function SalesForm() {
                 ref={searchInputRef}
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Search products by name, barcode or SKU..."
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Search or scan barcode..."
                 className="w-full pl-10 pr-10 h-10 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
               />
               {searchTerm && (

@@ -26,7 +26,7 @@ import { apiClient } from '../../../lib/api-client'
 import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response'
 import { useBranch } from '../../../context/BranchContext'
 import { BranchRequiredNotice } from '../../../components/BranchRequiredNotice'
-import { MEASUREMENT_UNIT_OPTIONS } from '../../../types/ebm'
+import { MEASUREMENT_UNIT_OPTIONS, PACKAGING_UNIT_OPTIONS } from '../../../types/ebm'
 import type { Product } from '../../../types'
 
 function toRwf(value: number): number {
@@ -51,6 +51,12 @@ const addProductSchema = yup.object({
         .typeError('Must be a number')
         .required('Unit price is required')
         .positive('Must be positive'),
+    purchasePrice: yup
+        .number()
+        .typeError('Must be a number')
+        .min(0, 'Cannot be negative')
+        .transform((v) => (isNaN(v) ? undefined : v))
+        .nullable(),
     taxCode: yup
         .string()
         .required('Tax category is required')
@@ -78,6 +84,13 @@ const addProductSchema = yup.object({
     barcode: yup
         .string()
         .matches(/^\d{0,13}$/, 'Barcode must be up to 13 digits'),
+    pkgUnitCd: yup.string(),
+    packagingQty: yup
+        .number()
+        .typeError('Must be a number')
+        .transform((v) => (isNaN(v) ? undefined : v))
+        .min(1, 'Must be at least 1')
+        .nullable(),
 })
 
 interface TaxCodeOption {
@@ -159,6 +172,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
             category: '',
             description: '',
             unitPrice: undefined as number | undefined,
+            purchasePrice: undefined as number | undefined,
             taxCode: '',
             batchNumber: '',
             expiryDate: null,
@@ -167,6 +181,8 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
             measurementUnit: '',
             sku: '',
             barcode: '',
+            pkgUnitCd: '',
+            packagingQty: undefined as number | undefined,
         },
     })
 
@@ -235,6 +251,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
             setValue('category', product.category || '')
             setValue('description', product.description || '')
             setValue('unitPrice', product.unitPrice)
+            setValue('purchasePrice', product.purchasePrice ?? undefined)
             setValue('taxCode', product.taxCode || '')
             setValue('itemType', (product.itemType as 'PRODUCT' | 'SERVICE') || 'PRODUCT')
             setValue('sku', product.sku || '')
@@ -243,6 +260,8 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
             setValue('quantity', product.quantity)
             setValue('minStock', product.minStock)
             setValue('measurementUnit', product.measurementUnit || '')
+            setValue('pkgUnitCd', product.pkgUnitCd || '')
+            setValue('packagingQty', product.packagingQty ?? undefined)
             if (product.expiryDate) {
                 setValue('expiryDate', product.expiryDate.split('T')[0] as any)
             }
@@ -347,6 +366,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
             }
 
             if (data.itemType === 'PRODUCT') {
+                payload.purchasePrice = data.purchasePrice ?? undefined
                 payload.batchNumber = data.batchNumber || undefined
                 payload.quantity = data.quantity || 0
                 payload.expiryDate = data.expiryDate || undefined
@@ -354,6 +374,8 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                 payload.measurementUnit = data.measurementUnit || 'PCS'
                 payload.sku = data.sku || undefined
                 payload.barcode = data.barcode || undefined
+                payload.pkgUnitCd = data.pkgUnitCd || undefined
+                payload.packagingQty = data.packagingQty ?? undefined
             } else {
                 payload.quantity = 0
                 payload.minStock = 0
@@ -654,12 +676,12 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            Unit Price <span className="text-red-500">*</span>
+                                            Sales Price <span className="text-red-500">*</span>
                                         </label>
                                         <div className="relative">
                                             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 dark:text-gray-400">RWF</span>
                                             <input
-                                                {...bindField('unitPrice', 'taxCode')}
+                                                {...bindField('unitPrice', 'purchasePrice')}
                                                 type="number"
                                                 inputMode="decimal"
                                                 step="0.01"
@@ -672,6 +694,29 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                         </div>
                                         {errors.unitPrice && <p className="text-xs text-red-500 mt-1">{errors.unitPrice.message}</p>}
                                     </div>
+                                    {itemType === 'PRODUCT' && (
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                Purchase Price
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 dark:text-gray-400">RWF</span>
+                                                <input
+                                                    {...bindField('purchasePrice', 'taxCode')}
+                                                    type="number"
+                                                    inputMode="decimal"
+                                                    step="0.01"
+                                                    min="0"
+                                                    placeholder="0.00"
+                                                    className={`w-full pl-14 pr-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                        errors.purchasePrice ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                    }`}
+                                                />
+                                            </div>
+                                            <p className="text-xs text-gray-400">What you paid for this stock — used for cost/profit tracking.</p>
+                                            {errors.purchasePrice && <p className="text-xs text-red-500 mt-1">{errors.purchasePrice.message}</p>}
+                                        </div>
+                                    )}
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                             Tax Category <span className="text-red-500">*</span>
@@ -748,7 +793,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                                 Measurement Unit <span className="text-red-500">*</span>
                                             </label>
                                             <select
-                                                {...bindField('measurementUnit', 'sku')}
+                                                {...bindField('measurementUnit', 'pkgUnitCd')}
                                                 className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
                                                     errors.measurementUnit ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
                                                 }`}
@@ -759,6 +804,36 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                                 ))}
                                             </select>
                                             {errors.measurementUnit && <p className="text-xs text-red-500 mt-1">{errors.measurementUnit.message}</p>}
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                Packaging Unit
+                                            </label>
+                                            <select
+                                                {...bindField('pkgUnitCd', 'packagingQty')}
+                                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                            >
+                                                <option value="">Select packaging (e.g. Box, Carton)</option>
+                                                {PACKAGING_UNIT_OPTIONS.map(u => (
+                                                    <option key={u.value} value={u.value}>{u.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                Qty per Package
+                                            </label>
+                                            <input
+                                                {...bindField('packagingQty', 'sku')}
+                                                type="number"
+                                                inputMode="numeric"
+                                                min="1"
+                                                placeholder="e.g. 24"
+                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                    errors.packagingQty ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                }`}
+                                            />
+                                            {errors.packagingQty && <p className="text-xs text-red-500 mt-1">{errors.packagingQty.message}</p>}
                                         </div>
                                     </div>
                                 </div>
@@ -819,7 +894,10 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                         <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Pricing & Tax</h3>
                                     </div>
                                     <div className="px-4 py-3 space-y-2.5">
-                                        <ReviewRow label="Unit Price" value={watch('unitPrice') ? `RWF ${Number(watch('unitPrice')).toLocaleString()}` : '-'} />
+                                        <ReviewRow label="Sales Price" value={watch('unitPrice') ? `RWF ${Number(watch('unitPrice')).toLocaleString()}` : '-'} />
+                                        {watch('purchasePrice') !== undefined && watch('purchasePrice') !== null && (
+                                            <ReviewRow label="Purchase Price" value={`RWF ${Number(watch('purchasePrice')).toLocaleString()}`} />
+                                        )}
                                         <ReviewRow label="Tax Category" value={watch('taxCode') ? taxCodes.find(t => t.code === watch('taxCode'))?.label || watch('taxCode') : '-'} />
                                         {watch('unitPrice') && watch('taxCode') && (
                                             <>
@@ -841,6 +919,12 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                             <ReviewRow label="Quantity" value={String(watch('quantity') ?? 0)} />
                                             <ReviewRow label="Min Stock" value={String(watch('minStock') ?? 0)} />
                                             <ReviewRow label="Measurement Unit" value={watch('measurementUnit') || 'PCS'} />
+                                            {watch('pkgUnitCd') && (
+                                                <ReviewRow
+                                                    label="Packaging"
+                                                    value={`${PACKAGING_UNIT_OPTIONS.find(u => u.value === watch('pkgUnitCd'))?.label || watch('pkgUnitCd')}${watch('packagingQty') ? ` × ${watch('packagingQty')}` : ''}`}
+                                                />
+                                            )}
                                         </div>
                                     </div>
                                 )}

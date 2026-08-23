@@ -90,9 +90,10 @@ export async function createSaleWithOutbox(input: SaleOutboxInput) {
 
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { vatRegistered: true },
+    select: { vatRegistered: true, isTaxExempt: true },
   });
   const vatRegistered = org?.vatRegistered ?? false;
+  const isTaxExempt = org?.isTaxExempt ?? false;
 
   const operation: EbmOperation = 'SALE';
 
@@ -115,11 +116,12 @@ export async function createSaleWithOutbox(input: SaleOutboxInput) {
       }
     }
 
-    // 2. Calculate tax (forced to code D for non-VAT-registered taxpayers)
+    // 2. Calculate tax (forced to A for tax-exempt entities, else D for non-VAT-registered taxpayers)
     const taxSummary = await TaxService.calculateSaleTax(
       organizationId,
       items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
       vatRegistered,
+      isTaxExempt,
     );
 
     // 3. Create sale + items

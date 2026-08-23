@@ -241,6 +241,8 @@ export const updateOrganization = async (req: Request, res: Response) => {
       TIN,
       VRN,
       vatRegistered,
+      isTaxExempt,
+      taxExemptionReason,
       currency,
       ebmDeviceId,
       ebmSerialNo,
@@ -284,6 +286,12 @@ export const updateOrganization = async (req: Request, res: Response) => {
           : {}),
         ...(vatRegistered !== undefined
           ? { vatRegistered: !!vatRegistered }
+          : {}),
+        ...(isTaxExempt !== undefined
+          ? { isTaxExempt: !!isTaxExempt }
+          : {}),
+        ...(taxExemptionReason !== undefined
+          ? { taxExemptionReason: taxExemptionReason === "" ? null : taxExemptionReason }
           : {}),
         ...(ebmDeviceId !== undefined
           ? { ebmDeviceId: ebmDeviceId === "" ? null : ebmDeviceId }

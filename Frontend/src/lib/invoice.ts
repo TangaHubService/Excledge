@@ -20,6 +20,8 @@ export interface InvoiceCompany {
   mrc?: string | null
   website?: string | null
   currency?: string | null
+  /** Whether the branch/org is actually configured with RRA/EBM device credentials. */
+  ebmLinked?: boolean
 }
 
 export interface InvoiceCustomer {

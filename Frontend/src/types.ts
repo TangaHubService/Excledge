@@ -17,6 +17,7 @@ export interface Product {
     batchNumber?: string;
     quantity: number;
     unitPrice: number;
+    purchasePrice?: number | null;
     expiryDate?: string;
     category?: string;
     description?: string;
@@ -29,6 +30,9 @@ export interface Product {
     itemType?: 'PRODUCT' | 'SERVICE';
     measurementUnit?: string;
     barcode?: string;
+    pkgUnitCd?: string | null;
+    qtyUnitCd?: string | null;
+    packagingQty?: number | null;
     createdAt: string;
     updatedAt: string;
 }

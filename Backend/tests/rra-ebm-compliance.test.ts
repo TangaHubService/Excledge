@@ -86,6 +86,29 @@ describe('RRA TAX CODE MAPPING (TAX_A / B / C / D)', () => {
     it('includes D', () => expect(TaxService.ALLOWED_TAX_CODES.has(RraTaxCode.D)).toBe(true));
     it('excludes E (internal use only)', () => expect(TaxService.ALLOWED_TAX_CODES.has(RraTaxCode.E)).toBe(false));
   });
+
+  describe('resolveProductTaxCode — VAT-registration and tax-exemption precedence', () => {
+    it('VAT-registered, not exempt: uses the product category code', () => {
+      expect(TaxService.resolveProductTaxCode(null, 'STANDARD', true, false)).toBe(RraTaxCode.B);
+      expect(TaxService.resolveProductTaxCode(null, 'EXEMPT', true, false)).toBe(RraTaxCode.A);
+      expect(TaxService.resolveProductTaxCode(null, 'ZERO_RATED', true, false)).toBe(RraTaxCode.C);
+    });
+
+    it('not VAT-registered: forces code D regardless of product category', () => {
+      expect(TaxService.resolveProductTaxCode(null, 'STANDARD', false, false)).toBe(RraTaxCode.D);
+      expect(TaxService.resolveProductTaxCode(RraTaxCode.B, 'STANDARD', false, false)).toBe(RraTaxCode.D);
+    });
+
+    it('tax-exempt entity: forces code A regardless of VAT-registration or product category', () => {
+      expect(TaxService.resolveProductTaxCode(RraTaxCode.B, 'STANDARD', true, true)).toBe(RraTaxCode.A);
+      expect(TaxService.resolveProductTaxCode(RraTaxCode.B, 'STANDARD', false, true)).toBe(RraTaxCode.A);
+    });
+
+    it('a non-VAT-registered account is never silently treated as VAT registered', () => {
+      // Even an explicit product-level standard tax code must not survive when the org isn't VAT registered.
+      expect(TaxService.resolveProductTaxCode(RraTaxCode.B, 'STANDARD', false)).not.toBe(RraTaxCode.B);
+    });
+  });
 });
 
 // ============================================================================
