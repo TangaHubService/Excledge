@@ -80,20 +80,37 @@ export async function openShift(params: OpenShiftParams) {
     }
   }
 
-  const shiftNumber = await generateShiftNumber(organizationId);
-
-  return prisma.shift.create({
-    data: {
-      shiftNumber,
-      organizationId,
-      branchId,
-      userId,
-      deviceId,
-      openingFloat,
-      openingMobileMoney: openingMobileMoney ?? 0,
-      openingNotes,
-    },
-  });
+  // generateShiftNumber() counts existing rows and is not atomic with the
+  // create() below, so two near-simultaneous opens (double-click, two
+  // registers) can compute the same number. Shift opens are low-frequency
+  // enough that a bounded retry on the unique-constraint conflict is simpler
+  // and safer than introducing a dedicated counter table under time pressure.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const shiftNumber = await generateShiftNumber(organizationId);
+    try {
+      return await prisma.shift.create({
+        data: {
+          shiftNumber,
+          organizationId,
+          branchId,
+          userId,
+          deviceId,
+          openingFloat,
+          openingMobileMoney: openingMobileMoney ?? 0,
+          openingNotes,
+        },
+      });
+    } catch (err) {
+      const isShiftNumberConflict =
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002' &&
+        (err.meta?.target as string[] | undefined)?.includes('shift_number');
+      if (!isShiftNumberConflict || attempt === 4) {
+        throw err;
+      }
+    }
+  }
+  throw new Error('Failed to allocate a unique shift number after multiple attempts.');
 }
 
 export async function getShiftById(shiftId: number, organizationId: number) {

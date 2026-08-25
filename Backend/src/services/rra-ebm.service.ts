@@ -47,7 +47,7 @@ export type SaleWithRelations = {
     taxCode: string | null;
     dcRate: Decimal;
     dcAmt: Decimal;
-    product: { name: string; itemCd: string | null; itemClsCd: string | null; pkgUnitCd: string | null; qtyUnitCd: string | null } | null;
+    product: { name: string; itemCd: string | null; itemClsCd: string | null; pkgUnitCd: string | null; qtyUnitCd: string | null; packagingQty: number | null } | null;
   }>;
 };
 
@@ -527,12 +527,21 @@ export function buildRraSendReceiptPayload(
     taxblAmt[slot] = fix2(taxblAmt[slot] + splyAmt);
     taxAmt[slot]   = fix2(taxAmt[slot] + tAmt);
 
+    // Sales are always rung up per individual unit (qty), never per whole
+    // package. `pkg` is RRA's package count for the line, so when the product
+    // declares how many units make up one package, convert; a partial package
+    // still rounds up to 1, since RRA has no concept of a fractional package.
+    // Products without packagingQty (most of the catalog today) fall back to
+    // the historical 1 pkg == 1 unit behavior.
+    const packagingQty = si.product?.packagingQty ?? null;
+    const pkg = packagingQty && packagingQty > 0 ? Math.ceil(qty / packagingQty) : qty;
+
     return {
       itemSeq:    idx + 1,
       itemCd:     si.product?.itemCd ?? `P${si.productId ?? idx + 1}`,
       itemClsCd:  si.product?.itemClsCd ?? '5020230302',
       itemNm:     si.product?.name ?? 'Item',
-      pkg:        qty,
+      pkg,
       pkgUnitCd:  si.product?.pkgUnitCd ?? 'CT',
       qty,
       qtyUnitCd:  si.product?.qtyUnitCd ?? 'U',
@@ -718,7 +727,7 @@ export async function submitInvoiceToEbm(params: {
     include: {
       saleItems: {
         include: {
-          product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true } },
+          product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true, packagingQty: true } },
         },
       },
       customer: true,
@@ -991,7 +1000,7 @@ export async function submitRefundToEbm(params: {
       include: {
         saleItems: {
           include: {
-            product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true } },
+            product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true, packagingQty: true } },
           },
         },
         customer: true,
@@ -1136,7 +1145,7 @@ export async function submitVoidToEbm(params: {
     include: {
       saleItems: {
         include: {
-          product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true } },
+          product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true, packagingQty: true } },
         },
       },
       customer: true,
