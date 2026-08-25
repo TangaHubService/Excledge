@@ -384,7 +384,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       include: {
         saleItems: {
           include: {
-            product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true } },
+            product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true, packagingQty: true } },
           },
         },
         customer: true,

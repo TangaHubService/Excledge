@@ -129,6 +129,7 @@ export async function buildPaymentSaleLikeObject(params: {
           itemClsCd: '5020230302',
           pkgUnitCd: null,
           qtyUnitCd: null,
+          packagingQty: null,
         },
       },
     ],
