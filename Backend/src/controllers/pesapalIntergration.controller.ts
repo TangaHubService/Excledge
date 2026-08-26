@@ -122,6 +122,9 @@ export const pesapalOrderRequest = async (req: Request, res: Response) => {
         }
 
         const ipnId = process.env.PESAPAL_IPN_ID;
+        const lastTenPhoneDigits = user.phoneNumber
+            ? String(user.phoneNumber).replace(/\D/g, "").slice(-10)
+            : undefined;
         const orderData: Record<string, any> = {
             id: pesapalUniqueRef,
             currency: "RWF",
@@ -130,7 +133,7 @@ export const pesapalOrderRequest = async (req: Request, res: Response) => {
             callback_url: `${config.primaryFrontendUrl}/subscription/callback?planId=${planId}`,
             billing_address: {
                 email_address: user.email,
-                phone_number: user.phoneNumber.slice(-10),
+                ...(lastTenPhoneDigits ? { phone_number: lastTenPhoneDigits } : {}),
                 first_name: user.firstName,
             }
         };

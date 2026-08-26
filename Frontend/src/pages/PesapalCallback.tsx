@@ -7,6 +7,13 @@ import { apiClient } from '../lib/api-client';
 
 type PaymentStatus = 'idle' | 'checking' | 'success' | 'error' | 'pending';
 
+const notifyEmbeddingParent = (message: Record<string, unknown>) => {
+    if (window.parent && window.parent !== window) {
+        window.parent.postMessage(message, window.location.origin);
+    }
+    window.opener?.postMessage(message, window.location.origin);
+};
+
 export const PesapalCallback = () => {
     const location = useLocation();
     const [status, setStatus] = useState<PaymentStatus>('idle');
@@ -57,16 +64,13 @@ export const PesapalCallback = () => {
                             ? 'pesapal:payment:success'
                             : 'pesapal:payment:error';
 
-                    window.opener?.postMessage(
-                        {
-                            type: messageType,
-                            data: {
-                                orderTrackingId,
-                                transaction: transactionData
-                            }
-                        },
-                        window.location.origin
-                    );
+                    notifyEmbeddingParent({
+                        type: messageType,
+                        data: {
+                            orderTrackingId,
+                            transaction: transactionData
+                        }
+                    });
 
                     // If success, start progress redirect
                     if (transactionData.payment_status_description === 'Completed') {
@@ -83,13 +87,10 @@ export const PesapalCallback = () => {
                 setError('Failed to verify payment status. Please check your order history or contact support.');
                 setStatus('error');
 
-                window.opener?.postMessage(
-                    {
-                        type: 'pesapal:payment:error',
-                        message: 'Failed to verify payment status'
-                    },
-                    window.location.origin
-                );
+                notifyEmbeddingParent({
+                    type: 'pesapal:payment:error',
+                    message: 'Failed to verify payment status'
+                });
             }
         };
 
@@ -118,11 +119,13 @@ export const PesapalCallback = () => {
             const frontendUrl = import.meta.env.VITE_APP_URL || window.location.origin;
             const dashboardUrl = new URL('/dashboard', frontendUrl).href;
 
-            if (window.opener) {
+            if (window.top && window.top !== window.self) {
+                window.top.location.href = dashboardUrl;
+            } else if (window.opener) {
                 window.opener.location.href = dashboardUrl;
-                window.close(); // Close popup
+                window.close();
             } else {
-                navigate('/dashboard'); // Fallback for non-popup
+                navigate('/dashboard');
             }
         }, 3000);
 
