@@ -1,12 +1,11 @@
 import cron from 'node-cron';
 import { prisma } from '../lib/prisma';
 import { isEbmEnabled } from '../services/rra-ebm.service';
-import { buildVsdcEnvelope, saveZReport, listActiveVsdcDevices } from '../services/vsdc-api.service';
+import { buildVsdcEnvelope, saveAndVerifyZReport, listActiveVsdcDevices } from '../services/vsdc-api.service';
 
-const pad2 = (n: number) => String(n).padStart(2, '0');
-/** `yyyyMMddHHmmss` — the report-generation timestamp `saveZReports` expects. */
-function toRptDeTimestamp(d: Date): string {
-  return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
+/** One rra_sync_cursor row per VSDC device holds the last Z-close outcome. */
+function zReportResource(branchId: number | null): string {
+  return branchId != null ? `zReport:${branchId}` : 'zReport';
 }
 
 /**
@@ -14,8 +13,13 @@ function toRptDeTimestamp(d: Date): string {
  * the device's daily counters to be legally closed out once per business day.
  * Filed per VSDC device (per branch, with the org-level fallback for legacy
  * single-branch tenants). Training-mode orgs are skipped — there is no real
- * day to close. Runs late at night so it lands after trading has finished; a
- * per-org configurable closing hour is a future enhancement.
+ * day to close.
+ *
+ * Each close is save + verify (`saveAndVerifyZReport`): the day is only counted
+ * as closed once `/reports/checkZReport` confirms RRA has it. The outcome is
+ * persisted to `rra_sync_cursors` (resource `zReport:<branchId>`) so there is
+ * durable certification evidence and the operator can spot a device that saved
+ * but did not verify.
  */
 export const zReportJob = cron.schedule('55 23 * * *', async () => {
   if (!isEbmEnabled()) {
@@ -24,23 +28,60 @@ export const zReportJob = cron.schedule('55 23 * * *', async () => {
 
   try {
     const devices = await listActiveVsdcDevices();
-    const rptDe = toRptDeTimestamp(new Date());
-    let succeeded = 0;
+    let verified = 0;
+    let savedUnverified = 0;
     let failed = 0;
 
     for (const dev of devices) {
       try {
         const envelope = await buildVsdcEnvelope(dev.organizationId, dev.branchId);
-        const result = await saveZReport(envelope, rptDe);
-        if (result.success) {
-          succeeded += 1;
+        const z = await saveAndVerifyZReport(envelope);
+
+        const state = z.verified ? 'VERIFIED' : z.saved ? 'SAVED_UNVERIFIED' : 'FAILED';
+        if (z.verified) verified += 1;
+        else if (z.saved) savedUnverified += 1;
+        else failed += 1;
+
+        const detail = [
+          state,
+          dev.label,
+          `(${z.rptDeDate})`,
+          z.saveError ? `save:${z.saveError}` : '',
+          z.verifyError ? `check:${z.verifyError}` : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .slice(0, 480);
+
+        await prisma.rraSyncCursor.upsert({
+          where: {
+            organizationId_resource: {
+              organizationId: dev.organizationId,
+              resource: zReportResource(dev.branchId),
+            },
+          },
+          create: {
+            organizationId: dev.organizationId,
+            resource: zReportResource(dev.branchId),
+            lastReqDt: z.rptDeTimestamp,
+            lastRunAt: new Date(),
+            lastResult: detail,
+          },
+          update: {
+            lastReqDt: z.rptDeTimestamp,
+            lastRunAt: new Date(),
+            lastResult: detail,
+          },
+        });
+
+        if (z.saved) {
           await prisma.organization.update({
             where: { id: dev.organizationId },
             data: { lastSuccessfulVdsContact: new Date() },
           });
-        } else {
-          failed += 1;
-          console.warn(`[Z-report] ${dev.label} (${dev.tin}): ${result.error}`);
+        }
+        if (!z.verified) {
+          console.warn(`[Z-report] ${dev.label}: ${state} — save:${z.saveError ?? 'ok'} check:${z.verifyError ?? 'ok'}`);
         }
       } catch (e) {
         failed += 1;
@@ -48,8 +89,10 @@ export const zReportJob = cron.schedule('55 23 * * *', async () => {
       }
     }
 
-    if (succeeded > 0 || failed > 0) {
-      console.log(`[Z-report] daily close: devices=${devices.length} succeeded=${succeeded} failed=${failed}`);
+    if (devices.length) {
+      console.log(
+        `[Z-report] daily close: devices=${devices.length} verified=${verified} savedUnverified=${savedUnverified} failed=${failed}`,
+      );
     }
   } catch (e) {
     console.error('[Z-report] job error:', e);

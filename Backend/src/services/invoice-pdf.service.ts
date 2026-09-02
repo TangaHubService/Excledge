@@ -358,7 +358,12 @@ function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void 
 
 function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void {
   const sdc = data.sdcInformation
-  const sdcDate = formatInvoiceDateTime(sdc.sdcDateTime || sdc.date)
+  // Proforma and training-mode slips carry no VSDC signature, but the printout
+  // must still show the transaction's date/time and receipt number under SDC
+  // INFORMATION (spec §16/§17 worked examples) — fall back to the invoice-level
+  // values whenever the fiscal-specific fields are absent.
+  const sdcDate = formatInvoiceDateTime(sdc.sdcDateTime || sdc.date || data.invoice.invoiceDate)
+  const sdcReceiptNo = safe(sdc.receiptNumber) || safe(data.invoice.receiptNumber)
   const invoiceDate = formatInvoiceDateTime(data.invoice.invoiceDate)
   const indicator = documentIndicator(data)
   const isTraining = indicator === TRAINING_MODE_LABEL
@@ -366,7 +371,7 @@ function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePaylo
   const lines = [
     sdcDate.date || sdcDate.time ? `Date: ${sdcDate.date}${sdcDate.time ? ` Time: ${sdcDate.time}` : ""}` : "",
     sdc.sdcId ? `SDC ID: ${safe(sdc.sdcId)}` : "",
-    sdc.receiptNumber ? `RECEIPT NUMBER: ${safe(sdc.receiptNumber)}` : "",
+    sdcReceiptNo ? `RECEIPT NUMBER: ${sdcReceiptNo}` : "",
     sdc.internalData ? `Internal Data: ${groupFiscalValue(sdc.internalData)}` : "",
     sdc.receiptSignature ? `Receipt Signature: ${groupFiscalValue(sdc.receiptSignature)}` : "",
   ].filter(Boolean)
@@ -401,14 +406,13 @@ function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePaylo
   const extraLines = [
     invoiceDate.date ? `Date: ${invoiceDate.date}${data.invoice.time ? ` Time: ${safe(data.invoice.time)}` : ""}` : "",
     sdc.mrcNo ? `MRC: ${safe(sdc.mrcNo)}` : "",
-    // Proforma repeats the SDC ID here instead of software version; training
-    // shows the payment method used for the practice sale instead. §21 still
-    // requires the software version on every other (real) receipt type.
-    isProforma
+    // Proforma and training-mode slips share the same non-fiscal SDC
+    // INFORMATION block: they repeat the SDC ID here instead of the software
+    // version. §21 still requires the software version on every other (real)
+    // receipt type.
+    isProforma || isTraining
       ? (sdc.sdcId ? `SDC ID: ${safe(sdc.sdcId)}` : "")
-      : isTraining
-        ? (data.invoice.paymentMethod ? `Payment Mode: ${safe(data.invoice.paymentMethod)}` : "")
-        : (sdc.softwareVersion ? safe(sdc.softwareVersion) : ""),
+      : (sdc.softwareVersion ? safe(sdc.softwareVersion) : ""),
   ].filter(Boolean)
   if (extraLines.length) {
     doc.moveTo(LEFT, y + 1).lineTo(176, y + 1).dash(2, { space: 1.5 }).stroke().undash()
