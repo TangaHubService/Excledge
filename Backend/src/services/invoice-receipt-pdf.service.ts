@@ -176,12 +176,16 @@ function drawReceipt(
   }
   y = centeredText(doc, "SDC INFORMATION", y, true)
   y += 1
-  const sdcDate = formatInvoiceDateTime(sdc.sdcDateTime || sdc.date)
+  // Proforma / training slips have no VSDC signature but must still print the
+  // transaction date/time and receipt number here — fall back to the
+  // invoice-level values when the fiscal-specific fields are absent.
+  const sdcDate = formatInvoiceDateTime(sdc.sdcDateTime || sdc.date || data.invoice.invoiceDate)
+  const sdcReceiptNo = safe(sdc.receiptNumber) || safe(data.invoice.receiptNumber)
   if (sdcDate.date || sdcDate.time) {
     y = wrappedLine(doc, `Date: ${sdcDate.date}  Time: ${sdcDate.time}`, y)
   }
   if (sdc.sdcId) y = wrappedLine(doc, `SDC ID: ${safe(sdc.sdcId)}`, y)
-  if (sdc.receiptNumber) y = wrappedLine(doc, `RECEIPT NUMBER: ${safe(sdc.receiptNumber)}`, y)
+  if (sdcReceiptNo) y = wrappedLine(doc, `RECEIPT NUMBER: ${sdcReceiptNo}`, y)
   if (sdc.internalData) {
     y = wrappedLine(doc, "Internal Data:", y)
     y = centeredText(doc, groupFiscalValue(sdc.internalData), y, false, 5.8)
@@ -212,13 +216,12 @@ function drawReceipt(
   const invoiceDate = formatInvoiceDateTime(data.invoice.invoiceDate)
   y = wrappedLine(doc, `DATE: ${invoiceDate.date}  TIME: ${invoiceDate.time}`, y)
   if (data.company.mrc) y = wrappedLine(doc, `MRC: ${safe(data.company.mrc)}`, y)
-  // Proforma repeats the SDC ID here instead of software version; training
-  // shows the payment method used for the practice sale instead. §21 still
-  // requires the software version on every other (real) receipt type.
-  if (isProforma) {
+  // Proforma and training-mode slips share the same non-fiscal SDC
+  // INFORMATION block: they repeat the SDC ID here instead of the software
+  // version. §21 still requires the software version on every other (real)
+  // receipt type.
+  if (isProforma || isTraining) {
     if (sdc.sdcId) y = wrappedLine(doc, `SDC ID: ${safe(sdc.sdcId)}`, y)
-  } else if (isTraining) {
-    if (data.invoice.paymentMethod) y = wrappedLine(doc, `Payment Mode: ${safe(data.invoice.paymentMethod)}`, y)
   } else if (sdc.softwareVersion) {
     y = wrappedLine(doc, safe(sdc.softwareVersion), y)
   }
