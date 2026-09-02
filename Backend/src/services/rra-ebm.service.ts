@@ -2,9 +2,11 @@ import { prisma } from '../lib/prisma';
 import { config } from '../config';
 import type { Decimal } from '@prisma/client/runtime/library';
 import type { Prisma } from '@prisma/client';
-import { buildVsdcEnvelope, saveInvc, parseVsdcResponse } from './vsdc-api.service';
+import { buildVsdcEnvelope, saveInvc, parseVsdcResponse, validateVsdcEnvelope } from './vsdc-api.service';
 import { submitSalesToOsdc } from './rra-osdc.service';
 import { isValidPurchaseCode } from './purchase-code.checksum';
+import { DEFAULT_ITEM_CLASSIFICATION_CD } from './item-code.service';
+import { isValidCustomerPhone } from '../validations/customers.validation';
 
 /** Any Prisma client capable of running queries — the top-level client or a $transaction callback's `tx`. */
 type PrismaClientOrTx = typeof prisma | Prisma.TransactionClient;
@@ -462,7 +464,7 @@ function pmtTypeCd(paymentType: string): string {
 }
 
 /** VSDC §4.1 Tax Type rates — static, RRA-defined: A 0%, B 18%, C 0%, D 0%. */
-const TAX_RATE_BY_SLOT: [number, number, number, number] = [0, 18, 0, 0];
+export const TAX_RATE_BY_SLOT: [number, number, number, number] = [0, 18, 0, 0];
 
 /**
  * Build the RRA VSDC API v1.0.5 `/trnsSales/saveSales` payload
@@ -539,7 +541,7 @@ export function buildRraSendReceiptPayload(
     return {
       itemSeq:    idx + 1,
       itemCd:     si.product?.itemCd ?? `P${si.productId ?? idx + 1}`,
-      itemClsCd:  si.product?.itemClsCd ?? '5020230302',
+      itemClsCd:  si.product?.itemClsCd ?? DEFAULT_ITEM_CLASSIFICATION_CD,
       itemNm:     si.product?.name ?? 'Item',
       pkg,
       pkgUnitCd:  si.product?.pkgUnitCd ?? 'CT',
@@ -578,6 +580,13 @@ export function buildRraSendReceiptPayload(
       ? synthesizeTin(sale.customer.id)
       : (isValidRraTin(org.TIN ?? '') ? org.TIN! : synthesizeTin(1));
   const custNm  = sale.customer?.name ?? org.name;
+  // §4.6 custMblNo: only send a real, correctly-shaped phone number — never a
+  // raw unvalidated value, and never the TIN (a pre-fix swapped/duplicate
+  // record could otherwise leak the TIN into the mobile-number field).
+  const customerPhone = sale.customer?.phone?.trim() ?? '';
+  const custMblNo = customerPhone && isValidCustomerPhone(customerPhone) && customerPhone !== custTin
+    ? customerPhone
+    : '';
   const invcNo      = opts.invcNoOverride ?? sale.vsdcInvcNo ?? sale.id;
   const regrNm      = sale.user?.name ?? 'System';
   const regrId      = sale.user ? String(sale.user.id) : 'system';
@@ -632,7 +641,7 @@ export function buildRraSendReceiptPayload(
     modrId: regrId,
     receipt: {
       custTin,
-      custMblNo: sale.customer?.phone ?? '',
+      custMblNo,
       rptNo: invcNo,
       // RRA WAR rejects `trdeNm` longer than 20 chars with resultCd 910
       // ("length must be between 0 and 20") — clamp the trade name.
@@ -705,6 +714,45 @@ export async function generateInvoiceNumber(
   const year = new Date().getFullYear();
 
   return { invoiceNumber: `INV-${orgCode}-B${branchId}-${year}-${sequence}`, vsdcInvcNo };
+}
+
+/**
+ * Allocate a local, non-fiscal receipt number pair for PROFORMA (and future
+ * local-only types), which per the CIS spec (§6.3.6) must never be assigned a
+ * VSDC-signed invoice number — they never draw from the real gapless RRA
+ * sequence (allocateNextInvoiceSequence). Mirrors the spec's own "A/B RT"
+ * counter shape (§7.25) with two independent, atomically-incremented values:
+ *  - typeSeq: this branch's count of this specific receipt type only
+ *    (BranchReceiptCounter, keyed by rcptLabel)
+ *  - totalSeq: this branch's running count across EVERY locally-numbered
+ *    receipt type combined (Branch.localReceiptTotalSeq)
+ * Both increment together so the pair is never `<n>/<n>` by construction.
+ */
+export async function allocateLocalReceiptSequence(
+  branchId: number,
+  rcptLabel: string,
+  client: PrismaClientOrTx = prisma,
+): Promise<{ typeSeq: number; totalSeq: number }> {
+  const [typeRows, totalRows] = await Promise.all([
+    client.$queryRaw<Array<{ nextSeq: number }>>`
+      INSERT INTO "branch_receipt_counters" ("branchId", "rcptLabel", "nextSeq", "updatedAt")
+      VALUES (${branchId}, ${rcptLabel}::"RcptLabel", 1, NOW())
+      ON CONFLICT ("branchId", "rcptLabel") DO UPDATE
+        SET "nextSeq" = "branch_receipt_counters"."nextSeq" + 1,
+            "updatedAt" = NOW()
+      RETURNING "nextSeq"
+    `,
+    client.$queryRaw<Array<{ local_receipt_total_seq: number }>>`
+      UPDATE "branches"
+      SET "local_receipt_total_seq" = "local_receipt_total_seq" + 1
+      WHERE "id" = ${branchId}
+      RETURNING "local_receipt_total_seq"
+    `,
+  ]);
+  return {
+    typeSeq: Number(typeRows[0]?.nextSeq ?? 1),
+    totalSeq: Number(totalRows[0]?.local_receipt_total_seq ?? 1),
+  };
 }
 
 /**
@@ -912,6 +960,15 @@ export async function submitInvoiceToEbm(params: {
     }
 
     const envelope = await buildVsdcEnvelope(params.organizationId, sale.branchId);
+
+    // §22: refuse to submit against an unusable device (missing/invalid TIN or
+    // no MRC serial) — the receipt must not be issued in that state.
+    const envelopeError = validateVsdcEnvelope(envelope);
+    if (envelopeError) {
+      await persistFailure(envelopeError);
+      return { success: false, error: envelopeError };
+    }
+
     const result = await saveInvc(envelope, payload);
 
     if (!result.success || !result.data?.rcptNo) {

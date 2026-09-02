@@ -12,7 +12,7 @@ import {
 import {
   ShoppingCart, Loader2, UserPlus, Search, X, WifiOff,
   Package, Minus, Plus, Trash2, Star,
-  ChevronRight,
+  ChevronRight, FileText,
 } from 'lucide-react'
 import PhoneInputWithCountryCode from '../../../components/PhoneInputWithCountryCode'
 import {
@@ -25,7 +25,7 @@ import { offlineQueue } from '../../../utils/offlineQueue'
 import { PaymentModal } from '../../../components/pos/PaymentModal'
 import SaleSuccessModal, { type SaleSuccessData } from '../../../components/pos/SaleSuccessModal'
 import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice'
-import { invoiceToPdfBlob } from '../../../lib/invoice-pdf'
+import { getInvoicePdfBlob } from '../../../lib/invoice-pdf'
 import { useVsdcOnlineStatus } from '../../../hooks/useVsdcOnlineStatus'
 import { useBranch } from '../../../context/BranchContext'
 import { useOrganizationSettings } from '../../../context/OrganizationSettingsContext'
@@ -656,6 +656,28 @@ export default function SalesForm() {
     setIsPaymentModalOpen(true)
   }, [cart, selectedCustomer, t])
 
+  // Poll GET /invoices/:saleId until VSDC confirms (200) or the wait gives up
+  // — the endpoint returns 425 while `composeInvoicePayload` is still
+  // blocking on fiscalization (RRA checklist §16/§22). Updates the success
+  // modal's fiscalizationStatus in place so Print/Download/Share unlock the
+  // moment the receipt is actually safe to issue.
+  const pollFiscalization = useCallback(async (saleId: string | number) => {
+    const maxAttempts = 10
+    const stepMs = 1500
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, stepMs))
+      try {
+        await apiClient.getInvoice(saleId)
+        setSuccessSale((prev) => (prev && String(prev.id) === String(saleId) ? { ...prev, fiscalizationStatus: 'success' } : prev))
+        return
+      } catch (e: any) {
+        if (e?.response?.status === 425) continue
+        break
+      }
+    }
+    setSuccessSale((prev) => (prev && String(prev.id) === String(saleId) ? { ...prev, fiscalizationStatus: 'failed' } : prev))
+  }, [])
+
   const handleProcessPayment = useCallback(async (
     entries: Array<{ id: string; method: string; amount: number; reference?: string }>,
   ) => {
@@ -721,6 +743,13 @@ export default function SalesForm() {
         if (storedUser) cashierName = (JSON.parse(storedUser).name as string) || undefined
       } catch { /* ignore */ }
 
+      // RRA VSDC checklist §16/§22: don't let the cashier print before VSDC
+      // has confirmed. The backend already waited briefly for that during
+      // createSale — `fiscalization.status` tells us whether it landed in
+      // time ("success"), is still in flight ("pending", poll below), or
+      // gave up ("failed").
+      const fiscalizationStatus = (createdSale?.fiscalization?.status as 'success' | 'pending' | 'failed' | undefined) ?? 'success'
+
       setSuccessSale({
         id: createdSale?.id ?? created?.id ?? '',
         invoiceNumber: createdSale?.invoiceNumber as string | null | undefined,
@@ -733,9 +762,14 @@ export default function SalesForm() {
         changeReturned: Math.max(0, cashAmount - total),
         date: new Date(),
         cashierName,
-      }) 
+        fiscalizationStatus,
+      })
       setLastCreatedSale(createdSale)
       setIsSuccessOpen(true)
+
+      if (fiscalizationStatus === 'pending' && createdSale?.id != null) {
+        pollFiscalization(createdSale.id)
+      }
 
       setCart([])
       setIsPaymentModalOpen(false)
@@ -754,7 +788,63 @@ export default function SalesForm() {
     } finally {
       setIsSubmitting(false)
     }
-  }, [cart, selectedCustomer, total, t, isOnline, selectedBranchId])
+  }, [cart, selectedCustomer, total, t, isOnline, selectedBranchId, pollFiscalization])
+
+  // A proforma is a quote, not a sale: no payment is collected, no stock moves,
+  // and it is never sent to RRA (see createSale on the backend — isProforma
+  // skips fiscalization, stock deduction, and debt entirely). debtAmount is
+  // still set to `total` here only to satisfy the backend's payment-sum check;
+  // the backend does not actually add it to the customer's balance.
+  const handleCreateProforma = useCallback(async () => {
+    if (cart.length === 0) { toast.error(t('pos.noItemsInCart')); return }
+    if (!selectedCustomer) { toast.error(t('pos.selectCustomer')); return }
+
+    try {
+      setIsSubmitting(true)
+      const payload = {
+        customerId: selectedCustomer,
+        items: cart.map(i => ({ productId: i.product.id, quantity: i.quantity, unitPrice: i.unitPrice })),
+        cashAmount: 0,
+        insuranceAmount: 0,
+        debtAmount: total,
+        isProforma: true,
+        branchId: selectedBranchId,
+      }
+
+      const created = await apiClient.createSale(payload)
+      const createdSale = (created as any)?.data ?? created
+
+      let cashierName: string | undefined
+      try {
+        const storedUser = localStorage.getItem('user')
+        if (storedUser) cashierName = (JSON.parse(storedUser).name as string) || undefined
+      } catch { /* ignore */ }
+
+      setSuccessSale({
+        id: createdSale?.id ?? '',
+        invoiceNumber: createdSale?.invoiceNumber as string | null | undefined,
+        receiptNumber: undefined,
+        customerName: selectedCustomerObj?.name,
+        totalItems: cart.reduce((s, i) => s + i.quantity, 0),
+        totalAmount: Number(createdSale?.totalAmount ?? total ?? 0),
+        paymentLabel: 'PROFORMA',
+        amountPaid: 0,
+        changeReturned: 0,
+        date: new Date(),
+        cashierName,
+        // Proforma is never submitted to VSDC by design — always print-ready.
+        fiscalizationStatus: 'success',
+      })
+      setLastCreatedSale(createdSale)
+      setIsSuccessOpen(true)
+      setCart([])
+    } catch (error: any) {
+      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || t('pos.paymentError')
+      toast.error(msg)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }, [cart, selectedCustomer, selectedCustomerObj, total, t, selectedBranchId])
 
   // ── Success modal actions ──────────────────────────────────────────────────
 
@@ -762,15 +852,18 @@ export default function SalesForm() {
     if (!base?.id) return null
     try {
       const invoice = unwrapInvoice(await apiClient.getInvoice(base.id))
-      const blob = await invoiceToPdfBlob(invoice)
-      if (!blob) return null
+      const blob = await getInvoicePdfBlob(base.id)
       return {
         blob,
         filename: getInvoiceFilename(invoice, base.invoiceNumber ?? base.saleNumber ?? base.id),
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to build sale invoice:', e)
-      toast.error(t('sales.invoiceGenerationError') || 'Failed to generate invoice')
+      if (e?.response?.status === 425) {
+        toast.error(t('pos.stillFiscalizing') || 'Still confirming with the tax authority (VSDC) — try again in a moment.')
+      } else {
+        toast.error(t('sales.invoiceGenerationError') || 'Failed to generate invoice')
+      }
       return null
     }
   }, [t])
@@ -1128,6 +1221,22 @@ export default function SalesForm() {
               ) : (
                 <>Process Payment <ChevronRight className="h-4 w-4" /></>
               )}
+            </button>
+
+            {/* Create Quote (Proforma) — a printable estimate, not a real
+                sale: no payment, no stock movement, never sent to RRA. */}
+            <button
+              type="button"
+              onClick={handleCreateProforma}
+              disabled={cart.length === 0 || !selectedCustomer || isSubmitting}
+              className="w-full h-10 flex items-center justify-center gap-2 rounded-xl border border-blue-200 text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold transition-colors"
+            >
+              {isSubmitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileText className="h-4 w-4" />
+              )}
+              Create Quote (Proforma)
             </button>
           </div>
         </div>

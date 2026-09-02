@@ -10,6 +10,12 @@ import {
     getStockHistory,
     getProfitReportController,
     getDailyReport,
+    getDailyReportPdf,
+    getPluReport,
+    getPluReportPdf,
+    getElectronicJournal,
+    getElectronicJournalEntry,
+    getPurchasesReport,
 } from "../controllers/report.controller"
 import { authenticate, authorize } from "../middleware/auth.middleware"
 import { branchAuth } from "../middleware/branchAuth.middleware"
@@ -29,7 +35,16 @@ router.get("/stock/:organizationId", authenticate, orgAccess, requireActiveSubsc
 router.get("/stock-history/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getStockHistory)
 router.get("/profit/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getProfitReportController)
 router.get("/export/:reportType/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), exportReport)
-// C9: X/Z daily fiscal reports (RRA CIS/VSDC spec §6)
+// C9: X/Z daily fiscal reports (RRA CIS/VSDC spec §6 / Articles 7, 18, 19)
 router.get("/daily/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getDailyReport)
+router.get("/daily/:organizationId/pdf", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getDailyReportPdf)
+// C10: PLU (Price Look-Up) report (RRA CIS/VSDC spec §21)
+router.get("/plu/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getPluReport)
+router.get("/plu/:organizationId/pdf", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getPluReportPdf)
+// CIS Electronic Journal (RRA CIS/VSDC spec §5 / checklist §44)
+router.get("/electronic-journal/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getElectronicJournal)
+router.get("/electronic-journal/:organizationId/:saleId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getElectronicJournalEntry)
+// Detailed purchases report (RRA checklist §25)
+router.get("/purchases/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getPurchasesReport)
 
 export default router

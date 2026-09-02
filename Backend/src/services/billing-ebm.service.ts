@@ -10,6 +10,7 @@ import {
 } from './rra-ebm.service';
 import { buildVsdcEnvelope, saveInvc } from './vsdc-api.service';
 import { submitSalesToOsdc } from './rra-osdc.service';
+import { DEFAULT_ITEM_CLASSIFICATION_CD } from './item-code.service';
 
 /**
  * RRA EBM fiscalization for subscription (billing) receipts.
@@ -126,7 +127,7 @@ export async function buildPaymentSaleLikeObject(params: {
         product: {
           name: subscription?.plan?.name ?? 'Subscription',
           itemCd: null,
-          itemClsCd: '5020230302',
+          itemClsCd: DEFAULT_ITEM_CLASSIFICATION_CD,
           pkgUnitCd: null,
           qtyUnitCd: null,
           packagingQty: null,

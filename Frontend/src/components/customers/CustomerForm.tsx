@@ -1,10 +1,11 @@
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from '../../components/ui/drawer';
-import { useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronDown, ShieldCheck, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import PhoneInputWithCountryCode from '../../components/PhoneInputWithCountryCode';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { yupResolver } from '@hookform/resolvers/yup';
+import { apiClient } from '../../lib/api-client';
 
 import type { CustomerFormData } from '../../types/customer';
 import { customerSchema } from '../../schema/customer';
@@ -24,6 +25,7 @@ export function CustomerForm({
 }: CustomerFormProps) {
     const { t } = useTranslation();
 
+    const [rraCheck, setRraCheck] = useState<{ state: 'idle' | 'loading' | 'ok' | 'error'; message?: string }>({ state: 'idle' });
 
     const {
         register,
@@ -147,15 +149,56 @@ export function CustomerForm({
                                 >
                                     {t('customers.tinNumber')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
                                 </label>
-                                <input
-                                    id="tin"
-                                    type="text"
-                                    placeholder="e.g. 123456789"
-                                    className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.tin ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
-                                    {...register('tin')}
-                                />
+                                <div className="flex gap-2">
+                                    <input
+                                        id="tin"
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={9}
+                                        placeholder="e.g. 123456789"
+                                        className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.tin ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
+                                        {...register('tin')}
+                                        onChange={(e) => {
+                                            // TIN is a 9-digit RRA number, never the phone field's "+countrycode"
+                                            // shape — strip anything but digits so the two can't get swapped.
+                                            const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 9);
+                                            setValue('tin', digitsOnly, { shouldValidate: true });
+                                            setRraCheck({ state: 'idle' });
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        disabled={rraCheck.state === 'loading' || !/^\d{9}$/.test((watch('tin') || '').trim())}
+                                        onClick={async () => {
+                                            const tin = (watch('tin') || '').trim();
+                                            setRraCheck({ state: 'loading' });
+                                            try {
+                                                const res = await apiClient.verifyCustomerWithRra(tin, (initialData as any)?.id);
+                                                const data = (res as any)?.data ?? res;
+                                                if (data?.found) {
+                                                    if (data.taxprNm && !watch('name')) setValue('name', data.taxprNm, { shouldValidate: true });
+                                                    setRraCheck({ state: 'ok', message: `RRA: ${data.taxprNm ?? 'registered'}${data.taxprSttsCd ? ` (status ${data.taxprSttsCd})` : ''}` });
+                                                } else {
+                                                    setRraCheck({ state: 'error', message: 'RRA has no taxpayer for this TIN' });
+                                                }
+                                            } catch (err: any) {
+                                                setRraCheck({ state: 'error', message: err?.message ?? 'RRA verification failed' });
+                                            }
+                                        }}
+                                        className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-gray-300 dark:border-gray-600 px-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                                    >
+                                        {rraCheck.state === 'loading' ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+                                        Verify
+                                    </button>
+                                </div>
                                 {formErrors.tin && (
                                     <p className="mt-1 text-sm text-red-600">{formErrors.tin.message}</p>
+                                )}
+                                {rraCheck.state === 'ok' && (
+                                    <p className="mt-1 flex items-center gap-1.5 text-sm text-emerald-600"><CheckCircle2 className="size-4" />{rraCheck.message}</p>
+                                )}
+                                {rraCheck.state === 'error' && (
+                                    <p className="mt-1 flex items-center gap-1.5 text-sm text-amber-600"><AlertTriangle className="size-4" />{rraCheck.message}</p>
                                 )}
                             </div>
 

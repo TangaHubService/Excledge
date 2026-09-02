@@ -2,9 +2,8 @@
  * Single source of truth for the composed ERP sales-invoice payload
  * produced by GET /api/sales/:orgId/invoices/:saleId.
  *
- * The invoice is RENDERED on the backend (invoice-render.service.ts -> renderedHtml);
- * these types describe the data envelope the frontend receives so components
- * can unwrap and preview the server-rendered HTML.
+ * The backend owns all invoice values and the authoritative PDF. These types
+ * describe the metadata envelope used for status and filenames in the UI.
  */
 
 export interface InvoiceCompany {
@@ -101,6 +100,8 @@ export interface SdcInformation {
   ebmInvoiceNumber?: string | null
   rcptLabel?: string | null
   poweredBy?: string | null
+  /** §21: CIS software version, printed on every receipt. */
+  softwareVersion?: string | null
 }
 
 export interface InvoiceCertification {
@@ -214,6 +215,7 @@ export function unwrapInvoice(payload: unknown): EbmInvoice {
 export function getInvoiceFilename(
   invoice: EbmInvoice | null | undefined,
   fallback = "invoice",
+  format: "A4" | "80mm" = "A4",
 ): string {
   const toFilenamePart = (value: unknown): string => String(value ?? "")
     .trim()
@@ -222,10 +224,10 @@ export function getInvoiceFilename(
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
 
-  const company = toFilenamePart(invoice?.company?.name)
   const invoiceNumber = toFilenamePart(invoice?.invoice?.invoiceNumber || invoice?.invoice?.saleNumber)
   const fallbackName = toFilenamePart(fallback) || "invoice"
-  const name = [company, invoiceNumber].filter(Boolean).join("_") || fallbackName
+  const name = invoiceNumber || fallbackName
+  const suffix = format === "80mm" ? "-80mm" : ""
 
-  return `${name}.pdf`
+  return `EBM-Invoice-${name}${suffix}.pdf`
 }

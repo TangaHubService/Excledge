@@ -18,11 +18,34 @@ const VSDC_OFFLINE_WARN_MS   = Math.floor(VSDC_OFFLINE_BLOCK_MS * 0.8);
 export async function verifyVsdcOnlineStatus(organizationId: number): Promise<boolean> {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { lastSuccessfulVdsContact: true },
+    select: {
+      lastSuccessfulVdsContact: true,
+      trainingMode: true,
+      ebmDeviceId: true,
+      ebmSerialNo: true,
+      branches: {
+        where: { OR: [{ ebmDeviceId: { not: null } }, { ebmSerialNo: { not: null } }, { bhfId: { not: null } }] },
+        select: { id: true },
+        take: 1,
+      },
+    },
   });
 
   if (!org) {
     throw Object.assign(new Error('Organization not found'), { statusCode: 404 });
+  }
+
+  // Training mode never talks to the VSDC — a stale heartbeat must not block it.
+  if (org.trainingMode) {
+    return true;
+  }
+
+  // No VSDC device configured anywhere (org or branch) — there is nothing to
+  // be "offline" from. Fiscalisation itself still fails/queues per sale; the
+  // hard block only makes sense once a device exists.
+  const hasDevice = Boolean(org.ebmDeviceId || org.ebmSerialNo || org.branches.length > 0);
+  if (!hasDevice) {
+    return true;
   }
 
   const lastContact = org.lastSuccessfulVdsContact;

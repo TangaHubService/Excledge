@@ -24,27 +24,41 @@ function QrCanvas({ payload }: { payload: string }) {
   return <canvas ref={canvasRef} style={{ width: 100, height: 100, display: "block" }} />
 }
 
-/** Official verification data. It is shown only after fiscalisation returns real SDC data. */
+/**
+ * Official verification data. Shown after real fiscalisation, and also for
+ * training (TS/TR) and proforma (PS) receipts — neither is ever submitted to
+ * the VSDC (see the warranty statement's Warranted Function 5/18, and the
+ * "Certified Receipt" definition excluding both), so the block still needs
+ * to appear (with blank Internal Data / Receipt Signature) rather than
+ * silently disappear.
+ */
 export function EBMSection({ data }: { data: EbmSectionProps }) {
   const sdc = data.sdcInformation
   const qrImage = data.verification?.qrCodeImage
   const qrPayload = data.verification?.qrPayload
+  const rcptLabel = (data.invoice?.rcptLabel ?? "").toUpperCase()
+  const isTraining = rcptLabel === "TS" || rcptLabel === "TR"
+  const isProforma = Boolean(data.invoice?.isProforma) || rcptLabel === "PS"
   const signature = safeText(sdc?.receiptSignature)
   const internalData = safeText(sdc?.internalData)
-  const hasSdc = Boolean(qrImage || qrPayload || (sdc?.receiptNumber && sdc?.internalData && sdc?.receiptSignature))
+  const hasSdc = Boolean(qrImage || qrPayload || isTraining || isProforma || (sdc?.receiptNumber && sdc?.internalData && sdc?.receiptSignature))
 
   if (!hasSdc) return null
+
+  const internalDataDisplay = internalData !== "—" ? dashEvery4(internalData) : ""
+  const signatureDisplay = signature !== "—" ? dashEvery4(signature) : ""
 
   const leftRows = [
     { label: "SDC ID", value: safeText(sdc?.sdcId) },
     { label: "RECEIPT NUMBER", value: safeText(sdc?.receiptNumber ?? data.invoice?.receiptNumber) },
     { label: "MRC", value: safeText(sdc?.mrcNo) },
-    { label: "INTERNAL DATA", value: internalData === "—" ? "—" : dashEvery4(internalData) },
+    { label: "INTERNAL DATA", value: internalDataDisplay },
   ]
   const rightRows = [
-    { label: "RECEIPT SIGNATURE", value: signature === "—" ? "—" : dashEvery4(signature) },
+    { label: "RECEIPT SIGNATURE", value: signatureDisplay },
     { label: "DATE", value: formatDateShort(sdc?.date ?? data.invoice?.invoiceDate) },
     { label: "TIME", value: formatTime(sdc?.time ?? data.invoice?.time) },
+    { label: "SOFTWARE VERSION", value: safeText(sdc?.softwareVersion) },
   ]
 
   const labelStyle: React.CSSProperties = { width: 116, padding: "0 4px 6px 0", color: C.ink, fontSize: 9.5, fontWeight: 800, textTransform: "uppercase", verticalAlign: "top", whiteSpace: "nowrap" }

@@ -10,6 +10,7 @@ import {
   submitInvoiceToEbm,
   consumeOrgPurchaseCode,
   isEbmEnabled,
+  allocateLocalReceiptSequence,
 } from "../services/rra-ebm.service"
 import { processEbmOutboxBatch } from "../services/ebm-outbox.service"
 import { selectBatchesForSale, updateBatchQuantity } from "../services/batch.service"
@@ -20,6 +21,9 @@ import { success, error as apiError } from "../utils/apiResponse"
 import { TaxService } from "../services/tax.service"
 import { getOrganizationSettings } from "../services/organization-settings.service"
 import { renderSalesInvoiceHtml, type RenderInvoicePayload } from "../services/invoice-render.service"
+import { generateEbmInvoicePdf, getEbmInvoiceFilename, type InvoicePdfFormat } from "../services/invoice-pdf.service"
+import { generateEbmReceiptPdf80mm } from "../services/invoice-receipt-pdf.service"
+import { SYSTEM_FOOTER, SYSTEM_POWERED_BY, CIS_VERSION_LABEL } from "../services/system-branding.service"
 import QRCode from "qrcode"
 
 export const createSale = async (req: BranchAuthRequest, res: Response) => {
@@ -64,7 +68,9 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
     // submitted without a valid 6-character prcOrdCd — confirmed against the
     // sandbox. Catching this before the sale commits avoids completing a
     // checkout (payment taken, stock deducted) that can never be fiscalized.
-    if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+    // Skipped for proforma: it is never fiscalized (see step 7 below), so RRA
+    // never sees it and has no purchase-code requirement to satisfy.
+    if (!isProforma && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
       const customer = await prisma.customer.findUnique({
         where: { id: parseInt(customerId) },
         select: { TIN: true, prcOrdCd: true },
@@ -303,15 +309,39 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         });
       }
 
-      // 4. Allocate the RRA invoice sequence number and create the sale together,
-      // so a rollback of this transaction also rolls back the sequence increment.
-      const { invoiceNumber, vsdcInvcNo } = await generateInvoiceNumber(organizationId!, branchId as number, tx)
+      // 4. Allocate an invoice/receipt number and create the sale together, so a
+      // rollback of this transaction also rolls back the sequence increment.
+      //
+      // PROFORMA is explicitly "not an official receipt" (CIS spec §16/17) and
+      // per §6.3.6 must never be assigned a VSDC-signed number — it draws a
+      // local, non-fiscal counter instead (BranchReceiptCounter) and never
+      // touches the real gapless RRA sequence (vsdcInvcNo stays null).
+      let invoiceNumber: string | null
+      let vsdcInvcNo: number | null = null
+      let localReceiptSeq: number | null = null
+      let localReceiptTotalSeq: number | null = null
+      if (isProforma) {
+        const localSeq = await allocateLocalReceiptSequence(branchId as number, 'PS', tx)
+        localReceiptSeq = localSeq.typeSeq
+        localReceiptTotalSeq = localSeq.totalSeq
+        // Plain auto-incrementing number, not a "PROF-B3-2026-000003"-style
+        // string — set to the sale's own id right after creation below, so
+        // it's a clean number and globally unique by construction (the
+        // invoiceNumber column is unique across every sale, any branch/type).
+        invoiceNumber = null
+      } else {
+        const generated = await generateInvoiceNumber(organizationId!, branchId as number, tx)
+        invoiceNumber = generated.invoiceNumber
+        vsdcInvcNo = generated.vsdcInvcNo
+      }
 
       const newSale = await tx.sale.create({
         data: {
           saleNumber,
           invoiceNumber,
           vsdcInvcNo,
+          localReceiptSeq,
+          localReceiptTotalSeq,
           customerId: parseInt(customerId),
           userId: userId!,
           organizationId: organizationId!,
@@ -335,12 +365,23 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         },
       } as any);
 
+      // 4a. Proforma's invoiceNumber is the sale's own id — assigned now that
+      // it exists, so "INVOICE NO" prints as a plain, auto-incrementing
+      // number instead of a "PROF-B..." string.
+      if (isProforma) {
+        const plainInvoiceNumber = String((newSale as any).id)
+        await tx.sale.update({
+          where: { id: (newSale as any).id },
+          data: { invoiceNumber: plainInvoiceNumber },
+        })
+        ;(newSale as any).invoiceNumber = plainInvoiceNumber
+      }
+
       // 4b. Consume an organization-level RRA purchase code for business (B2B)
-      // buyers. Test codes are configured once at the org level (not per customer)
-      // and are single-use, so each business sale draws a fresh unused code. Falls
-      // back to the legacy per-customer prcOrdCd when the org pool is empty.
+      // buyers. Skipped for proforma — it is never fiscalized, so no purchase
+      // code is ever needed and none should be burned on a quote.
       const custTin = (newSale as any).customer?.TIN?.trim() ?? '';
-      if (custTin && !custTin.startsWith('7')) {
+      if (!isProforma && custTin && !custTin.startsWith('7')) {
         const allocated = await consumeOrgPurchaseCode(organizationId!, custTin, (newSale as any).id, tx)
           ?? ((newSale as any).customer?.prcOrdCd ?? null);
         if (allocated) {
@@ -352,38 +393,46 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
         }
       }
 
-      // 5. Record stock movements for PRODUCT items only (MODULE 2.4: guard reference)
-      for (const item of productItems) {
-        const saleItem = (newSale as any).saleItems?.find((si: any) => si.productId === parseInt(item.productId));
-        if (!saleNumber || saleNumber.trim().length === 0) {
-          throw new Error('Stock movement reference cannot be empty');
+      // 5. Record stock movements for PRODUCT items only (MODULE 2.4: guard reference).
+      // Skipped for proforma — it is a quote, not a completed sale, so nothing
+      // has actually left inventory yet.
+      if (!isProforma) {
+        for (const item of productItems) {
+          const saleItem = (newSale as any).saleItems?.find((si: any) => si.productId === parseInt(item.productId));
+          if (!saleNumber || saleNumber.trim().length === 0) {
+            throw new Error('Stock movement reference cannot be empty');
+          }
+          await removeStock({
+            organizationId: organizationId!,
+            productId: parseInt(item.productId),
+            userId: userId!,
+            quantity: item.quantity,
+            movementType: 'SALE',
+            branchId: branchId as any,
+            reference: saleNumber,
+            referenceType: 'SALE',
+            note: `Sale #${saleNumber}`,
+            batchId: saleItem?.batchId || null,
+            tx,
+          });
         }
-        await removeStock({
-          organizationId: organizationId!,
-          productId: parseInt(item.productId),
-          userId: userId!,
-          quantity: item.quantity,
-          movementType: 'SALE',
-          branchId: branchId as any,
-          reference: saleNumber,
-          referenceType: 'SALE',
-          note: `Sale #${saleNumber}`,
-          batchId: saleItem?.batchId || null,
-          tx,
-        });
       }
 
-      // 6. Update customer balance if debt (atomic with sale)
-      const remainingDebt = computedTotal - (cashAmount || 0) - (insuranceAmount || 0)
-      if (remainingDebt > 0) {
-        await tx.customer.update({
-          where: { id: parseInt(customerId) },
-          data: { balance: { increment: remainingDebt } },
-        });
+      // 6. Update customer balance if debt (atomic with sale). Skipped for
+      // proforma — no payment obligation exists yet for a quote.
+      if (!isProforma) {
+        const remainingDebt = computedTotal - (cashAmount || 0) - (insuranceAmount || 0)
+        if (remainingDebt > 0) {
+          await tx.customer.update({
+            where: { id: parseInt(customerId) },
+            data: { balance: { increment: remainingDebt } },
+          });
+        }
       }
 
-      // 7. Write transactional outbox entry (atomic with the sale)
-      if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+      // 7. Write transactional outbox entry (atomic with the sale). Skipped for
+      // proforma — it must never reach VSDC (see step 4 comment).
+      if (!isProforma && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
         const operation: EbmOperation = 'SALE';
         const idempotencyKey = `ebm-${operation}-${organizationId}-${newSale.id}`;
         await tx.ebmOutbox.create({
@@ -405,14 +454,48 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       timeout: 60000,   // 60 seconds
     });
 
-    // Fire the outbox worker immediately (fire-and-forget) so the invoice hits
-    // the WAR right at sale time instead of waiting for the 2-minute cron tick.
-    // The outbox row stays the single source of truth, so idempotency is kept
-    // and the cron job remains a retry/backstop if this run fails or times out.
-    if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
-      void processEbmOutboxBatch(50).catch((e) => {
-        console.error('[EBM] immediate fiscalization error:', e);
-      });
+    // Wait (briefly, bounded) for the outbox worker to attempt fiscalization
+    // before responding, so the caller knows whether the receipt is actually
+    // safe to print. RRA VSDC spec forbids issuing/printing a receipt VSDC
+    // hasn't confirmed (checklist §16/§22). The outbox row stays the single
+    // source of truth, so idempotency is kept and the 2-minute cron job
+    // remains a retry/backstop if this bounded wait times out or the process
+    // crashes mid-submission — it does not block or fail the sale itself.
+    let fiscalization: { status: 'success' | 'pending' | 'failed'; sdcRcptNo: number | null; isCertified: boolean } = {
+      status: 'success',
+      sdcRcptNo: null,
+      isCertified: false,
+    };
+
+    if (!isProforma && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+      const EBM_INLINE_WAIT_MS = 5000;
+      await Promise.race([
+        processEbmOutboxBatch(5).catch((e) => {
+          console.error('[EBM] immediate fiscalization error:', e);
+        }),
+        new Promise((resolve) => setTimeout(resolve, EBM_INLINE_WAIT_MS)),
+      ]);
+
+      const [outboxRow, fiscalTx] = await Promise.all([
+        prisma.ebmOutbox.findFirst({
+          where: { saleId: sale.id, operation: 'SALE' },
+          orderBy: { createdAt: 'desc' },
+          select: { status: true },
+        }),
+        prisma.ebmTransaction.findFirst({
+          where: { saleId: sale.id, submissionStatus: 'SUCCESS' },
+          orderBy: { createdAt: 'desc' },
+          select: { sdcRcptNo: true },
+        }),
+      ]);
+
+      if (outboxRow?.status === 'SUCCEEDED') {
+        fiscalization = { status: 'success', sdcRcptNo: fiscalTx?.sdcRcptNo ?? null, isCertified: !!fiscalTx };
+      } else if (outboxRow?.status === 'DEAD_LETTER') {
+        fiscalization = { status: 'failed', sdcRcptNo: null, isCertified: false };
+      } else {
+        fiscalization = { status: 'pending', sdcRcptNo: null, isCertified: false };
+      }
     }
 
     // 7. Record split payments if provided
@@ -465,7 +548,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       },
     });
 
-    res.status(201).json(success(completeSale || sale))
+    res.status(201).json(success({ ...(completeSale ?? sale), fiscalization }))
   } catch (error: any) {
     console.error("[Create Sale Error]:", error)
 
@@ -489,7 +572,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
 export const getSales = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId)
-    const { startDate, endDate, customerId, page, limit, search, status, paymentType } = req.query
+    const { startDate, endDate, customerId, page, limit, search, status, paymentType, rcptLabel } = req.query
     const requestedPage = Number(page)
     const pageNumber = Number.isFinite(requestedPage) && requestedPage > 0
       ? Math.floor(requestedPage)
@@ -526,6 +609,10 @@ export const getSales = async (req: BranchAuthRequest, res: Response) => {
 
     if (paymentType) {
       where.paymentType = paymentType as string
+    }
+
+    if (rcptLabel) {
+      where.rcptLabel = rcptLabel as string
     }
 
     if (search) {
@@ -786,13 +873,23 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           throw { status: 400, message: "Partial refunds are not allowed. Only full refunds are permitted." };
         }
 
-        // Get all sale items for full refund — include batchId to restore batch quantities
+        // Get all sale items for full refund — include batchId to restore batch quantities.
+        // Tax code / rate / amount and any line discount are carried over from the
+        // original line so the refund is fiscalised (and printed) as a true mirror
+        // of the original — otherwise a refund of an 18% VAT sale would be reported
+        // to RRA as a tax-exempt, zero-VAT refund (RRA checklist §9/§56).
         const itemsToRefund = ((sale as any).saleItems || []).map((item: any) => ({
           saleItemId: item.id,
           productId: item.productId,
           quantity: item.quantity,
           unitPrice: item.unitPrice.toNumber(),
           totalPrice: item.totalPrice.toNumber(),
+          taxRate: Number(item.taxRate ?? 0),
+          taxAmount: Number(item.taxAmount ?? 0),
+          taxCode: item.taxCode ?? null,
+          dcRate: Number(item.dcRate ?? 0),
+          dcAmt: Number(item.dcAmt ?? 0),
+          measurementUnit: item.measurementUnit ?? 'PCS',
           batchId: item.batchId || item.batch?.id || null,
           itemType: item.itemType || 'PRODUCT',
           serviceName: item.serviceName || null,
@@ -801,6 +898,8 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
 
         // Calculate total refund amount
         const totalRefundAmount = itemsToRefund.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
+        const totalRefundVat = itemsToRefund.reduce((sum: number, item: any) => sum + item.taxAmount, 0);
+        const totalRefundTaxable = totalRefundAmount - totalRefundVat;
 
         // ── MODULE 2.3: Reject if refund exceeds original total (defense-in-depth) ──
         const originalTotal = Number((sale as any).totalAmount);
@@ -844,6 +943,8 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             insuranceAmount: 0,
             debtAmount: 0,
             totalAmount: -totalRefundAmount, // Negative total
+            vatAmount: -totalRefundVat,      // Negative — mirrors the original VAT being refunded
+            taxableAmount: -totalRefundTaxable,
             status: 'REFUNDED',
             refundReason: reason,
             rcptLabel: refundRcptLabel as any,
@@ -852,9 +953,23 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             saleItems: {
               create: itemsToRefund.map((item: any) => ({
                 productId: item.productId || undefined,
+                // quantity negative x unitPrice positive = totalPrice negative;
+                // unitPrice itself stays positive here so that identity holds —
+                // the printed minus sign on the per-unit price (RRA checklist
+                // §56) is applied at render time (composeInvoicePayload), not
+                // stored, to avoid double-negating the line total.
                 quantity: -item.quantity,
                 unitPrice: item.unitPrice,
                 totalPrice: -item.totalPrice,
+                // Tax + discount mirror the original line with the sign flipped so
+                // the refund fiscalises with the correct tax code/amount and the
+                // printed receipt shows every amount negative (RRA checklist §56).
+                taxRate: item.taxRate,
+                taxAmount: -item.taxAmount,
+                taxCode: item.taxCode ?? undefined,
+                dcRate: item.dcRate,
+                dcAmt: -item.dcAmt,
+                measurementUnit: item.measurementUnit,
                 itemType: item.itemType,
                 serviceName: item.serviceName,
                 serviceDescription: item.serviceDescription,
@@ -958,17 +1073,31 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
       });
     });
 
-    // Fire the outbox worker immediately (fire-and-forget) so the refund hits
-    // the WAR right at refund time instead of waiting for the 2-minute cron tick.
-    // The outbox row stays the single source of truth for idempotency; the cron
-    // job remains a retry/backstop if this run fails or times out.
+    // Bounded wait (same rationale as createSale — RRA checklist §16/§22: a
+    // refund receipt must not be issued before VSDC confirms it either). The
+    // outbox row stays the single source of truth; the 2-minute cron job
+    // remains the retry/backstop if this wait times out.
+    let refundFiscalization: { status: 'success' | 'pending' | 'failed' } = { status: 'success' };
     if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
-      void processEbmOutboxBatch(50).catch((e) => {
-        console.error('[EBM] immediate refund fiscalization error:', e);
+      const EBM_INLINE_WAIT_MS = 5000;
+      await Promise.race([
+        processEbmOutboxBatch(5).catch((e) => {
+          console.error('[EBM] immediate refund fiscalization error:', e);
+        }),
+        new Promise((resolve) => setTimeout(resolve, EBM_INLINE_WAIT_MS)),
+      ]);
+
+      const outboxRow = await prisma.ebmOutbox.findFirst({
+        where: { saleId: result.refundSale.id, operation: 'REFUND' },
+        orderBy: { createdAt: 'desc' },
+        select: { status: true },
       });
+      refundFiscalization = {
+        status: outboxRow?.status === 'SUCCEEDED' ? 'success' : outboxRow?.status === 'DEAD_LETTER' ? 'failed' : 'pending',
+      };
     }
 
-    res.status(200).json(success(result));
+    res.status(200).json(success({ ...result, fiscalization: refundFiscalization }));
   } catch (error: any) {
     console.error("[Refund Error]:", error);
     const status = error.status || 500;
@@ -979,8 +1108,13 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
 
 
 /**
- * Reprint a sale receipt — increments reprintCount atomically and returns
- * the sale with isCopy=true so the frontend can render a "COPY RECEIPT" label.
+ * Registers one download/print of this sale's invoice PDF — called by the
+ * frontend right before it fetches the actual PDF for every deliberate
+ * download. CIS/VSDC spec §7.18: "print only one original receipt. Reprint
+ * shall have a watermark with mention Copy." There's no separate "copy"
+ * action: the FIRST registered download stays the original (reprintCount
+ * reaches 1, isCopy stays false in getSaleInvoiceData); every one after that
+ * is automatically rendered as a COPY (CS/CR) receipt.
  */
 export const reprintSaleReceipt = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -989,39 +1123,38 @@ export const reprintSaleReceipt = async (req: BranchAuthRequest, res: Response) 
 
     const sale = await prisma.sale.findFirst({
       where: { id: saleId, organizationId, ...buildBranchFilter(req) },
-      include: {
-        saleItems: { include: { product: true } },
-        customer: true,
-      },
+      select: { id: true, saleNumber: true, status: true, rcptLabel: true },
     });
 
     if (!sale) {
       return res.status(404).json(apiError("Sale not found"));
     }
 
-    // C6: CS = copy of a sale, CR = copy of a refund
-    const copyLabel = (sale.status === 'REFUNDED' || (sale as any).rcptLabel === 'NR' || (sale as any).rcptLabel === 'TR')
+    // C6: CS = copy of a sale, CR = copy of a refund. This is a display-only
+    // label for the printout being produced right now — it must NOT overwrite
+    // the sale's own rcptLabel (NS/NR/TS/TR), which is the fiscal record of
+    // what the original receipt actually was. Persisting CS/CR onto the sale
+    // previously made reprinted TRAINING receipts (TS/TR) look like normal
+    // sales/refunds everywhere the sale's rcptLabel is read from, including
+    // the daily X/Z report's training exclusion filter.
+    const copyLabel = (sale.status === 'REFUNDED' || sale.rcptLabel === 'NR' || sale.rcptLabel === 'TR')
       ? 'CR'
       : 'CS';
 
     const updated = await prisma.sale.update({
       where: { id: saleId },
-      data: {
-        reprintCount: { increment: 1 },
-        rcptLabel: copyLabel as any,
-      },
+      data: { reprintCount: { increment: 1 } },
     });
 
     await auditLogger.sales(req, {
       type: 'SALE_REPRINTED',
-      description: `Receipt reprinted for Sale #${sale.saleNumber} (count: ${updated.reprintCount})`,
+      description: `Invoice downloaded for Sale #${sale.saleNumber} (download #${updated.reprintCount})`,
       entityType: 'Sale',
       entityId: saleId,
-      metadata: { reprintCount: updated.reprintCount },
+      metadata: { reprintCount: updated.reprintCount, copyLabel },
     });
 
     res.json(success({
-      ...sale,
       isCopy: updated.reprintCount > 1,
       reprintCount: updated.reprintCount,
       rcptLabel: copyLabel,
@@ -1053,6 +1186,20 @@ export const regenerateInvoice = async (req: BranchAuthRequest, res: Response) =
 
         if (sale.status === 'CANCELLED' || sale.status === 'REFUNDED') {
             return res.status(400).json(apiError(`Cannot regenerate invoice for a ${sale.status.toLowerCase()} sale`));
+        }
+
+        // RRA checklist §28: an approved (VSDC-signed) receipt must never be
+        // modified — that includes re-numbering it. Regeneration is only for a
+        // sale whose invoice number was never accepted by VSDC (still pending or
+        // permanently failed). A fiscalised sale can only be corrected via a
+        // refund against the original receipt.
+        const alreadyFiscalised = sale.ebmTransactions.some(
+            (t) => (t.operation === 'SALE' || !t.operation) && t.submissionStatus === 'SUCCESS' && t.ebmInvoiceNumber != null,
+        );
+        if (alreadyFiscalised) {
+            return res.status(409).json(apiError(
+                'This sale already has a VSDC-signed receipt and cannot be re-numbered. Issue a refund against the original receipt instead.',
+            ));
         }
 
         const result = await prisma.$transaction(async (tx) => {
@@ -1167,7 +1314,10 @@ export const getEbmReceipt = async (req: BranchAuthRequest, res: Response) => {
       : null;
 
     const mrcNo = branch?.ebmSerialNo ?? org?.ebmSerialNo ?? null;
-    const sdcId = branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null;
+    // `tx` is this sale's own successful VSDC response — prefer the ID it was
+    // actually stamped with over the (possibly still-unconfigured) device
+    // setting, same precedence composeInvoicePayload uses.
+    const sdcId = tx.sdcId ?? branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null;
 
     res.json({
       status: 'success',
@@ -1397,10 +1547,22 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
  * All money arithmetic (subtotal, discount, VAT, tax, paid, balance, grand
  * total) is performed here in the backend; the frontend merely displays it.
  */
-export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
-  try {
-    const saleId = parseInt(req.params.saleId ?? req.params.id)
-    const organizationId = parseInt(req.params.organizationId)
+/**
+ * Thrown by composeInvoicePayload when a real (non-proforma) sale has not yet
+ * been confirmed by VSDC — RRA VSDC spec forbids issuing/printing a receipt
+ * without that confirmation (checklist §16/§22), so callers must surface this
+ * distinctly instead of falling back to a degraded, unsigned receipt.
+ */
+export class FiscalizationPendingError extends Error {
+  constructor(public readonly reason: "pending" | "failed") {
+    super(`Sale not yet confirmed by VSDC (${reason})`)
+    this.name = "FiscalizationPendingError"
+  }
+}
+
+export async function composeInvoicePayload(req: BranchAuthRequest): Promise<RenderInvoicePayload | null> {
+  const saleId = parseInt(req.params.saleId ?? req.params.id)
+  const organizationId = parseInt(req.params.organizationId)
 
     const sale = await prisma.sale.findFirst({
       where: { id: saleId, organizationId, ...buildBranchFilter(req) },
@@ -1409,10 +1571,30 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
         user: { select: { id: true, name: true } },
         saleItems: { include: { product: true } },
         ebmTransactions: { orderBy: { createdAt: "desc" } },
+        originalSale: { select: { vsdcInvcNo: true, invoiceNumber: true, saleNumber: true } },
       },
     })
 
-    if (!sale) return res.status(404).json(apiError("Sale not found"))
+    if (!sale) return null
+
+    // Proforma sales are never submitted to VSDC by design and have no outbox
+    // row to check. A real (NS/NR) sale that does have an outbox row must have
+    // reached SUCCEEDED before its receipt can be composed — anything else
+    // (PENDING/PROCESSING/FAILED still retrying, or permanently DEAD_LETTER)
+    // blocks here rather than silently degrading to an unsigned receipt.
+    if (!sale.isProforma) {
+      // Not filtered to operation:"SALE" — a refund sale's outbox row is
+      // written with operation:"REFUND" (see refundSale), and a voided sale's
+      // with "VOID"; whichever applies to this sale is what must have SUCCEEDED.
+      const outboxRow = await prisma.ebmOutbox.findFirst({
+        where: { saleId: sale.id },
+        orderBy: { createdAt: "desc" },
+        select: { status: true },
+      })
+      if (outboxRow && outboxRow.status !== "SUCCEEDED") {
+        throw new FiscalizationPendingError(outboxRow.status === "DEAD_LETTER" ? "failed" : "pending")
+      }
+    }
 
     const [org, branch] = await Promise.all([
       prisma.organization.findUnique({
@@ -1442,20 +1624,50 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
     // Prefer the ID stamped in the successful RRA response. Configured device
     // values are a fallback only; this keeps the printed SDC identifier aligned
     // with the actual fiscal receipt.
-    const sdcId = fiscalTx?.sdcId ?? branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null
+    let sdcId = fiscalTx?.sdcId ?? branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null
+    // Proforma/training documents never get their own fiscalTx (never
+    // submitted to VSDC), and the device may not have its ebmDeviceId
+    // backfilled in Organization/Branch settings — but the SDC ID is a fixed
+    // per-device identifier, so reuse the one this branch's device was last
+    // handed back on any real, successfully-fiscalized sale.
+    if (!sdcId) {
+      const lastKnownDevice = await prisma.ebmTransaction.findFirst({
+        where: { organizationId, sdcId: { not: null }, sale: { branchId: sale.branchId } },
+        orderBy: { createdAt: "desc" },
+        select: { sdcId: true },
+      })
+      sdcId = lastKnownDevice?.sdcId ?? null
+    }
     const sdcRcptNo = fiscalTx?.sdcRcptNo ?? null
     const totalRcptNo = fiscalTx?.totalRcptNo ?? null
     const internalData = fiscalTx?.internalData ?? norm?.intrlData ?? null
     const receiptSignature = fiscalTx?.receiptSignature ?? norm?.vsdcSignature ?? norm?.verificationCode ?? null
-    const sdcDateTime = fiscalTx?.sdcDateTime ?? norm?.sdcDateTime ?? null
+    // Proforma has no fiscalTx (never sent to VSDC), so it has no VSDC-stamped
+    // time either — fall back to the CIS's own creation time, same as the
+    // spec's own proforma example still prints a date/time under SDC INFORMATION.
+    const sdcDateTime = fiscalTx?.sdcDateTime ?? norm?.sdcDateTime ?? (sale.isProforma ? sale.createdAt : null)
     const ebmInvoiceNumber = fiscalTx?.ebmInvoiceNumber ?? norm?.ebmInvoiceNumber ?? sale.invoiceNumber ?? null
     const rcptLabel = fiscalTx?.rcptLabel ?? sale.rcptLabel ?? null
+    // Proforma is never submitted to VSDC (see createSale step 4/7), so it never
+    // has a fiscalTx/sdcRcptNo — it prints its own local, non-fiscal counter pair
+    // instead: localReceiptSeq (this type only) / localReceiptTotalSeq (every
+    // locally-numbered type combined), the same distinct-A/B shape as a real
+    // VSDC counter (spec §7.25's own example: "168/258 NS" — two different numbers).
     const fiscalReceiptNumber = sdcRcptNo != null
       ? `${sdcRcptNo}/${totalRcptNo ?? sdcRcptNo}${rcptLabel ? ` ${rcptLabel}` : ""}`
-      : sale.saleNumber
-    const fiscalInvoiceNumber = fiscalTx && sdcId && sdcRcptNo != null
-      ? `${sdcId}-${sdcRcptNo}`
+      : sale.localReceiptSeq != null
+        ? `${sale.localReceiptSeq}/${sale.localReceiptTotalSeq ?? sale.localReceiptSeq}${rcptLabel ? ` ${rcptLabel}` : ""}`
+        : sale.saleNumber
+    // The invoice number is the sequence submitted to VSDC (invcNo), not the
+    // SDC device identifier. SDC ID and receipt counters are printed separately.
+    const fiscalInvoiceNumber = sale.vsdcInvcNo != null
+      ? String(sale.vsdcInvcNo)
       : ebmInvoiceNumber ?? sale.invoiceNumber ?? sale.saleNumber
+    const originalReceiptNumber = sale.originalSale
+      ? (sale.originalSale.vsdcInvcNo != null
+          ? String(sale.originalSale.vsdcInvcNo)
+          : sale.originalSale.invoiceNumber ?? sale.originalSale.saleNumber)
+      : null
 
     const currency = org?.currency ?? "RWF"
     const toNumber = (v: unknown): number => (v == null ? 0 : typeof v === "number" ? v : Number(String(v)))
@@ -1465,7 +1677,15 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
     const insuranceAmount = toNumber(sale.insuranceAmount)
     const vatAmount = toNumber(sale.vatAmount)
     const taxableAmount = toNumber(sale.taxableAmount)
-    const discountAmount = Math.max(0, totalAmount - cashAmount - debtAmount - insuranceAmount - vatAmount - taxableAmount)
+    // A refund stores every amount negative; compute the residual sale-level
+    // discount on magnitudes and re-apply the document's sign so a refund
+    // receipt shows the discount negative too (RRA checklist §56) instead of a
+    // spurious positive value.
+    const docSign = totalAmount < 0 ? -1 : 1
+    const discountAmount = docSign * Math.max(
+      0,
+      Math.abs(totalAmount) - Math.abs(cashAmount) - Math.abs(debtAmount) - Math.abs(insuranceAmount) - Math.abs(vatAmount) - Math.abs(taxableAmount),
+    )
 
     const items = (sale.saleItems ?? []).map((line, index) => {
       const qty = toNumber(line.quantity)
@@ -1483,7 +1703,11 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
         description: line.serviceName ?? line.product?.name ?? line.serviceDescription ?? "",
         quantity: qty,
         unit: line.measurementUnit ?? "PCS",
-        unitPrice,
+        // Per-unit price always prints positive, refund or not — only qty and
+        // the amounts derived from it (gross/net/total) carry the refund's
+        // negative sign. qty is already stored negative for a refund line, so
+        // qty*unitPrice still yields the correct negative line total below.
+        unitPrice: Math.abs(unitPrice),
         discountPct: dcRate,
         discountAmt: dcAmt,
         taxCode: line.taxCode ?? null,
@@ -1502,7 +1726,8 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
     const subtotal = items.reduce((s, i) => s + i.subtotal, 0)
     const itemDiscount = items.reduce((s, i) => s + i.discountAmt, 0)
     const lineTax = items.reduce((s, i) => s + i.taxAmount, 0)
-    const discount = Math.max(0, Math.round(itemDiscount + discountAmount))
+    // §56: keep the discount signed with the document (negative on a refund).
+    const discount = docSign * Math.max(0, Math.round(Math.abs(itemDiscount) + Math.abs(discountAmount)))
     const grandTotal = Math.round(totalAmount)
     const paid = Math.round(cashAmount + insuranceAmount)
     const balance = Math.round(debtAmount)
@@ -1560,8 +1785,13 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
         rcptLabel,
         rcptLabelText: rcptLabel ? RCT_LABEL_DISPLAY[rcptLabel] ?? rcptLabel : null,
         isProforma: sale.isProforma,
-        isCopy: (sale.reprintCount ?? 0) > 0,
+        // CIS/VSDC spec §7.18/§15: only ONE original printout is allowed —
+        // reprintCount is incremented on every deliberate "download" of this
+        // invoice's PDF, so the first download (count reaches 1) stays the
+        // original and every one after (count > 1) renders as a COPY.
+        isCopy: (sale.reprintCount ?? 0) > 1,
         currency,
+        originalReceiptNumber,
       },
       items,
       totals: {
@@ -1597,7 +1827,7 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
       sdcInformation: {
         sdcId,
         mrcNo,
-        receiptNumber: sdcRcptNo != null ? fiscalReceiptNumber : null,
+        receiptNumber: (sdcRcptNo != null || sale.isProforma) ? fiscalReceiptNumber : null,
         receiptSignature,
         internalData,
         sdcDateTime: sdcDateTime ? String(sdcDateTime) : null,
@@ -1605,7 +1835,8 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
         time: sdcDateTime ? `${p2(new Date(sdcDateTime).getHours())}:${p2(new Date(sdcDateTime).getMinutes())}:${p2(new Date(sdcDateTime).getSeconds())}` : null,
         ebmInvoiceNumber: ebmInvoiceNumber,
         rcptLabel,
-        poweredBy: null,
+        poweredBy: SYSTEM_FOOTER,
+        softwareVersion: CIS_VERSION_LABEL,
       },
       certification: {
         isCertified,
@@ -1620,7 +1851,7 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
       branding: {
         primaryColor: "#1565C0",
         rraLogo: null,
-        poweredBy: "EXCEL EDGE ERP",
+        poweredBy: SYSTEM_POWERED_BY,
       },
       footer: {
         message: "Thank you for your business.",
@@ -1628,14 +1859,49 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
       },
     }
 
-    res.json(
-      success({
-        ...invoiceData,
-        renderedHtml: renderSalesInvoiceHtml(invoiceData),
-      })
-    )
+    return invoiceData
+}
+
+export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const invoiceData = await composeInvoicePayload(req)
+    if (!invoiceData) return res.status(404).json(apiError("Sale not found"))
+
+    return res.json(success({
+      ...invoiceData,
+      renderedHtml: renderSalesInvoiceHtml(invoiceData),
+    }))
   } catch (error: any) {
+    if (error instanceof FiscalizationPendingError) {
+      return res.status(425).json({ success: false, status: "pending_fiscalization", reason: error.reason, error: error.message })
+    }
     console.error("[Get Invoice Error]:", error)
-    res.status(500).json(apiError("Failed to get invoice"))
+    return res.status(500).json(apiError("Failed to get invoice"))
+  }
+}
+
+/** Authoritative backend-generated invoice PDF (A4, A5 or 80mm) for download, preview, sharing, and printing. */
+export const getInvoicePdf = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const invoiceData = await composeInvoicePayload(req)
+    if (!invoiceData) return res.status(404).json(apiError("Sale not found"))
+
+    const q = String(req.query.format ?? "").toUpperCase()
+    const format: InvoicePdfFormat = q === "80MM" ? "80mm" : q === "A5" ? "A5" : "A4"
+    const pdf = format === "80mm"
+      ? await generateEbmReceiptPdf80mm(invoiceData)
+      : await generateEbmInvoicePdf(invoiceData, format === "A5" ? "A5" : "A4")
+    const filename = getEbmInvoiceFilename(invoiceData, format)
+    res.setHeader("Content-Type", "application/pdf")
+    res.setHeader("Content-Length", String(pdf.length))
+    res.setHeader("Content-Disposition", `inline; filename="${filename}"`)
+    res.setHeader("Cache-Control", "private, no-store")
+    return res.status(200).send(pdf)
+  } catch (error: any) {
+    if (error instanceof FiscalizationPendingError) {
+      return res.status(425).json({ success: false, status: "pending_fiscalization", reason: error.reason, error: error.message })
+    }
+    console.error("[Get Invoice PDF Error]:", error)
+    return res.status(500).json(apiError("Failed to generate invoice PDF"))
   }
 }

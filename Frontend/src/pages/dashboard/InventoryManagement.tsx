@@ -612,7 +612,7 @@ export const InventoryManagement = () => {
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
         {loading ? (
           <div className="p-6">
-            <TableSkeleton rows={6} columns={9} rowHeight="h-10" />
+            <TableSkeleton rows={6} columns={10} rowHeight="h-10" />
           </div>
         ) : products.length === 0 ? (
           <div className="py-20 flex flex-col items-center justify-center text-gray-400 gap-3">
@@ -625,6 +625,7 @@ export const InventoryManagement = () => {
               <TableRow className="hover:bg-transparent">
                 {[
                   { label: "ID", key: "id" },
+                  { label: "Product Code", key: "" },
                   { label: "Product", key: "name" },
                   { label: "Batch Number", key: "batchNumber" },
                   { label: "Category", key: "category" },
@@ -679,6 +680,11 @@ export const InventoryManagement = () => {
                       <button onClick={() => setViewProduct(prod)} className="hover:underline">
                         {codeId}
                       </button>
+                    </TableCell>
+
+                    {/* RRA Product Code (itemCd) */}
+                    <TableCell className="py-3.5 text-xs font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      {prod.itemCd || <span className="text-gray-300 dark:text-gray-600">Not registered</span>}
                     </TableCell>
 
                     {/* Product Name & Thumbnail */}

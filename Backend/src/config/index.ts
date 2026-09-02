@@ -56,17 +56,25 @@ export const config = {
     salePath: process.env.EBM_SALE_PATH || "/trnsSales/saveSales",
     refundPath: process.env.EBM_REFUND_PATH || "/trnsSales/saveSales",
     voidPath: process.env.EBM_VOID_PATH || "/trnsSales/saveSales",
-    // NOTE: item/movement/purchase/import paths below are out of scope for this
-    // pass (product-sync/stock-movement-sync/purchase-sync services) and are left
-    // unchanged even though they're also not real VSDC paths — see EBM audit.
-    itemPath: process.env.EBM_ITEM_PATH || "/saveItem",
+    // itemPath now matches the real VSDC path (§3.2.1: POST /items/saveItems),
+    // fixed alongside product-sync.service.ts's payload shape.
+    itemPath: process.env.EBM_ITEM_PATH || "/items/saveItems",
+    // DEPRECATED: stock and purchase now use the real VSDC routes directly in
+    // vsdc-api.service.ts (/stock/saveStockItems, /stockMaster/saveStockMaster,
+    // /trnsPurchase/savePurchases, /trnsPurchase/selectTrnsPurchaseSales). These
+    // env overrides are kept only so an old .env doesn't break startup.
     movementPath: process.env.EBM_MOVEMENT_PATH || "/selectMvmt",
     purchasePath: process.env.EBM_PURCHASE_PATH || "/savePurc",
     importPath: process.env.EBM_IMPORT_PATH || "/selectImportInvc",
     requestTimeoutMs: Number.parseInt(process.env.EBM_REQUEST_TIMEOUT_MS || "1000", 10),
     useMock: process.env.EBM_USE_MOCK === "true",
     maxQueueRetries: Number.parseInt(process.env.EBM_MAX_QUEUE_RETRIES || "10", 10),
-    statusCheckPath: process.env.EBM_STATUS_CHECK_PATH || "/status",
+    // "/status" is not a real VSDC route (verified 404 against the RRA sandbox)
+    // — there is no dedicated heartbeat endpoint in the spec. /code/selectCodes
+    // is a real, side-effect-free lookup, so a successful response from it is
+    // used as the liveness probe instead. Override via env if a genuine status
+    // endpoint becomes available on production RRA infrastructure.
+    statusCheckPath: process.env.EBM_STATUS_CHECK_PATH || "/code/selectCodes",
     securityKey: process.env.EBM_SECURITY_KEY || "",
     // ── EBM 2.1 / OSDC (Online Sales Data Controller) integration ────────────
     // protocol: 'vsdc' (v1, the /trnsSales/saveSales path) or 'osdc' (v2.1).

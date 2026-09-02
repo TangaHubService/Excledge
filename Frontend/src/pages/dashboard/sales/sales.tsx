@@ -15,7 +15,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, Dr
 import { Label } from '../../../components/ui/label';
 import { toast } from 'react-toastify';
 import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice';
-import { downloadInvoicePdf } from '../../../lib/invoice-pdf';
+import { downloadInvoicePdf, type InvoicePdfFormat } from '../../../lib/invoice-pdf';
 import type { SaleEbmTransaction } from '../../../utils/invoiceFiscal';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import { useNavigate } from 'react-router-dom';
@@ -60,6 +60,7 @@ type Sale = {
   id: string;
   saleNumber: string;
   invoiceNumber?: string;
+  rcptLabel?: string | null;
   customer: { name: string; email?: string; phone?: string };
   user: { name: string };
   paymentType: string;
@@ -139,6 +140,7 @@ export default function SalesPage() {
   const [stats, setStats] = useState({ totalSales: 0, totalCustomers: 0, totalItemsSold: 0, totalReceipts: 0 });
   const [statusFilter, setStatusFilter] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
+  const [rcptLabelFilter, setRcptLabelFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -159,6 +161,8 @@ export default function SalesPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState<string | null>(null);
+  // Named distinctly from date-fns's `format` (imported above) to avoid shadowing it.
+  const [invoiceFormat, setInvoiceFormat] = useState<InvoicePdfFormat>('A4');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [openRowMenu, setOpenRowMenu] = useState<string | null>(null);
   const fetchSales = useCallback(async () => {
@@ -170,6 +174,7 @@ export default function SalesPage() {
         search: searchTerm,
         status: statusFilter,
         paymentType: paymentFilter,
+        rcptLabel: rcptLabelFilter,
         startDate,
         endDate,
       }) as SalesResponse;
@@ -212,7 +217,7 @@ export default function SalesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, pageSize, searchTerm, statusFilter, paymentFilter, startDate, endDate]);
+  }, [currentPage, pageSize, searchTerm, statusFilter, paymentFilter, rcptLabelFilter, startDate, endDate]);
 
   useEffect(() => { fetchSales(); }, [fetchSales]);
 
@@ -288,13 +293,21 @@ export default function SalesPage() {
     }
   };
 
-  const handleDownloadInvoice = async (sale: Sale) => {
+  /**
+   * CIS/VSDC spec §7.18/§15: "print only one original receipt. Reprint shall
+   * have a watermark with mention Copy." There's no separate copy action —
+   * downloadInvoicePdf registers each download with the backend itself, so
+   * the first download of a given sale's invoice comes back as the original
+   * and every one after automatically renders watermarked COPY.
+   */
+  const handleDownloadInvoice = async (sale: Sale, downloadFormat: InvoicePdfFormat = invoiceFormat) => {
     setIsDownloadingInvoice(sale.id);
     try {
       const invoice = unwrapInvoice(await apiClient.getInvoice(sale.id));
       const ok = await downloadInvoicePdf(
-        invoice,
-        getInvoiceFilename(invoice, sale.saleNumber)
+        sale.id,
+        getInvoiceFilename(invoice, sale.saleNumber, downloadFormat),
+        downloadFormat
       );
       if (!ok) throw new Error('PDF generation failed');
       toast.success(t('sales.invoiceDownloadSuccess'));
@@ -308,7 +321,8 @@ export default function SalesPage() {
 
   const resetFilters = () => {
     setStartDate(''); setEndDate(''); setStatusFilter('');
-    setPaymentFilter(''); setSearchTerm(''); setCurrentPage(1);
+    setPaymentFilter(''); setRcptLabelFilter('');
+    setSearchTerm(''); setCurrentPage(1);
   };
 
   const pageWindowStart = Math.max(1, Math.min(currentPage - 2, Math.max(1, totalPages - 4)));
@@ -412,7 +426,7 @@ export default function SalesPage() {
             </select>
           </div>
 
-          {/* Method */}
+{/* Method */}
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-500">Method</label>
             <select
@@ -424,8 +438,28 @@ export default function SalesPage() {
               <option value="CASH">Cash</option>
               <option value="MOBILE_MONEY">Mobile Money</option>
               <option value="INSURANCE">Insurance</option>
+              <option value="CREDIT_CARD">Credit Card</option>
               <option value="DEBT">Debt</option>
               <option value="MIXED">Mixed</option>
+            </select>
+          </div>
+
+          {/* Receipt Type (RcptLabel) */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-500">Receipt Type</label>
+            <select
+              value={rcptLabelFilter}
+              onChange={e => { setRcptLabelFilter(e.target.value); setCurrentPage(1); }}
+              className="h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+            >
+              <option value="">All Types</option>
+              <option value="NS">Normal Sale</option>
+              <option value="NR">Normal Refund</option>
+              <option value="CS">Copy Sale</option>
+              <option value="CR">Copy Refund</option>
+              <option value="TS">Training Sale</option>
+              <option value="TR">Training Refund</option>
+              <option value="PS">Proforma</option>
             </select>
           </div>
 
@@ -480,7 +514,7 @@ export default function SalesPage() {
           <Table>
             <TableHeader className="bg-gray-50 border-b border-gray-100">
               <TableRow className="hover:bg-transparent">
-                {['Time', 'Sale Number', 'Customer', 'Items', 'Tax', 'Method', 'Paid', 'Debt', 'Status', 'Total', 'Actions'].map(h => (
+                {['Time', 'Sale Number', 'Customer', 'Items', 'Tax', 'Method', 'Paid', 'Debt', 'Status', 'Type', 'Total', 'Actions'].map(h => (
                   <TableHead key={h} className="text-xs font-semibold text-gray-600 whitespace-nowrap py-3">
                     <span className="flex items-center gap-1">
                       {h}
@@ -585,6 +619,23 @@ export default function SalesPage() {
                       </span>
                     </TableCell>
 
+                    {/* Receipt Type (RcptLabel) */}
+                    <TableCell className="py-3.5">
+                      {sale.rcptLabel ? (
+                        <span className={cn(
+                          'inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide',
+                          (sale as any).rcptLabel === 'CS' || (sale as any).rcptLabel === 'CR' ? 'bg-blue-100 text-blue-700' :
+                          (sale as any).rcptLabel === 'PS' ? 'bg-yellow-100 text-yellow-700' :
+                          (sale as any).rcptLabel === 'TS' || (sale as any).rcptLabel === 'TR' ? 'bg-violet-100 text-violet-700' :
+                          'bg-gray-100 text-gray-700',
+                        )}>
+                          {(sale as any).rcptLabel}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 text-sm">—</span>
+                      )}
+                    </TableCell>
+
                     {/* Total */}
                     <TableCell className="py-3.5">
                       <span className="text-sm font-bold text-gray-900 tabular-nums">{fmtCurrency(sale.totalAmount)}</span>
@@ -610,14 +661,24 @@ export default function SalesPage() {
                           {openRowMenu === sale.id && (
                             <div className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-100 z-30 py-1 text-sm">
                               <button
-                                onClick={() => { handleDownloadInvoice(sale); setOpenRowMenu(null); }}
+                                onClick={() => { handleDownloadInvoice(sale, 'A4'); setOpenRowMenu(null); }}
                                 disabled={isDownloadingInvoice === sale.id}
                                 className="w-full text-left px-3 py-2 flex items-center gap-2 text-gray-700 hover:bg-gray-50 transition-colors"
                               >
                                 {isDownloadingInvoice === sale.id
                                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   : <Download className="h-3.5 w-3.5" />}
-                                Download Invoice
+                                Download A4
+                              </button>
+                              <button
+                                onClick={() => { handleDownloadInvoice(sale, '80mm'); setOpenRowMenu(null); }}
+                                disabled={isDownloadingInvoice === sale.id}
+                                className="w-full text-left px-3 py-2 flex items-center gap-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                              >
+                                {isDownloadingInvoice === sale.id
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <Download className="h-3.5 w-3.5" />}
+                                Download 80mm
                               </button>
                               {sale.status === 'COMPLETED' && (
                                 <button
@@ -800,16 +861,31 @@ export default function SalesPage() {
             </div>
           )}
 
-          <DrawerFooter className="flex-row flex-wrap gap-2 border-t border-slate-200 px-5 py-4">
+          <DrawerFooter className="flex-row flex-wrap items-center gap-2 border-t border-slate-200 px-5 py-4">
             <button
               onClick={() => setSelectedSale(null)}
-              className="flex-1 h-10 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 transition-colors hover:bg-white"
+              className="h-10 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 transition-colors hover:bg-white"
             >
               {t('common.close')}
             </button>
+            <div className="flex items-center rounded-lg border border-slate-200 p-0.5">
+              {(['A4', '80mm'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setInvoiceFormat(option)}
+                  className={cn(
+                    'rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors',
+                    invoiceFormat === option ? 'bg-[#1d57c8] text-white' : 'text-slate-500 hover:bg-slate-100'
+                  )}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
             {selectedSale && (
               <button
-                onClick={() => handleDownloadInvoice(selectedSale)}
+                onClick={() => handleDownloadInvoice(selectedSale, invoiceFormat)}
                 disabled={isDownloadingInvoice === selectedSale?.id}
                 className="flex-1 h-10 flex items-center justify-center gap-2 rounded-xl bg-[#1d57c8] text-sm font-semibold text-white transition-colors hover:bg-[#1748b3]"
               >

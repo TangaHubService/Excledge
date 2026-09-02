@@ -26,7 +26,8 @@ This document does not repeat day-to-day sales, refund, or reporting procedures 
 1. [System Architecture Overview](#section-1-system-architecture-overview)
 2. [Configuring Organization RRA/VSDC Credentials (TIN, EBM Device ID, MRC Serial)](#section-2-configuring-organization-rravsdc-credentials-tin-ebm-device-id-mrc-serial)
 3. [Configuring Branches](#section-3-configuring-branches)
-4. [Per-Branch RRA Fields (bhfId, VSDC URL) — Current Provisioning Process](#section-4-per-branch-rra-fields-bhfid-vsdc-url--current-provisioning-process)
+4. [Per-Branch RRA Device Credentials (bhfId, Device ID, MRC Serial, VSDC URL)](#section-4-per-branch-rra-device-credentials-bhfid-device-id-mrc-serial-vsdc-url)
+4A. [Tax Rates (A / B / C / D)](#section-4a-tax-rates-a--b--c--d)
 5. [User/Role Programming](#section-5-userrole-programming)
 6. [Product/Tax Programming](#section-6-producttax-programming)
 7. [Training Mode Programming](#section-7-training-mode-programming)
@@ -91,13 +92,51 @@ These are the credentials the RRA issues when a business registers for EBM/VSDC.
 
 ---
 
-## SECTION 4: PER-BRANCH RRA FIELDS (bhfId, VSDC URL) — CURRENT PROVISIONING PROCESS
+## SECTION 4: PER-BRANCH RRA DEVICE CREDENTIALS (bhfId, Device ID, MRC Serial, VSDC URL)
 
-The system's data model supports a separate RRA Branch ID (**bhfId**), EBM Device ID, MRC Serial, and VSDC endpoint URL **per branch**, for businesses that receive an individual RRA registration for each till location. As of this document's version, these per-branch fields are **not yet exposed in the Branch Management screen** described in Section 3 — that screen only edits Name, Code, and Location.
+Businesses that receive an individual RRA registration for each till location can
+configure a separate RRA Branch ID (**bhfId**), EBM Device ID (SDC ID), MRC
+Serial, and VSDC endpoint URL **per branch**. A branch with no per-branch values
+inherits the Organization-level credentials from Section 2.
 
-**Current process:** until a self-service screen for these fields ships, per-branch bhfId/EBM Device ID/MRC Serial/VSDC URL values are set directly by Excledge support/implementation engineers via the system's administrative API, as part of onboarding a new branch for RRA certification. If your business needs a branch configured with its own RRA registration (rather than inheriting the Organization-level credentials from Section 2), contact Excledge support (exceledgecpaltd@gmail.com) with the RRA-issued values for that branch.
+**Where:** **Admin → EBM Outbox → "EBM / VSDC Credentials"** card. Select a branch,
+enter the RRA-issued `bhfId`, `dvcSrlNo`/MRC, `sdcId`, and (optionally) a
+per-branch VSDC URL, then **"Save Credentials."** The per-branch device table on
+the same card shows every branch's current values.
 
-The same MRC format validation described in Section 2 (BBBCCNNNNNN, 11 characters) applies to per-branch serial numbers.
+**Initializing the device:** after saving the credentials, click **"Initialize
+with RRA."** This calls RRA's initialization service to confirm the device is
+registered under this TIN, pull back the authoritative SDC ID / MRC number, and
+seed the local invoice counter past the last number RRA has on record. Do this
+once per branch device before the first real sale.
+
+The same MRC format validation described in Section 2 (BBBCCNNNNNN, 11
+characters) applies to per-branch serial numbers.
+
+---
+
+## SECTION 4A: TAX RATES (A / B / C / D)
+
+The RRA tax bands and their rates are **fixed by Rwandan tax law** and applied
+automatically by the CIS according to each product's assigned tax code:
+
+| Band | Rate | Meaning |
+|------|------|---------|
+| A | 0% | Exempt |
+| B | 18% | Standard VAT |
+| C | 0% | Zero-rated / export |
+| D | 0% | Non-taxable (taxpayer not VAT registered) |
+
+These rates are **not operator-editable** — a rate change (e.g. if RRA revises
+the standard VAT rate) is a system update that requires RRA re-certification. The
+bands and their rates are shown read-only in **Settings → Organization Settings**
+for verification. What the operator *does* control is which band a product falls
+into: set the product **Tax Code (A–D)** in **Inventory → Add/Edit Product**
+(Product User Manual Section 13.1). Organization-level switches also apply:
+"VAT Registered" off forces every line to D; "Tax Exempt" on forces every line
+to A.
+
+Rounding: tax values are rounded to two decimals, `<5` down and `>=5` up.
 
 ---
 

@@ -10,6 +10,7 @@ import {
 } from "../services/inventory-ledger.service"
 import { syncProductToRraAsync } from "../services/product-sync.service"
 import { TaxService } from "../services/tax.service"
+import { allocateItemCd, allocateItemCdBlock, buildItemCd, deriveQtyUnitCd, isItemCdConflict } from "../services/item-code.service"
 import { success, error as apiError } from "../utils/apiResponse"
 import { getOrganizationSettings } from "../services/organization-settings.service"
 import { getOrderBy } from "../utils/sorting"
@@ -248,7 +249,7 @@ export const getProductById = async (req: BranchAuthRequest, res: Response) => {
 export const createProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId)
-    const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode, itemType, pkgUnitCd, qtyUnitCd, packagingQty } = req.body
+    const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode, itemType, pkgUnitCd, qtyUnitCd, packagingQty, itemClsCd, itemStandardName, origin, useInsurance, additionalInfo, l1SalePrice, l2SalePrice, l3SalePrice, l4SalePrice, l5SalePrice } = req.body
     const userId = parseInt((req as any).user?.userId as string)
     const branchId = getBranchIdForOperation(req)
     const isService = itemType === 'SERVICE'
@@ -305,8 +306,19 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       ));
     }
 
-    // Use transaction to ensure product creation, batch, and ledger are atomic
-    const result = await prisma.$transaction(async (tx) => {
+    // The RRA item code (itemCd) is derived, not user-entered — VSDC spec
+    // §4.17: RW + product-type digit + pkgUnitCd + qtyUnitCd + sequence.
+    // qtyUnitCd is likewise derived from measurementUnit rather than asked
+    // for separately, since the UI only ever collects measurementUnit/pkgUnitCd.
+    const resolvedItemType = (isService ? 'SERVICE' : (itemType || 'PRODUCT')) as 'PRODUCT' | 'SERVICE'
+    const resolvedQtyUnitCd = qtyUnitCd || deriveQtyUnitCd(measurementUnit)
+
+    const createProductInTx = async (tx: any) => {
+      // Allocated from the same atomic per-organization counter table the
+      // create() below runs against, inside this same transaction, so a
+      // sequence number is only ever consumed if the product actually commits
+      // — no gap is left behind if create() fails for an unrelated reason.
+      const itemCd = await allocateItemCd(organizationId!, resolvedItemType, pkgUnitCd, resolvedQtyUnitCd, tx)
       const product = await tx.product.create({
         data: {
           name,
@@ -327,8 +339,19 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
           itemType,
           barcode,
           pkgUnitCd: isService ? null : (pkgUnitCd || null),
-          qtyUnitCd: isService ? null : (qtyUnitCd || null),
+          qtyUnitCd: resolvedQtyUnitCd,
           packagingQty: isService ? null : (packagingQty != null && packagingQty !== '' ? packagingQty : null),
+          itemCd,
+          itemClsCd: itemClsCd || null,
+          itemStandardName: itemStandardName || null,
+          origin: origin || 'RW',
+          useInsurance: !!useInsurance,
+          additionalInfo: additionalInfo || null,
+          l1SalePrice: l1SalePrice != null && l1SalePrice !== '' ? l1SalePrice : null,
+          l2SalePrice: l2SalePrice != null && l2SalePrice !== '' ? l2SalePrice : null,
+          l3SalePrice: l3SalePrice != null && l3SalePrice !== '' ? l3SalePrice : null,
+          l4SalePrice: l4SalePrice != null && l4SalePrice !== '' ? l4SalePrice : null,
+          l5SalePrice: l5SalePrice != null && l5SalePrice !== '' ? l5SalePrice : null,
         },
       })
 
@@ -385,7 +408,24 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       }
 
       return product;
-    });
+    }
+
+    // itemCd is allocated from an atomic per-organization counter (see
+    // createProductInTx above), so a genuine collision shouldn't happen —
+    // this retry is a defensive fallback for the same transient-error class
+    // openShift() in shift.service.ts retries on.
+    let result: any
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        result = await prisma.$transaction((tx) => createProductInTx(tx))
+        break
+      } catch (err) {
+        if (!isItemCdConflict(err) || attempt === 4) {
+          throw err
+        }
+        // Conflict on itemCd — loop again to allocate the next sequence number.
+      }
+    }
 
     await auditLogger.inventory(req, {
       type: 'PRODUCT_CREATE',
@@ -397,7 +437,7 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       }
     });
 
-    syncProductToRraAsync(result.id);
+    syncProductToRraAsync(result.id, userId);
 
     res.status(201).json(success(result))
   } catch (error: any) {
@@ -517,100 +557,121 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
       }
     }
 
-    // Use transaction to ensure all products, batches, and ledger entries are atomic
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.product.createMany({
-        data: products.map((product: any) => {
-          const isService = product.itemType === 'SERVICE';
-          return {
-            name: product.name,
-            batchNumber: isService ? null : product.batchNumber,
-            quantity: isService ? 0 : (product.quantity || 0),
-            unitPrice: product.unitPrice,
-            purchasePrice: isService ? null : (product.purchasePrice != null && product.purchasePrice !== '' ? product.purchasePrice : null),
-            category: product.category || (isService ? 'Services' : undefined),
-            description: product.description,
-            imageUrl: product.imageUrl,
-            minStock: isService ? 0 : (product.minStock || 10),
-            organizationId: organizationId!,
-            expiryDate: isService ? null : (product.expiryDate ? new Date(product.expiryDate) : null),
-            sku: product.sku,
-            taxCategory: product.taxCategory || 'STANDARD',
-            taxCode: product.taxCode,
-            measurementUnit: product.measurementUnit || 'OTHER',
-            itemType: product.itemType || 'PRODUCT',
-            barcode: isService ? null : product.barcode,
-            pkgUnitCd: isService ? null : (product.pkgUnitCd || null),
-            packagingQty: isService ? null : (product.packagingQty != null && product.packagingQty !== '' ? product.packagingQty : null),
-          };
-        }),
-      });
+    // Use transaction to ensure all products, batches, and ledger entries are atomic.
+    // itemCd sequence numbers are allocated as one contiguous block (base count
+    // + row index) inside the same transaction as the createMany, so a whole
+    // retry of the transaction on conflict re-allocates a fresh block — same
+    // conflict-retry pattern as createProduct/openShift.
+    let result: any
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        result = await prisma.$transaction(async (tx) => {
+          const itemCdBase = await allocateItemCdBlock(organizationId!, products.length, tx);
 
-      // Fetch created products to get their IDs
-      const createdProducts = await tx.product.findMany({
-        where: {
-          organizationId: organizationId!,
-          batchNumber: {
-            in: products.map((p: any) => p.batchNumber),
-          },
-        },
-      });
-
-      // Create batch records and initial ledger entries for each product
-      // Skip batch/ledger for SERVICE items — no inventory tracking
-      for (const product of createdProducts) {
-        if (product.itemType === 'SERVICE') continue;
-
-        const batchUnitCost = product.purchasePrice != null
-          ? Number(product.purchasePrice)
-          : (product.unitPrice ? Number(product.unitPrice) : 0);
-        const batchName = product.batchNumber || `DEFAULT-${product.id}`;
-        await tx.batch.upsert({
-          where: {
-            productId_batchNumber_branchId: {
-              productId: product.id,
-              batchNumber: batchName,
-              branchId,
-            }
-          },
-          update: {
-            quantity: { increment: product.quantity || 0 },
-            unitCost: batchUnitCost,
-            expiryDate: product.expiryDate || null,
-            isActive: true,
-          },
-          create: {
-            productId: product.id,
-            organizationId: organizationId!,
-            branchId,
-            batchNumber: batchName,
-            quantity: product.quantity || 0,
-            unitCost: batchUnitCost,
-            expiryDate: product.expiryDate || null,
-            isActive: true,
-          },
-        });
-
-        if (product.quantity > 0) {
-          await ledgerAddStock({
-            organizationId: organizationId!,
-            productId: product.id,
-            userId,
-            quantity: product.quantity,
-            movementType: 'INITIAL_STOCK',
-            branchId,
-            reference: `INIT-${product.id}`,
-            referenceType: 'INITIAL_STOCK',
-            note: 'Initial stock from bulk import',
-            batchNumber: product.batchNumber || undefined,
-            expiryDate: product.expiryDate || undefined,
-            tx,
+          await tx.product.createMany({
+            data: products.map((product: any, index: number) => {
+              const isService = product.itemType === 'SERVICE';
+              const resolvedItemType = (isService ? 'SERVICE' : (product.itemType || 'PRODUCT')) as 'PRODUCT' | 'SERVICE'
+              const resolvedQtyUnitCd = product.qtyUnitCd || deriveQtyUnitCd(product.measurementUnit)
+              return {
+                name: product.name,
+                batchNumber: isService ? null : product.batchNumber,
+                quantity: isService ? 0 : (product.quantity || 0),
+                unitPrice: product.unitPrice,
+                purchasePrice: isService ? null : (product.purchasePrice != null && product.purchasePrice !== '' ? product.purchasePrice : null),
+                category: product.category || (isService ? 'Services' : undefined),
+                description: product.description,
+                imageUrl: product.imageUrl,
+                minStock: isService ? 0 : (product.minStock || 10),
+                organizationId: organizationId!,
+                expiryDate: isService ? null : (product.expiryDate ? new Date(product.expiryDate) : null),
+                sku: product.sku,
+                taxCategory: product.taxCategory || 'STANDARD',
+                taxCode: product.taxCode,
+                measurementUnit: product.measurementUnit || 'OTHER',
+                itemType: product.itemType || 'PRODUCT',
+                barcode: isService ? null : product.barcode,
+                pkgUnitCd: isService ? null : (product.pkgUnitCd || null),
+                qtyUnitCd: resolvedQtyUnitCd,
+                packagingQty: isService ? null : (product.packagingQty != null && product.packagingQty !== '' ? product.packagingQty : null),
+                itemCd: buildItemCd(resolvedItemType, product.pkgUnitCd, resolvedQtyUnitCd, itemCdBase + index + 1),
+              };
+            }),
           });
-        }
-      }
 
-      return createdProducts;
-    });
+          // Fetch created products to get their IDs
+          const createdProducts = await tx.product.findMany({
+            where: {
+              organizationId: organizationId!,
+              batchNumber: {
+                in: products.map((p: any) => p.batchNumber),
+              },
+            },
+          });
+
+          // Create batch records and initial ledger entries for each product
+          // Skip batch/ledger for SERVICE items — no inventory tracking
+          for (const product of createdProducts) {
+            if (product.itemType === 'SERVICE') continue;
+
+            const batchUnitCost = product.purchasePrice != null
+              ? Number(product.purchasePrice)
+              : (product.unitPrice ? Number(product.unitPrice) : 0);
+            const batchName = product.batchNumber || `DEFAULT-${product.id}`;
+            await tx.batch.upsert({
+              where: {
+                productId_batchNumber_branchId: {
+                  productId: product.id,
+                  batchNumber: batchName,
+                  branchId,
+                }
+              },
+              update: {
+                quantity: { increment: product.quantity || 0 },
+                unitCost: batchUnitCost,
+                expiryDate: product.expiryDate || null,
+                isActive: true,
+              },
+              create: {
+                productId: product.id,
+                organizationId: organizationId!,
+                branchId,
+                batchNumber: batchName,
+                quantity: product.quantity || 0,
+                unitCost: batchUnitCost,
+                expiryDate: product.expiryDate || null,
+                isActive: true,
+              },
+            });
+
+            if (product.quantity > 0) {
+              await ledgerAddStock({
+                organizationId: organizationId!,
+                productId: product.id,
+                userId,
+                quantity: product.quantity,
+                movementType: 'INITIAL_STOCK',
+                branchId,
+                reference: `INIT-${product.id}`,
+                referenceType: 'INITIAL_STOCK',
+                note: 'Initial stock from bulk import',
+                batchNumber: product.batchNumber || undefined,
+                expiryDate: product.expiryDate || undefined,
+                tx,
+              });
+            }
+          }
+
+          return createdProducts;
+        });
+        break
+      } catch (err) {
+        if (!isItemCdConflict(err) || attempt === 4) {
+          throw err
+        }
+        // Conflict on itemCd — loop again to re-allocate the sequence block.
+      }
+    }
 
     await auditLogger.inventory(req, {
       type: 'PRODUCT_CREATE',
@@ -622,6 +683,10 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
         products: result,
       }
     });
+
+    for (const created of result) {
+      syncProductToRraAsync(created.id, userId)
+    }
 
     res.status(201).json(success(result))
   } catch (error: any) {
@@ -638,7 +703,8 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
-    const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, barcode, taxCode, measurementUnit, itemType, pkgUnitCd, qtyUnitCd, packagingQty } = req.body
+    const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, barcode, taxCode, measurementUnit, itemType, pkgUnitCd, qtyUnitCd, packagingQty, itemClsCd, itemStandardName, origin, useInsurance, additionalInfo, l1SalePrice, l2SalePrice, l3SalePrice, l4SalePrice, l5SalePrice } = req.body
+    const userId = parseInt((req as any).user?.userId as string)
 
     const existingProduct = await prisma.product.findFirst({
       where: { id, organizationId, deletedAt: null },
@@ -694,16 +760,60 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
     }
     if (measurementUnit !== undefined) data.measurementUnit = measurementUnit
     if (pkgUnitCd !== undefined) data.pkgUnitCd = pkgUnitCd === '' ? null : pkgUnitCd
-    if (qtyUnitCd !== undefined) data.qtyUnitCd = qtyUnitCd === '' ? null : qtyUnitCd
+    // qtyUnitCd isn't collected directly by the UI — keep it derived from
+    // measurementUnit unless a caller explicitly overrides it.
+    if (qtyUnitCd !== undefined) {
+      data.qtyUnitCd = qtyUnitCd === '' ? null : qtyUnitCd
+    } else if (measurementUnit !== undefined) {
+      data.qtyUnitCd = deriveQtyUnitCd(measurementUnit)
+    }
     if (packagingQty !== undefined) data.packagingQty = packagingQty === '' ? null : packagingQty
     if (itemType !== undefined) data.itemType = itemType
     data.expiryDate = expiryDate ? new Date(expiryDate) : null
     if (imageUrl !== undefined) data.imageUrl = imageUrl
+    if (itemClsCd !== undefined) data.itemClsCd = itemClsCd === '' ? null : itemClsCd
+    if (itemStandardName !== undefined) data.itemStandardName = itemStandardName === '' ? null : itemStandardName
+    if (origin !== undefined) data.origin = origin || 'RW'
+    if (useInsurance !== undefined) data.useInsurance = !!useInsurance
+    if (additionalInfo !== undefined) data.additionalInfo = additionalInfo === '' ? null : additionalInfo
+    if (l1SalePrice !== undefined) data.l1SalePrice = l1SalePrice === '' ? null : l1SalePrice
+    if (l2SalePrice !== undefined) data.l2SalePrice = l2SalePrice === '' ? null : l2SalePrice
+    if (l3SalePrice !== undefined) data.l3SalePrice = l3SalePrice === '' ? null : l3SalePrice
+    if (l4SalePrice !== undefined) data.l4SalePrice = l4SalePrice === '' ? null : l4SalePrice
+    if (l5SalePrice !== undefined) data.l5SalePrice = l5SalePrice === '' ? null : l5SalePrice
 
-    const product = await prisma.product.update({
-      where: { id },
-      data,
-    })
+    // itemCd is generated once and then permanent (it's the identifier RRA
+    // knows the item by) — only backfill it for legacy rows that never got
+    // one; never regenerate an itemCd that's already registered.
+    let product: any
+    if (!existingProduct.itemCd) {
+      const resolvedItemType = (data.itemType ?? existingProduct.itemType) as 'PRODUCT' | 'SERVICE'
+      const resolvedPkgUnitCd = data.pkgUnitCd !== undefined ? data.pkgUnitCd : existingProduct.pkgUnitCd
+      const resolvedQtyUnitCd = data.qtyUnitCd ?? existingProduct.qtyUnitCd ?? deriveQtyUnitCd(existingProduct.measurementUnit)
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          product = await prisma.$transaction(async (tx) => {
+            // Allocated inside the same transaction as the update so a
+            // sequence number is only consumed if the update actually commits.
+            const itemCd = await allocateItemCd(organizationId, resolvedItemType, resolvedPkgUnitCd, resolvedQtyUnitCd, tx)
+            return tx.product.update({
+              where: { id },
+              data: { ...data, itemCd },
+            })
+          })
+          break
+        } catch (err) {
+          if (!isItemCdConflict(err) || attempt === 4) {
+            throw err
+          }
+        }
+      }
+    } else {
+      product = await prisma.product.update({
+        where: { id },
+        data,
+      })
+    }
 
     await auditLogger.inventory(req, {
       type: 'PRODUCT_UPDATE',
@@ -716,7 +826,7 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
       }
     });
 
-    syncProductToRraAsync(product.id);
+    syncProductToRraAsync(product.id, userId);
 
     res.json(success(product))
   } catch (error: any) {

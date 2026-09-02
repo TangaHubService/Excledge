@@ -1,6 +1,16 @@
 import { InventoryMovementType, InventoryDirection } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 
+/**
+ * RRA Stock In/Out reporting (RRA checklist §72/§73): every non-sale inventory
+ * movement is queued for the VSDC by marking its ledger row PENDING; a cron
+ * batch (stock-sync.job) submits them. SALE rows are never queued — RRA derives
+ * stock-out from /trnsSales/saveSales, so `null` here means "not applicable".
+ */
+function ebmSyncStatusFor(movementType: InventoryMovementType): 'PENDING' | null {
+  return movementType === 'SALE' ? null : 'PENDING';
+}
+
 
 /**
  * Inventory Ledger Service
@@ -269,6 +279,7 @@ export async function addStock(params: AddStockParams) {
         expiryDate: expiryDate ? new Date(expiryDate) : null,
         note,
         metadata: metadata ? metadata : null,
+        ebmSyncStatus: ebmSyncStatusFor(movementType),
       },
     });
 
@@ -399,6 +410,7 @@ export async function removeStock(params: RemoveStockParams) {
         referenceType,
         note,
         metadata: metadata ? metadata : null,
+        ebmSyncStatus: ebmSyncStatusFor(movementType),
       },
     });
 
@@ -566,6 +578,7 @@ export async function adjustStock(params: AdjustStockParams) {
         referenceType,
         note: note || `Stock adjustment: ${quantity > 0 ? '+' : ''}${quantity}`,
         metadata: metadata ? (metadata as any) : undefined,
+        ebmSyncStatus: ebmSyncStatusFor(movementType),
       } as any,
     });
 

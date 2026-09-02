@@ -54,6 +54,8 @@ function EbmCredentialsCard() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [credPage, setCredPage] = useState(1);
   const [credPageSize, setCredPageSize] = useState(8);
+  const [initializing, setInitializing] = useState(false);
+  const [initInfo, setInitInfo] = useState<any>(null);
 
   const applyBranch = (branch: Branch) => {
     setForm({
@@ -113,6 +115,27 @@ function EbmCredentialsCard() {
       setErrorMsg(e?.message || e?.response?.data?.error || 'Failed to save EBM credentials.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleInitialize = async () => {
+    setInitializing(true);
+    setInitInfo(null);
+    setErrorMsg(null);
+    try {
+      const orgId = localStorage.getItem('current_organization_id');
+      const res = await apiClient.request(`/organizations/${orgId}/ebm/initialize`, {
+        method: 'POST',
+        ...(branchId !== '' ? { body: JSON.stringify({ branchId }) } : {}),
+      });
+      const info = (res as any)?.data ?? res;
+      setInitInfo(info);
+      setSavedMsg(`Device verified with RRA — SDC ${info?.sdcId ?? '?'} / MRC ${info?.mrcNo ?? '?'}.`);
+      await load();
+    } catch (e: any) {
+      setErrorMsg(e?.message || e?.response?.data?.error || 'Device initialization failed.');
+    } finally {
+      setInitializing(false);
     }
   };
 
@@ -319,7 +342,20 @@ function EbmCredentialsCard() {
           </p>
         )}
 
-        <div className="flex justify-end">
+        {initInfo && (
+          <div className="rounded-lg border bg-muted/40 p-3 text-xs space-y-0.5">
+            <p className="font-medium text-foreground">RRA device initialization</p>
+            {initInfo.taxpayer && <p>Taxpayer: {initInfo.taxpayer}{initInfo.branch ? ` · ${initInfo.branch}` : ''}</p>}
+            <p>SDC ID: <span className="font-mono">{initInfo.sdcId ?? '—'}</span> · MRC: <span className="font-mono">{initInfo.mrcNo ?? '—'}</span>{initInfo.dvcId ? <> · Device: <span className="font-mono">{initInfo.dvcId}</span></> : null}</p>
+            <p>RRA last invoice #: {initInfo.lastInvoiceNo ?? 0} · last receipt #: {initInfo.lastReceiptNo ?? 0}{initInfo.seededCounterTo ? ` · local counter seeded to ${initInfo.seededCounterTo}` : ''}</p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="outline" onClick={handleInitialize} disabled={initializing || loading || branchId === ''}>
+            {initializing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
+            Initialize with RRA
+          </Button>
           <Button onClick={handleSave} disabled={saving || loading}>
             {saving ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />

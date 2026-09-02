@@ -1,6 +1,13 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+// Prisma exposes some columns (e.g. RraPurchase.spplrInvcNo) as BigInt, which
+// JSON.stringify cannot serialize. Emit them as strings in every API response.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(BigInt.prototype as any).toJSON = function (this: bigint) {
+  return this.toString();
+};
+
 // Critical Security Check
 if (!process.env.JWT_SECRET) {
   console.error("FATAL ERROR: JWT_SECRET is not defined in environment variables.");
@@ -54,7 +61,11 @@ import {
 import { ebmQueueJob } from "./jobs/ebm-queue.job";
 import { ebmOutboxJob } from "./jobs/ebm-outbox.job";
 import { vsdcHeartbeatJob } from "./jobs/vsdc-heartbeat.job";
+import { zReportJob } from "./jobs/z-report.job";
+import { rraMasterDataJob } from "./jobs/rra-master-data.job";
+import { stockSyncJob } from "./jobs/stock-sync.job";
 import pesapalRoutes from "./routes/pesapal.route";
+import { SYSTEM_NAME, SYSTEM_VERSION, CIS_VERSION_LABEL } from "./services/system-branding.service";
 import uploadRoutes from "./routes/upload.route";
 import supplierInvoiceRoutes from "./routes/supplier-invoice.routes";
 import supplierPortalRoutes from "./routes/supplier-portal.routes";
@@ -169,6 +180,19 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Business Management API is running" })
 })
 
+/* ----------------------------------
+   🔖 CIS SOFTWARE VERSION (RRA CIS/VSDC §21)
+   Verifiable software version; the same value is printed on every receipt.
+------------------------------------- */
+
+app.get(["/api/version", "/version"], (req, res) => {
+  res.json({
+    name: SYSTEM_NAME,
+    version: SYSTEM_VERSION,
+    label: CIS_VERSION_LABEL,
+  })
+})
+
 app.use(errorHandler);
 
 /* ----------------------------------
@@ -183,6 +207,9 @@ if (process.env.RUN_JOBS !== "false") {
   ebmQueueJob.start();
   ebmOutboxJob.start();
   vsdcHeartbeatJob.start();
+  zReportJob.start();
+  rraMasterDataJob.start();
+  stockSyncJob.start();
 
   // Run an immediate subscription status transition on boot so that
   // overdue statuses (TRIALING, ACTIVE, GRACE_PERIOD) are always caught

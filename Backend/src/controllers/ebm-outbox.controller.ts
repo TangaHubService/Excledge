@@ -3,6 +3,7 @@ import type { BranchAuthRequest } from '../middleware/branchAuth.middleware';
 import { prisma } from '../lib/prisma';
 import { isEbmEnabled } from '../services/rra-ebm.service';
 import { buildVsdcEnvelope, saveZReport, checkZReport } from '../services/vsdc-api.service';
+import { initializeVsdcDevice } from '../services/vsdc-init.service';
 import { success, error as apiError } from '../utils/apiResponse';
 
 const OFFLINE_BLOCK_MS = Number(process.env.VSDC_OFFLINE_BLOCK_MS ?? 2 * 60 * 60 * 1000);
@@ -114,12 +115,52 @@ export async function checkEbmOutboxStatus(req: BranchAuthRequest, res: Response
   }
 }
 
+/**
+ * POST /:organizationId/ebm/initialize — one-time RRA VSDC device initialization
+ * (RRA checklist §58). Body: { branchId? }.
+ */
+export async function initializeDevice(req: BranchAuthRequest, res: Response) {
+  try {
+    if (!isEbmEnabled()) {
+      return res.status(400).json(apiError('EBM is not enabled for this organization'));
+    }
+    const organizationId = parseInt(req.params.organizationId);
+    const branchId = req.body?.branchId != null ? parseInt(req.body.branchId) : undefined;
+
+    const result = await initializeVsdcDevice(organizationId, branchId ?? null);
+    if (!result.success) {
+      return res.status(502).json(apiError(result.error ?? 'Device initialization failed'));
+    }
+    const info = result.info ?? {};
+    res.json(success({
+      taxpayer: info.taxprNm,
+      branch: info.bhfNm,
+      sdcId: info.sdcId,
+      mrcNo: info.mrcNo,
+      dvcId: info.dvcId,
+      lastInvoiceNo: info.lastSaleInvcNo ?? info.lastInvcNo ?? 0,
+      lastReceiptNo: info.lastSaleRcptNo ?? 0,
+      seededCounterTo: result.seededCounterTo ?? null,
+    }));
+  } catch (error) {
+    console.error('[EbmInit] Initialization failed:', error);
+    res.status(500).json(apiError('Failed to initialize the VSDC device'));
+  }
+}
+
 const pad2 = (n: number) => String(n).padStart(2, '0');
 /** `yyyyMMddHHmmss` — the report-generation timestamp `saveZReports` expects. */
 function toRptDeTimestamp(d: Date): string {
   return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
 }
-/** `yyyyMMdd` — the report-date `checkZReport` expects. */
+/**
+ * `yyyyMMdd` — the report-date `checkZReport` expects. Live-tested against
+ * the RRA sandbox 2026-08-29: a full 14-digit timestamp was rejected with
+ * "length must be between 8 and 8", confirming 8 digits is correct despite
+ * that same sandbox also (inconsistently, likely due to a concurrent
+ * disk-pressure incident — see resultCd 899 on saveSales that day) rejecting
+ * an 8-digit value with a contradictory "must be yyyyMMddHH24MISS" message.
+ */
 function toRptDeDate(d: Date): string {
   return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
 }

@@ -620,6 +620,15 @@ class ApiClient {
     return this.request(`/sales/${this.getOrganizationId()}/invoices/${id}`);
   }
 
+  /** Authoritative backend-generated EBM invoice PDF, in A4, A5, or 80mm (thermal receipt) format. */
+  async getInvoicePdf(id: string | number, format: "A4" | "A5" | "80mm" = "A4") {
+    const query = format === "A4" ? "" : `?format=${format}`;
+    return this.requestFile(`/sales/${this.getOrganizationId()}/invoices/${id}/pdf${query}`, {
+      method: "GET",
+      headers: { Accept: "application/pdf" },
+    });
+  }
+
   async recordPayment(id: string, data: { amount: number }) {
     return this.request(`/sales/${id}/${this.getOrganizationId()}`, {
       method: "PUT",
@@ -633,7 +642,19 @@ class ApiClient {
     })
   }
 
-  // Shift endpoints
+  /**
+   * CIS/VSDC spec §7.18/§15: registers one download of this invoice's PDF.
+   * The first registered download is the original; every one after that
+   * makes the backend render the PDF as a COPY (CS/CR) receipt. Called
+   * automatically before every deliberate download — there's no separate
+   * "copy" action to trigger by hand.
+   */
+  async reprintSale(saleId: string | number) {
+    return this.request(`/sales/${this.getOrganizationId()}/${saleId}/reprint`, {
+      method: "POST",
+    })
+  }
+
   async getActiveShift() {
     return this.request(`/shifts/${this.getOrganizationId()}/active`);
   }
@@ -993,6 +1014,140 @@ class ApiClient {
   }) {
     const query = new URLSearchParams(params as any).toString();
     return this.request(`/reports/stock-history/${this.getOrganizationId()}?${query}`);
+  }
+
+  // ── Fiscal reports (RRA CIS/VSDC) ──────────────────────────────────────
+  /** X/Z daily fiscal report as structured JSON. type: 'X' (interim) | 'Z' (closing). */
+  async getDailyFiscalReport(params: { type: "X" | "Z"; date?: string; branchId?: number | string }) {
+    const q = new URLSearchParams({ type: params.type });
+    if (params.date) q.set("date", params.date);
+    if (params.branchId != null && params.branchId !== "") q.set("branchId", String(params.branchId));
+    return this.request(`/reports/daily/${this.getOrganizationId()}?${q.toString()}`);
+  }
+
+  /** Printable (80mm) X/Z daily fiscal report PDF. */
+  async getDailyFiscalReportPdf(params: { type: "X" | "Z"; date?: string; branchId?: number | string }) {
+    const q = new URLSearchParams({ type: params.type });
+    if (params.date) q.set("date", params.date);
+    if (params.branchId != null && params.branchId !== "") q.set("branchId", String(params.branchId));
+    return this.requestFile(`/reports/daily/${this.getOrganizationId()}/pdf?${q.toString()}`, {
+      method: "GET",
+      headers: { Accept: "application/pdf" },
+    });
+  }
+
+  /** Printable (80mm) PLU report PDF. */
+  async getPluReportPdf(params: { startDate?: string; endDate?: string; sortBy?: string } = {}) {
+    const q = new URLSearchParams(params as Record<string, string>);
+    return this.requestFile(`/reports/plu/${this.getOrganizationId()}/pdf?${q.toString()}`, {
+      method: "GET",
+      headers: { Accept: "application/pdf" },
+    });
+  }
+
+  /** PLU report as structured JSON (paginated). */
+  async getPluReport(params: { startDate?: string; endDate?: string; sortBy?: string; sortOrder?: string; page?: number; limit?: number } = {}) {
+    const q = new URLSearchParams(params as Record<string, string>);
+    return this.request(`/reports/plu/${this.getOrganizationId()}?${q.toString()}`);
+  }
+
+  /** CIS electronic journal — list entries for a period. */
+  async getElectronicJournal(params: { startDate?: string; endDate?: string; page?: number; limit?: number } = {}) {
+    const q = new URLSearchParams(params as Record<string, string>);
+    return this.request(`/reports/electronic-journal/${this.getOrganizationId()}?${q.toString()}`);
+  }
+
+  /** CIS electronic journal — one sale's EJ record plus its slip data for §44 comparison. */
+  async getElectronicJournalEntry(saleId: string | number) {
+    return this.request(`/reports/electronic-journal/${this.getOrganizationId()}/${saleId}`);
+  }
+
+  /** Detailed purchases report (RRA checklist §25). */
+  async getPurchasesReport(params: { startDate?: string; endDate?: string } = {}) {
+    const q = new URLSearchParams(params as Record<string, string>);
+    return this.request(`/reports/purchases/${this.getOrganizationId()}?${q.toString()}`);
+  }
+
+  // ── RRA master-data (Codes §59 / Item Class §61 / Customer §62 / Select Item §64 / Notices §65) ──
+  private rraBase() {
+    return `/organizations/${this.getOrganizationId()}/rra`;
+  }
+  async getRraMasterDataStatus() {
+    return this.request(`${this.rraBase()}/status`);
+  }
+  async syncAllRraMasterData() {
+    return this.request(`${this.rraBase()}/sync-all`, { method: "POST" });
+  }
+  async listRraCodes(cdCls?: string) {
+    const q = cdCls ? `?cdCls=${encodeURIComponent(cdCls)}` : "";
+    return this.request(`${this.rraBase()}/codes${q}`);
+  }
+  async syncRraCodes() {
+    return this.request(`${this.rraBase()}/codes/sync`, { method: "POST" });
+  }
+  async searchRraItemClasses(q?: string, limit = 30) {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    params.set("limit", String(limit));
+    return this.request(`${this.rraBase()}/item-classes?${params.toString()}`);
+  }
+  async syncRraItemClasses() {
+    return this.request(`${this.rraBase()}/item-classes/sync`, { method: "POST" });
+  }
+  async listRraNotices() {
+    return this.request(`${this.rraBase()}/notices`);
+  }
+  async syncRraNotices() {
+    return this.request(`${this.rraBase()}/notices/sync`, { method: "POST" });
+  }
+  async markRraNoticeRead(noticeNo: number) {
+    return this.request(`${this.rraBase()}/notices/${noticeNo}/read`, { method: "POST" });
+  }
+  async verifyCustomerWithRra(tin: string, customerId?: number) {
+    const q = customerId != null ? `?customerId=${customerId}` : "";
+    return this.request(`${this.rraBase()}/customers/${encodeURIComponent(tin)}${q}`);
+  }
+  async reconcileRraItems() {
+    return this.request(`${this.rraBase()}/items/reconcile`, { method: "POST" });
+  }
+  async syncOneProductToRra(productId: number, body: { itemClsCd?: string; taxCode?: string } = {}) {
+    return this.request(`${this.rraBase()}/items/${productId}/sync`, { method: "POST", body: JSON.stringify(body) });
+  }
+  // Stock In/Out §72/§73
+  async getRraStockStatus() {
+    return this.request(`${this.rraBase()}/stock`);
+  }
+  async syncRraStock() {
+    return this.request(`${this.rraBase()}/stock/sync`, { method: "POST" });
+  }
+  // B2B purchases §70/§71
+  async listRraPurchases(status?: "PENDING" | "CONFIRMED" | "REJECTED") {
+    const q = status ? `?status=${status}` : "";
+    return this.request(`${this.rraBase()}/purchases${q}`);
+  }
+  async syncRraPurchases() {
+    return this.request(`${this.rraBase()}/purchases/sync`, { method: "POST" });
+  }
+  async confirmRraPurchase(id: number, reject = false) {
+    return this.request(`${this.rraBase()}/purchases/${id}/confirm${reject ? "?reject=true" : ""}`, { method: "POST" });
+  }
+  // Import declarations §66/§67/§68
+  async listRraImports(status?: "PENDING" | "APPROVED" | "REJECTED") {
+    const q = status ? `?status=${status}` : "";
+    return this.request(`${this.rraBase()}/imports${q}`);
+  }
+  async syncRraImports(requestDate?: string) {
+    return this.request(`${this.rraBase()}/imports/sync`, {
+      method: "POST",
+      ...(requestDate ? { body: JSON.stringify({ requestDate }) } : {}),
+    });
+  }
+  async actionRraImport(
+    id: number,
+    action: "approve" | "reject",
+    body: { itemClsCd?: string; itemCd?: string; linkProductId?: number; remark?: string } = {},
+  ) {
+    return this.request(`${this.rraBase()}/imports/${id}/${action}`, { method: "POST", body: JSON.stringify(body) });
   }
 
   async exportReport(reportType: string, params: any) {
