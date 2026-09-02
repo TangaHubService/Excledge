@@ -796,10 +796,13 @@ export async function vsdcHeartbeat(
  * `rptDe` here is the **report generation timestamp**, `yyyyMMddHHmmss` (14
  * digits) — confirmed by the sandbox's own validation error message when
  * given an 8-digit date. This differs from `checkZReport`, which takes an
- * 8-digit report *date*. Not yet observed returning a live success from this
- * sandbox instance (see caller note) — confirm the exact contract with RRA
- * (`cis_sdc_certification@rra.gov.rw`) before relying on it for certification
- * evidence.
+ * 8-digit report *date*.
+ *
+ * `/reports/saveZReports` has been seen to accept a request without returning a
+ * conclusive success body, so callers should not treat a bare `saveZReport`
+ * result as proof the day was closed — use `saveAndVerifyZReport`, which
+ * confirms the close with the live-tested `/reports/checkZReport` before
+ * recording it.
  */
 export async function saveZReport(
   envelope: VsdcEnvelope,
@@ -825,6 +828,50 @@ export async function checkZReport(
     return mockResult('ZREPORT-CHECK', envelope.sdcId);
   }
   return postToEndpoint('/reports/checkZReport', { tin: envelope.tin, bhfId: envelope.bhfId, rptDe }, envelope.vsdcUrl);
+}
+
+export interface ZReportOutcome {
+  /** VSDC accepted the /reports/saveZReports request. */
+  saved: boolean;
+  /** /reports/checkZReport confirms RRA has the day's Z report on record. */
+  verified: boolean;
+  /** 14-digit generation timestamp sent to saveZReports. */
+  rptDeTimestamp: string;
+  /** 8-digit report date sent to checkZReport. */
+  rptDeDate: string;
+  saveError?: string;
+  verifyError?: string;
+  raw: { save: unknown; check: unknown };
+}
+
+/**
+ * Close a day at the VSDC and prove it stuck: POST `/reports/saveZReports`,
+ * then immediately confirm with `/reports/checkZReport` (8-digit date,
+ * live-verified against the RRA sandbox). A Z close is only trustworthy for
+ * certification evidence once `verified` is true; `saved && !verified` means
+ * RRA took the request but has not yet surfaced the report and it should be
+ * re-checked (via `GET /:org/z-report`).
+ */
+export async function saveAndVerifyZReport(
+  envelope: VsdcEnvelope,
+  now: Date = new Date(),
+): Promise<ZReportOutcome> {
+  const p = (n: number) => String(n).padStart(2, '0');
+  const ymd = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}`;
+  const rptDeTimestamp = `${ymd}${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
+
+  const save = await saveZReport(envelope, rptDeTimestamp);
+  const check = await checkZReport(envelope, ymd);
+
+  return {
+    saved: save.success,
+    verified: check.success,
+    rptDeTimestamp,
+    rptDeDate: ymd,
+    saveError: save.success ? undefined : save.error,
+    verifyError: check.success ? undefined : check.error,
+    raw: { save: save.rawBody, check: check.rawBody },
+  };
 }
 
 // ──────────────────────────────────────────────

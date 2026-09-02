@@ -2,7 +2,7 @@ import type { Response } from 'express';
 import type { BranchAuthRequest } from '../middleware/branchAuth.middleware';
 import { prisma } from '../lib/prisma';
 import { isEbmEnabled } from '../services/rra-ebm.service';
-import { buildVsdcEnvelope, saveZReport, checkZReport } from '../services/vsdc-api.service';
+import { buildVsdcEnvelope, saveAndVerifyZReport, checkZReport } from '../services/vsdc-api.service';
 import { initializeVsdcDevice } from '../services/vsdc-init.service';
 import { success, error as apiError } from '../utils/apiResponse';
 
@@ -149,10 +149,6 @@ export async function initializeDevice(req: BranchAuthRequest, res: Response) {
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
-/** `yyyyMMddHHmmss` — the report-generation timestamp `saveZReports` expects. */
-function toRptDeTimestamp(d: Date): string {
-  return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
-}
 /**
  * `yyyyMMdd` — the report-date `checkZReport` expects. Live-tested against
  * the RRA sandbox 2026-08-29: a full 14-digit timestamp was rejected with
@@ -180,13 +176,19 @@ export async function submitZReport(req: BranchAuthRequest, res: Response) {
     const branchId = req.body?.branchId != null ? parseInt(req.body.branchId) : undefined;
 
     const envelope = await buildVsdcEnvelope(organizationId, branchId);
-    const rptDe = toRptDeTimestamp(new Date());
-    const result = await saveZReport(envelope, rptDe);
+    const z = await saveAndVerifyZReport(envelope);
 
-    if (!result.success) {
-      return res.status(502).json(apiError(result.error ?? 'Z-report submission failed'));
+    if (!z.saved) {
+      return res.status(502).json(apiError(z.saveError ?? 'Z-report submission failed'));
     }
-    res.json(success({ rptDe, response: result.rawBody }));
+    res.json(success({
+      rptDe: z.rptDeTimestamp,
+      rptDeDate: z.rptDeDate,
+      saved: z.saved,
+      verified: z.verified,
+      verifyError: z.verifyError ?? null,
+      response: z.raw,
+    }));
   } catch (error) {
     console.error('[EbmZReport] Submission failed:', error);
     res.status(500).json(apiError('Failed to submit Z-report'));
