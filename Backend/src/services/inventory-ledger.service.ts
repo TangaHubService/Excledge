@@ -71,6 +71,14 @@ export interface AddStockParams {
   expiryDate?: Date | string;
   note?: string;
   metadata?: Record<string, any>;
+  /**
+   * Skip queuing this movement for the RRA Stock In/Out sync. Used when the
+   * stock change has already been reported to the VSDC by another call — e.g.
+   * a confirmed B2B purchase, whose stock-in RRA books from
+   * /trnsPurchase/savePurchases, so re-sending it via /stock/saveStockItems
+   * would double-count.
+   */
+  skipEbmSync?: boolean;
   tx?: any; // Optional transaction client for use within existing transactions
 }
 
@@ -223,6 +231,7 @@ export async function addStock(params: AddStockParams) {
     expiryDate,
     note,
     metadata,
+    skipEbmSync = false,
     tx: providedTx,
   } = params;
 
@@ -279,7 +288,7 @@ export async function addStock(params: AddStockParams) {
         expiryDate: expiryDate ? new Date(expiryDate) : null,
         note,
         metadata: metadata ? metadata : null,
-        ebmSyncStatus: ebmSyncStatusFor(movementType),
+        ebmSyncStatus: skipEbmSync ? null : ebmSyncStatusFor(movementType),
       },
     });
 

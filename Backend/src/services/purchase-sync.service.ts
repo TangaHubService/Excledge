@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { isEbmEnabled, fix2, toRraDate, toRraDateTime } from './rra-ebm.service';
 import { buildVsdcEnvelope, selectPurchases, savePurchase, validateVsdcEnvelope, toRraReqDt } from './vsdc-api.service';
 import { DEFAULT_ITEM_CLASSIFICATION_CD } from './item-code.service';
+import { addStock } from './inventory-ledger.service';
 import logger from '../utils/logger';
 
 /**
@@ -235,16 +236,56 @@ export async function confirmRraPurchase(
     if (!res.success) {
       return { success: false, error: res.error ?? 'savePurchases failed' };
     }
-    await prisma.$transaction([
-      prisma.rraPurchase.update({
-        where: { id: rraPurchaseId },
-        data: { status: 'CONFIRMED', confirmedAt: new Date() },
-      }),
-      prisma.organization.update({
-        where: { id: organizationId },
-        data: { lastSuccessfulVdsContact: new Date() },
-      }),
-    ]);
+
+    await prisma.rraPurchase.update({
+      where: { id: rraPurchaseId },
+      data: { status: 'CONFIRMED', confirmedAt: new Date() },
+    });
+
+    // §74: a confirmed purchase must affect local stock in real time. RRA has
+    // already booked the stock-in from /trnsPurchase/savePurchases (pchsSttsCd
+    // 02), so these ledger rows are written with skipEbmSync — re-sending them
+    // via /stock/saveStockItems would double-count the same receipt at the VSDC.
+    let stockBooked = 0;
+    if (opts.branchId != null) {
+      const itemCds = rp.items.map((it) => it.itemCd).filter((c): c is string => !!c);
+      const productByCd = new Map(
+        (itemCds.length
+          ? await prisma.product.findMany({
+              where: { organizationId, itemCd: { in: itemCds } },
+              select: { id: true, itemCd: true },
+            })
+          : []
+        ).map((p) => [p.itemCd as string, p.id]),
+      );
+      for (const it of rp.items) {
+        const productId = it.itemCd ? productByCd.get(it.itemCd) : undefined;
+        const qty = Math.round(Math.abs(it.qty.toNumber()));
+        if (!productId || qty <= 0) continue;
+        await addStock({
+          organizationId,
+          productId,
+          userId: opts.userId ?? 0,
+          quantity: qty,
+          movementType: 'PURCHASE',
+          branchId: opts.branchId,
+          unitCost: Math.abs(it.prc.toNumber()),
+          reference: `RRA-PURCHASE-${rp.spplrTin}-${rp.spplrInvcNo}`,
+          referenceType: 'RRA_PURCHASE',
+          note: `Confirmed RRA purchase from ${rp.spplrNm ?? rp.spplrTin}`,
+          skipEbmSync: true,
+        });
+        stockBooked += 1;
+      }
+    } else {
+      logger.warn(`[EBM] confirm RRA purchase #${rraPurchaseId}: no branch supplied — local stock not booked`);
+    }
+
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { lastSuccessfulVdsContact: new Date() },
+    });
+    logger.info(`[EBM] confirmed RRA purchase #${rraPurchaseId} — ${stockBooked} item(s) booked into branch ${opts.branchId ?? '-'} stock`);
     return { success: true };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Purchase confirmation failed';
