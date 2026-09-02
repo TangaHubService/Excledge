@@ -58,7 +58,6 @@ import {
   productExpiryAlertJob,
   dailyReportJob,
 } from "./jobs/product-expiry.job";
-import { ebmQueueJob } from "./jobs/ebm-queue.job";
 import { ebmOutboxJob } from "./jobs/ebm-outbox.job";
 import { vsdcHeartbeatJob } from "./jobs/vsdc-heartbeat.job";
 import { zReportJob } from "./jobs/z-report.job";
@@ -204,7 +203,6 @@ if (process.env.RUN_JOBS !== "false") {
   subscriptionStatusTransitionJob.start();
   productExpiryAlertJob.start();
   dailyReportJob.start();
-  ebmQueueJob.start();
   ebmOutboxJob.start();
   vsdcHeartbeatJob.start();
   zReportJob.start();

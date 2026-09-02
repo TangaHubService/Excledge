@@ -5,6 +5,7 @@ let stockItemsPayload: any = null
 let stockMasterArgs: any = null
 let savePurchasePayload: any = null
 const ledgerUpdates: any[] = []
+const addStockCalls: any[] = []
 
 vi.mock("../src/lib/prisma", () => {
   const purchase = {
@@ -49,6 +50,9 @@ vi.mock("../src/lib/prisma", () => {
         groupBy: vi.fn(async () => []),
       },
       organization: { update: vi.fn(async () => ({})) },
+      product: {
+        findMany: vi.fn(async () => [{ id: 5, itemCd: "RW2CTU0000001" }]),
+      },
       $transaction: vi.fn(async (ops: any[]) => Promise.all(ops)),
     },
   }
@@ -59,7 +63,10 @@ vi.mock("../src/services/rra-ebm.service", async () => {
   return { ...actual, isEbmEnabled: () => true }
 })
 
-vi.mock("../src/services/inventory-ledger.service", () => ({ getCurrentStock: vi.fn(async () => 250) }))
+vi.mock("../src/services/inventory-ledger.service", () => ({
+  getCurrentStock: vi.fn(async () => 250),
+  addStock: vi.fn(async (p: any) => { addStockCalls.push(p); return { id: 1000 + addStockCalls.length } }),
+}))
 
 vi.mock("../src/services/vsdc-api.service", async () => {
   const actual = await vi.importActual<any>("../src/services/vsdc-api.service")
@@ -81,6 +88,7 @@ beforeEach(() => {
   stockMasterArgs = null
   savePurchasePayload = null
   ledgerUpdates.length = 0
+  addStockCalls.length = 0
 })
 
 describe("sarTyCdFor (§4.19 stock in/out reason)", () => {
@@ -133,5 +141,26 @@ describe("confirmRraPurchase (§71)", () => {
     expect(savePurchasePayload.taxAmtB).toBeCloseTo(180, 0)
     expect(savePurchasePayload.totAmt).toBeCloseTo(1180, 0)
     expect(savePurchasePayload.itemList[0].taxTyCd).toBe("B")
+  })
+
+  it("§74: books the received quantity into branch stock, without re-reporting it to the VSDC", async () => {
+    const r = await confirmRraPurchase(1, 7, { userId: 3, branchId: 4 })
+    expect(r.success).toBe(true)
+
+    expect(addStockCalls).toHaveLength(1)
+    const booked = addStockCalls[0]
+    expect(booked.productId).toBe(5)
+    expect(booked.branchId).toBe(4)
+    expect(booked.quantity).toBe(10)
+    expect(booked.movementType).toBe("PURCHASE")
+    // RRA already booked the stock-in from /trnsPurchase/savePurchases —
+    // this ledger row must not be queued for /stock/saveStockItems too.
+    expect(booked.skipEbmSync).toBe(true)
+  })
+
+  it("skips stock booking when no branch is supplied", async () => {
+    const r = await confirmRraPurchase(1, 7, { userId: 3 })
+    expect(r.success).toBe(true)
+    expect(addStockCalls).toHaveLength(0)
   })
 })

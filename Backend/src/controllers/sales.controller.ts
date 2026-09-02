@@ -7,7 +7,6 @@ import { auditLogger } from "../utils/auditLogger"
 import { removeStock, addStock } from "../services/inventory-ledger.service"
 import {
   generateInvoiceNumber,
-  submitInvoiceToEbm,
   consumeOrgPurchaseCode,
   isEbmEnabled,
   allocateLocalReceiptSequence,
