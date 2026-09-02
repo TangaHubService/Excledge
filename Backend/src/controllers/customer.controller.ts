@@ -7,6 +7,28 @@ import { validateCustomerRow } from "../services/import-validation.service"
 import { createPreviewSession, getPreviewSession, deletePreviewSession } from "../services/preview-session.service"
 import { prisma } from "../lib/prisma"
 import { getOrderBy } from "../utils/sorting"
+import { isValidCustomerPhone, isValidCustomerTin } from "../validations/customers.validation"
+
+/**
+ * Rejects a phone/TIN pair that's malformed or swapped before it ever reaches
+ * the database — this is what ultimately becomes custTin/custMblNo on the
+ * RRA VSDC sale payload (rra-ebm.service.ts), so garbage or crossed values
+ * here would otherwise surface as a VSDC 910-class rejection at sale time.
+ */
+function validateCustomerContactFields(phone: unknown, tin: unknown): string | null {
+  const phoneValue = typeof phone === "string" ? phone.trim() : ""
+  const tinValue = typeof tin === "string" ? tin.trim() : ""
+  if (phoneValue && !isValidCustomerPhone(phoneValue)) {
+    return "Invalid phone number — expected +<country code><digits> or 0XXXXXXXXX"
+  }
+  if (tinValue && !isValidCustomerTin(tinValue)) {
+    return "TIN must be exactly 9 digits"
+  }
+  if (phoneValue && tinValue && phoneValue === tinValue) {
+    return "Phone number and TIN cannot be the same value"
+  }
+  return null
+}
 
 /** Treat browser query-string placeholders as absent values, never as filters. */
 const optionalQueryValue = (value: unknown): string | undefined => {
@@ -168,6 +190,12 @@ export const createCustomer = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params?.organizationId)
     const { name, phone, email, type, tin, TIN, prcOrdCd, balance } = req.body
+    const resolvedTin = TIN || tin || null
+
+    const contactError = validateCustomerContactFields(phone, resolvedTin)
+    if (contactError) {
+      return res.status(400).json({ error: contactError })
+    }
 
     // Validate and map customerType
     let customerType: 'INDIVIDUAL' | 'INSURANCE' | 'CORPORATE' = 'INDIVIDUAL'
@@ -180,7 +208,7 @@ export const createCustomer = async (req: BranchAuthRequest, res: Response) => {
         name,
         phone: phone || null,
         email: email || null,
-        TIN: TIN || tin || null,
+        TIN: resolvedTin,
         prcOrdCd: prcOrdCd || null,
         customerType,
         balance: balance || 0,
@@ -221,6 +249,16 @@ export const updateCustomer = async (req: BranchAuthRequest, res: Response) => {
 
     if (!existingCustomer) {
       return res.status(404).json({ error: "Customer not found" })
+    }
+
+    // Validate against the *resulting* phone/TIN, not just whichever field
+    // this particular request happens to touch — a request that only changes
+    // one of the pair must still be checked against the other's existing value.
+    const resolvedPhone = updateData.phone !== undefined ? updateData.phone : existingCustomer.phone
+    const resolvedTin = updateData.TIN !== undefined ? updateData.TIN : existingCustomer.TIN
+    const contactError = validateCustomerContactFields(resolvedPhone, resolvedTin)
+    if (contactError) {
+      return res.status(400).json({ error: contactError })
     }
 
     const customer = await prisma.customer.update({

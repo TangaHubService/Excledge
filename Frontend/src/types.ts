@@ -33,6 +33,17 @@ export interface Product {
     pkgUnitCd?: string | null;
     qtyUnitCd?: string | null;
     packagingQty?: number | null;
+    itemCd?: string | null;
+    itemClsCd?: string | null;
+    itemStandardName?: string | null;
+    origin?: string | null;
+    useInsurance?: boolean;
+    additionalInfo?: string | null;
+    l1SalePrice?: number | null;
+    l2SalePrice?: number | null;
+    l3SalePrice?: number | null;
+    l4SalePrice?: number | null;
+    l5SalePrice?: number | null;
     createdAt: string;
     updatedAt: string;
 }

@@ -1,67 +1,255 @@
 import { prisma } from '../lib/prisma';
-import { isEbmEnabled } from './rra-ebm.service';
-import { buildVsdcEnvelope, selectMvmt } from './vsdc-api.service';
+import type { InventoryMovementType, InventoryDirection } from '@prisma/client';
+import { isEbmEnabled, fix2, toRraDate } from './rra-ebm.service';
+import { buildVsdcEnvelope, saveStockItems, saveStockMaster, validateVsdcEnvelope } from './vsdc-api.service';
+import { getCurrentStock } from './inventory-ledger.service';
+import { DEFAULT_ITEM_CLASSIFICATION_CD } from './item-code.service';
+import logger from '../utils/logger';
 
 /**
- * Submit a stock movement/adjustment to the RRA VSDC gateway via /selectMvmt.
+ * RRA Stock In/Out + Stock Master sync (RRA checklist §23, §72, §73).
+ *
+ * Every non-sale inventory movement (purchase receipt, adjustment, transfer,
+ * damage/expiry, customer return) is reported to the VSDC as a Store Adjustment
+ * Record via /stock/saveStockItems, and the item's new on-hand quantity is
+ * pushed via /stockMaster/saveStockMaster. SALE movements are NOT sent here —
+ * RRA derives the stock-out from /trnsSales/saveSales (stockRlsDt), so
+ * double-reporting is avoided by never marking SALE ledger rows PENDING.
  */
-export async function submitStockMovementToEbm(movementId: number): Promise<{ success: boolean; error?: string }> {
-  if (!isEbmEnabled()) {
+
+/** VSDC §4.19 Stock In/Out (`sarTyCd`) — mapped from our movement type + direction. */
+export function sarTyCdFor(
+  movementType: InventoryMovementType,
+  direction: InventoryDirection,
+  referenceType?: string | null,
+): string | null {
+  if (direction === 'IN') {
+    // An approved import declaration books its stock-in as an Import (01),
+    // not a Purchase (02) — see rra-import.service.ts.
+    if (referenceType === 'RRA_IMPORT') return '01';
+    switch (movementType) {
+      case 'PURCHASE':          return '02'; // Purchase
+      case 'RETURN_CUSTOMER':   return '03'; // Return
+      case 'TRANSFER_IN':       return '04'; // Stock Movement
+      case 'INITIAL_STOCK':
+      case 'ADJUSTMENT_IN':
+      case 'ADJUSTMENT':
+      case 'CORRECTION':        return '06'; // Adjustment (incremental)
+      default:                  return '06';
+    }
+  }
+  switch (movementType) {
+    case 'SALE':          return null;  // handled by /trnsSales/saveSales
+    case 'TRANSFER_OUT':  return '13';  // Stock Movement
+    case 'DAMAGE':
+    case 'EXPIRED':       return '15';  // Discarding
+    case 'ADJUSTMENT_OUT':
+    case 'ADJUSTMENT':
+    case 'CORRECTION':    return '16';  // Adjustment (decremental)
+    default:              return '16';
+  }
+}
+
+/** Whether an inventory movement needs to be reported to RRA as a stock adjustment. */
+export function stockMovementNeedsEbm(movementType: InventoryMovementType): boolean {
+  return movementType !== 'SALE';
+}
+
+async function allocateSarNo(organizationId: number): Promise<number> {
+  const row = await prisma.inventoryLedger.aggregate({
+    where: { organizationId, ebmSarNo: { not: null } },
+    _max: { ebmSarNo: true },
+  });
+  return (row._max.ebmSarNo ?? 0) + 1;
+}
+
+/**
+ * Submit one InventoryLedger entry to RRA (/stock/saveStockItems) and then
+ * push the item's new remaining quantity (/stockMaster/saveStockMaster).
+ * Idempotent: a row already SYNCED is skipped; a persisted `ebmSarNo` is reused
+ * on retry so RRA does not reject a duplicate SAR number.
+ */
+export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ success: boolean; error?: string }> {
+  if (!isEbmEnabled()) return { success: true };
+
+  const entry = await prisma.inventoryLedger.findUnique({
+    where: { id: ledgerId },
+    include: {
+      product: { select: { id: true, name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true, barcode: true, taxCode: true, unitPrice: true } },
+      user: { select: { id: true, name: true } },
+    },
+  });
+  if (!entry) return { success: false, error: 'Ledger entry not found' };
+  if (entry.ebmSyncStatus === 'SYNCED') return { success: true };
+
+  if (!stockMovementNeedsEbm(entry.movementType)) {
+    await prisma.inventoryLedger.update({ where: { id: ledgerId }, data: { ebmSyncStatus: null } });
     return { success: true };
   }
 
-  const movement = await prisma.stockMovement.findUnique({
-    where: { id: movementId },
-    include: {
-      product: { select: { name: true, sku: true } },
-      branch: { select: { id: true, code: true, name: true } },
-    },
-  });
-
-  if (!movement) {
-    return { success: false, error: 'Stock movement not found' };
+  const sarTyCd = sarTyCdFor(entry.movementType, entry.direction, entry.referenceType);
+  if (!sarTyCd) {
+    await prisma.inventoryLedger.update({ where: { id: ledgerId }, data: { ebmSyncStatus: null } });
+    return { success: true };
   }
 
-  // RRA requires a non-empty reference (document ID) for inventory transactions
-  if (!movement.reference || movement.reference.trim() === '') {
-    return { success: false, error: 'Please provide inventory document Id' };
+  const product = entry.product;
+  if (!product?.itemCd) {
+    await prisma.inventoryLedger.update({
+      where: { id: ledgerId },
+      data: { ebmSyncStatus: 'FAILED', ebmError: 'Product has no itemCd — register it with RRA first' },
+    });
+    return { success: false, error: 'Product has no itemCd' };
   }
+
+  const envelope = await buildVsdcEnvelope(entry.organizationId, entry.branchId);
+  const envErr = validateVsdcEnvelope(envelope);
+  if (envErr) {
+    await prisma.inventoryLedger.update({ where: { id: ledgerId }, data: { ebmSyncStatus: 'FAILED', ebmError: envErr } });
+    return { success: false, error: envErr };
+  }
+
+  const qty = Math.abs(entry.quantity);
+  const prc = entry.unitCost != null ? Math.abs(entry.unitCost.toNumber()) : Math.abs(product.unitPrice.toNumber());
+  const splyAmt = fix2(qty * prc);
+  const taxTyCd = (product.taxCode ?? 'B').toUpperCase();
+  // §4.19: incoming purchases carry input VAT; other adjustments net to zero tax.
+  const rate = taxTyCd === 'B' ? 18 : 0;
+  const taxAmt = sarTyCd === '02' && rate > 0 ? fix2(splyAmt - splyAmt / (1 + rate / 100)) : 0;
+  const taxblAmt = fix2(splyAmt - taxAmt);
+
+  const sarNo = entry.ebmSarNo ?? (await allocateSarNo(entry.organizationId));
+  const regr = { id: String(entry.user?.id ?? 'system'), name: entry.user?.name ?? 'System' };
+  const now = entry.createdAt;
+
+  const payload = {
+    sarNo,
+    orgSarNo: 0,
+    regTyCd: 'M', // Manual
+    custTin: envelope.tin,
+    custNm: '',
+    custBhfId: envelope.bhfId,
+    sarTyCd,
+    ocrnDt: toRraDate(now),
+    totItemCnt: 1,
+    totTaxblAmt: taxblAmt,
+    totTaxAmt: taxAmt,
+    totAmt: splyAmt,
+    remark: entry.note ?? entry.movementType,
+    regrId: regr.id,
+    regrNm: regr.name,
+    modrId: regr.id,
+    modrNm: regr.name,
+    itemList: [
+      {
+        itemSeq: 1,
+        itemCd: product.itemCd,
+        itemClsCd: product.itemClsCd ?? DEFAULT_ITEM_CLASSIFICATION_CD,
+        itemNm: product.name,
+        bcd: product.barcode ?? undefined,
+        pkgUnitCd: product.pkgUnitCd ?? 'CT',
+        pkg: qty,
+        qtyUnitCd: product.qtyUnitCd ?? 'U',
+        qty,
+        prc,
+        splyAmt,
+        totDcAmt: 0,
+        taxblAmt,
+        taxTyCd,
+        taxAmt,
+        totAmt: splyAmt,
+      },
+    ],
+  };
 
   try {
-    const envelope = await buildVsdcEnvelope(movement.organizationId, movement.branchId);
+    await prisma.inventoryLedger.update({
+      where: { id: ledgerId },
+      data: { ebmSyncStatus: 'PENDING', ebmSarNo: sarNo, ebmError: null },
+    });
 
-    const payload: Record<string, unknown> = {
-      operation: 'SELECT_MVMT',
-      movementType: movement.type,
-      productId: movement.productId,
-      productName: movement.product?.name ?? '',
-      quantity: movement.quantity,
-      previousStock: movement.previousStock,
-      newStock: movement.newStock,
-      movementDate: movement.createdAt.toISOString(),
-      branchCode: movement.branch?.code ?? '',
-      reference: movement.reference ?? '',
-      note: movement.note ?? '',
-    };
-
-    const result = await selectMvmt(envelope, payload);
-
-    if (result.success) {
-      return { success: true };
+    const io = await saveStockItems(envelope, payload);
+    if (!io.success) {
+      await prisma.inventoryLedger.update({
+        where: { id: ledgerId },
+        data: { ebmSyncStatus: 'FAILED', ebmError: io.error ?? 'saveStockItems failed' },
+      });
+      return { success: false, error: io.error };
     }
 
-    return { success: false, error: result.error ?? 'VSDC movement sync failed' };
+    // §73 — push the item's new on-hand quantity to the stock master.
+    const onHand = await getCurrentStock(entry.organizationId, product.id, entry.branchId);
+    const master = await saveStockMaster(envelope, product.itemCd, onHand, regr);
+    if (!master.success) {
+      // The IO record went through; flag the master push for retry but do not lose the IO.
+      await prisma.inventoryLedger.update({
+        where: { id: ledgerId },
+        data: { ebmSyncStatus: 'FAILED', ebmError: `stock master push failed: ${master.error}` },
+      });
+      return { success: false, error: master.error };
+    }
+
+    await prisma.$transaction([
+      prisma.inventoryLedger.update({
+        where: { id: ledgerId },
+        data: { ebmSyncStatus: 'SYNCED', ebmSyncedAt: new Date(), ebmError: null },
+      }),
+      prisma.organization.update({
+        where: { id: entry.organizationId },
+        data: { lastSuccessfulVdsContact: new Date() },
+      }),
+    ]);
+    return { success: true };
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Stock movement sync error';
+    const message = e instanceof Error ? e.message : 'Stock sync error';
+    await prisma.inventoryLedger.update({
+      where: { id: ledgerId },
+      data: { ebmSyncStatus: 'FAILED', ebmError: message },
+    });
     return { success: false, error: message };
   }
 }
 
-/**
- * Async fire-and-forget wrapper.
- */
-export function submitStockMovementToEbmAsync(movementId: number): void {
-  submitStockMovementToEbm(movementId).catch((err) =>
-    console.error(`[EBM] Stock movement #${movementId} sync failed:`, err),
+/** Fire-and-forget wrapper — called from the write paths that create a ledger row. */
+export function submitStockLedgerEntryToEbmAsync(ledgerId: number): void {
+  submitStockLedgerEntryToEbm(ledgerId).catch((err) =>
+    logger.error(`[EBM] stock ledger #${ledgerId} sync failed`, err),
   );
+}
+
+/** Process PENDING/FAILED stock ledger rows in batch (cron job). */
+export async function processStockSyncBatch(limit = 25): Promise<{ processed: number; succeeded: number; failed: number }> {
+  if (!isEbmEnabled()) return { processed: 0, succeeded: 0, failed: 0 };
+
+  const rows = await prisma.inventoryLedger.findMany({
+    where: { ebmSyncStatus: { in: ['PENDING', 'FAILED'] }, movementType: { not: 'SALE' } },
+    orderBy: { createdAt: 'asc' },
+    take: limit,
+    select: { id: true },
+  });
+
+  let succeeded = 0;
+  let failed = 0;
+  for (const row of rows) {
+    const r = await submitStockLedgerEntryToEbm(row.id);
+    if (r.success) succeeded += 1;
+    else failed += 1;
+  }
+  return { processed: rows.length, succeeded, failed };
+}
+
+/**
+ * Mark every not-yet-synced non-sale ledger row for this org PENDING so the
+ * next batch picks them up. Used by the "sync stock now" endpoint.
+ */
+export async function queuePendingStockForOrg(organizationId: number): Promise<number> {
+  const res = await prisma.inventoryLedger.updateMany({
+    where: {
+      organizationId,
+      movementType: { not: 'SALE' },
+      OR: [{ ebmSyncStatus: null }, { ebmSyncStatus: 'FAILED' }],
+    },
+    data: { ebmSyncStatus: 'PENDING' },
+  });
+  return res.count;
 }

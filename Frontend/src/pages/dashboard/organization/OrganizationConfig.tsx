@@ -20,7 +20,8 @@ import {
     LayoutGrid,
     ToggleLeft,
     SlidersHorizontal,
-    ChevronDown
+    ChevronDown,
+    FlaskConical
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
@@ -62,6 +63,7 @@ type OrganizationData = {
     taxExemptionReason?: string | null;
     ebmDeviceId?: string | null;
     ebmSerialNo?: string | null;
+    trainingMode?: boolean;
     currency?: string;
     isActive: boolean;
     createdAt: string;
@@ -525,6 +527,30 @@ export function OrganizationConfig() {
                                     <div className="space-y-2 md:col-span-2">
                                         <Label className="flex items-center gap-2">
                                             <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                            RRA tax bands
+                                        </Label>
+                                        <div className="rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800 text-sm">
+                                            {[
+                                                { code: 'A', rate: '0%', label: 'Exempt' },
+                                                { code: 'B', rate: '18%', label: 'Standard VAT' },
+                                                { code: 'C', rate: '0%', label: 'Zero-rated / export' },
+                                                { code: 'D', rate: '0%', label: 'Non-taxable (not VAT registered)' },
+                                            ].map((b) => (
+                                                <div key={b.code} className="flex items-center justify-between px-3 py-2">
+                                                    <span><span className="font-semibold">{b.code}</span> — {b.label}</span>
+                                                    <span className="font-mono tabular-nums">{b.rate}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <p className="text-xs text-gray-400">
+                                            Tax rates are fixed by Rwandan tax law and applied automatically per product tax code.
+                                            They are not operator-editable; a rate change would require a system update and RRA re-certification.
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2 md:col-span-2">
+                                        <Label className="flex items-center gap-2">
+                                            <ShieldCheck className="h-4 w-4 text-gray-400" />
                                             RRA EBM / VSDC — device ID
                                         </Label>
                                         <Input
@@ -548,6 +574,28 @@ export function OrganizationConfig() {
                                             placeholder="Device / controller serial from RRA"
                                             className="rounded-xl"
                                         />
+                                    </div>
+
+                                    <div className="space-y-2 md:col-span-2">
+                                        <div className="flex items-center justify-between rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-3">
+                                            <div>
+                                                <Label className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+                                                    <FlaskConical className="h-4 w-4 text-amber-500" />
+                                                    Training Mode
+                                                </Label>
+                                                <p className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-400/80">
+                                                    For staff practice only. While on, every sale/refund prints as a
+                                                    TRAINING receipt (watermarked, "not an official receipt") and is
+                                                    excluded from RRA fiscal submission and sales report totals.
+                                                    Turn off before real business hours.
+                                                </p>
+                                            </div>
+                                            <Switch
+                                                checked={organization?.trainingMode ?? false}
+                                                onCheckedChange={(checked) => setOrganization(prev => prev ? { ...prev, trainingMode: checked } : null)}
+                                                disabled={!isAuthorized || isSavingOrg}
+                                            />
+                                        </div>
                                     </div>
 
                                     <div className="space-y-2">

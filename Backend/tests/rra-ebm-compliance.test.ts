@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { TaxService } from '../src/services/tax.service';
 import { parseVsdcResponse, parseVsdcStatusCode } from '../src/services/vsdc-api.service';
-import { parseGatewayResponse, gatewayErrorMessage } from '../src/services/rra-ebm.service';
+import { parseGatewayResponse, gatewayErrorMessage, buildRraSendReceiptPayload, type SaleWithRelations } from '../src/services/rra-ebm.service';
+import { validateVsdcEnvelope } from '../src/services/vsdc-api.service';
+import { taxGroups, documentIndicator, isFormalNoticeIndicator } from '../src/services/invoice-pdf.service';
+import type { RenderInvoicePayload, RenderInvoiceLineItem } from '../src/services/invoice-render.service';
 import { RraTaxCode, TaxCategory } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
@@ -312,5 +315,192 @@ describe('TAX CALCULATION — decimal precision and resilience', () => {
       expect(summary.items[1].taxCode).toBe(RraTaxCode.A);
       expect(summary.items[2].taxCode).toBe(RraTaxCode.C);
     });
+  });
+});
+
+// ============================================================================
+// Module 7: RECEIPT RENDERING — shared helpers used by all three renderers
+// (invoice-pdf.service, invoice-render.service, invoice-receipt-pdf.service)
+// ============================================================================
+
+function makeItem(overrides: Partial<RenderInvoiceLineItem> = {}): RenderInvoiceLineItem {
+  return {
+    line: 1,
+    code: 'ITEM-1',
+    description: 'Test item',
+    quantity: 1,
+    unit: 'PCS',
+    unitPrice: 100,
+    discountPct: 0,
+    discountAmt: 0,
+    taxCode: 'A',
+    vatPct: 0,
+    taxAmount: 0,
+    subtotal: 100,
+    net: 100,
+    total: 100,
+    ...overrides,
+  };
+}
+
+function makePayload(overrides: {
+  items?: RenderInvoiceLineItem[]
+  invoice?: Partial<RenderInvoicePayload['invoice']>
+  certification?: Partial<RenderInvoicePayload['certification']>
+} = {}): RenderInvoicePayload {
+  return {
+    company: { name: 'Test Co', ebmLinked: true },
+    customer: { name: 'Walk-in' },
+    invoice: {
+      invoiceNumber: 'INV-1',
+      receiptNumber: 'INV-1',
+      invoiceDate: new Date().toISOString(),
+      time: '10:00:00',
+      paymentMethod: 'CASH',
+      cashier: 'Cashier',
+      status: 'COMPLETED',
+      isProforma: false,
+      isCopy: false,
+      currency: 'RWF',
+      ...overrides.invoice,
+    },
+    items: overrides.items ?? [makeItem()],
+    totals: { subtotal: 100, discount: 0, taxable: 100, vat: 0, tax: 0, shipping: 0, paid: 100, balance: 0, grandTotal: 100 },
+    charges: { vatAmount: 0, taxableAmount: 100, discountAmount: 0, cashAmount: 100, insuranceAmount: 0, debtAmount: 0, totalAmount: 100, shipping: 0 },
+    payment: {},
+    sdcInformation: {},
+    certification: { isCertified: true, ...overrides.certification },
+    verification: {},
+    branding: {},
+  };
+}
+
+describe('taxGroups — RRA checklist §46/§48/§49 (A/B/C/D tax label printing)', () => {
+  it('§48: tax code B always appears at the statutory rate, even with zero sales', () => {
+    const groups = taxGroups(makePayload({ items: [makeItem({ taxCode: 'A', vatPct: 0 })] }));
+    const bGroup = groups.find((g) => g.code === 'B');
+    expect(bGroup).toBeDefined();
+    expect(bGroup!.rate).toBe(18);
+    expect(bGroup!.total).toBe(0);
+    expect(bGroup!.tax).toBe(0);
+  });
+
+  it('§49: tax codes A/C/D only appear when a line item actually used them', () => {
+    const groups = taxGroups(makePayload({ items: [makeItem({ taxCode: 'B', vatPct: 18, taxAmount: 18 })] }));
+    expect(groups.find((g) => g.code === 'A')).toBeUndefined();
+    expect(groups.find((g) => g.code === 'C')).toBeUndefined();
+    expect(groups.find((g) => g.code === 'D')).toBeUndefined();
+  });
+
+  it('§46: a used code accumulates totals from its line items, on top of the forced B row', () => {
+    const groups = taxGroups(makePayload({
+      items: [
+        makeItem({ taxCode: 'A', vatPct: 0, total: 50, taxAmount: 0 }),
+        makeItem({ taxCode: 'A', vatPct: 0, total: 30, taxAmount: 0 }),
+      ],
+    }));
+    const aGroup = groups.find((g) => g.code === 'A');
+    expect(aGroup!.total).toBe(80);
+    expect(groups.find((g) => g.code === 'B')).toBeDefined();
+  });
+});
+
+// ============================================================================
+// REFUND fiscalisation — RRA checklist §9/§56 (a refund mirrors the original
+// with the correct tax code and every amount negated)
+// ============================================================================
+
+function makeRefundSale(): SaleWithRelations {
+  return {
+    id: 2,
+    saleNumber: 'REFUND-SALE-1-123',
+    invoiceNumber: 'INV-1000-B1-2026-000002',
+    vsdcInvcNo: 2,
+    rcptLabel: 'NR',
+    createdAt: new Date('2026-08-30T09:00:00.000Z'),
+    status: 'REFUNDED',
+    paymentType: 'CASH',
+    cashAmount: new Decimal(-1180),
+    debtAmount: new Decimal(0),
+    insuranceAmount: new Decimal(0),
+    totalAmount: new Decimal(-1180),
+    taxableAmount: new Decimal(-1000),
+    vatAmount: new Decimal(-180),
+    branchId: 1,
+    branch: { id: 1, name: 'Main', code: 'M', bhfId: '00', ebmDeviceId: 'SDC1', ebmSerialNo: 'MRC1' },
+    customer: { id: 5, name: 'Client', phone: '0788000000', TIN: '100000000', customerType: 'INDIVIDUAL', email: null },
+    user: { id: 1, name: 'Cashier' },
+    saleItems: [
+      {
+        productId: 10,
+        quantity: -1,
+        unitPrice: new Decimal(1180),
+        totalPrice: new Decimal(-1180),
+        taxRate: new Decimal(18),
+        taxAmount: new Decimal(-180),
+        taxCode: 'B',
+        dcRate: new Decimal(0),
+        dcAmt: new Decimal(0),
+        product: { name: 'Widget', itemCd: 'RW2CTU0000001', itemClsCd: null, pkgUnitCd: 'CT', qtyUnitCd: 'U', packagingQty: null },
+      },
+    ],
+  };
+}
+
+describe('buildRraSendReceiptPayload — refund tax mirroring (§9/§56)', () => {
+  it('submits the original tax code B and a positive extracted VAT on a refund', () => {
+    const payload = buildRraSendReceiptPayload(
+      makeRefundSale(),
+      { TIN: '100000000', name: 'Seller', address: 'Kigali' },
+      { orgInvcNo: 1, rfdDt: new Date('2026-08-30T09:00:00.000Z'), rfdRsnCd: '06' },
+    ) as any;
+
+    expect(payload.rcptTyCd).toBe('R');
+    expect(payload.salesSttsCd).toBe('05');
+    expect(payload.itemList[0].taxTyCd).toBe('B');
+    expect(payload.itemList[0].taxAmt).toBe(180);
+    expect(payload.taxAmtB).toBe(180);
+    expect(payload.taxblAmtB).toBe(1180);
+    expect(payload.totTaxAmt).toBe(180);
+  });
+});
+
+describe('validateVsdcEnvelope — RRA checklist §22 (device connectivity/TIN preconditions)', () => {
+  const base = { bhfId: '00', sdcId: 'SDC1', mrcNo: 'MRC1', dvcSrlNo: 'MRC1', env: 'sandbox' };
+  it('passes a well-formed 9-digit TIN with a configured serial', () => {
+    expect(validateVsdcEnvelope({ ...base, tin: '100000000' })).toBeNull();
+  });
+  it('rejects a missing or malformed TIN', () => {
+    expect(validateVsdcEnvelope({ ...base, tin: '' })).toMatch(/TIN/);
+    expect(validateVsdcEnvelope({ ...base, tin: '12345' })).toMatch(/TIN/);
+  });
+  it('rejects a missing device serial', () => {
+    expect(validateVsdcEnvelope({ ...base, tin: '100000000', mrcNo: '', dvcSrlNo: '' })).toMatch(/device serial/);
+  });
+});
+
+describe('documentIndicator / isFormalNoticeIndicator — RRA checklist §55', () => {
+  it('a normal, certified sale has no watermark and no "not official" notice', () => {
+    const data = makePayload();
+    expect(documentIndicator(data)).toBe('');
+    expect(isFormalNoticeIndicator(documentIndicator(data)) || !data.certification.isCertified).toBe(false);
+  });
+
+  it('proforma is watermarked PROFORMA and always carries the notice', () => {
+    const data = makePayload({ invoice: { isProforma: true } });
+    expect(documentIndicator(data)).toBe('PROFORMA');
+    expect(isFormalNoticeIndicator(documentIndicator(data))).toBe(true);
+  });
+
+  it('copy is watermarked COPY and always carries the notice', () => {
+    const data = makePayload({ invoice: { isCopy: true } });
+    expect(documentIndicator(data)).toBe('COPY');
+    expect(isFormalNoticeIndicator(documentIndicator(data))).toBe(true);
+  });
+
+  it('a sale not yet certified by VSDC falls back to the notice even without a watermark', () => {
+    const data = makePayload({ certification: { isCertified: false } });
+    expect(documentIndicator(data)).toBe('');
+    expect(isFormalNoticeIndicator(documentIndicator(data)) || !data.certification.isCertified).toBe(true);
   });
 });

@@ -29,7 +29,10 @@ export const createSaleSchema = z.object({
   body: z.object({
     customerId: z.coerce.number().positive('Customer ID required'),
     items: z.array(saleItemSchema).min(1, 'Sale must have at least one item'),
-    paymentType: z.enum(['CASH', 'DEBT', 'INSURANCE', 'MIXED', 'MOBILE_MONEY', 'CREDIT_CARD']),
+    // Optional: a PROFORMA quote collects no payment, so the frontend sends
+    // debtAmount/cashAmount/insuranceAmount without a paymentType — the
+    // controller derives finalPaymentType from those amounts when omitted.
+    paymentType: z.enum(['CASH', 'DEBT', 'INSURANCE', 'MIXED', 'MOBILE_MONEY', 'CREDIT_CARD']).optional(),
     cashAmount: z.coerce.number().nonnegative('Cash amount cannot be negative').optional(),
     debtAmount: z.coerce.number().nonnegative('Debt amount cannot be negative').optional(),
     insuranceAmount: z.coerce.number().nonnegative('Insurance amount cannot be negative').optional(),

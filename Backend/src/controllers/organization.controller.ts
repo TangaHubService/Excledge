@@ -246,6 +246,7 @@ export const updateOrganization = async (req: Request, res: Response) => {
       currency,
       ebmDeviceId,
       ebmSerialNo,
+      trainingMode,
     } = req.body;
     //@ts-ignore
     const userId = parseInt(req.user?.userId as string);
@@ -298,6 +299,13 @@ export const updateOrganization = async (req: Request, res: Response) => {
           : {}),
         ...(ebmSerialNo !== undefined
           ? { ebmSerialNo: ebmSerialNo === "" ? null : ebmSerialNo }
+          : {}),
+        // CIS/VSDC spec §16: while on, every new sale/refund is recorded as a
+        // TRAINING receipt (TS/TR) instead of a real NS/NR — excluded from
+        // fiscal submission and the daily report's legal totals. Admin-only,
+        // same as the other fiscal-behavior fields above.
+        ...(trainingMode !== undefined
+          ? { trainingMode: !!trainingMode }
           : {}),
       },
     });

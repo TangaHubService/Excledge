@@ -11,7 +11,7 @@ import { apiClient } from '../../../lib/api-client';
 import { toast } from 'react-toastify';
 import { saveAs } from 'file-saver';
 import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice';
-import { invoiceToPdfBlob, shareInvoicePdf } from '../../../lib/invoice-pdf';
+import { getInvoicePdfBlob, shareInvoicePdf, type InvoicePdfFormat } from '../../../lib/invoice-pdf';
 import type { SaleEbmTransaction } from '../../../utils/invoiceFiscal';
 import { Badge } from '../../../components/ui/badge';
 
@@ -73,6 +73,8 @@ export default function SaleDetailsPage() {
     const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
     const [isPrintingInvoice, setIsPrintingInvoice] = useState(false);
     const [isSharingInvoice, setIsSharingInvoice] = useState(false);
+    // Named distinctly from date-fns's `format` (imported above) to avoid shadowing it.
+    const [invoiceFormat, setInvoiceFormat] = useState<InvoicePdfFormat>('A4');
 
     useEffect(() => {
         if (id) {
@@ -109,14 +111,21 @@ export default function SaleDetailsPage() {
         return format(new Date(dateString), 'HH:mm');
     };
 
+    /**
+     * CIS/VSDC spec §7.18/§15: "print only one original receipt. Reprint shall
+     * have a watermark with mention Copy." Registers this deliberate
+     * download/print with the backend before fetching the PDF — the first
+     * registered call for a sale renders as the original, every one after
+     * automatically comes back watermarked COPY. No separate copy action needed.
+     */
     const buildInvoicePdfBlob = async () => {
         if (!id) throw new Error('Sale ID is missing');
 
+        await apiClient.reprintSale(id);
         const invoice = unwrapInvoice(await apiClient.getInvoice(id));
         if (!invoice) throw new Error('Invoice was not returned by the backend.');
 
-        const blob = await invoiceToPdfBlob(invoice);
-        if (!blob) throw new Error('PDF generation failed');
+        const blob = await getInvoicePdfBlob(id, invoiceFormat);
         return { blob, invoice };
     };
 
@@ -161,7 +170,7 @@ export default function SaleDetailsPage() {
         setIsDownloadingInvoice(true);
         try {
             const { blob, invoice } = await buildInvoicePdfBlob();
-            saveAs(blob, getInvoiceFilename(invoice, sale.saleNumber));
+            saveAs(blob, getInvoiceFilename(invoice, sale.saleNumber, invoiceFormat));
             toast.success(t('sales.invoiceDownloadSuccess') || 'Invoice downloaded successfully');
         } catch (error) {
             console.error('Failed to generate invoice:', error);
@@ -203,8 +212,8 @@ export default function SaleDetailsPage() {
         try {
             const invoice = unwrapInvoice(await apiClient.getInvoice(id));
             if (!invoice) throw new Error('Invoice was not returned by the backend.');
-            const filename = getInvoiceFilename(invoice, sale.saleNumber);
-            const shared = await shareInvoicePdf(invoice, filename);
+            const filename = getInvoiceFilename(invoice, sale.saleNumber, invoiceFormat);
+            const shared = await shareInvoicePdf(id, filename, invoiceFormat);
             toast.success(shared ? 'Invoice ready to share' : 'Your browser downloaded the invoice instead');
         } catch (error: unknown) {
             if (error instanceof DOMException && error.name === 'AbortError') return;
@@ -291,6 +300,24 @@ export default function SaleDetailsPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <div className={`flex items-center rounded-lg border p-0.5 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}>
+                        {(['A4', 'A5', '80mm'] as const).map((option) => (
+                            <button
+                                key={option}
+                                type="button"
+                                onClick={() => setInvoiceFormat(option)}
+                                className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+                                    invoiceFormat === option
+                                        ? 'bg-blue-600 text-white'
+                                        : theme === 'dark'
+                                            ? 'text-gray-300 hover:bg-gray-700'
+                                            : 'text-gray-600 hover:bg-gray-100'
+                                }`}
+                            >
+                                {option}
+                            </button>
+                        ))}
+                    </div>
                     <Button
                         onClick={handlePrintInvoice}
                         disabled={isPrintingInvoice}

@@ -51,7 +51,9 @@ import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import SalesForm from "./pages/dashboard/sales/pos";
 import { EbmOutboxDashboard } from "./pages/dashboard/ebm/EbmOutboxDashboard";
+import { FiscalReportsPage } from "./pages/dashboard/ebm/FiscalReportsPage";
 import InvoicePage from "./pages/dashboard/invoice/InvoicePage";
+import InvoicesListPage from "./pages/dashboard/invoice/InvoicesListPage";
 import DebtManagement from "./pages/dashboard/dept";
 import SubscriptionManagementPage from "./pages/billing/SubscriptionManagementPage";
 import BillingHistoryPage from "./pages/billing/BillingHistoryPage";
@@ -140,6 +142,7 @@ function App() {
                       <Route path="warehouses" element={<WarehouseManagement />} />
                       <Route path="sales" element={<SalesPage />} />
                       <Route path="sales/:id" element={<Navigate to="/dashboard/sales" replace />} />
+                      <Route path="invoices" element={<InvoicesListPage />} />
                       <Route path="shifts" element={<ShiftSummaryPage />} />
                       <Route path="open-shift" element={<Navigate to="shifts" replace />} />
                       <Route path="organization-config" element={<OrganizationConfig />} />
@@ -152,6 +155,7 @@ function App() {
                       <Route path="users" element={<UserManagement />} />
                       <Route path="activity-logs" element={<ActivityLogs />} />
                       <Route path="ebm-outbox" element={<EbmOutboxDashboard />} />
+                      <Route path="fiscal-reports" element={<FiscalReportsPage />} />
                       <Route path="profile" element={<Profile />} />
                       <Route path="suppliers" element={<SuppliersPage />} />
                       <Route path="orders">

@@ -12,8 +12,8 @@ model Organization {
   businessType             BusinessType                 @default(PHARMACY)
   TIN                      String? // 9-digit RRA Tax Identification Number
   VRN                      String? // VAT Registration Number (for VAT-registered orgs)
-  vatRegistered            Boolean                    @default(true) // Business/taxpayer is registered for VAT → product tax categories A/B/C apply; if false every sale uses tax code D
-  isTaxExempt              Boolean                    @default(false) // Legally tax-exempt entity (e.g. NGO/diplomatic) → every sale uses tax code A regardless of vatRegistered or product category
+  vatRegistered            Boolean                      @default(true) // Business/taxpayer is registered for VAT → product tax categories A/B/C apply; if false every sale uses tax code D
+  isTaxExempt              Boolean                      @default(false) // Legally tax-exempt entity (e.g. NGO/diplomatic) → every sale uses tax code A regardless of vatRegistered or product category
   taxExemptionReason       String? // Free-text reason/certificate reference for the exemption
   currency                 String?
   ebmDeviceId              String? // Legacy: org-level fallback (use Branch.ebmDeviceId per branch)
@@ -54,6 +54,7 @@ model Organization {
   stockTransfers           StockTransfer[]
   invoiceCounters          OrganizationInvoiceCounter[]
   vsdcDeviceCounters       VsdcDeviceCounter[]
+  itemCdCounter            ProductItemCdCounter?
   purchaseCodes            OrganizationPurchaseCode[]
   lastSyncCursor           DateTime?                    @map("last_sync_cursor")
   lastSuccessfulVdsContact DateTime?                    @map("last_successful_vds_contact")
@@ -67,6 +68,12 @@ model Organization {
   heldSales                HeldSale[]
   devices                  Device[]
   fuelDispensers           FuelDispenser[]
+  rraCodes                 RraCode[]
+  rraItemClasses           RraItemClass[]
+  rraNotices               RraNotice[]
+  rraSyncCursors           RraSyncCursor[]
+  rraPurchases             RraPurchase[]
+  rraImportItems           RraImportItem[]
 
   @@map("organizations")
 }
@@ -91,24 +98,32 @@ model OrganizationSetting {
 
 // NEW: Branch Model - Core entity for inventory management
 model Branch {
-  id             Int          @id @default(autoincrement())
-  organizationId Int
-  name           String
-  code           String // internal code e.g., "KIGALI-01"
+  id                   Int          @id @default(autoincrement())
+  organizationId       Int
+  name                 String
+  code                 String // internal code e.g., "KIGALI-01"
   // RRA/EBM per-branch device credentials (each branch has its own VSDC device)
-  bhfId          String? // RRA-assigned branch code, e.g. "00", "01"
-  ebmDeviceId    String? // VSDC device ID issued per branch by RRA
-  ebmSerialNo    String? // VSDC device serial number issued per branch by RRA
-  vsdcUrl        String? // Per-branch VSDC endpoint URL (B3)
-  location       String?
-  address        String?
-  addressLine2   String? // Second address line (B3)
-  phone          String?
-  status         BranchStatus @default(ACTIVE)
-  isDefault      Boolean      @default(false)
-  metadata       Json?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  bhfId                String? // RRA-assigned branch code, e.g. "00", "01"
+  ebmDeviceId          String? // VSDC device ID issued per branch by RRA
+  ebmSerialNo          String? // VSDC device serial number issued per branch by RRA
+  vsdcUrl              String? // Per-branch VSDC endpoint URL (B3)
+  // RRA VSDC device initialization (/initializer/selectInitInfo, RRA checklist §58)
+  ebmInitializedAt     DateTime?
+  ebmInitInfo          Json? // full selectInitInfo response (sdcId, mrcNo, dvcId, last counters, taxpayer/branch metadata)
+  location             String?
+  address              String?
+  addressLine2         String? // Second address line (B3)
+  phone                String?
+  status               BranchStatus @default(ACTIVE)
+  isDefault            Boolean      @default(false)
+  metadata             Json?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  // Running total across every locally-numbered (non-fiscal) receipt on this
+  // branch — proforma today, any future local-only type tomorrow. This is the
+  // "B" (total counter) in the printed "A/B RT" receipt number (spec §7.25),
+  // paired with Sale.localReceiptSeq ("A", the per-type counter).
+  localReceiptTotalSeq Int          @default(0) @map("local_receipt_total_seq")
 
   // Relations
   organization      Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -163,6 +178,7 @@ model Supplier {
   email                String
   phone                String?
   address              String?
+  TIN                  String? // RRA supplier TIN — spplrTin on /trnsPurchase/savePurchases
   contactPerson        String?
   isActive             Boolean               @default(true)
   createdAt            DateTime              @default(now())
@@ -182,7 +198,7 @@ model Supplier {
 model PurchaseOrder {
   orderNumber      String              @unique
   status           PurchaseOrderStatus @default(PENDING)
-  totalAmount      Decimal             @db.Decimal(10, 2)
+  totalAmount      Decimal             @db.Decimal(15, 2)
   notes            String?
   orderedAt        DateTime            @default(now())
   expectedDate     DateTime?
@@ -215,8 +231,8 @@ model PurchaseOrderItem {
   productName      String
   quantity         Int
   quantityReceived Int           @default(0)
-  unitPrice        Decimal       @db.Decimal(10, 2)
-  totalPrice       Decimal       @db.Decimal(10, 2)
+  unitPrice        Decimal       @db.Decimal(15, 2)
+  totalPrice       Decimal       @db.Decimal(15, 2)
   taxCode          RraTaxCode?   @default(A)
   taxRate          Decimal?      @db.Decimal(5, 2)
   id               Int           @id @default(autoincrement())
@@ -445,8 +461,8 @@ model Product {
   sku                  String?
   batchNumber          String?
   quantity             Int                   @default(0)
-  unitPrice            Decimal               @db.Decimal(10, 2) // Sales price
-  purchasePrice        Decimal?              @db.Decimal(10, 2) // Cost/purchase price — seeds the initial batch's unitCost
+  unitPrice            Decimal               @db.Decimal(15, 2) // Sales price
+  purchasePrice        Decimal?              @db.Decimal(15, 2) // Cost/purchase price — seeds the initial batch's unitCost
   expiryDate           DateTime?
   category             String?
   description          String?
@@ -472,6 +488,15 @@ model Product {
   pkgUnitCd            String? // Packaging unit code (e.g. "CT", "BT")
   qtyUnitCd            String? // Quantity unit code (e.g. "U", "KG")
   packagingQty         Int? // Quantity per packaging unit (e.g. 24 pieces per carton)
+  origin               String?               @default("RW") // RRA origin country code (ItemSaveReq orgnNatCd, e.g. "RW", "UG")
+  useInsurance         Boolean               @default(false) // RRA ItemSaveReq isrcAplcbYn — can this item be billed against a customer's insurance
+  itemStandardName     String? // RRA ItemSaveReq itemStdNm — optional standardized item name
+  additionalInfo       String? // RRA ItemSaveReq addInfo (max 7 chars)
+  l1SalePrice          Decimal?              @db.Decimal(15, 2) // RRA ItemSaveReq grpPrcL1 — price tier 1
+  l2SalePrice          Decimal?              @db.Decimal(15, 2) // RRA ItemSaveReq grpPrcL2 — price tier 2
+  l3SalePrice          Decimal?              @db.Decimal(15, 2) // RRA ItemSaveReq grpPrcL3 — price tier 3
+  l4SalePrice          Decimal?              @db.Decimal(15, 2) // RRA ItemSaveReq grpPrcL4 — price tier 4
+  l5SalePrice          Decimal?              @db.Decimal(15, 2) // RRA ItemSaveReq grpPrcL5 — price tier 5
   batches              Batch[]
   inventoryLedgers     InventoryLedger[]
   organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -483,6 +508,10 @@ model Product {
   supplierInvoiceItems SupplierInvoiceItem[]
   fuelDispensers       FuelDispenser[]
 
+  // RRA itemCd must be unique per taxpayer (VSDC spec §4.17). NULLs (items
+  // never synced to EBM) are exempt from a Postgres unique index, so this
+  // doesn't block products created before EBM was enabled.
+  @@unique([organizationId, itemCd])
   @@index([name])
   @@index([sku])
   @@index([barcode])
@@ -495,23 +524,27 @@ model Product {
 }
 
 model Customer {
-  name           String
-  email          String?
-  phone          String?
-  address        String?
-  customerType   CustomerType  @default(INDIVIDUAL)
-  balance        Decimal       @default(0) @db.Decimal(10, 2)
-  isActive       Boolean       @default(true)
-  TIN            String? // RRA Tax ID
-  prcOrdCd       String? // RRA purchase order code (required for B2B / business customer TINs)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  deletedAt      DateTime?
-  id             Int           @id @default(autoincrement())
-  organizationId Int
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  debtPayments   DebtPayment[]
-  sales          Sale[]
+  name            String
+  email           String?
+  phone           String?
+  address         String?
+  customerType    CustomerType  @default(INDIVIDUAL)
+  balance         Decimal       @default(0) @db.Decimal(15, 2)
+  isActive        Boolean       @default(true)
+  TIN             String? // RRA Tax ID
+  prcOrdCd        String? // RRA purchase order code (required for B2B / business customer TINs)
+  // RRA Customer API (/customers/selectCustomer) verification result
+  rraVerifiedName String? // taxprNm returned by RRA for this TIN
+  rraTaxprSttsCd  String? // taxpayer status code returned by RRA
+  rraVerifiedAt   DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+  id              Int           @id @default(autoincrement())
+  organizationId  Int
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  debtPayments    DebtPayment[]
+  sales           Sale[]
 
   @@index([organizationId])
   @@index([phone])
@@ -521,7 +554,7 @@ model Customer {
 }
 
 model DebtPayment {
-  amount         Decimal      @db.Decimal(10, 2)
+  amount         Decimal      @db.Decimal(15, 2)
   paymentDate    DateTime     @default(now())
   paymentMethod  String       @default("CASH")
   reference      String?
@@ -544,51 +577,61 @@ model DebtPayment {
 }
 
 model Sale {
-  saleNumber         String           @unique
-  paymentType        SalePaymentType
-  cashAmount         Decimal          @default(0) @db.Decimal(10, 2)
-  insuranceAmount    Decimal          @default(0) @db.Decimal(10, 2)
-  debtAmount         Decimal          @default(0) @db.Decimal(10, 2)
-  totalAmount        Decimal          @db.Decimal(10, 2)
-  status             SaleStatus       @default(COMPLETED)
-  refundedAt         DateTime?        @map("refunded_at")
-  refundReason       String?          @map("refund_reason")
-  cancelledAt        DateTime?        @map("cancelled_at")
-  cancellationReason String?          @map("cancellation_reason")
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-  id                 Int              @id @default(autoincrement())
-  customerId         Int
-  userId             Int
-  organizationId     Int
-  branchId           Int // NEW: Branch association
-  refundedById       Int?             @map("refunded_by")
-  cancelledById      Int?             @map("cancelled_by")
-  originalSaleId     Int?             @map("original_sale_id")
-  shiftId            Int?             @map("shift_id")
-  originHeldSaleId   Int?             @unique @map("origin_held_sale_id")
-  isProforma         Boolean          @default(false)
-  reprintCount       Int              @default(0)
-  invoiceNumber      String?          @unique @map("invoice_number")
-  vatAmount          Decimal          @default(0) @db.Decimal(10, 2)
-  taxableAmount      Decimal          @default(0) @db.Decimal(10, 2)
-  rcptLabel          RcptLabel? // RRA receipt type label (B4): NS/NR/CS/CR/TS/TR/PS
-  vsdcInvcNo         Int?             @map("vsdc_invc_no") // Raw numeric invoice number sent to VSDC as invcNo (reused as orgInvcNo on refund)
-  debtPayments       DebtPayment[]
-  ebmQueueItems      EbmQueue[]       @relation("SaleEbmQueue")
-  ebmTransactions    EbmTransaction[] @relation("SaleEbmTransactions")
-  ebmOutboxItems     EbmOutbox[]
-  prcOrdCd           String?          @map("prc_ord_cd") // RRA purchase order code used for this sale (single-use)
-  saleItems          SaleItem[]
-  customer           Customer         @relation(fields: [customerId], references: [id])
-  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  branch             Branch           @relation(fields: [branchId], references: [id]) // NEW
-  originalSale       Sale?            @relation("RefundRelation", fields: [originalSaleId], references: [id])
-  refunds            Sale[]           @relation("RefundRelation")
-  user               User             @relation(fields: [userId], references: [id])
-  salePayments       SalePayment[]
-  shift              Shift?           @relation(fields: [shiftId], references: [id])
-  originHeldSale     HeldSale?        @relation(fields: [originHeldSaleId], references: [id])
+  saleNumber           String           @unique
+  paymentType          SalePaymentType
+  cashAmount           Decimal          @default(0) @db.Decimal(15, 2)
+  insuranceAmount      Decimal          @default(0) @db.Decimal(15, 2)
+  debtAmount           Decimal          @default(0) @db.Decimal(15, 2)
+  totalAmount          Decimal          @db.Decimal(15, 2)
+  status               SaleStatus       @default(COMPLETED)
+  refundedAt           DateTime?        @map("refunded_at")
+  refundReason         String?          @map("refund_reason")
+  cancelledAt          DateTime?        @map("cancelled_at")
+  cancellationReason   String?          @map("cancellation_reason")
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  id                   Int              @id @default(autoincrement())
+  customerId           Int
+  userId               Int
+  organizationId       Int
+  branchId             Int // NEW: Branch association
+  refundedById         Int?             @map("refunded_by")
+  cancelledById        Int?             @map("cancelled_by")
+  originalSaleId       Int?             @map("original_sale_id")
+  shiftId              Int?             @map("shift_id")
+  originHeldSaleId     Int?             @unique @map("origin_held_sale_id")
+  isProforma           Boolean          @default(false)
+  reprintCount         Int              @default(0)
+  invoiceNumber        String?          @unique @map("invoice_number")
+  vatAmount            Decimal          @default(0) @db.Decimal(15, 2)
+  taxableAmount        Decimal          @default(0) @db.Decimal(15, 2)
+  rcptLabel            RcptLabel? // RRA receipt type label (B4): NS/NR/CS/CR/TS/TR/PS
+  vsdcInvcNo           Int?             @map("vsdc_invc_no") // Raw numeric invoice number sent to VSDC as invcNo (reused as orgInvcNo on refund)
+  // Local, non-fiscal per-branch/per-rcptLabel counter (BranchReceiptCounter) —
+  // used ONLY for isProforma sales, which are never submitted to VSDC and so
+  // never receive a real vsdcInvcNo/sdcRcptNo. This is the "A" in the printed
+  // "A/B RT" receipt counter (spec §7.25) — count within this receipt type only.
+  localReceiptSeq      Int?             @map("local_receipt_seq")
+  // The "B" in "A/B RT" — a running total across every locally-numbered
+  // receipt type on this branch (Branch.localReceiptTotalSeq), captured at
+  // creation time so it stays fixed even as later local receipts advance the
+  // branch's counter further.
+  localReceiptTotalSeq Int?             @map("local_receipt_total_seq")
+  debtPayments         DebtPayment[]
+  ebmQueueItems        EbmQueue[]       @relation("SaleEbmQueue")
+  ebmTransactions      EbmTransaction[] @relation("SaleEbmTransactions")
+  ebmOutboxItems       EbmOutbox[]
+  prcOrdCd             String?          @map("prc_ord_cd") // RRA purchase order code used for this sale (single-use)
+  saleItems            SaleItem[]
+  customer             Customer         @relation(fields: [customerId], references: [id])
+  organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch               Branch           @relation(fields: [branchId], references: [id]) // NEW
+  originalSale         Sale?            @relation("RefundRelation", fields: [originalSaleId], references: [id])
+  refunds              Sale[]           @relation("RefundRelation")
+  user                 User             @relation(fields: [userId], references: [id])
+  salePayments         SalePayment[]
+  shift                Shift?           @relation(fields: [shiftId], references: [id])
+  originHeldSale       HeldSale?        @relation(fields: [originHeldSaleId], references: [id])
 
   @@index([organizationId, status, createdAt])
   @@index([invoiceNumber])
@@ -631,17 +674,17 @@ model SaleItem {
   productId          Int?
   batchId            Int?
   quantity           Int
-  unitPrice          Decimal         @db.Decimal(10, 2)
-  totalPrice         Decimal         @db.Decimal(10, 2)
-  costPrice          Decimal         @default(0) @db.Decimal(10, 2)
-  profit             Decimal         @default(0) @db.Decimal(10, 2)
+  unitPrice          Decimal         @db.Decimal(15, 2)
+  totalPrice         Decimal         @db.Decimal(15, 2)
+  costPrice          Decimal         @default(0) @db.Decimal(15, 2)
+  profit             Decimal         @default(0) @db.Decimal(15, 2)
   taxRate            Decimal         @default(0) @db.Decimal(5, 2)
-  taxAmount          Decimal         @default(0) @db.Decimal(10, 2)
+  taxAmount          Decimal         @default(0) @db.Decimal(15, 2)
   taxCode            RraTaxCode?
   measurementUnit    MeasurementUnit @default(PCS)
   exemptionReference String?
   dcRate             Decimal         @default(0) @db.Decimal(5, 2) // Discount rate % (B5)
-  dcAmt              Decimal         @default(0) @db.Decimal(10, 2) // Discount amount (B5)
+  dcAmt              Decimal         @default(0) @db.Decimal(15, 2) // Discount amount (B5)
   itemType           ItemType        @default(PRODUCT)
   serviceName        String?
   serviceDescription String?
@@ -731,7 +774,7 @@ model Batch {
   warehouseId      Int? // DEPRECATED: kept for migration
   batchNumber      String
   quantity         Int
-  unitCost         Decimal            @db.Decimal(10, 2)
+  unitCost         Decimal            @db.Decimal(15, 2)
   expiryDate       DateTime?
   receivedAt       DateTime           @default(now())
   isActive         Boolean            @default(true)
@@ -759,7 +802,7 @@ model Batch {
 model CostPriceHistory {
   id           Int      @id @default(autoincrement())
   batchId      Int
-  unitCost     Decimal  @db.Decimal(10, 2)
+  unitCost     Decimal  @db.Decimal(15, 2)
   quantity     Int
   reason       String?
   reference    String?
@@ -784,8 +827,8 @@ model InventoryLedger {
   direction      InventoryDirection
   quantity       Int
   runningBalance Int
-  unitCost       Decimal?              @db.Decimal(10, 2)
-  totalCost      Decimal?              @db.Decimal(10, 2)
+  unitCost       Decimal?              @db.Decimal(15, 2)
+  totalCost      Decimal?              @db.Decimal(15, 2)
   reference      String?
   referenceType  String?
   batchNumber    String?
@@ -794,6 +837,12 @@ model InventoryLedger {
   metadata       Json?
   createdAt      DateTime              @default(now())
   batchId        Int?
+  // RRA Stock In/Out sync (/stock/saveStockItems + /stockMaster/saveStockMaster).
+  // Null = not applicable (e.g. SALE rows — RRA derives stock-out from saveSales).
+  ebmSyncStatus  EbmSyncStatus?
+  ebmSarNo       Int?
+  ebmSyncedAt    DateTime?
+  ebmError       String?
   batch          Batch?                @relation(fields: [batchId], references: [id])
   organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product        Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -809,6 +858,7 @@ model InventoryLedger {
   @@index([createdAt])
   @@index([branchId]) // NEW
   @@index([branchId, productId]) // NEW
+  @@index([organizationId, ebmSyncStatus])
   @@map("inventory_ledger")
 }
 
@@ -898,6 +948,23 @@ model VsdcDeviceCounter {
 
   @@id([organizationId, deviceKey])
   @@map("vsdc_device_counters")
+}
+
+/// Atomic per-organization sequence for the itemCd §4.17 numeric suffix
+/// (RW + productTypeDigit + pkgUnitCd + qtyUnitCd + 7-digit sequence).
+/// Replaces the earlier count()-based allocation (item-code.service.ts) with
+/// a true DB-level increment — same INSERT..ON CONFLICT..RETURNING pattern as
+/// VsdcDeviceCounter/OrganizationInvoiceCounter, since Postgres has no native
+/// per-key auto-increment. Seeded past the highest sequence already in use so
+/// existing itemCd values already registered with RRA are never reissued.
+model ProductItemCdCounter {
+  organizationId Int
+  nextSequence   Int          @default(0)
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId])
+  @@map("product_itemcd_counters")
 }
 
 /// Organization-level RRA test purchase codes (single-use, issued per buyer TIN).
@@ -1003,6 +1070,196 @@ model EbmOutbox {
   @@map("ebm_outbox")
 }
 
+/// Local cache of the RRA VSDC "Codes" master list (/code/selectCodes,
+/// RRA checklist §59). One row per (class, code); organised by class so the
+/// CIS can populate its own dropdowns/enumerations from the authoritative list.
+model RraCode {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  cdCls          String // code class, e.g. "04" (payment type), "24" (tax type)
+  cdClsNm        String?
+  cd             String // the code value
+  cdNm           String?
+  cdDesc         String?
+  useYn          String       @default("Y")
+  srtOrd         Int?
+  userDfnCd1     String?
+  userDfnCd2     String?
+  userDfnCd3     String?
+  lastSyncedAt   DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, cdCls, cd])
+  @@index([organizationId, cdCls])
+  @@map("rra_codes")
+}
+
+/// Local cache of the RRA VSDC item-classification list / UNSPSC
+/// (/itemClass/selectItemsClass, RRA checklist §61). Backs the classification
+/// picker shown when creating an item, replacing the hard-coded fallback code.
+model RraItemClass {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  itemClsCd      String
+  itemClsNm      String?
+  itemClsLvl     Int?
+  taxTyCd        String?
+  mjrTgYn        String?
+  useYn          String       @default("Y")
+  lastSyncedAt   DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, itemClsCd])
+  @@index([organizationId, itemClsLvl])
+  @@map("rra_item_classes")
+}
+
+/// RRA notices received via /notices/selectNotices (RRA checklist §65).
+model RraNotice {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  noticeNo       Int
+  title          String?
+  cont           String?
+  dtlUrl         String?
+  regrNm         String?
+  regDt          String?
+  receivedAt     DateTime     @default(now())
+  readAt         DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, noticeNo])
+  @@index([organizationId, readAt])
+  @@map("rra_notices")
+}
+
+/// B2B purchase transactions issued TO this taxpayer, pulled from RRA via
+/// /trnsPurchase/selectTrnsPurchaseSales (RRA checklist §70). The operator
+/// reviews each one and confirms it (/trnsPurchase/savePurchases with
+/// pchsSttsCd, RRA checklist §71), which records the purchase and its stock-in.
+model RraPurchase {
+  id              Int               @id @default(autoincrement())
+  organizationId  Int
+  spplrTin        String
+  spplrNm         String?
+  spplrBhfId      String?
+  spplrInvcNo     BigInt
+  rcptTyCd        String?
+  pmtTyCd         String?
+  salesDt         String?
+  totItemCnt      Int?
+  totTaxblAmt     Decimal?          @db.Decimal(15, 2)
+  totTaxAmt       Decimal?          @db.Decimal(15, 2)
+  totAmt          Decimal?          @db.Decimal(15, 2)
+  remark          String?
+  status          RraPurchaseStatus @default(PENDING)
+  confirmedAt     DateTime?
+  purchaseOrderId Int?
+  rawResponse     Json?
+  pulledAt        DateTime          @default(now())
+  items           RraPurchaseItem[]
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, spplrTin, spplrInvcNo])
+  @@index([organizationId, status])
+  @@map("rra_purchases")
+}
+
+model RraPurchaseItem {
+  id            Int         @id @default(autoincrement())
+  rraPurchaseId Int
+  itemSeq       Int
+  itemCd        String?
+  itemClsCd     String?
+  itemNm        String?
+  bcd           String?
+  pkgUnitCd     String?
+  pkg           Decimal?    @db.Decimal(15, 2)
+  qtyUnitCd     String?
+  qty           Decimal     @db.Decimal(15, 2)
+  prc           Decimal     @db.Decimal(15, 2)
+  splyAmt       Decimal     @db.Decimal(15, 2)
+  dcRt          Decimal?    @db.Decimal(5, 2)
+  dcAmt         Decimal?    @db.Decimal(15, 2)
+  taxTyCd       String?
+  taxblAmt      Decimal?    @db.Decimal(15, 2)
+  taxAmt        Decimal?    @db.Decimal(15, 2)
+  totAmt        Decimal?    @db.Decimal(15, 2)
+  rraPurchase   RraPurchase @relation(fields: [rraPurchaseId], references: [id], onDelete: Cascade)
+
+  @@index([rraPurchaseId])
+  @@map("rra_purchase_items")
+}
+
+enum RraPurchaseStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+/// Import declaration line items received from RRA via /imports/selectImportItems
+/// (RRA checklist §66). The operator classifies + approves/rejects each one
+/// (/imports/updateImportItems, RRA checklist §68); an approval books the
+/// stock-in. §67: each pull's request date must be later than the previous one.
+model RraImportItem {
+  id             Int              @id @default(autoincrement())
+  organizationId Int
+  taskCd         String
+  dclNo          String?
+  dclDe          String // declaration date, yyyyMMdd
+  itemSeq        Int
+  hsCd           String?
+  itemNm         String?
+  orgnNatCd      String?
+  exptNatCd      String?
+  pkg            Decimal?         @db.Decimal(15, 3)
+  pkgUnitCd      String?
+  qty            Decimal?         @db.Decimal(15, 3)
+  qtyUnitCd      String?
+  totWt          Decimal?         @db.Decimal(15, 3)
+  netWt          Decimal?         @db.Decimal(15, 3)
+  spplrNm        String?
+  agntNm         String?
+  invcFcurAmt    Decimal?         @db.Decimal(18, 4)
+  invcFcurCd     String?
+  invcFcurExcrt  Decimal?         @db.Decimal(18, 6)
+  itemCd         String?
+  itemClsCd      String?
+  status         RraImportStatus  @default(PENDING)
+  remark         String?
+  actionedAt     DateTime?
+  linkedProductId Int?
+  rawResponse    Json?
+  pulledAt       DateTime         @default(now())
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, taskCd, dclDe, itemSeq])
+  @@index([organizationId, status])
+  @@map("rra_import_items")
+}
+
+enum RraImportStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Per-organization incremental-sync cursor for each RRA master-data resource.
+/// `lastReqDt` is sent as the `lastReqDt` request parameter so each sync only
+/// pulls rows changed since the previous run.
+model RraSyncCursor {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  resource       String // "codes" | "itemClasses" | "notices" | "items" | "purchases" | "imports"
+  lastReqDt      String       @default("20200101000000")
+  lastRunAt      DateTime?
+  lastResult     String?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, resource])
+  @@map("rra_sync_cursors")
+}
+
 model Expense {
   id             Int             @id @default(autoincrement())
   organizationId Int
@@ -1010,7 +1267,7 @@ model Expense {
   branchId       Int // NEW: Branch association
   shiftId        Int?
   category       ExpenseCategory
-  amount         Decimal         @db.Decimal(10, 2)
+  amount         Decimal         @db.Decimal(15, 2)
   paymentMethod  String
   description    String
   reference      String?
@@ -1036,7 +1293,7 @@ model SalePayment {
   id             Int                   @id @default(autoincrement())
   saleId         Int
   organizationId Int
-  amount         Decimal               @db.Decimal(10, 2)
+  amount         Decimal               @db.Decimal(15, 2)
   paymentMethod  SalePaymentMethodType
   reference      String?
   status         String                @default("COMPLETED")
@@ -1078,7 +1335,7 @@ model SupplierPayment {
   id              Int           @id @default(autoincrement())
   purchaseOrderId Int
   organizationId  Int
-  amount          Decimal       @db.Decimal(10, 2)
+  amount          Decimal       @db.Decimal(15, 2)
   paymentMethod   String
   paymentDate     DateTime
   reference       String?
@@ -1100,7 +1357,7 @@ model CashBalance {
   id             Int          @id @default(autoincrement())
   organizationId Int
   branchId       Int // NEW: Branch association
-  balance        Decimal      @db.Decimal(10, 2)
+  balance        Decimal      @db.Decimal(15, 2)
   balanceDate    DateTime
   notes          String?
   recordedById   Int
@@ -1117,48 +1374,48 @@ model CashBalance {
 }
 
 model Shift {
-  id                 Int          @id @default(autoincrement())
-  shiftNumber        String?      @unique @map("shift_number")
+  id                 Int         @id @default(autoincrement())
+  shiftNumber        String?     @unique @map("shift_number")
   organizationId     Int
   branchId           Int
   userId             Int
   deviceId           Int?
-  openingFloat       Decimal      @db.Decimal(10, 2)
-  openingMobileMoney Decimal      @default(0) @db.Decimal(10, 2)
-  openingNotes       String?      @map("opening_notes")
-  openedAt           DateTime     @default(now())
+  openingFloat       Decimal     @db.Decimal(15, 2)
+  openingMobileMoney Decimal     @default(0) @db.Decimal(15, 2)
+  openingNotes       String?     @map("opening_notes")
+  openedAt           DateTime    @default(now())
   closedAt           DateTime?
-  closingStartedAt   DateTime?    @map("closing_started_at")
-  closingSubmittedAt DateTime?    @map("closing_submitted_at")
-  closedById         Int?         @map("closed_by")
-  approvedById       Int?         @map("approved_by")
-  approvedAt         DateTime?    @map("approved_at")
-  approvalDecision   String?      @map("approval_decision")
-  approvalReason     String?      @map("approval_reason")
-  varianceReason     String?      @map("variance_reason")
-  expectedCash       Decimal?     @db.Decimal(10, 2)
-  actualCash         Decimal?     @db.Decimal(10, 2)
-  actualMobileMoney  Decimal?     @db.Decimal(10, 2)
-  difference         Decimal?     @db.Decimal(10, 2)
-  cashIn             Decimal?     @db.Decimal(10, 2)
-  cashOut            Decimal?     @db.Decimal(10, 2)
-  expenseTotal       Decimal?     @db.Decimal(10, 2)
-  denominationCounts Json?        @map("denomination_counts")
+  closingStartedAt   DateTime?   @map("closing_started_at")
+  closingSubmittedAt DateTime?   @map("closing_submitted_at")
+  closedById         Int?        @map("closed_by")
+  approvedById       Int?        @map("approved_by")
+  approvedAt         DateTime?   @map("approved_at")
+  approvalDecision   String?     @map("approval_decision")
+  approvalReason     String?     @map("approval_reason")
+  varianceReason     String?     @map("variance_reason")
+  expectedCash       Decimal?    @db.Decimal(15, 2)
+  actualCash         Decimal?    @db.Decimal(15, 2)
+  actualMobileMoney  Decimal?    @db.Decimal(15, 2)
+  difference         Decimal?    @db.Decimal(15, 2)
+  cashIn             Decimal?    @db.Decimal(15, 2)
+  cashOut            Decimal?    @db.Decimal(15, 2)
+  expenseTotal       Decimal?    @db.Decimal(15, 2)
+  denominationCounts Json?       @map("denomination_counts")
   closingNotes       String?
-  status             ShiftStatus  @default(OPEN)
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  status             ShiftStatus @default(OPEN)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  branch       Branch       @relation(fields: [branchId], references: [id])
-  user         User         @relation(fields: [userId], references: [id])
-  device       Device?      @relation(fields: [deviceId], references: [id])
-  closedBy     User?        @relation("ShiftClosedBy", fields: [closedById], references: [id])
-  approvedBy   User?        @relation("ShiftApprovedBy", fields: [approvedById], references: [id])
-  sales        Sale[]
-  heldSales    HeldSale[]
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch        Branch         @relation(fields: [branchId], references: [id])
+  user          User           @relation(fields: [userId], references: [id])
+  device        Device?        @relation(fields: [deviceId], references: [id])
+  closedBy      User?          @relation("ShiftClosedBy", fields: [closedById], references: [id])
+  approvedBy    User?          @relation("ShiftApprovedBy", fields: [approvedById], references: [id])
+  sales         Sale[]
+  heldSales     HeldSale[]
   cashMovements CashMovement[]
-  expenses     Expense[]
+  expenses      Expense[]
 
   @@index([organizationId, branchId, status])
   @@index([userId, status])
@@ -1166,16 +1423,16 @@ model Shift {
 }
 
 model CashMovement {
-  id             Int        @id @default(autoincrement())
+  id             Int              @id @default(autoincrement())
   organizationId Int
   branchId       Int
   shiftId        Int
   userId         Int
   type           CashMovementType
-  amount         Decimal    @db.Decimal(10, 2)
+  amount         Decimal          @db.Decimal(15, 2)
   reason         String?
   reference      String?
-  createdAt      DateTime   @default(now())
+  createdAt      DateTime         @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   branch       Branch       @relation(fields: [branchId], references: [id])
@@ -1211,7 +1468,7 @@ model HeldSale {
   cartSnapshot     Json     @map("cart_snapshot")
   customerSnapshot Json?    @map("customer_snapshot")
   itemCount        Int      @default(0) @map("item_count")
-  totalAmount      Decimal  @map("total_amount") @db.Decimal(10, 2)
+  totalAmount      Decimal  @map("total_amount") @db.Decimal(15, 2)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -1649,10 +1906,10 @@ model SupplierInvoice {
   supplierName    String?
   supplierAddress String?
   currency        String                @default("RWF")
-  subtotal        Decimal?              @db.Decimal(10, 2)
-  taxAmount       Decimal?              @db.Decimal(10, 2)
-  discount        Decimal?              @db.Decimal(10, 2)
-  totalAmount     Decimal?              @db.Decimal(10, 2)
+  subtotal        Decimal?              @db.Decimal(15, 2)
+  taxAmount       Decimal?              @db.Decimal(15, 2)
+  discount        Decimal?              @db.Decimal(15, 2)
+  totalAmount     Decimal?              @db.Decimal(15, 2)
   status          SupplierInvoiceStatus @default(DRAFT)
   notes           String?
   importedAt      DateTime?
@@ -1700,9 +1957,9 @@ model SupplierInvoiceItem {
   batchNumber  String?
   expiryDate   DateTime?
   quantity     Int
-  unitPrice    Decimal          @db.Decimal(10, 2)
-  sellingPrice Decimal?         @db.Decimal(10, 2)
-  totalPrice   Decimal          @db.Decimal(10, 2)
+  unitPrice    Decimal          @db.Decimal(15, 2)
+  sellingPrice Decimal?         @db.Decimal(15, 2)
+  totalPrice   Decimal          @db.Decimal(15, 2)
   taxRate      Decimal?         @db.Decimal(5, 2)
   category     String?
   manufacturer String?
@@ -1712,7 +1969,7 @@ model SupplierInvoiceItem {
   errorMessage String?
 
   // ── Semantic analysis ──
-  taxAmount       Decimal? @db.Decimal(10, 2) // per-line tax, distinct from the header-level taxRate %
+  taxAmount       Decimal? @db.Decimal(15, 2) // per-line tax, distinct from the header-level taxRate %
   isDuplicate     Boolean  @default(false) // flagged by invoice-analysis.service.ts as a repeated line
   discrepancyNote String? // e.g. "line total != qty * unitPrice"
 

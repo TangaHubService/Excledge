@@ -13,6 +13,7 @@ import {
   saveInvc,
   parseVsdcResponse,
   vsdcHeartbeat,
+  validateVsdcEnvelope,
 } from './vsdc-api.service';
 import { buildElectronicJournal } from './electronic-journal.service';
 import logger from '../utils/logger';
@@ -632,6 +633,29 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       }
 
       const envelope = await buildVsdcEnvelope(row.organizationId, sale.branchId);
+
+      // §22: never submit against a device that is not usable (missing/invalid
+      // TIN or no MRC serial). Retryable — the operator can fix the config and
+      // the next cron cycle picks the row back up.
+      const envelopeError = validateVsdcEnvelope(envelope);
+      if (envelopeError) {
+        await failSubmission(txRow.id, envelopeError);
+        const nextRetry = scheduleNextRetry(row.retryCount);
+        const isDead = row.retryCount + 1 >= (config.ebm.maxQueueRetries ?? 10);
+        await prisma.ebmOutbox.update({
+          where: { id: row.id },
+          data: {
+            status: isDead ? 'DEAD_LETTER' : 'FAILED',
+            retryCount: { increment: 1 },
+            lastError: envelopeError,
+            nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
+          },
+        });
+        logger.warn(`[EBM-OUTBOX] row ${row.id}: device not configured — ${envelopeError}`);
+        failed += 1;
+        continue;
+      }
+
       logger.info(`[EBM-OUTBOX] row ${row.id}: calling saveInvc (${config.ebm.apiUrl ?? ''}/trnsSales/saveSales) — prcOrdCd=${payload.prcOrdCd ?? 'N/A'}, custTin=${(payload.receipt as any)?.custTin ?? 'N/A'}, invcNo=${(payload as any).invcNo ?? 'N/A'}`);
       let result = await saveInvc(envelope, payload);
       logger.info(`[EBM-OUTBOX] row ${row.id}: saveInvc returned success=${result.success} error=${result.error ?? 'none'} rawStatus=${result.rawStatus} rawBody=${JSON.stringify(result.rawBody)?.slice(0, 500)}`);
@@ -662,32 +686,39 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
               await prisma.organizationPurchaseCode.updateMany({
                 where: { organizationId: row.organizationId, code: usedCode, consumed: false },
                 data: { consumed: true, consumedSaleId: sale.id, consumedAt: new Date() },
-              });
-              await prisma.sale.update({
-                where: { id: sale.id },
-                data: { prcOrdCd: null },
-              });
-              logger.warn(`[EBM-OUTBOX] row ${row.id}: burned purchase code ${usedCode} (${msg}) — cleared from sale for re-allocation`);
-            }
-          }
+               });
+               await prisma.sale.update({
+                 where: { id: sale.id },
+                 data: { prcOrdCd: null },
+               });
+               logger.warn(`[EBM-OUTBOX] row ${row.id}: burned purchase code ${usedCode} (${msg}) — cleared from sale for re-allocation`);
+             }
+           }
 
-          await failSubmission(txRow.id, msg);
+           // 899 = SQLite persistence failure (disk pressure) — transient infrastructure issue
+           if (msg.includes('SQLite') || msg.includes('persistence') || msg.includes('disk pressure')) {
+             logger.warn(`[EBM-OUTBOX] row ${row.id}: submission FAILED — transient infrastructure error, retrying...`);
+             // Re-raise the error to trigger retry mechanism
+             throw new Error(`Transient VSDC error: ${msg}`);
+           }
 
-          const nextRetry = scheduleNextRetry(row.retryCount);
-          const isDead = row.retryCount + 1 >= (config.ebm.maxQueueRetries ?? 10);
+           await failSubmission(txRow.id, msg);
 
-          await prisma.ebmOutbox.update({
-            where: { id: row.id },
-            data: {
-              status: isDead ? 'DEAD_LETTER' : 'FAILED',
-              retryCount: { increment: 1 },
-              lastError: msg,
-              nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
-            },
-          });
+           const nextRetry = scheduleNextRetry(row.retryCount);
+           const isDead = row.retryCount + 1 >= (config.ebm.maxQueueRetries ?? 10);
 
-          failed += 1;
-          continue;
+           await prisma.ebmOutbox.update({
+             where: { id: row.id },
+             data: {
+               status: isDead ? 'DEAD_LETTER' : 'FAILED',
+               retryCount: { increment: 1 },
+               lastError: msg,
+               nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
+             },
+           });
+
+           failed += 1;
+           continue;
         }
       }
 

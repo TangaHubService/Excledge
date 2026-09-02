@@ -14,6 +14,7 @@ export interface ISidebarConfig {
   dashboard: boolean;
   pos: boolean;
   sales: boolean;
+  invoices: boolean;
   customers: boolean;
   debtManagement: boolean;
   inventoryAll: boolean;
@@ -92,6 +93,7 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
     dashboard: true,
     pos: true,
     sales: true,
+    invoices: true,
     customers: true,
     debtManagement: true,
     inventoryAll: true,

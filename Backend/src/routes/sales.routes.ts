@@ -10,6 +10,7 @@ import {
   regenerateInvoice,
   getEbmReceipt,
   getInvoice,
+  getInvoicePdf,
 } from "../controllers/sales.controller";
 import { authenticate, authorize } from "../middleware/auth.middleware";
 import { branchAuth } from "../middleware/branchAuth.middleware";
@@ -151,8 +152,17 @@ router.get(
   getEbmReceipt
 );
 
-// Composed ERP invoice payload for the modern invoice renderer
-// GET /api/organizations/:orgId/invoices/:saleId
+// Authoritative backend-generated invoice PDF. Accepts ?format=A4|80mm (default A4).
+router.get(
+  "/:organizationId/invoices/:saleId/pdf",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  getInvoicePdf
+);
+
+// Composed invoice data for status/metadata and non-authoritative UI details.
 router.get(
   "/:organizationId/invoices/:saleId",
   authenticate,

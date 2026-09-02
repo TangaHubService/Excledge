@@ -124,6 +124,7 @@ export const getBranchDashboardStats = async (req: BranchAuthRequest, res: Respo
             branchId: { in: branchIds },
             createdAt: { gte: startDate, lte: endDate },
             status: { not: 'CANCELLED' },
+            isProforma: false,
           },
           _sum: { totalAmount: true, cashAmount: true, debtAmount: true, insuranceAmount: true },
           _count: { id: true },
@@ -379,7 +380,8 @@ export const getDashboardStats = async (req: BranchAuthRequest, res: Response) =
             lte: endDate,
           },
         }),
-        status: { not: 'CANCELLED' }
+        status: { not: 'CANCELLED' },
+        isProforma: false,
       },
       _sum: {
         totalAmount: true
@@ -431,6 +433,7 @@ export const getSalesTrend = async (req: BranchAuthRequest, res: Response) => {
       where: {
         organizationId,
         ...buildBranchFilter(req),
+        isProforma: false,
         ...(startDate && {
           createdAt: {
             gte: startDate,
@@ -672,6 +675,7 @@ export const getExecutiveDashboard = async (req: BranchAuthRequest, res: Respons
     const saleBase = (s: Date, e: Date) => ({
       organizationId,
       status: { not: 'CANCELLED' as const },
+      isProforma: false,
       createdAt: { gte: s, lte: e },
       branchId: { in: branchIds },
     })
@@ -712,14 +716,14 @@ export const getExecutiveDashboard = async (req: BranchAuthRequest, res: Respons
       prisma.sale.findMany({ where: saleBase(sparkStart, sparkEnd), select: { createdAt: true, totalAmount: true } }),
       prisma.sale.findMany({ where: saleBase(startDate, endDate), select: { createdAt: true, totalAmount: true, branchId: true } }),
       prisma.sale.findMany({
-        where: { organizationId, branchId: { in: branchIds } },
+        where: { organizationId, branchId: { in: branchIds }, isProforma: false },
         select: { id: true, saleNumber: true, totalAmount: true, status: true, createdAt: true, branchId: true, branch: { select: { name: true } } },
         orderBy: { createdAt: 'desc' },
         take: 20,
       }),
-      prisma.sale.groupBy({ by: ['branchId'], where: { organizationId, status: { not: 'CANCELLED' }, createdAt: { gte: thirtyDaysAgo }, branchId: { in: branchIds } }, _sum: { totalAmount: true }, _count: { id: true } }),
-      prisma.sale.groupBy({ by: ['branchId'], where: { organizationId, status: { not: 'CANCELLED' }, createdAt: { gte: todayStart }, branchId: { in: branchIds } }, _sum: { totalAmount: true }, _count: { id: true } }),
-      prisma.sale.groupBy({ by: ['branchId'], where: { organizationId, status: { not: 'CANCELLED' }, createdAt: { gte: twoHoursAgo }, branchId: { in: branchIds } }, _count: { id: true } }),
+      prisma.sale.groupBy({ by: ['branchId'], where: { organizationId, status: { not: 'CANCELLED' }, isProforma: false, createdAt: { gte: thirtyDaysAgo }, branchId: { in: branchIds } }, _sum: { totalAmount: true }, _count: { id: true } }),
+      prisma.sale.groupBy({ by: ['branchId'], where: { organizationId, status: { not: 'CANCELLED' }, isProforma: false, createdAt: { gte: todayStart }, branchId: { in: branchIds } }, _sum: { totalAmount: true }, _count: { id: true } }),
+      prisma.sale.groupBy({ by: ['branchId'], where: { organizationId, status: { not: 'CANCELLED' }, isProforma: false, createdAt: { gte: twoHoursAgo }, branchId: { in: branchIds } }, _count: { id: true } }),
       prisma.$queryRaw<Array<{ branchId: number; lastAt: Date }>>`
         SELECT DISTINCT ON ("branchId") "branchId", "createdAt" AS "lastAt"
         FROM sales
@@ -989,6 +993,7 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
     const saleWhereCurrent = {
       organizationId,
       status: { not: 'CANCELLED' as const },
+      isProforma: false,
       createdAt: { gte: startDate, lte: endDate },
       ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
     }
@@ -996,6 +1001,7 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
     const saleWherePrev = {
       organizationId,
       status: { not: 'CANCELLED' as const },
+      isProforma: false,
       createdAt: { gte: prevStartDate, lte: prevEndDate },
       ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
     }
@@ -1086,7 +1092,7 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
         include: { user: { select: { name: true } } },
       }),
       prisma.sale.findMany({
-        where: { organizationId, ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}) },
+        where: { organizationId, isProforma: false, ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}) },
         take: 10,
         orderBy: { createdAt: 'desc' },
         select: {

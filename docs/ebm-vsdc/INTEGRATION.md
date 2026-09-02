@@ -1,74 +1,151 @@
-# RRA EBM / VSDC integration (Excledge)
+# RRA EBM / VSDC integration — Excledge CIS
 
-This document describes how Excledge integrates with Rwanda Revenue Authority (RRA) Electronic Billing Machine (EBM) via a **Virtual Sales Data Controller (VSDC)**-style HTTP API. The official wire format **must be aligned** with the specification RRA provides during certification (`cis_sdc_certification@rra.gov.rw`).
+This document describes how Excledge integrates with the Rwanda Revenue Authority
+(RRA) Electronic Billing Machine (EBM) via the **VSDC** HTTP API. It reflects the
+integration as actually implemented (contracts verified against the RRA reference
+sandbox `rraVsdcSandbox3.0.2.war`). Confirm the current wire format with RRA
+during certification (`cis_sdc_certification@rra.gov.rw`).
 
-## Obtaining credentials and the technical spec
+## Deployment shape
 
-1. Contact RRA: **cis_sdc_certification@rra.gov.rw** (certification) and request the **VSDC technical specification**, sandbox base URL, and authentication method.
-2. Complete the certification monitoring form and document test cases (see [CERTIFICATION-CHECKLIST.md](./CERTIFICATION-CHECKLIST.md)).
-3. Map RRA’s required JSON/XML fields to the payload Excledge sends (see **Payload mapping** below). Adjust `normalizeEbmResponse()` in `server/src/services/rra-ebm.service.ts` if RRA uses different property names for receipt number, QR payload, or verification codes.
+- The CIS is a cloud multi-tenant ERP/POS. Each **Organization** holds one TIN.
+- Each **Branch** carries its own RRA device credentials — `bhfId`, device serial
+  (MRC), SDC id, and an optional per-branch `vsdcUrl`. Org-level `ebmDeviceId` /
+  `ebmSerialNo` are a fallback for single-branch tenants.
+- Requests go to `EBM_API_URL` (or the branch's `vsdcUrl`), which points at the
+  RRA-issued VSDC edge (locally the sandbox WAR, in production the RRA gateway).
 
 ## Environment variables
 
 | Variable | Description |
-|----------|-------------|
-| `ENABLE_EBM` | Set to `true` to submit sales, refunds, and voids to the configured gateway. |
-| `EBM_API_URL` | Base URL (no trailing slash), e.g. `https://vsdc-sandbox.rra.gov.rw`. |
-| `EBM_API_KEY` | Client identifier or username (depends on RRA spec). |
-| `EBM_API_SECRET` | Shared secret or password (depends on RRA spec). |
-| `EBM_ENVIRONMENT` | `sandbox` or `production` (included in JSON body for traceability). |
-| `EBM_SALE_PATH` | VSDC sale submission path (default `/trnsSales/saveSales`). |
-| `EBM_REFUND_PATH` | VSDC refund path (default `/trnsSales/saveSales`; the receipt fields distinguish a refund). |
-| `EBM_VOID_PATH` | VSDC cancellation path (default `/trnsSales/saveSales`; the receipt fields distinguish a cancellation). |
-| `EBM_REQUEST_TIMEOUT_MS` | HTTP timeout in ms (default `30000`). |
-| `EBM_USE_MOCK` | If `true`, skips HTTP and returns a synthetic success (local/dev only). |
+|---|---|
+| `ENABLE_EBM` | Master switch. When `false`, all fiscal calls short-circuit as success. |
+| `EBM_API_URL` | Base URL, no trailing slash. |
+| `EBM_API_KEY` / `EBM_API_SECRET` | Sent as `Authorization: Basic base64(key:secret)`, or `Bearer key` if only the key is set. |
+| `EBM_SECURITY_KEY` | Sent as the `security_key` header when set. |
+| `EBM_ENVIRONMENT` | `sandbox` \| `production`. |
+| `EBM_REQUEST_TIMEOUT_MS` | HTTP timeout (default 1000 in dev; raise for production). |
+| `EBM_USE_MOCK` | `true` → no HTTP; every call returns a synthetic success. Dev only. |
+| `EBM_MAX_QUEUE_RETRIES` | Outbox retry ceiling before DEAD_LETTER (default 10). |
+| `EBM_PROTOCOL` | `vsdc` (default, this document) or `osdc` (EBM 2.1 via the OSDC WAR). |
+| `OSDC_API_URL` / `OSDC_AUTH_TOKEN` | Only for the OSDC path. |
+| `VSDC_OFFLINE_BLOCK_MS` | Block new sales after this long without a successful VSDC contact (default 2 h). |
 
-Authentication: Excledge sends `Authorization: Basic base64(apiKey:apiSecret)` when both key and secret are set; otherwise `Bearer ${apiKey}` if only the key is set. **Change this in code** if RRA requires OAuth2 or signed requests.
+## Endpoints used
+
+| Purpose | Method + path | Service |
+|---|---|---|
+| Device initialization | `POST /initializer/selectInitInfo` | `vsdc-init.service.ts` |
+| Sale / refund / void | `POST /trnsSales/saveSales` | `rra-ebm.service.ts`, `ebm-outbox.service.ts` |
+| Save item | `POST /items/saveItems` | `product-sync.service.ts` |
+| Select items (reconcile) | `POST /items/selectItems` | `rra-master-data.service.ts` |
+| Codes | `POST /code/selectCodes` | `rra-master-data.service.ts` |
+| Item classification (UNSPSC) | `POST /itemClass/selectItemsClass` | `rra-master-data.service.ts` |
+| Customer lookup | `POST /customers/selectCustomer` | `rra-master-data.service.ts` |
+| Notices | `POST /notices/selectNotices` | `rra-master-data.service.ts` |
+| Stock in/out | `POST /stock/saveStockItems` | `stock-movement-sync.service.ts` |
+| Stock master (on-hand) | `POST /stockMaster/saveStockMaster` | `stock-movement-sync.service.ts` |
+| Received purchases | `POST /trnsPurchase/selectTrnsPurchaseSales` | `purchase-sync.service.ts` |
+| Confirm purchase | `POST /trnsPurchase/savePurchases` | `purchase-sync.service.ts` |
+| Import declarations | `POST /imports/selectImportItems` | `rra-import.service.ts` |
+| Update import status | `POST /imports/updateImportItems` | `rra-import.service.ts` |
+| Z report | `POST /reports/saveZReports` / `POST /reports/checkZReport` | `ebm-outbox.controller.ts`, `z-report.job.ts` |
+
+Every request body carries the VSDC envelope: `{ tin, bhfId, sdcId, mrcNo,
+dvcSrlNo, ... }` built by `buildVsdcEnvelope()`; lookups also send an incremental
+`lastReqDt` (`yyyyMMddHHmmss`).
 
 ## Flows
 
-### Sale (POS / create sale)
+### Device initialization (§58)
 
-1. Sale is committed in the database with internal `invoiceNumber` (per-device sequence).
-2. The transactional outbox atomically claims one pending row, then submits the VSDC `TrnsSalesSaveReq` payload to `/trnsSales/saveSales`.
-3. On HTTP success, `EbmTransaction` is updated to `SUCCESS` with the RRA receipt counters, signature, and full response data.
-4. On failure, the outbox row records the gateway message and retries with backoff; concurrent workers cannot submit the same receipt twice.
+`POST /organizations/:org/ebm/initialize` → `initializeVsdcDevice()` calls
+`/initializer/selectInitInfo` with `{ tin, bhfId, dvcSrlNo }`. On success it
+stores the returned `sdcId` / `mrcNo` / full payload on the branch, checks the
+device TIN matches the organization TIN, and seeds the local invoice counter
+past `lastSaleInvcNo` so no number is ever re-emitted.
 
-### Refund
+### Sale (POS checkout)
 
-After a full refund is recorded, `submitRefundToEbm()` POSTs to `EBM_REFUND_PATH` with the original internal invoice number and the latest successful `ebmInvoiceNumber` from `EbmTransaction`.
+1. The sale commits in one DB transaction together with an **`ebm_outbox`** row
+   (transactional outbox, idempotency key `ebm-SALE-<org>-<saleId>`). Inventory
+   deduction and the outbox write are ACID.
+2. A bounded inline wait (~5 s) runs the outbox worker so the caller learns the
+   fiscal status before the receipt is offered.
+3. The worker builds `TrnsSalesSaveWrReq` (`buildRraSendReceiptPayload`) —
+   `invcNo`, `custTin`, `prcOrdCd`, per-A/B/C/D-band `taxblAmt`/`taxAmt`,
+   `itemList`, `receipt` block — and POSTs `/trnsSales/saveSales`.
+4. On success the SDC fields (`rcptNo`, `intrlData`, `rcptSign`, `totRcptNo`,
+   `sdcId`, `vsdcRcptPbctDate`) are persisted to `ebm_transactions`, the
+   electronic journal text is stored, and the receipt becomes printable.
+5. On failure the outbox row backs off exponentially and retries; after
+   `EBM_MAX_QUEUE_RETRIES` it is DEAD_LETTER. `resultCd 924` (already
+   fiscalised) is treated as success.
 
-### Cancel (void)
+**The printable receipt is withheld until the outbox row is SUCCEEDED**
+(`FiscalizationPendingError` → HTTP 425).
 
-After a sale is cancelled, `submitVoidToEbm()` POSTs to `EBM_VOID_PATH` when a successful EBM submission exists for that sale.
+### Refund / void
 
-### Retry queue
+Both are fresh sales-transaction documents on `/trnsSales/saveSales`:
+- Refund — new `invcNo`, `salesSttsCd=05`, `rfdRsnCd`, `orgInvcNo` = original;
+  every line mirrors the original with its tax code/amount, amounts negated for
+  the printed slip.
+- Void — new `invcNo`, `cnclDt`/`cnclReqDt`, `salesSttsCd=04`, `orgInvcNo=0`.
 
-`ebm-queue.job.ts` runs on a schedule (when `RUN_JOBS` is not `false`), re-processes pending queue rows with exponential backoff, and marks them `SUCCESS` or `FAILED` after max attempts.
+### Stock (§23, §72, §73)
 
-## Payload mapping (Excledge → gateway)
+Every non-SALE `inventory_ledger` row is queued (`ebmSyncStatus=PENDING`). A
+5-minute batch submits `/stock/saveStockItems` with a real `sarTyCd` (01 import,
+02 purchase, 03 return, 04/13 transfer, 06/16 adjustment, 15 discarding) then
+`/stockMaster/saveStockMaster` with the item's new on-hand quantity. SALE rows
+are never queued — RRA derives stock-out from `saveSales`.
 
-Excledge sends a single JSON object (operation-specific). **Adjust keys to match RRA’s spec** before production.
+### Purchases (§70, §71)
 
-- **SALE**: `environment`, `operation: "SALE"`, `seller` (tin, deviceId, serialNo), `branch`, `invoice` (internalNumber, saleId, issuedAt, customer, payment, totals, lines with taxCode/taxRate/taxAmount).
-- **REFUND**: `operation: "REFUND"`, `originalInvoiceNumber`, `originalEbmInvoiceNumber`, `refundSaleId`, `reason`, amounts.
-- **VOID**: `operation: "VOID"`, `internalInvoiceNumber`, `ebmInvoiceNumber`, `reason`.
+`/trnsPurchase/selectTrnsPurchaseSales` pulls B2B sales issued to the taxpayer
+into `rra_purchases`. The operator confirms each: `confirmRraPurchase()` builds
+`TrnsPurchaseSaveReq` (per-band tax, `itemList`) and POSTs
+`/trnsPurchase/savePurchases` with `pchsSttsCd=02`, which records the purchase
+and its stock-in.
 
-## Response normalization
+### Import declarations (§66, §67, §68)
 
-The service accepts several possible shapes from the gateway and maps them into:
+`/imports/selectImportItems` pulls declaration lines into `rra_import_items`.
+Each pull's request date must be strictly later than the previous one. The
+operator classifies + approves/rejects each line:
+`/imports/updateImportItems` with `imptItemSttsCd` 2/3; an approval books the
+stock-in as an Import.
 
-- `ebmInvoiceNumber`
-- `receiptQrPayload` (string for QR generation if required)
-- `verificationCode`
-- `sdcDateTime`
+### Master data (§59, §61, §62, §64, §65)
 
-Extend `parseGatewayResponse()` in `rra-ebm.service.ts` after you have sample RRA responses.
+Codes, item classifications and notices are pulled incrementally by
+`rraMasterDataJob` (nightly) and on demand, cached in `rra_codes` /
+`rra_item_classes` / `rra_notices`. Customer TIN verification and item
+reconciliation are on-demand lookups.
 
-## Invoice numbering
+## Response handling
 
-Internal invoice numbers use **per-organization** atomic counters (`organization_invoice_counters`), not a global sequence, to reduce multi-tenant audit risk. Align final numbering rules with RRA if they mandate a specific format.
+`parseVsdcStatusCode()` carries the full `resultCd` table (`§4.14`); `000` is
+success, `001` ("no search result") is a benign empty lookup, everything else is
+a typed error surfaced on the row (`lastError` / `errorMessage`) and on the EBM
+Outbox screen. `parseVsdcResponse()` maps the `/trnsSales/saveSales` `data`
+block; the QR string is composed by the CIS itself
+(`ddmmyyyy#hhmmss#sdcId#rcptNo#intrlData#rcptSign`).
 
-## Reprints
+## Numbering
 
-`Sale.reprintCount` exists in the schema for future use. RRA may require reporting reprints to VSDC; add a dedicated endpoint and payload when the spec requires it.
+`invcNo` is a per-device gapless sequence (`vsdc_device_counters`, keyed by
+org + `bhfId`), seeded past the highest number ever accepted (and past RRA's
+`lastSaleInvcNo` at initialization). The printed `INV-…` string is cosmetic.
+Local-only receipt types (proforma) draw a separate non-fiscal counter pair.
+
+## Jobs (`RUN_JOBS != false`)
+
+| Job | Schedule | Purpose |
+|---|---|---|
+| `ebmOutboxJob` | every 2 min | drain the sales/refund/void outbox |
+| `stockSyncJob` | every 5 min | drain queued stock movements |
+| `rraMasterDataJob` | 04:20 daily | pull codes / classes / notices / purchases / imports |
+| `zReportJob` | 23:55 daily | submit the daily Z report per device |
+| `vsdcHeartbeatJob` | periodic | probe `/code/selectCodes` to update `lastSuccessfulVdsContact` |

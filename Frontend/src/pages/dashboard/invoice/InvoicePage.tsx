@@ -1,48 +1,26 @@
-import { useRef, useState } from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { useReactToPrint } from "react-to-print"
 import { ArrowLeft, FileDown, Loader2, Printer, RefreshCw, ReceiptText, Share2 } from "lucide-react"
 import { toast } from "react-toastify"
-import { saveAs } from "file-saver"
 import { apiClient } from "../../../lib/api-client"
 import { getInvoiceFilename, unwrapInvoice } from "../../../lib/invoice"
-import { invoiceToPdfBlob, shareInvoicePdf } from "../../../lib/invoice-pdf"
-import { InvoicePreview } from "../../../components/invoice/preview"
+import { downloadInvoicePdf, getInvoicePdfBlob, shareInvoicePdf, type InvoicePdfFormat } from "../../../lib/invoice-pdf"
 import { Button } from "../../../components/ui/button"
 import { Skeleton } from "../../../components/ui/skeleton"
+import { cn } from "../../../lib/utils"
 
-const A4_PAGE_CSS = `@page { size: A4; margin: 6mm; }
-  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  tr, thead { break-inside: avoid; page-break-inside: avoid; }
-  section { break-inside: avoid; page-break-inside: avoid; }`
+const FORMAT_OPTIONS: Array<{ value: InvoicePdfFormat; label: string }> = [
+  { value: "A4", label: "A4" },
+  { value: "A5", label: "A5" },
+  { value: "80mm", label: "80mm" },
+]
 
 function InvoiceSkeleton() {
   return (
     <div className="mx-auto w-full max-w-[210mm] space-y-4">
-      <div className="flex flex-wrap justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-10 rounded-lg" />
-          <Skeleton className="h-10 w-10 rounded-lg" />
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-44" />
-            <Skeleton className="h-3 w-64" />
-            <Skeleton className="h-3 w-52" />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Skeleton className="h-28 w-56 rounded-xl" />
-        </div>
-      </div>
-      <Skeleton className="mx-auto h-6 w-36" />
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Skeleton className="h-36 rounded-xl" />
-        <Skeleton className="h-36 rounded-xl" />
-      </div>
-      <Skeleton className="h-56 rounded-xl" />
-      <div className="flex justify-end">
-        <Skeleton className="h-44 w-full max-w-md rounded-xl" />
-      </div>
+      <Skeleton className="h-16 rounded-xl" />
+      <Skeleton className="aspect-[210/297] w-full rounded-xl" />
     </div>
   )
 }
@@ -50,53 +28,72 @@ function InvoiceSkeleton() {
 export default function InvoicePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const paperRef = useRef<HTMLDivElement>(null)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [isPdfGenerating, setIsPdfGenerating] = useState(false)
   const [isSharing, setIsSharing] = useState(false)
+  const [format, setFormat] = useState<InvoicePdfFormat>("A4")
 
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+  const invoiceQuery = useQuery({
     queryKey: ["invoice", id],
     queryFn: async () => unwrapInvoice(await apiClient.getInvoice(id!)),
     enabled: !!id,
     retry: 1,
-    // Keep the preview in sync with server-side changes (status / payment /
-    // fiscalization) while the page is open.
     refetchInterval: 15_000,
     refetchIntervalInBackground: false,
   })
-
-  const handlePrint = useReactToPrint({
-    contentRef: paperRef,
-    documentTitle: data?.invoice.invoiceNumber ?? `invoice-${id}`,
-    pageStyle: A4_PAGE_CSS,
+  const pdfQuery = useQuery({
+    queryKey: ["invoice-pdf", id, format],
+    queryFn: () => getInvoicePdfBlob(id!, format),
+    enabled: !!id,
+    retry: 1,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
+  const data = invoiceQuery.data
 
+  useEffect(() => {
+    if (!pdfQuery.data) {
+      setPdfUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(pdfQuery.data)
+    setPdfUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [pdfQuery.data])
+
+  const refresh = () => {
+    void invoiceQuery.refetch()
+    void pdfQuery.refetch()
+  }
+
+  /**
+   * CIS/VSDC spec §7.18/§15: "print only one original receipt. Reprint shall
+   * have a watermark with mention Copy." downloadInvoicePdf registers each
+   * download with the backend itself, so the first download of this invoice
+   * comes back original and every one after renders watermarked COPY —
+   * there's no separate copy action to trigger by hand.
+   */
   const handlePdfDownload = async () => {
-    if (!data) return
+    if (!data || !id) return
     try {
       setIsPdfGenerating(true)
-      const filename = getInvoiceFilename(data, id)
-      const blob = await invoiceToPdfBlob(data)
-      if (!blob) throw new Error("PDF generation failed")
-      saveAs(blob, filename)
+      await downloadInvoicePdf(id, getInvoiceFilename(data, id, format), format)
       toast.success("PDF downloaded")
     } catch (error) {
-      console.error("PDF generation failed:", error)
-      toast.error("Failed to generate PDF. Use Print > Save as PDF instead.")
+      console.error("PDF download failed:", error)
+      toast.error("Failed to download the invoice PDF")
     } finally {
       setIsPdfGenerating(false)
     }
   }
 
   const handleShare = async () => {
-    if (!data) return
+    if (!data || !id) return
     try {
       setIsSharing(true)
-      const filename = getInvoiceFilename(data, id)
-      const shared = await shareInvoicePdf(data, filename)
+      const shared = await shareInvoicePdf(id, getInvoiceFilename(data, id, format), format)
       toast.success(shared ? "Invoice ready to share" : "Your browser downloaded the invoice instead")
     } catch (error: unknown) {
-      // Closing the browser share sheet is not a failed invoice operation.
       if (error instanceof DOMException && error.name === "AbortError") return
       console.error("Invoice share failed:", error)
       toast.error("Failed to prepare invoice sharing")
@@ -105,30 +102,50 @@ export default function InvoicePage() {
     }
   }
 
+  const handlePrint = () => {
+    if (!pdfUrl) return
+    const printWindow = window.open(pdfUrl, "_blank", "noopener,noreferrer")
+    if (!printWindow) toast.error("Allow pop-ups to open the invoice print view")
+  }
+
+  const isLoading = invoiceQuery.isLoading || pdfQuery.isLoading
+  const isError = invoiceQuery.isError || pdfQuery.isError
+  const isFetching = invoiceQuery.isFetching || pdfQuery.isFetching
+
   return (
     <div className="min-h-screen bg-slate-100 py-6 dark:bg-slate-950">
-      <style>{A4_PAGE_CSS}</style>
       <div className="mx-auto max-w-5xl px-4">
-        {/* Toolbar */}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm print:hidden">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
               <ArrowLeft className="size-4" /> Back
             </Button>
             <div>
-              <h1 className="text-sm font-bold text-slate-900">ERP Invoice</h1>
+              <h1 className="text-sm font-bold text-slate-900">EBM Invoice</h1>
               <p className="text-[11px] text-slate-500">
                 {data ? `${data.invoice.invoiceNumber} · ${data.invoice.paymentMethod || "—"}` : "Loading invoice…"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => refetch()}
-              disabled={isFetching || !data}
-            >
+            <div className="flex items-center rounded-lg border border-slate-200 p-0.5">
+              {FORMAT_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setFormat(option.value)}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 text-xs font-semibold transition-colors",
+                    format === option.value
+                      ? "bg-slate-900 text-white"
+                      : "text-slate-600 hover:bg-slate-100",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <Button variant="outline" size="sm" onClick={refresh} disabled={isFetching}>
               {isFetching ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
               Refresh
             </Button>
@@ -140,43 +157,43 @@ export default function InvoicePage() {
               {isSharing ? <Loader2 className="size-4 animate-spin" /> : <Share2 className="size-4" />}
               Share
             </Button>
-            <Button size="sm" onClick={() => handlePrint?.()} disabled={!data}>
+            <Button size="sm" onClick={handlePrint} disabled={!pdfUrl}>
               <Printer className="size-4" /> Print
             </Button>
           </div>
         </div>
 
-        {/* Body */}
         {isLoading ? (
           <InvoiceSkeleton />
         ) : isError ? (
           <div className="mx-auto flex max-w-xl flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
             <ReceiptText className="h-10 w-10 text-red-500" />
             <h2 className="text-base font-bold text-slate-900">Could not load the invoice</h2>
-            <p className="text-sm text-slate-500">
-              The invoice could not be fetched from the server. Please try again.
-            </p>
+            <p className="text-sm text-slate-500">The authoritative PDF could not be fetched from the server.</p>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => navigate("/dashboard/sales")}>
-                Go to Sales
-              </Button>
-              <Button size="sm" onClick={() => refetch()}>
-                <RefreshCw className="size-4" /> Retry
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => navigate("/dashboard/sales")}>Go to Sales</Button>
+              <Button size="sm" onClick={refresh}><RefreshCw className="size-4" /> Retry</Button>
             </div>
           </div>
-        ) : !data ? (
+        ) : !data || !pdfUrl ? (
           <div className="mx-auto flex max-w-xl flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
             <ReceiptText className="h-10 w-10 text-slate-300" />
             <h2 className="text-base font-bold text-slate-900">No invoice found</h2>
-            <p className="text-sm text-slate-500">There is no data to display for this invoice.</p>
-            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard/sales")}>
-              Go to Sales
-            </Button>
           </div>
         ) : (
-          <div className="rounded-xl bg-slate-200/60 p-4 sm:p-6 print:bg-transparent print:p-0">
-            <InvoicePreview ref={paperRef} data={data} />
+          <div className="overflow-hidden rounded-xl border border-slate-300 bg-slate-200 p-2 shadow-sm sm:p-4">
+            <iframe
+              title={`Invoice ${data.invoice.invoiceNumber}`}
+              src={pdfUrl}
+              className={cn(
+                "mx-auto block min-h-[75vh] bg-white",
+                format === "80mm"
+                  ? "w-full max-w-[80mm]"
+                  : format === "A5"
+                    ? "aspect-[148/210] w-full max-w-[148mm]"
+                    : "aspect-[210/297] w-full max-w-[210mm]",
+              )}
+            />
           </div>
         )}
       </div>

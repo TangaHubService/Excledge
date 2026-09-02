@@ -7,17 +7,19 @@ type Detail = {
   label: string
   value: string
   Icon?: typeof FileText
+  /** Always show this row's label, even when there's no value to show (blank instead of "—"). */
+  required?: boolean
 }
 
 function DetailList({ rows, withIcons = false }: { rows: Detail[]; withIcons?: boolean }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 11 }}>
-      {rows.filter((row) => row.value !== "—").map(({ label, value, Icon }) => (
+      {rows.filter((row) => row.required || row.value !== "—").map(({ label, value, Icon, required }) => (
         <div key={label} style={{ display: "grid", gridTemplateColumns: withIcons ? "20px 104px 14px minmax(0, 1fr)" : "104px 14px minmax(0, 1fr)", alignItems: "start", columnGap: 4, fontSize: 11 }}>
           {withIcons ? <span style={{ lineHeight: 1 }}>{Icon ? <Icon style={{ width: 14, height: 14, color: C.navy }} /> : null}</span> : null}
           <span style={{ color: C.body, fontWeight: 500, lineHeight: 1.25 }}>{label}</span>
           <span style={{ color: C.body, fontWeight: 700, textAlign: "center", lineHeight: 1.25 }}>:</span>
-          <span style={{ color: C.ink, fontWeight: 600, lineHeight: 1.25, overflowWrap: "anywhere" }}>{value}</span>
+          <span style={{ color: C.ink, fontWeight: 600, lineHeight: 1.25, overflowWrap: "anywhere" }}>{required && value === "—" ? "" : value}</span>
         </div>
       ))}
     </div>
@@ -29,10 +31,10 @@ export function CustomerCard({ data }: { data: Pick<EbmInvoice, "customer" | "in
   const customer = data.customer
   const invoice = data.invoice
   const clientRows: Detail[] = [
-    { label: "Client Name", value: safeText(customer?.name) },
-    { label: "TIN", value: safeText(customer?.tin ?? customer?.vatNo) },
+    { label: "Client Name", value: safeText(customer?.name), required: true },
+    { label: "TIN", value: safeText(customer?.tin ?? customer?.vatNo), required: true },
+    { label: "Phone", value: safeText(customer?.phone), required: true },
     { label: "Address", value: safeText(customer?.address) },
-    { label: "Phone", value: safeText(customer?.phone) },
   ]
   const invoiceRows: Detail[] = [
     { label: "Invoice No", value: safeText(invoice?.invoiceNumber), Icon: FileText },

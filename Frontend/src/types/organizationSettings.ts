@@ -5,6 +5,7 @@ export interface ISidebarConfig {
     dashboard: boolean;
     pos: boolean;
     sales: boolean;
+    invoices: boolean;
     customers: boolean;
     debtManagement: boolean;
     inventoryAll: boolean;
@@ -79,6 +80,7 @@ export const SIDEBAR_SECTIONS: { label: string; items: { key: keyof ISidebarConf
         items: [
             { key: 'pos', label: 'POS', route: '/dashboard/pos' },
             { key: 'sales', label: 'Sales', route: '/dashboard/sales' },
+            { key: 'invoices', label: 'Invoices', route: '/dashboard/invoices' },
             { key: 'customers', label: 'Customers', route: '/dashboard/customers' },
             { key: 'debtManagement', label: 'Debt Management', route: '/dashboard/debt' },
         ],

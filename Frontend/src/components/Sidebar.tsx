@@ -95,6 +95,7 @@ const baseNavigation: NavItem[] = [
   { id: "pos", name: "nav.pos", href: "pos", icon: ShoppingCart, moduleKey: "pos" },
   { id: "shifts", name: "nav.shifts", href: "shifts", icon: Clock },
   { id: "sales", name: "nav.sales", href: "sales", icon: Receipt, moduleKey: "sales" },
+  { id: "invoices", name: "Invoices", href: "invoices", icon: FileText, moduleKey: "invoices" },
   { id: "customers", name: "nav.customers", href: "customers", icon: User, moduleKey: "customers" },
   { id: "debt-management", name: "nav.debtManagement", href: "debt", icon: Receipt, moduleKey: "debtManagement" },
 
@@ -121,6 +122,7 @@ const adminNav: NavItem[] = [
   { id: "users", name: "nav.users", href: "users", icon: Users, moduleKey: "users" },
   { id: "activity-logs", name: "nav.activityLogs", href: "activity-logs", icon: Activity, moduleKey: "activityLogs" },
   { id: "ebm-outbox", name: "EBM Outbox", href: "ebm-outbox", icon: Wifi, moduleKey: "ebmOutbox", featureFlag: "ebmIntegrationEnabled" },
+  { id: "fiscal-reports", name: "Fiscal Reports", href: "fiscal-reports", icon: FileText, moduleKey: "ebmOutbox", featureFlag: "ebmIntegrationEnabled" },
 
   { id: "billing-header", name: "nav.billing", href: "", type: "header" },
   { id: "subscription", name: "nav.subscription", href: "subscription", icon: CreditCard, moduleKey: "subscription" },

@@ -26,7 +26,8 @@ import { apiClient } from '../../../lib/api-client'
 import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response'
 import { useBranch } from '../../../context/BranchContext'
 import { BranchRequiredNotice } from '../../../components/BranchRequiredNotice'
-import { MEASUREMENT_UNIT_OPTIONS, PACKAGING_UNIT_OPTIONS } from '../../../types/ebm'
+import { MEASUREMENT_UNIT_OPTIONS, PACKAGING_UNIT_OPTIONS, ORIGIN_COUNTRY_OPTIONS } from '../../../types/ebm'
+import { RraItemClassPicker } from '../../../components/inventory/RraItemClassPicker'
 import type { Product } from '../../../types'
 
 function toRwf(value: number): number {
@@ -40,6 +41,14 @@ function computeInclusiveVat(gross: number, ratePercent: number): { taxable: num
     const vat = toRwf(gross - taxable)
     return { taxable, vat }
 }
+
+// RRA ItemSaveReq grpPrcL1..grpPrcL5 — five optional price tiers, all validated the same way.
+const priceTierSchema = yup
+    .number()
+    .typeError('Must be a number')
+    .min(0, 'Cannot be negative')
+    .transform((v) => (isNaN(v) ? undefined : v))
+    .nullable()
 
 const addProductSchema = yup.object({
     itemType: yup.string().oneOf(['PRODUCT', 'SERVICE']).required(),
@@ -78,9 +87,6 @@ const addProductSchema = yup.object({
         .transform((v) => (isNaN(v) ? undefined : v))
         .min(0, 'Cannot be negative'),
     measurementUnit: yup.string(),
-    sku: yup
-        .string()
-        .matches(/^[A-Za-z0-9-_]*$/, 'SKU: letters, numbers, hyphens, underscores only'),
     barcode: yup
         .string()
         .matches(/^\d{0,13}$/, 'Barcode must be up to 13 digits'),
@@ -91,7 +97,26 @@ const addProductSchema = yup.object({
         .transform((v) => (isNaN(v) ? undefined : v))
         .min(1, 'Must be at least 1')
         .nullable(),
+    itemClsCd: yup.string().matches(/^\d{0,10}$/, 'Class code must be up to 10 digits'),
+    itemStandardName: yup.string().max(200),
+    origin: yup.string(),
+    useInsurance: yup.boolean(),
+    additionalInfo: yup.string().max(7, 'Up to 7 characters'),
+    l1SalePrice: priceTierSchema,
+    l2SalePrice: priceTierSchema,
+    l3SalePrice: priceTierSchema,
+    l4SalePrice: priceTierSchema,
+    l5SalePrice: priceTierSchema,
 })
+
+// RRA ItemSaveReq grpPrcL1..grpPrcL5 — five optional group/tier prices.
+const PRICE_TIER_FIELDS = [
+    { field: 'l1SalePrice', label: 'Tier 1' },
+    { field: 'l2SalePrice', label: 'Tier 2' },
+    { field: 'l3SalePrice', label: 'Tier 3' },
+    { field: 'l4SalePrice', label: 'Tier 4' },
+    { field: 'l5SalePrice', label: 'Tier 5' },
+] as const
 
 interface TaxCodeOption {
     code: string
@@ -107,7 +132,9 @@ interface AddProductProps {
 
 const STEPS = [
     { id: 'basic', label: 'Basic Info' },
-    { id: 'pricing', label: 'Pricing & Inventory' },
+    { id: 'pricing', label: 'Pricing' },
+    { id: 'inventory', label: 'Inventory' },
+    { id: 'details', label: 'RRA Details' },
     { id: 'review', label: 'Review' },
 ] as const
 
@@ -179,10 +206,19 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
             quantity: undefined as number | undefined,
             minStock: undefined as number | undefined,
             measurementUnit: '',
-            sku: '',
             barcode: '',
             pkgUnitCd: '',
             packagingQty: undefined as number | undefined,
+            itemClsCd: '',
+            itemStandardName: '',
+            origin: 'RW',
+            useInsurance: false,
+            additionalInfo: '',
+            l1SalePrice: undefined as number | undefined,
+            l2SalePrice: undefined as number | undefined,
+            l3SalePrice: undefined as number | undefined,
+            l4SalePrice: undefined as number | undefined,
+            l5SalePrice: undefined as number | undefined,
         },
     })
 
@@ -254,7 +290,6 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
             setValue('purchasePrice', product.purchasePrice ?? undefined)
             setValue('taxCode', product.taxCode || '')
             setValue('itemType', (product.itemType as 'PRODUCT' | 'SERVICE') || 'PRODUCT')
-            setValue('sku', product.sku || '')
             setValue('barcode', product.barcode || '')
             setValue('batchNumber', product.batchNumber || '')
             setValue('quantity', product.quantity)
@@ -262,6 +297,16 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
             setValue('measurementUnit', product.measurementUnit || '')
             setValue('pkgUnitCd', product.pkgUnitCd || '')
             setValue('packagingQty', product.packagingQty ?? undefined)
+            setValue('itemClsCd', product.itemClsCd || '')
+            setValue('itemStandardName', product.itemStandardName || '')
+            setValue('origin', product.origin || 'RW')
+            setValue('useInsurance', !!product.useInsurance)
+            setValue('additionalInfo', product.additionalInfo || '')
+            setValue('l1SalePrice', product.l1SalePrice ?? undefined)
+            setValue('l2SalePrice', product.l2SalePrice ?? undefined)
+            setValue('l3SalePrice', product.l3SalePrice ?? undefined)
+            setValue('l4SalePrice', product.l4SalePrice ?? undefined)
+            setValue('l5SalePrice', product.l5SalePrice ?? undefined)
             if (product.expiryDate) {
                 setValue('expiryDate', product.expiryDate.split('T')[0] as any)
             }
@@ -329,13 +374,25 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                 toast.error('Please fill in pricing fields')
                 return
             }
+            goToStep('inventory')
+        } else if (currentStep === 'inventory') {
+            const fields = itemType === 'PRODUCT' ? ['quantity', 'minStock', 'measurementUnit'] : []
+            const valid = await trigger(fields as any)
+            if (!valid) {
+                toast.error('Please fill in inventory fields')
+                return
+            }
+            goToStep('details')
+        } else if (currentStep === 'details') {
             goToStep('review')
         }
     }
 
     const handlePrevious = () => {
         if (currentStep === 'pricing') goToStep('basic')
-        else if (currentStep === 'review') goToStep('pricing')
+        else if (currentStep === 'inventory') goToStep('pricing')
+        else if (currentStep === 'details') goToStep('inventory')
+        else if (currentStep === 'review') goToStep('details')
     }
 
     const onSubmit = async (data: Record<string, any>) => {
@@ -363,6 +420,8 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                 itemType: data.itemType,
                 branchId: selectedBranchId,
                 imageUrl: imageUrl || undefined,
+                origin: data.origin || 'RW',
+                useInsurance: !!data.useInsurance,
             }
 
             if (data.itemType === 'PRODUCT') {
@@ -372,10 +431,17 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                 payload.expiryDate = data.expiryDate || undefined
                 payload.minStock = data.minStock || 0
                 payload.measurementUnit = data.measurementUnit || 'PCS'
-                payload.sku = data.sku || undefined
                 payload.barcode = data.barcode || undefined
                 payload.pkgUnitCd = data.pkgUnitCd || undefined
                 payload.packagingQty = data.packagingQty ?? undefined
+                payload.itemClsCd = data.itemClsCd || undefined
+                payload.itemStandardName = data.itemStandardName || undefined
+                payload.additionalInfo = data.additionalInfo || undefined
+                payload.l1SalePrice = data.l1SalePrice ?? undefined
+                payload.l2SalePrice = data.l2SalePrice ?? undefined
+                payload.l3SalePrice = data.l3SalePrice ?? undefined
+                payload.l4SalePrice = data.l4SalePrice ?? undefined
+                payload.l5SalePrice = data.l5SalePrice ?? undefined
             } else {
                 payload.quantity = 0
                 payload.minStock = 0
@@ -667,10 +733,10 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                         </div>
                     )}
 
-                    {/* ══════ STEP 2: PRICING & INVENTORY ══════ */}
+                    {/* ══════ STEP 2: PRICING ══════ */}
                     {currentStep === 'pricing' && (
                         <div className="space-y-6">
-                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Pricing & Inventory</h2>
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Pricing</h2>
 
                             <div ref={setSectionRef('pricing-tax')}>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -717,25 +783,64 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                             {errors.purchasePrice && <p className="text-xs text-red-500 mt-1">{errors.purchasePrice.message}</p>}
                                         </div>
                                     )}
-                                    <div className="space-y-1.5">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            Tax Category <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            {...bindField('taxCode', 'batchNumber')}
-                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                errors.taxCode ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
-                                            }`}
-                                        >
-                                            <option value="">Select tax category (A, B or C)</option>
-                                            {taxOptions.map(tc => (
-                                                <option key={tc.code} value={tc.code}>{tc.label}</option>
-                                            ))}
-                                        </select>
-                                        {errors.taxCode && <p className="text-xs text-red-500 mt-1">{errors.taxCode.message}</p>}
-                                    </div>
                                 </div>
                             </div>
+
+                            {itemType === 'PRODUCT' && (
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
+                                        Additional Price Tiers
+                                    </label>
+                                    <p className="text-xs text-gray-400 mb-2">
+                                        Optional RRA group prices (e.g. wholesale/retail tiers) — leave blank if not used.
+                                    </p>
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                        {PRICE_TIER_FIELDS.map(({ field, label }, index) => (
+                                            <div key={field} className="space-y-1">
+                                                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">{label}</label>
+                                                <input
+                                                    {...bindField(field, PRICE_TIER_FIELDS[index + 1]?.field ?? 'taxCode')}
+                                                    type="number"
+                                                    inputMode="decimal"
+                                                    step="0.01"
+                                                    min="0"
+                                                    placeholder="0.00"
+                                                    className={`w-full px-3 py-2 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                        (errors as any)[field] ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                    }`}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div className="space-y-1.5">
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Tax Category <span className="text-red-500">*</span>
+                                    </label>
+                                    <select
+                                        {...bindField('taxCode', 'batchNumber')}
+                                        className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                            errors.taxCode ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                        }`}
+                                    >
+                                        <option value="">Select tax category (A, B or C)</option>
+                                        {taxOptions.map(tc => (
+                                            <option key={tc.code} value={tc.code}>{tc.label}</option>
+                                        ))}
+                                    </select>
+                                    {errors.taxCode && <p className="text-xs text-red-500 mt-1">{errors.taxCode.message}</p>}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ══════ STEP: INVENTORY ══════ */}
+                    {currentStep === 'inventory' && (
+                        <div className="space-y-6">
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Inventory & Stock</h2>
 
                             {itemType === 'PRODUCT' && (
                                 <div ref={setSectionRef('inventory-details')}>
@@ -824,7 +929,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                                 Qty per Package
                                             </label>
                                             <input
-                                                {...bindField('packagingQty', 'sku')}
+                                                {...bindField('packagingQty', 'origin')}
                                                 type="number"
                                                 inputMode="numeric"
                                                 min="1"
@@ -835,36 +940,82 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                             />
                                             {errors.packagingQty && <p className="text-xs text-red-500 mt-1">{errors.packagingQty.message}</p>}
                                         </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Origin</label>
+                                            <select
+                                                {...bindField('origin', 'barcode')}
+                                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                            >
+                                                {ORIGIN_COUNTRY_OPTIONS.map(c => (
+                                                    <option key={c.value} value={c.value}>{c.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* ══════ STEP: RRA DETAILS ══════ */}
+                    {currentStep === 'details' && (
+                        <div className="space-y-6">
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Additional Details</h2>
 
                             <div ref={setSectionRef('additional-info')}>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">SKU</label>
-                                        <input
-                                            {...bindField('sku', 'barcode')}
-                                            placeholder={itemType === 'PRODUCT' ? 'e.g. MED-PCM-001' : 'e.g. SVC-001'}
-                                            className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
                                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Barcode</label>
                                         <input
-                                            {...bindField('barcode', '')}
+                                            {...bindField('barcode', 'itemClsCd')}
                                             inputMode="numeric"
                                             maxLength={13}
                                             placeholder="e.g. 8901234567890"
                                             className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
                                         />
                                     </div>
+                                    {itemType === 'PRODUCT' && (
+                                        <div>
+                                            <RraItemClassPicker
+                                                value={watch('itemClsCd') || ''}
+                                                onChange={(code) => setValue('itemClsCd', code, { shouldValidate: true, shouldDirty: true })}
+                                                invalid={!!errors.itemClsCd}
+                                            />
+                                            {errors.itemClsCd && <p className="text-xs text-red-500 mt-1">{errors.itemClsCd.message}</p>}
+                                        </div>
+                                    )}
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Standard Name</label>
+                                        <input
+                                            {...bindField('itemStandardName', 'additionalInfo')}
+                                            placeholder="Optional standardized name"
+                                            className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Additional Info</label>
+                                        <input
+                                            {...bindField('additionalInfo', '')}
+                                            maxLength={7}
+                                            placeholder="Up to 7 characters"
+                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                errors.additionalInfo ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                            }`}
+                                        />
+                                        {errors.additionalInfo && <p className="text-xs text-red-500 mt-1">{errors.additionalInfo.message}</p>}
+                                    </div>
+                                    <div className="space-y-1.5 md:col-span-2">
+                                        <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <input type="checkbox" {...register('useInsurance')} className="h-4 w-4 rounded border-gray-300 dark:border-gray-600" />
+                                            Billable to customer insurance
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* ══════ STEP 3: REVIEW & CONFIRM ══════ */}
+                    {/* ══════ STEP 5: REVIEW & CONFIRM ══════ */}
                     {currentStep === 'review' && (
                         <div className="space-y-6">
                             <h2 className="text-base font-semibold text-gray-900 dark:text-white">Review & Confirm</h2>
@@ -898,6 +1049,12 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                         {watch('purchasePrice') !== undefined && watch('purchasePrice') !== null && (
                                             <ReviewRow label="Purchase Price" value={`RWF ${Number(watch('purchasePrice')).toLocaleString()}`} />
                                         )}
+                                        {PRICE_TIER_FIELDS.map(({ field, label }) => {
+                                            const value = watch(field)
+                                            return value !== undefined && value !== null
+                                                ? <ReviewRow key={field} label={label} value={`RWF ${Number(value).toLocaleString()}`} />
+                                                : null
+                                        })}
                                         <ReviewRow label="Tax Category" value={watch('taxCode') ? taxCodes.find(t => t.code === watch('taxCode'))?.label || watch('taxCode') : '-'} />
                                         {watch('unitPrice') && watch('taxCode') && (
                                             <>
@@ -925,18 +1082,22 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                                     value={`${PACKAGING_UNIT_OPTIONS.find(u => u.value === watch('pkgUnitCd'))?.label || watch('pkgUnitCd')}${watch('packagingQty') ? ` × ${watch('packagingQty')}` : ''}`}
                                                 />
                                             )}
+                                            <ReviewRow label="Origin" value={ORIGIN_COUNTRY_OPTIONS.find(c => c.value === watch('origin'))?.label || watch('origin') || 'Rwanda (RW)'} />
                                         </div>
                                     </div>
                                 )}
 
-                                {(watch('sku') || watch('barcode')) && (
+                                {(watch('barcode') || watch('itemClsCd') || watch('itemStandardName') || watch('additionalInfo') || watch('useInsurance')) && (
                                     <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                                         <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                                             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Additional Info</h3>
                                         </div>
                                         <div className="px-4 py-3 space-y-2.5">
-                                            {watch('sku') && <ReviewRow label="SKU" value={watch('sku')} />}
                                             {watch('barcode') && <ReviewRow label="Barcode" value={watch('barcode')} />}
+                                            {watch('itemClsCd') && <ReviewRow label="Class Code" value={watch('itemClsCd')} />}
+                                            {watch('itemStandardName') && <ReviewRow label="Standard Name" value={watch('itemStandardName')} />}
+                                            {watch('additionalInfo') && <ReviewRow label="Additional Info" value={watch('additionalInfo')} />}
+                                            {watch('useInsurance') && <ReviewRow label="Insurance" value="Billable" />}
                                         </div>
                                     </div>
                                 )}

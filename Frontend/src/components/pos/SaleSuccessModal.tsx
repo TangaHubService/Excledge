@@ -2,7 +2,7 @@
 
 import { useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Printer, Plus, ReceiptText, Download, Share2 } from "lucide-react"
+import { Printer, Plus, ReceiptText, Download, Share2, Loader2, AlertTriangle } from "lucide-react"
 
 import {
   Dialog,
@@ -23,6 +23,15 @@ export interface SaleSuccessData {
   changeReturned?: number
   cashierName?: string
   date?: Date | string
+  /**
+   * RRA VSDC compliance: a receipt must not print until VSDC has confirmed
+   * it (checklist §16/§22). "success" (or undefined, for proforma/EBM-off
+   * sales which never go through VSDC) means print actions are safe to use;
+   * "pending" means VSDC confirmation is still in flight; "failed" means the
+   * bounded wait ran out without confirmation and the sale needs manual
+   * follow-up before it can be printed.
+   */
+  fiscalizationStatus?: "success" | "pending" | "failed"
 }
 
 interface SaleSuccessModalProps {
@@ -136,56 +145,80 @@ export default function SaleSuccessModal({
                 </div>
               )}
 
-              <p className="mt-4 text-sm text-emerald-700">
-                Thank you! The sale has been completed successfully and inventory has been updated.
-              </p>
+              {saleData.fiscalizationStatus === "pending" ? (
+                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-700">
+                  <Loader2 className="size-4 animate-spin" />
+                  Confirming with the tax authority (VSDC)…
+                </div>
+              ) : saleData.fiscalizationStatus === "failed" ? (
+                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-700">
+                  <AlertTriangle className="size-4" />
+                  VSDC didn't confirm this receipt — find it in Sales to retry before printing.
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-emerald-700">
+                  Thank you! The sale has been completed successfully and inventory has been updated.
+                </p>
+              )}
 
               {/* Actions */}
-              <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-                <Button
-                  onClick={onPrint}
-                  size="lg"
-                  className="flex-1 bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  <Printer className="size-4.5" />
-                  Print Invoice
-                </Button>
-                <Button
-                  onClick={onNewSale}
-                  size="lg"
-                  className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
-                >
-                  <Plus className="size-4.5" />
-                  New Sale
-                </Button>
-              </div>
+              {(() => {
+                const printBlocked = saleData.fiscalizationStatus === "pending" || saleData.fiscalizationStatus === "failed"
+                return (
+                  <>
+                    <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        onClick={onPrint}
+                        size="lg"
+                        disabled={printBlocked}
+                        className="flex-1 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {saleData.fiscalizationStatus === "pending"
+                          ? <Loader2 className="size-4.5 animate-spin" />
+                          : <Printer className="size-4.5" />}
+                        Print Invoice
+                      </Button>
+                      <Button
+                        onClick={onNewSale}
+                        size="lg"
+                        className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
+                      >
+                        <Plus className="size-4.5" />
+                        New Sale
+                      </Button>
+                    </div>
 
-              {(onDownload || onShare) && (
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                  {onDownload && (
-                    <Button
-                      onClick={onDownload}
-                      variant="outline"
-                      size="lg"
-                      className="flex-1"
-                    >
-                      <Download className="size-4.5" />
-                      Download
-                    </Button>
-                  )}
-                  {onShare && (
-                    <Button
-                      onClick={onShare}
-                      variant="outline"
-                      size="lg"
-                      className="flex-1"
-                    >
-                      <Share2 className="size-4.5" />
-                      Share
-                    </Button>
-                  )}
-                </div>
-              )}
+                    {(onDownload || onShare) && (
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                        {onDownload && (
+                          <Button
+                            onClick={onDownload}
+                            variant="outline"
+                            size="lg"
+                            disabled={printBlocked}
+                            className="flex-1 disabled:opacity-50"
+                          >
+                            <Download className="size-4.5" />
+                            Download
+                          </Button>
+                        )}
+                        {onShare && (
+                          <Button
+                            onClick={onShare}
+                            variant="outline"
+                            size="lg"
+                            disabled={printBlocked}
+                            className="flex-1 disabled:opacity-50"
+                          >
+                            <Share2 className="size-4.5" />
+                            Share
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
 
               {onViewInvoice && (
                 <button

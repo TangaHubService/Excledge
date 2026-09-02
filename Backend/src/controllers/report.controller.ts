@@ -5,6 +5,15 @@ import { buildBranchFilter } from "../middleware/branchAuth.middleware"
 import { logManualActivity } from "../middleware/activity-log.middleware"
 import { getProfitReport } from "../services/profit.service"
 import { success, error as apiError } from "../utils/apiResponse"
+import { buildVsdcEnvelope, checkZReport } from "../services/vsdc-api.service"
+import { isEbmEnabled, TAX_RATE_BY_SLOT } from "../services/rra-ebm.service"
+import {
+  renderDailyReportPdf,
+  renderPluReportPdf,
+  type DailyReportData,
+  type FiscalReportHeader,
+  type PluReportData,
+} from "../services/fiscal-report-pdf.service"
 
 export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -170,6 +179,170 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Error generating sales report:', error);
     res.status(500).json(apiError('Failed to generate sales report', undefined, error.message));
+  }
+}
+
+// ──────────────────────────────────────────────
+// C10: PLU (Price Look-Up) report (RRA CIS/VSDC spec §21) — per-item-code
+// quantity and revenue summary, the report format RRA testers ask for
+// alongside X/Z reports.
+// ──────────────────────────────────────────────
+interface PluRow {
+  itemCd: string
+  productId: number | null
+  productName: string
+  unit: string
+  quantity: number
+  revenue: number
+  taxAmount: number
+  transactionCount: number
+}
+
+async function buildPluRows(
+  req: BranchAuthRequest,
+  organizationId: number,
+  opts: { startDate?: unknown; endDate?: unknown; sortBy?: unknown; sortOrder?: unknown },
+): Promise<{ rows: PluRow[]; summary: PluReportData['summary']; periodLabel: string }> {
+  const { startDate, endDate, sortBy = 'quantity', sortOrder = 'desc' } = opts;
+
+  let periodLabel = 'All time';
+  const dateFilter = startDate && endDate && startDate !== 'undefined' && endDate !== 'undefined'
+    ? (() => {
+        const start = new Date(startDate as string);
+        const end = new Date(endDate as string);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+        end.setHours(23, 59, 59, 999);
+        periodLabel = `${start.toISOString().split('T')[0]} → ${end.toISOString().split('T')[0]}`;
+        return { createdAt: { gte: start, lte: end } };
+      })()
+    : null;
+
+  const saleItems = await prisma.saleItem.findMany({
+    where: {
+      sale: {
+        organizationId,
+        status: { notIn: ['REFUNDED', 'CANCELLED'] },
+        ...buildBranchFilter(req),
+        ...(dateFilter ?? {}),
+      },
+      itemType: 'PRODUCT',
+    },
+    select: {
+      quantity: true,
+      unitPrice: true,
+      totalPrice: true,
+      taxAmount: true,
+      product: { select: { id: true, name: true, itemCd: true, measurementUnit: true } },
+    },
+  });
+
+  const byItemCode = new Map<string, PluRow>();
+  for (const line of saleItems) {
+    if (!line.product) continue;
+    const key = line.product.itemCd ?? `NOCODE-${line.product.id}`;
+    const existing = byItemCode.get(key) ?? {
+      itemCd: line.product.itemCd ?? '—',
+      productId: line.product.id,
+      productName: line.product.name,
+      unit: line.product.measurementUnit ?? 'PCS',
+      quantity: 0,
+      revenue: 0,
+      taxAmount: 0,
+      transactionCount: 0,
+    };
+    existing.quantity += line.quantity;
+    existing.revenue += line.totalPrice.toNumber();
+    existing.taxAmount += line.taxAmount.toNumber();
+    existing.transactionCount += 1;
+    byItemCode.set(key, existing);
+  }
+
+  const rows = Array.from(byItemCode.values());
+  rows.sort((a, b) => {
+    const dir = sortOrder === 'asc' ? 1 : -1;
+    if (sortBy === 'revenue') return dir * (a.revenue - b.revenue);
+    if (sortBy === 'itemCd') return dir * a.itemCd.localeCompare(b.itemCd);
+    return dir * (a.quantity - b.quantity);
+  });
+
+  return {
+    rows,
+    periodLabel,
+    summary: {
+      uniqueItemCodes: rows.length,
+      totalQuantity: rows.reduce((sum, r) => sum + r.quantity, 0),
+      totalRevenue: rows.reduce((sum, r) => sum + r.revenue, 0),
+      totalTax: rows.reduce((sum, r) => sum + r.taxAmount, 0),
+    },
+  };
+}
+
+export const getPluReport = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const { page = '1', limit = '50' } = req.query;
+
+    const { rows, summary } = await buildPluRows(req, organizationId, req.query);
+
+    const pageNum = Math.max(parseInt(page as string) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit as string) || 50, 1), 500);
+    const pageRows = rows.slice((pageNum - 1) * limitNum, (pageNum - 1) * limitNum + limitNum);
+
+    res.json(success({
+      summary,
+      items: pageRows,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: rows.length,
+        totalPages: Math.ceil(rows.length / limitNum),
+      },
+    }));
+  } catch (error: any) {
+    console.error('Error generating PLU report:', error);
+    res.status(500).json(apiError('Failed to generate PLU report', undefined, error.message));
+  }
+}
+
+/**
+ * Printable (80 mm thermal) PLU report — RRA Article 21.
+ * GET /reports/plu/:organizationId/pdf?startDate=&endDate=&sortBy=
+ */
+export const getPluReportPdf = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const { rows, summary, periodLabel } = await buildPluRows(req, organizationId, req.query);
+
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true, TIN: true, address: true, ebmSerialNo: true, ebmDeviceId: true },
+    });
+    const header: FiscalReportHeader = {
+      orgName: org?.name ?? '',
+      tin: org?.TIN ?? null,
+      mrcNo: org?.ebmSerialNo ?? null,
+      sdcId: org?.ebmDeviceId ?? null,
+      branchName: null,
+      bhfId: null,
+      address: org?.address ?? null,
+    };
+
+    const pdf = await renderPluReportPdf({
+      header,
+      periodLabel,
+      generatedAt: new Date().toISOString(),
+      rows: rows.slice(0, 500),
+      summary,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', String(pdf.length));
+    res.setHeader('Content-Disposition', `inline; filename="PLU-report.pdf"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.status(200).send(pdf);
+  } catch (error: any) {
+    console.error('[PLU Report PDF Error]:', error);
+    res.status(500).json(apiError('Failed to generate PLU report PDF'));
   }
 }
 
@@ -1411,32 +1584,46 @@ function fix2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export const getDailyReport = async (req: BranchAuthRequest, res: Response) => {
-  try {
-    const organizationId = parseInt(req.params.organizationId);
-    const reportType = (req.query.type as string ?? 'X').toUpperCase();
-    const { date, branchId: branchParam } = req.query;
+const pad2 = (n: number) => String(n).padStart(2, '0');
 
-    if (reportType !== 'X' && reportType !== 'Z') {
-      return res.status(400).json(apiError('type must be X or Z'));
-    }
+/**
+ * Shared X/Z daily-report aggregation (RRA CIS/VSDC spec §6 / Articles 7, 18,
+ * 19). Consumed by both the JSON endpoint and the printable PDF endpoint so the
+ * two can never disagree.
+ */
+async function buildDailyReport(
+  req: BranchAuthRequest,
+  organizationId: number,
+  reportType: 'X' | 'Z',
+  reportDate: Date,
+  branchParam?: string | number,
+): Promise<DailyReportData & { organizationId: number; branchId: number | null }> {
+  const dayStart = new Date(reportDate);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(reportDate);
+  dayEnd.setHours(23, 59, 59, 999);
 
-    const reportDate = date ? new Date(date as string) : new Date();
-    const dayStart = new Date(reportDate);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(reportDate);
-    dayEnd.setHours(23, 59, 59, 999);
+  const branchFilter: any = {};
+  const targetBranchId = branchParam != null && branchParam !== '' ? parseInt(String(branchParam)) : null;
+  if (targetBranchId != null) {
+    branchFilter.branchId = targetBranchId;
+  } else {
+    const bFilter = buildBranchFilter(req);
+    if (Object.keys(bFilter).length) Object.assign(branchFilter, bFilter);
+  }
 
-    const branchFilter: any = {};
-    if (branchParam) {
-      branchFilter.branchId = parseInt(branchParam as string);
-    } else {
-      const bFilter = buildBranchFilter(req);
-      if (Object.keys(bFilter).length) Object.assign(branchFilter, bFilter);
-    }
-
-    // Fetch all completed/refunded sales for the day
-    const sales = await prisma.sale.findMany({
+  const [org, branch, sales] = await Promise.all([
+    prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true, TIN: true, address: true, ebmSerialNo: true, ebmDeviceId: true },
+    }),
+    targetBranchId != null
+      ? prisma.branch.findUnique({
+          where: { id: targetBranchId },
+          select: { name: true, bhfId: true, ebmSerialNo: true, ebmDeviceId: true, address: true },
+        })
+      : Promise.resolve(null),
+    prisma.sale.findMany({
       where: {
         organizationId,
         ...branchFilter,
@@ -1452,66 +1639,417 @@ export const getDailyReport = async (req: BranchAuthRequest, res: Response) => {
         },
       },
       orderBy: { createdAt: 'asc' },
-    });
+    }),
+  ]);
 
-    // Split into NS/NR buckets
-    const normalSales   = sales.filter(s => s.status === 'COMPLETED' && s.rcptLabel !== 'TR' && s.rcptLabel !== 'TS');
-    const normalRefunds = sales.filter(s => s.status === 'REFUNDED'  && s.rcptLabel !== 'TR' && s.rcptLabel !== 'TS');
+  const header: FiscalReportHeader = {
+    orgName: org?.name ?? '',
+    tin: org?.TIN ?? null,
+    mrcNo: branch?.ebmSerialNo ?? org?.ebmSerialNo ?? null,
+    sdcId: branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null,
+    branchName: branch?.name ?? null,
+    bhfId: branch?.bhfId ?? null,
+    address: branch?.address ?? org?.address ?? null,
+  };
 
-    // Per-tax-band totals
-    const taxBands: Record<string, { taxableAmt: number; taxAmt: number; salesAmt: number }> = {};
-    for (const code of TAX_CODES) {
-      taxBands[code] = { taxableAmt: 0, taxAmt: 0, salesAmt: 0 };
+  // Split into NS/NR buckets — TS/TR (training mode) receipts are excluded
+  // entirely from the legal sales/refund totals below and reported separately
+  // (spec §18.1.15/§19.1.15), since they never happened as real business
+  // transactions.
+  const normalSales   = sales.filter(s => s.status === 'COMPLETED' && s.rcptLabel !== 'TR' && s.rcptLabel !== 'TS');
+  const normalRefunds = sales.filter(s => s.status === 'REFUNDED'  && s.rcptLabel !== 'TR' && s.rcptLabel !== 'TS');
+  const trainingSales = sales.filter(s => s.rcptLabel === 'TS' || s.rcptLabel === 'TR');
+  // Reprints (CS/CR receipts, spec §18.1.14/§19.1.14) aren't a separate fiscal
+  // record here — a copy is just a re-print of its original NS/NR/TS/TR sale,
+  // tracked via `reprintCount`.
+  const copiedSales = sales.filter(s => (s.reprintCount ?? 0) > 0);
+
+  // Per-tax-band totals
+  const taxBands: Record<string, { taxableAmt: number; taxAmt: number; salesAmt: number }> = {};
+  for (const code of TAX_CODES) {
+    taxBands[code] = { taxableAmt: 0, taxAmt: 0, salesAmt: 0 };
+  }
+  for (const sale of normalSales) {
+    for (const si of sale.saleItems) {
+      const code = (si.taxCode ?? 'A').toUpperCase();
+      if (!taxBands[code]) taxBands[code] = { taxableAmt: 0, taxAmt: 0, salesAmt: 0 };
+      const total = Number(si.totalPrice);
+      const tax   = Number(si.taxAmount);
+      taxBands[code].taxAmt    = fix2(taxBands[code].taxAmt    + tax);
+      taxBands[code].taxableAmt= fix2(taxBands[code].taxableAmt+ (total - tax));
+      taxBands[code].salesAmt  = fix2(taxBands[code].salesAmt  + total);
     }
+  }
 
-    for (const sale of normalSales) {
-      for (const si of sale.saleItems) {
-        const code = (si.taxCode ?? 'A').toUpperCase();
-        if (!taxBands[code]) taxBands[code] = { taxableAmt: 0, taxAmt: 0, salesAmt: 0 };
-        const total = Number(si.totalPrice);
-        const tax   = Number(si.taxAmount);
-        taxBands[code].taxAmt    = fix2(taxBands[code].taxAmt    + tax);
-        taxBands[code].taxableAmt= fix2(taxBands[code].taxableAmt+ (total - tax));
-        taxBands[code].salesAmt  = fix2(taxBands[code].salesAmt  + total);
+  const taxRates: Record<string, number> = {
+    A: TAX_RATE_BY_SLOT[0], B: TAX_RATE_BY_SLOT[1], C: TAX_RATE_BY_SLOT[2], D: TAX_RATE_BY_SLOT[3], E: 0,
+  };
+
+  // Payment breakdown
+  const paymentTotals: Record<string, number> = {};
+  for (const sale of normalSales) {
+    const pt = sale.paymentType;
+    paymentTotals[pt] = fix2((paymentTotals[pt] ?? 0) + Number(sale.totalAmount));
+  }
+
+  const grossSalesAmt  = fix2(normalSales.reduce((s, sale) => s + Number(sale.totalAmount), 0));
+  const grossRefundAmt = fix2(normalRefunds.reduce((s, sale) => s + Math.abs(Number(sale.totalAmount)), 0));
+  const netSalesAmt    = fix2(grossSalesAmt - grossRefundAmt);
+  const totalTaxAmt    = fix2(Object.values(taxBands).reduce((s, b) => s + b.taxAmt, 0));
+
+  // Receipt counters — the "A"/"B" halves of the RRA A/B RT counter, taken from
+  // the VSDC-signed transactions for the day (§7.24.4/§7.25).
+  const rcptNos: number[] = [];
+  let lastTotalRcptNo: number | null = null;
+  let itemCount = 0;
+  for (const sale of normalSales) {
+    itemCount += sale.saleItems.length;
+    const tx = (sale as any).ebmTransactions?.[0];
+    if (tx?.sdcRcptNo != null) rcptNos.push(tx.sdcRcptNo);
+    if (tx?.totalRcptNo != null) lastTotalRcptNo = tx.totalRcptNo;
+  }
+
+  // Z report only: cross-check against VSDC's own record of the day's close.
+  let vsdcConfirmation: DailyReportData['vsdcConfirmation'] = null;
+  if (reportType === 'Z' && isEbmEnabled()) {
+    if (targetBranchId != null) {
+      try {
+        const envelope = await buildVsdcEnvelope(organizationId, targetBranchId);
+        const rptDe = `${reportDate.getFullYear()}${pad2(reportDate.getMonth() + 1)}${pad2(reportDate.getDate())}`;
+        const result = await checkZReport(envelope, rptDe);
+        vsdcConfirmation = result.success
+          ? { checked: true, rptDe }
+          : { checked: true, rptDe, error: result.error ?? 'VSDC has no Z-report on record for this date' };
+      } catch (e: any) {
+        vsdcConfirmation = { checked: false, error: e instanceof Error ? e.message : 'VSDC lookup failed' };
       }
+    } else {
+      vsdcConfirmation = { checked: false, error: 'Specify branchId to cross-check the VSDC-confirmed Z-report' };
     }
+  }
 
-    // Payment breakdown
-    const paymentTotals: Record<string, number> = {};
-    for (const sale of normalSales) {
-      const pt = sale.paymentType;
-      paymentTotals[pt] = fix2((paymentTotals[pt] ?? 0) + Number(sale.totalAmount));
-    }
+  return {
+    reportType,
+    reportDate: reportDate.toISOString().split('T')[0],
+    organizationId,
+    branchId: targetBranchId,
+    periodStart: dayStart.toISOString(),
+    periodEnd: dayEnd.toISOString(),
+    generatedAt: new Date().toISOString(),
+    header,
+    counters: {
+      firstRcptNo: rcptNos.length ? Math.min(...rcptNos) : null,
+      lastRcptNo: rcptNos.length ? Math.max(...rcptNos) : null,
+      lastTotalRcptNo,
+      receiptCount: normalSales.length + normalRefunds.length,
+      itemCount,
+    },
+    vsdcConfirmation,
+    summary: {
+      normalSalesCount: normalSales.length,
+      normalRefundsCount: normalRefunds.length,
+      grossSalesAmt,
+      grossRefundAmt,
+      netSalesAmt,
+      totalTaxAmt,
+      trainingCount: trainingSales.length,
+      trainingAmt: fix2(trainingSales.reduce((s, sale) => s + Number(sale.totalAmount), 0)),
+      copyCount: copiedSales.length,
+      copyAmt: fix2(copiedSales.reduce((s, sale) => s + Number(sale.totalAmount), 0)),
+    },
+    taxBands,
+    taxRates,
+    paymentBreakdown: paymentTotals,
+  };
+}
 
-    const grossSalesAmt  = fix2(normalSales.reduce((s, sale) => s + Number(sale.totalAmount), 0));
-    const grossRefundAmt = fix2(normalRefunds.reduce((s, sale) => s + Math.abs(Number(sale.totalAmount)), 0));
-    const netSalesAmt    = fix2(grossSalesAmt - grossRefundAmt);
-    const totalTaxAmt    = fix2(Object.values(taxBands).reduce((s, b) => s + b.taxAmt, 0));
+function parseReportType(raw: unknown): 'X' | 'Z' | null {
+  const t = String(raw ?? 'X').toUpperCase();
+  return t === 'X' || t === 'Z' ? t : null;
+}
 
-    const report = {
-      reportType,
-      reportDate: reportDate.toISOString().split('T')[0],
-      organizationId,
-      branchId: branchParam ? parseInt(branchParam as string) : null,
-      periodStart: dayStart.toISOString(),
-      periodEnd:   dayEnd.toISOString(),
-      generatedAt: new Date().toISOString(),
-      summary: {
-        normalSalesCount:   normalSales.length,
-        normalRefundsCount: normalRefunds.length,
-        grossSalesAmt,
-        grossRefundAmt,
-        netSalesAmt,
-        totalTaxAmt,
-      },
-      taxBands,
-      paymentBreakdown: paymentTotals,
-      fiscalizedCount: sales.filter(s => (s as any).ebmTransactions?.length > 0).length,
-    };
+export const getDailyReport = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const reportType = parseReportType(req.query.type);
+    if (!reportType) return res.status(400).json(apiError('type must be X or Z'));
 
-    res.json(success(report));
+    const reportDate = req.query.date ? new Date(req.query.date as string) : new Date();
+    const report = await buildDailyReport(req, organizationId, reportType, reportDate, req.query.branchId as string);
+    res.json(success({
+      ...report,
+      fiscalizedCount: report.counters.receiptCount, // kept for backward compatibility
+    }));
   } catch (error: any) {
     console.error('[Daily Report Error]:', error);
     res.status(500).json(apiError('Failed to generate daily report'));
+  }
+};
+
+/**
+ * Printable (80 mm thermal) X/Z daily report — RRA Articles 7, 18, 19.
+ * GET /reports/daily/:organizationId/pdf?type=X|Z&date=&branchId=
+ */
+export const getDailyReportPdf = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const reportType = parseReportType(req.query.type);
+    if (!reportType) return res.status(400).json(apiError('type must be X or Z'));
+
+    const reportDate = req.query.date ? new Date(req.query.date as string) : new Date();
+    const report = await buildDailyReport(req, organizationId, reportType, reportDate, req.query.branchId as string);
+    const pdf = await renderDailyReportPdf(report);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', String(pdf.length));
+    res.setHeader('Content-Disposition', `inline; filename="${reportType}-report-${report.reportDate}.pdf"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.status(200).send(pdf);
+  } catch (error: any) {
+    console.error('[Daily Report PDF Error]:', error);
+    res.status(500).json(apiError('Failed to generate daily report PDF'));
+  }
+};
+
+// ──────────────────────────────────────────────
+// CIS Electronic Journal (RRA CIS/VSDC spec §5 / checklist §44)
+// The EJ is issued at the same time as every normal receipt and contains the
+// same data as the printed slip. These endpoints expose it for inspection and
+// for the certification tester's EJ-vs-slip comparison.
+// ──────────────────────────────────────────────
+
+export const getElectronicJournal = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const { startDate, endDate, page = '1', limit = '50' } = req.query;
+
+    const where: any = {
+      organizationId,
+      journalText: { not: null },
+      operation: 'SALE',
+      submissionStatus: 'SUCCESS',
+    };
+    if (startDate && endDate && startDate !== 'undefined' && endDate !== 'undefined') {
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+        end.setHours(23, 59, 59, 999);
+        where.createdAt = { gte: start, lte: end };
+      }
+    }
+
+    const pageNum = Math.max(parseInt(page as string) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit as string) || 50, 1), 200);
+
+    const [total, rows] = await Promise.all([
+      prisma.ebmTransaction.count({ where }),
+      prisma.ebmTransaction.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+        select: {
+          id: true,
+          saleId: true,
+          invoiceNumber: true,
+          ebmInvoiceNumber: true,
+          rcptLabel: true,
+          sdcRcptNo: true,
+          totalRcptNo: true,
+          sdcId: true,
+          sdcDateTime: true,
+          ejSent: true,
+          journalText: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    res.json(success({
+      entries: rows,
+      pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) },
+    }));
+  } catch (error: any) {
+    console.error('[Electronic Journal Error]:', error);
+    res.status(500).json(apiError('Failed to load the electronic journal'));
+  }
+};
+
+/**
+ * GET /reports/electronic-journal/:organizationId/:saleId
+ * Returns the EJ record for one sale plus the sale's own line items and totals,
+ * so a reviewer can confirm the journal matches the printed slip (§44).
+ */
+export const getElectronicJournalEntry = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const saleId = parseInt(req.params.saleId);
+
+    const tx = await prisma.ebmTransaction.findFirst({
+      where: { organizationId, saleId, operation: 'SALE', submissionStatus: 'SUCCESS' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!tx || !tx.journalText) {
+      return res.status(404).json(apiError('No electronic journal on record for this sale'));
+    }
+
+    const sale = await prisma.sale.findFirst({
+      where: { id: saleId, organizationId },
+      include: {
+        saleItems: { include: { product: { select: { name: true, itemCd: true } } } },
+        customer: { select: { name: true, phone: true, TIN: true } },
+      },
+    });
+
+    const slip = sale
+      ? {
+          invoiceNumber: sale.invoiceNumber,
+          vsdcInvcNo: sale.vsdcInvcNo,
+          rcptLabel: sale.rcptLabel,
+          customer: sale.customer,
+          items: sale.saleItems.map((si) => ({
+            name: si.product?.name ?? si.serviceName ?? 'Item',
+            itemCd: si.product?.itemCd ?? null,
+            quantity: si.quantity,
+            unitPrice: si.unitPrice.toNumber(),
+            totalPrice: si.totalPrice.toNumber(),
+            taxCode: si.taxCode,
+            taxAmount: si.taxAmount.toNumber(),
+          })),
+          totalAmount: Number(sale.totalAmount),
+          vatAmount: Number(sale.vatAmount),
+        }
+      : null;
+
+    // §44: the journal and the slip must agree. Surface a machine check on the
+    // one value both carry in a comparable form (the document total).
+    const journalTotalMatch = slip
+      ? tx.journalText.includes(`TOTAL:${(Math.round(slip.totalAmount * 100) / 100)}`)
+      : null;
+
+    res.json(success({
+      journal: {
+        id: tx.id,
+        saleId: tx.saleId,
+        rcptLabel: tx.rcptLabel,
+        sdcId: tx.sdcId,
+        sdcRcptNo: tx.sdcRcptNo,
+        totalRcptNo: tx.totalRcptNo,
+        sdcDateTime: tx.sdcDateTime,
+        ejSent: tx.ejSent,
+        text: tx.journalText,
+      },
+      slip,
+      checks: { journalTotalMatchesSlip: journalTotalMatch },
+    }));
+  } catch (error: any) {
+    console.error('[Electronic Journal Entry Error]:', error);
+    res.status(500).json(apiError('Failed to load the electronic journal entry'));
+  }
+};
+
+// ──────────────────────────────────────────────
+// Detailed purchases report (RRA checklist §25)
+// Importation reporting depends on the import-declaration feature (checklist
+// §66–68), which is a separate phase — none exists yet, so this covers the
+// purchases half only.
+// ──────────────────────────────────────────────
+
+export const getPurchasesReport = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const { startDate, endDate } = req.query;
+
+    const where: any = { organizationId, ...buildBranchFilter(req) };
+    if (startDate && endDate && startDate !== 'undefined' && endDate !== 'undefined') {
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+        end.setHours(23, 59, 59, 999);
+        where.orderedAt = { gte: start, lte: end };
+      }
+    }
+
+    const orders = await prisma.purchaseOrder.findMany({
+      where,
+      include: {
+        supplier: { select: { name: true, phone: true, email: true } },
+        items: true,
+        branch: { select: { name: true, code: true } },
+      },
+      orderBy: { orderedAt: 'desc' },
+      take: 1000,
+    });
+
+    const rows = orders.map((po) => {
+      const taxTotal = po.items.reduce((s, it) => {
+        const rate = Number(it.taxRate ?? 0);
+        const line = it.totalPrice.toNumber();
+        return s + (rate > 0 ? line - line / (1 + rate / 100) : 0);
+      }, 0);
+      return {
+        id: po.id,
+        orderNumber: po.orderNumber,
+        status: po.status,
+        supplierName: po.supplier?.name ?? '',
+        branch: po.branch?.name ?? null,
+        orderedAt: po.orderedAt.toISOString().split('T')[0],
+        receivedAt: po.receivedAt ? po.receivedAt.toISOString().split('T')[0] : null,
+        itemCount: po.items.length,
+        totalAmount: po.totalAmount.toNumber(),
+        taxTotal: Math.round(taxTotal * 100) / 100,
+        items: po.items.map((it) => ({
+          productName: it.productName,
+          quantity: it.quantity,
+          quantityReceived: it.quantityReceived,
+          unitPrice: it.unitPrice.toNumber(),
+          totalPrice: it.totalPrice.toNumber(),
+          taxCode: it.taxCode,
+          taxRate: Number(it.taxRate ?? 0),
+        })),
+      };
+    });
+
+    res.json(success({
+      summary: {
+        orderCount: rows.length,
+        receivedCount: rows.filter((r) => r.status === 'COMPLETED' || r.receivedAt).length,
+        totalPurchases: Math.round(rows.reduce((s, r) => s + r.totalAmount, 0) * 100) / 100,
+        totalTax: Math.round(rows.reduce((s, r) => s + r.taxTotal, 0) * 100) / 100,
+      },
+      importation: await (async () => {
+        const importWhere: any = { organizationId };
+        if (where.orderedAt) {
+          // RraImportItem.dclDe is yyyyMMdd text; range-filter on the string.
+          const d = (v: any) => new Date(v).toISOString().slice(0, 10).replace(/-/g, '');
+          importWhere.dclDe = { gte: d(where.orderedAt.gte), lte: d(where.orderedAt.lte) };
+        }
+        const imports = await prisma.rraImportItem.findMany({ where: importWhere, orderBy: [{ dclDe: 'desc' }, { itemSeq: 'asc' }], take: 500 });
+        const byStatus = { PENDING: 0, APPROVED: 0, REJECTED: 0 };
+        for (const i of imports) byStatus[i.status] += 1;
+        return {
+          available: true,
+          summary: { lines: imports.length, ...byStatus },
+          items: imports.map((i) => ({
+            taskCd: i.taskCd,
+            dclNo: i.dclNo,
+            dclDe: i.dclDe,
+            itemSeq: i.itemSeq,
+            hsCd: i.hsCd,
+            itemNm: i.itemNm,
+            orgnNatCd: i.orgnNatCd,
+            supplier: i.spplrNm,
+            qty: i.qty ? i.qty.toNumber() : null,
+            invcFcurAmt: i.invcFcurAmt ? i.invcFcurAmt.toNumber() : null,
+            invcFcurCd: i.invcFcurCd,
+            status: i.status,
+          })),
+        };
+      })(),
+      orders: rows,
+    }));
+  } catch (error: any) {
+    console.error('[Purchases Report Error]:', error);
+    res.status(500).json(apiError('Failed to generate purchases report'));
   }
 };
