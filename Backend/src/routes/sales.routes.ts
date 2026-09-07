@@ -11,6 +11,8 @@ import {
   getEbmReceipt,
   getInvoice,
   getInvoicePdf,
+  updateProforma,
+  convertProforma,
 } from "../controllers/sales.controller";
 import { authenticate, authorize } from "../middleware/auth.middleware";
 import { branchAuth } from "../middleware/branchAuth.middleware";
@@ -18,7 +20,7 @@ import { requireOrganizationAccess } from "../middleware/organizationAccess.midd
 import { requireActiveSubscription } from '../middleware/feature-access.middleware';
 import { vsdcOnlineGuard } from "../middleware/vsdc-offline-guard.middleware";
 import { validate } from "../middleware/validate.middleware";
-import { createSaleSchema, cancelSaleSchema } from "../validations/sales.validation";
+import { createSaleSchema, cancelSaleSchema, updateProformaSchema, convertProformaSchema } from "../validations/sales.validation";
 import {
   initiateMobileMoneyPayment,
   getMobileMoneyPaymentStatus,
@@ -79,6 +81,29 @@ router.get(
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
   getSales
+);
+
+// Edit a proforma's line items / customer (only before it is converted)
+router.put(
+  "/:organizationId/:saleId/proforma",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  validate(updateProformaSchema),
+  updateProforma
+);
+
+// Convert a proforma into a real, fiscalized NS sale
+router.post(
+  "/:organizationId/:saleId/convert",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  vsdcOnlineGuard,
+  validate(convertProformaSchema),
+  convertProforma
 );
 
 // Get a specific sale by ID

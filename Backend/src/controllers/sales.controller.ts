@@ -22,533 +22,41 @@ import { getOrganizationSettings } from "../services/organization-settings.servi
 import { renderSalesInvoiceHtml, type RenderInvoicePayload } from "../services/invoice-render.service"
 import { generateEbmInvoicePdf, getEbmInvoiceFilename, type InvoicePdfFormat } from "../services/invoice-pdf.service"
 import { generateEbmReceiptPdf80mm } from "../services/invoice-receipt-pdf.service"
+import { commitSale, CommitSaleError } from "../services/sale-commit.service"
 import { SYSTEM_FOOTER, SYSTEM_POWERED_BY, CIS_VERSION_LABEL } from "../services/system-branding.service"
 import QRCode from "qrcode"
 
 export const createSale = async (req: BranchAuthRequest, res: Response) => {
   try {
-    const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma, payments: splitPayments, shiftId } = req.body
+    const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma, payments: splitPayments, shiftId, inventoryMethod } = req.body
     // @ts-ignore
     const userId = parseInt(req.user?.userId as string)
     const organizationId = parseInt(req.params.organizationId)
     const branchId = await resolveBranchIdForWrite(req)
-    const orgSettings = await getOrganizationSettings(organizationId)
 
-    // Validate items
-    if (!items || items.length === 0) {
-      return res.status(400).json(apiError("Sale must have at least one item"))
-    }
-
-    // If the mobile POS sent a shiftId, it must be this user's own open shift —
-    // prevents attributing a sale to someone else's till or a already-closed shift.
-    let resolvedShiftId: number | undefined
-    if (shiftId !== undefined && shiftId !== null && shiftId !== '') {
-      const shift = await prisma.shift.findFirst({
-        where: { id: parseInt(shiftId), organizationId, userId, status: { in: ['OPEN', 'REOPENED'] } },
-        select: { id: true },
-      })
-      if (!shift) {
-        return res.status(400).json(apiError("Shift is not open or does not belong to you"))
-      }
-      resolvedShiftId = shift.id
-    } else {
-      // Business rule: every transaction belongs to a shift. When the caller
-      // does not supply one, attach this user's currently active shift (if any).
-      const active = await prisma.shift.findFirst({
-        where: { organizationId, userId, status: { in: ['OPEN', 'REOPENED'] } },
-        orderBy: { openedAt: 'desc' },
-        select: { id: true },
-      })
-      resolvedShiftId = active?.id
-    }
-
-    // ── B2B purchase-code pre-check ──
-    // RRA rejects (resultCd 910) any business-TIN (non-7-prefix) sale
-    // submitted without a valid 6-character prcOrdCd — confirmed against the
-    // sandbox. Catching this before the sale commits avoids completing a
-    // checkout (payment taken, stock deducted) that can never be fiscalized.
-    // Skipped for proforma: it is never fiscalized (see step 7 below), so RRA
-    // never sees it and has no purchase-code requirement to satisfy.
-    if (!isProforma && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
-      const customer = await prisma.customer.findUnique({
-        where: { id: parseInt(customerId) },
-        select: { TIN: true, prcOrdCd: true },
-      })
-      const custTin = customer?.TIN?.trim() ?? ''
-      if (custTin && !custTin.startsWith('7')) {
-        const poolCount = await prisma.organizationPurchaseCode.count({
-          where: { organizationId, buyerTin: custTin, consumed: false },
-        })
-        const fallbackCode = customer?.prcOrdCd?.trim()
-        const hasValidFallback = !!fallbackCode && fallbackCode.length === 6
-        if (poolCount === 0 && !hasValidFallback) {
-          return res.status(400).json(apiError(
-            `This customer has a business TIN (${custTin}) but no RRA purchase order code on file. Add a 6-character purchase code for this customer before completing the sale.`
-          ))
-        }
-      }
-    }
-
-    // Separate product items from service items
-    const productItems = items.filter((i: any) => i.itemType !== 'SERVICE')
-    const serviceItems = items.filter((i: any) => i.itemType === 'SERVICE')
-
-    // ── Server-side mathematical gatekeeper (Module 2.2) ──
-    // Re-compute totals server-side; reject if client delta > 0.01 RWF
-    const clientTotal = items.reduce((s: number, i: any) => s + Number(i.quantity) * Number(i.unitPrice), 0)
-
-    // Pre-validate payment amounts using client total (rough check; precise check uses Decimal inside txn)
-    const calculatedDebt = clientTotal - (cashAmount || 0) - (insuranceAmount || 0)
-    if (Math.abs(calculatedDebt - (debtAmount || 0)) > 0.01) {
-      return res.status(400).json(apiError("Payment amounts do not match total. Total must equal cashAmount + insuranceAmount + debtAmount"))
-    }
-
-    // Fetch all products once up-front for tax calculation
-    const productIds = productItems
-      .map((i: any) => parseInt(i.productId))
-      .filter((id: number) => !isNaN(id))
-
-    const products = productIds.length > 0
-      ? await prisma.product.findMany({
-          where: { id: { in: productIds }, organizationId },
-          select: { id: true, unitPrice: true, taxCategory: true, taxCode: true, name: true },
-        })
-      : []
-
-    const productMap = new Map(products.map(p => [p.id, p]))
-
-    // When the org disallows manual discounts, sellers may not submit a unit
-    // price below the catalog price — the POS UI already locks the price
-    // field in that case, but the API must not trust the client either.
-    if (!orgSettings.featureFlags.allowManualDiscounts) {
-      for (const item of productItems) {
-        const product = productMap.get(parseInt(item.productId))
-        if (!product) continue
-        const catalogPrice = Number(product.unitPrice)
-        if (Number(item.unitPrice) < catalogPrice - 0.01) {
-          return res.status(400).json(apiError(
-            `Manual price overrides are disabled for this organization. "${product.name}" must be sold at ${catalogPrice}.`
-          ))
-        }
-      }
-    }
-
-    // Automatically determine paymentType if multiple payment methods are used
-    let finalPaymentType = paymentType
-    const hasCash = (cashAmount || 0) > 0
-    const hasInsurance = (insuranceAmount || 0) > 0
-    const hasDebt = (debtAmount || 0) > 0
-    const paymentMethodCount = [hasCash, hasInsurance, hasDebt].filter(Boolean).length
-
-    // Handle payment type determination
-    // If paymentType is MOBILE_MONEY or CREDIT_CARD and there's cash amount, keep it
-    if (paymentType === 'MOBILE_MONEY' || paymentType === 'CREDIT_CARD') {
-      // If it's a standalone mobile money or card payment, keep the payment type
-      if (hasCash && !hasInsurance && !hasDebt) {
-        finalPaymentType = paymentType
-      } else if (paymentMethodCount > 1) {
-        // Multiple methods, use MIXED
-        finalPaymentType = 'MIXED'
-      }
-    } else if (paymentMethodCount > 1 && paymentType !== 'MIXED') {
-      // If multiple payment methods are used, ensure paymentType is MIXED
-      finalPaymentType = 'MIXED'
-    } else if (hasDebt && !hasCash && !hasInsurance) {
-      // Only debt, no other payments
-      finalPaymentType = 'DEBT'
-    } else if (hasInsurance && !hasCash && !hasDebt) {
-      // Only insurance, no other payments
-      finalPaymentType = 'INSURANCE'
-    } else if (hasCash && !hasInsurance && !hasDebt && !paymentType) {
-      // Only cash, no other payments, and no payment type specified
-      finalPaymentType = 'CASH'
-    }
-
-    // Sale number now; invoice number is allocated inside the transaction below so
-    // that a rollback (e.g. insufficient stock, tax mismatch) also rolls back the
-    // sequence increment — otherwise a failed sale permanently burns an RRA invoice
-    // number, leaving a gap in the mandated gapless sequence.
-    const saleNumber = `SALE-${Date.now()}`
-
-    // C6: determine receipt type label (NS/TS/PS)
-    const org = await prisma.organization.findUnique({
-      where: { id: organizationId! },
-      select: { trainingMode: true, vatRegistered: true, isTaxExempt: true },
-    });
-    const rcptLabel = isProforma ? 'PS' : (org?.trainingMode ? 'TS' : 'NS');
-
-    // ── Atomic transaction ──
-    const sale = await prisma.$transaction(async (tx) => {
-      // 1. Validate stock availability for PRODUCT items only
-      for (const item of productItems) {
-        const product = productMap.get(parseInt(item.productId))
-
-        if (!product) {
-          throw new Error(`Product with ID ${item.productId} not found`);
-        }
-
-        const stockAggregates = await tx.inventoryLedger.groupBy({
-          by: ['direction'],
-          where: {
-            productId: parseInt(item.productId),
-            organizationId: organizationId!,
-            branchId: { equals: branchId as number },
-          },
-          _sum: { quantity: true },
-        });
-
-        const inQty = stockAggregates.find(a => a.direction === 'IN')?._sum.quantity || 0;
-        const outQty = stockAggregates.find(a => a.direction === 'OUT')?._sum.quantity || 0;
-        const currentStock = inQty - outQty;
-
-        if (currentStock < item.quantity && !orgSettings.featureFlags.allowNegativeStock) {
-          throw new Error(
-            `Insufficient stock for product ${product.name}. Available: ${currentStock}, Requested: ${item.quantity}`
-          );
-        }
-      }
-
-      // 2. Server-side tax computation with Decimal arithmetic.
-      // The business's VAT-registration status decides whether the products'
-      // A/B/C categories apply, or whether every line is forced to tax code D.
-      const allItemsForTax = items.map((i: any) => ({
-        productId: i.productId ? parseInt(i.productId) : undefined,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-        itemType: i.itemType || 'PRODUCT',
-      }));
-      const taxSummary = await TaxService.calculateSaleTax(organizationId!, allItemsForTax, org?.vatRegistered ?? false, org?.isTaxExempt ?? false);
-
-      // ── MODULE 2.2: Reconcile server-computed total vs client total ──
-      const computedTotal = taxSummary.items.reduce(
-        (sum, ti) => sum + Number(ti.taxableAmount) + Number(ti.taxAmount),
-        0,
-      )
-      if (Math.abs(computedTotal - clientTotal) > 0.01) {
-        throw new Error(
-          `Total amount mismatch: server computed ${computedTotal.toFixed(2)}, client submitted ${clientTotal.toFixed(2)}`
-        )
-      }
-
-      // 3. Select batches and calculate costs for PRODUCT items only
-      const inventoryMethod = (req.body.inventoryMethod as 'FIFO' | 'LIFO' | 'AVERAGE') || 'FIFO';
-      const saleItemsData: any[] = [];
-
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const isService = item.itemType === 'SERVICE';
-        const quantity = item.quantity;
-        const unitPrice = item.unitPrice;
-        const itemTax = taxSummary.items[i];
-
-        if (isService) {
-          saleItemsData.push({
-            quantity,
-            unitPrice,
-            totalPrice: quantity * unitPrice,
-            costPrice: 0,
-            profit: quantity * unitPrice,
-            taxRate: itemTax?.taxRate || 0,
-            taxAmount: itemTax?.taxAmount || 0,
-            taxCode: itemTax?.taxCode || null,
-            itemType: 'SERVICE',
-            serviceName: item.serviceName || null,
-            serviceDescription: item.serviceDescription || null,
-            measurementUnit: item.measurementUnit || 'PCS',
-            exemptionReference: item.exemptionReference || null,
-          });
-          continue;
-        }
-
-        const productId = parseInt(item.productId);
-        let batchId: number | null = null;
-        let costPrice = 0;
-
-        try {
-          const selectedBatches = await selectBatchesForSale({
-            productId,
-            organizationId: organizationId!,
-            quantity,
-            method: inventoryMethod,
-            branchId: branchId,
-          }, tx);
-
-          if (selectedBatches.length > 0) {
-            batchId = selectedBatches[0].batchId;
-            costPrice = selectedBatches[0].unitCost;
-
-            for (const batch of selectedBatches) {
-              await updateBatchQuantity(batch.batchId, batch.quantity, organizationId!, tx);
-            }
-          } else {
-            const avgCost = await getAverageCost(productId, organizationId!, branchId);
-            costPrice = avgCost?.averageCost || 0;
-          }
-        } catch (error: any) {
-          const avgCost = await getAverageCost(productId, organizationId!, branchId);
-          costPrice = avgCost?.averageCost || 0;
-        }
-
-        const profit = (unitPrice - costPrice) * quantity;
-
-        saleItemsData.push({
-          quantity,
-          unitPrice,
-          totalPrice: quantity * unitPrice,
-          costPrice,
-          profit,
-          taxRate: itemTax.taxRate,
-          taxAmount: itemTax.taxAmount,
-          taxCode: itemTax.taxCode,
-          itemType: 'PRODUCT',
-          measurementUnit: item.measurementUnit || 'PCS',
-          exemptionReference: item.exemptionReference || null,
-          product: { connect: { id: productId } },
-          ...(batchId !== null ? { batch: { connect: { id: batchId } } } : {}),
-        });
-      }
-
-      // 4. Allocate an invoice/receipt number and create the sale together, so a
-      // rollback of this transaction also rolls back the sequence increment.
-      //
-      // PROFORMA is explicitly "not an official receipt" (CIS spec §16/17) and
-      // per §6.3.6 must never be assigned a VSDC-signed number — it draws a
-      // local, non-fiscal counter instead (BranchReceiptCounter) and never
-      // touches the real gapless RRA sequence (vsdcInvcNo stays null).
-      let invoiceNumber: string | null
-      let vsdcInvcNo: number | null = null
-      let localReceiptSeq: number | null = null
-      let localReceiptTotalSeq: number | null = null
-      if (isProforma) {
-        const localSeq = await allocateLocalReceiptSequence(branchId as number, 'PS', tx)
-        localReceiptSeq = localSeq.typeSeq
-        localReceiptTotalSeq = localSeq.totalSeq
-        // Plain auto-incrementing number, not a "PROF-B3-2026-000003"-style
-        // string — set to the sale's own id right after creation below, so
-        // it's a clean number and globally unique by construction (the
-        // invoiceNumber column is unique across every sale, any branch/type).
-        invoiceNumber = null
-      } else {
-        const generated = await generateInvoiceNumber(organizationId!, branchId as number, tx)
-        invoiceNumber = generated.invoiceNumber
-        vsdcInvcNo = generated.vsdcInvcNo
-      }
-
-      const newSale = await tx.sale.create({
-        data: {
-          saleNumber,
-          invoiceNumber,
-          vsdcInvcNo,
-          localReceiptSeq,
-          localReceiptTotalSeq,
-          customerId: parseInt(customerId),
-          userId: userId!,
-          organizationId: organizationId!,
-          branchId: branchId as any,
-          paymentType: finalPaymentType,
-          cashAmount: cashAmount || 0,
-          insuranceAmount: insuranceAmount || 0,
-          debtAmount: debtAmount || 0,
-          shiftId: resolvedShiftId,
-          totalAmount: computedTotal,
-          vatAmount: taxSummary.vatAmount,
-          taxableAmount: taxSummary.taxableAmount,
-          status: 'COMPLETED',
-          isProforma: !!isProforma,
-          rcptLabel: rcptLabel as any,
-          saleItems: { create: saleItemsData },
-        },
-        include: {
-          saleItems: { include: { product: true, batch: true } },
-          customer: true,
-        },
-      } as any);
-
-      // 4a. Proforma's invoiceNumber is the sale's own id — assigned now that
-      // it exists, so "INVOICE NO" prints as a plain, auto-incrementing
-      // number instead of a "PROF-B..." string.
-      if (isProforma) {
-        const plainInvoiceNumber = String((newSale as any).id)
-        await tx.sale.update({
-          where: { id: (newSale as any).id },
-          data: { invoiceNumber: plainInvoiceNumber },
-        })
-        ;(newSale as any).invoiceNumber = plainInvoiceNumber
-      }
-
-      // 4b. Consume an organization-level RRA purchase code for business (B2B)
-      // buyers. Skipped for proforma — it is never fiscalized, so no purchase
-      // code is ever needed and none should be burned on a quote.
-      const custTin = (newSale as any).customer?.TIN?.trim() ?? '';
-      if (!isProforma && custTin && !custTin.startsWith('7')) {
-        const allocated = await consumeOrgPurchaseCode(organizationId!, custTin, (newSale as any).id, tx)
-          ?? ((newSale as any).customer?.prcOrdCd ?? null);
-        if (allocated) {
-          await tx.sale.update({
-            where: { id: (newSale as any).id },
-            data: { prcOrdCd: allocated },
-          });
-          (newSale as any).prcOrdCd = allocated;
-        }
-      }
-
-      // 5. Record stock movements for PRODUCT items only (MODULE 2.4: guard reference).
-      // Skipped for proforma — it is a quote, not a completed sale, so nothing
-      // has actually left inventory yet.
-      if (!isProforma) {
-        for (const item of productItems) {
-          const saleItem = (newSale as any).saleItems?.find((si: any) => si.productId === parseInt(item.productId));
-          if (!saleNumber || saleNumber.trim().length === 0) {
-            throw new Error('Stock movement reference cannot be empty');
-          }
-          await removeStock({
-            organizationId: organizationId!,
-            productId: parseInt(item.productId),
-            userId: userId!,
-            quantity: item.quantity,
-            movementType: 'SALE',
-            branchId: branchId as any,
-            reference: saleNumber,
-            referenceType: 'SALE',
-            note: `Sale #${saleNumber}`,
-            batchId: saleItem?.batchId || null,
-            tx,
-          });
-        }
-      }
-
-      // 6. Update customer balance if debt (atomic with sale). Skipped for
-      // proforma — no payment obligation exists yet for a quote.
-      if (!isProforma) {
-        const remainingDebt = computedTotal - (cashAmount || 0) - (insuranceAmount || 0)
-        if (remainingDebt > 0) {
-          await tx.customer.update({
-            where: { id: parseInt(customerId) },
-            data: { balance: { increment: remainingDebt } },
-          });
-        }
-      }
-
-      // 7. Write transactional outbox entry (atomic with the sale). Skipped for
-      // proforma — it must never reach VSDC (see step 4 comment).
-      if (!isProforma && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
-        const operation: EbmOperation = 'SALE';
-        const idempotencyKey = `ebm-${operation}-${organizationId}-${newSale.id}`;
-        await tx.ebmOutbox.create({
-          data: {
-            organizationId: organizationId!,
-            saleId: newSale.id,
-            operation,
-            idempotencyKey,
-            payload: { version: 1, saleId: newSale.id, organizationId: organizationId!, operation } as any,
-            status: 'PENDING',
-            nextAttemptAt: new Date(),
-          },
-        });
-      }
-
-      return newSale;
-    }, {
-      maxWait: 30000,   // 30 seconds
-      timeout: 60000,   // 60 seconds
-    });
-
-    // Wait (briefly, bounded) for the outbox worker to attempt fiscalization
-    // before responding, so the caller knows whether the receipt is actually
-    // safe to print. RRA VSDC spec forbids issuing/printing a receipt VSDC
-    // hasn't confirmed (checklist §16/§22). The outbox row stays the single
-    // source of truth, so idempotency is kept and the 2-minute cron job
-    // remains a retry/backstop if this bounded wait times out or the process
-    // crashes mid-submission — it does not block or fail the sale itself.
-    let fiscalization: { status: 'success' | 'pending' | 'failed'; sdcRcptNo: number | null; isCertified: boolean } = {
-      status: 'success',
-      sdcRcptNo: null,
-      isCertified: false,
-    };
-
-    if (!isProforma && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
-      const EBM_INLINE_WAIT_MS = 5000;
-      await Promise.race([
-        processEbmOutboxBatch(5).catch((e) => {
-          console.error('[EBM] immediate fiscalization error:', e);
-        }),
-        new Promise((resolve) => setTimeout(resolve, EBM_INLINE_WAIT_MS)),
-      ]);
-
-      const [outboxRow, fiscalTx] = await Promise.all([
-        prisma.ebmOutbox.findFirst({
-          where: { saleId: sale.id, operation: 'SALE' },
-          orderBy: { createdAt: 'desc' },
-          select: { status: true },
-        }),
-        prisma.ebmTransaction.findFirst({
-          where: { saleId: sale.id, submissionStatus: 'SUCCESS' },
-          orderBy: { createdAt: 'desc' },
-          select: { sdcRcptNo: true },
-        }),
-      ]);
-
-      if (outboxRow?.status === 'SUCCEEDED') {
-        fiscalization = { status: 'success', sdcRcptNo: fiscalTx?.sdcRcptNo ?? null, isCertified: !!fiscalTx };
-      } else if (outboxRow?.status === 'DEAD_LETTER') {
-        fiscalization = { status: 'failed', sdcRcptNo: null, isCertified: false };
-      } else {
-        fiscalization = { status: 'pending', sdcRcptNo: null, isCertified: false };
-      }
-    }
-
-    // 7. Record split payments if provided
-    if (splitPayments && Array.isArray(splitPayments) && splitPayments.length > 0) {
-      const validPaymentMethods = ['CASH', 'BANK', 'CARD', 'PAYPACK', 'MTN_MOMO', 'AIRTEL_MONEY', 'WALLET', 'GIFT_CARD', 'STORE_CREDIT'];
-      let totalSplitAmount = 0;
-
-      for (const pmt of splitPayments) {
-        if (!validPaymentMethods.includes(pmt.paymentMethod)) continue;
-        const amount = Number(pmt.amount) || 0;
-        if (amount <= 0) continue;
-        totalSplitAmount += amount;
-
-        await prisma.salePayment.create({
-          data: {
-            saleId: sale.id,
-            organizationId,
-            amount,
-            paymentMethod: pmt.paymentMethod,
-            reference: pmt.reference || null,
-            status: 'COMPLETED',
-            processedAt: new Date(),
-            metadata: pmt.metadata || null,
-          },
-        });
-      }
-    }
-
-    // 8. Log activity (outside transaction for performance, but after successful sale)
-    await auditLogger.sales(req, {
-      type: 'SALE_COMPLETED',
-      description: `Sale completed (Invoice #${sale.invoiceNumber || saleNumber})`,
-      entityType: 'Sale',
-      entityId: sale.id,
-      metadata: {
-        invoiceNumber: sale.invoiceNumber,
-        totalAmount: sale.totalAmount,
-        paymentType: sale.paymentType,
-        splitPayments: splitPayments?.length || 0,
-      }
-    });
-
-    // Fetch the complete sale with payments
-    const completeSale = await prisma.sale.findUnique({
-      where: { id: sale.id },
-      include: {
-        saleItems: { include: { product: true, batch: true } },
-        customer: true,
-        salePayments: true,
-      },
-    });
+    const { sale, completeSale, fiscalization } = await commitSale({
+      organizationId,
+      branchId: branchId as number,
+      userId,
+      customerId: parseInt(customerId),
+      items,
+      paymentType,
+      cashAmount,
+      debtAmount,
+      insuranceAmount,
+      payments: splitPayments,
+      shiftId,
+      isProforma: !!isProforma,
+      inventoryMethod,
+      req,
+    })
 
     res.status(201).json(success({ ...(completeSale ?? sale), fiscalization }))
   } catch (error: any) {
+    if (error instanceof CommitSaleError) {
+      return res.status(error.statusCode).json(apiError(error.message))
+    }
+
     console.error("[Create Sale Error]:", error)
 
     // Return appropriate status code based on error type
@@ -565,6 +73,202 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
     }
 
     res.status(500).json(apiError("Failed to create sale"))
+  }
+}
+
+/**
+ * Recompute a proforma's line items / customer before it is converted.
+ * A proforma never touched inventory, VSDC or the customer balance, so this is a
+ * pure recompute: replace saleItems, refresh totals. Only allowed while the
+ * proforma has not been converted yet.
+ *
+ * PUT /:organizationId/:saleId/proforma   body: { customerId?, items: [...] }
+ */
+export const updateProforma = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId)
+    const saleId = parseInt(req.params.saleId)
+    const { customerId, items } = req.body as {
+      customerId?: number
+      items: Array<{ productId?: number; quantity: number; unitPrice: number; itemType?: 'PRODUCT' | 'SERVICE'; serviceName?: string; serviceDescription?: string; measurementUnit?: string }>
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json(apiError("A proforma must have at least one item"))
+    }
+
+    const sale = await prisma.sale.findFirst({
+      where: { id: saleId, organizationId, ...buildBranchFilter(req) },
+      include: { convertedSale: { select: { id: true } } },
+    })
+    if (!sale) return res.status(404).json(apiError("Proforma not found"))
+    if (!sale.isProforma) return res.status(400).json(apiError("Only a proforma can be edited this way"))
+    if (sale.status === 'CONVERTED' || sale.convertedSale) {
+      return res.status(409).json(apiError("This proforma has already been converted to a sale"))
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { vatRegistered: true, isTaxExempt: true },
+    })
+
+    const itemsForTax = items.map((i) => ({
+      productId: i.productId ? Number(i.productId) : undefined,
+      quantity: Number(i.quantity),
+      unitPrice: Number(i.unitPrice),
+      itemType: i.itemType || 'PRODUCT',
+    }))
+    const taxSummary = await TaxService.calculateSaleTax(
+      organizationId,
+      itemsForTax as any,
+      org?.vatRegistered ?? false,
+      org?.isTaxExempt ?? false,
+    )
+    const computedTotal = taxSummary.items.reduce(
+      (sum, ti) => sum + Number(ti.taxableAmount) + Number(ti.taxAmount),
+      0,
+    )
+
+    const saleItemsData = items.map((i, idx) => {
+      const t = taxSummary.items[idx]
+      const isService = (i.itemType || 'PRODUCT') === 'SERVICE'
+      const quantity = Number(i.quantity)
+      const unitPrice = Number(i.unitPrice)
+      return {
+        quantity,
+        unitPrice,
+        totalPrice: quantity * unitPrice,
+        costPrice: 0,
+        profit: 0,
+        taxRate: t?.taxRate ?? 0,
+        taxAmount: t?.taxAmount ?? 0,
+        taxCode: (t?.taxCode as any) ?? null,
+        itemType: isService ? 'SERVICE' : 'PRODUCT',
+        measurementUnit: (i.measurementUnit as any) || 'PCS',
+        serviceName: isService ? (i.serviceName || null) : null,
+        serviceDescription: isService ? (i.serviceDescription || null) : null,
+        ...(isService ? {} : { product: { connect: { id: Number(i.productId) } } }),
+      }
+    })
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.saleItem.deleteMany({ where: { saleId } })
+      return tx.sale.update({
+        where: { id: saleId },
+        data: {
+          ...(customerId ? { customerId: Number(customerId) } : {}),
+          totalAmount: computedTotal,
+          vatAmount: taxSummary.vatAmount,
+          taxableAmount: taxSummary.taxableAmount,
+          debtAmount: computedTotal,
+          cashAmount: 0,
+          insuranceAmount: 0,
+          saleItems: { create: saleItemsData as any },
+        },
+        include: {
+          saleItems: { include: { product: true } },
+          customer: true,
+        },
+      })
+    })
+
+    await auditLogger.sales(req, {
+      type: 'SALE_UPDATE',
+      description: `Proforma #${sale.invoiceNumber ?? saleId} edited`,
+      entityType: 'Sale',
+      entityId: saleId,
+      metadata: { itemCount: items.length, totalAmount: computedTotal },
+    })
+
+    res.json(success(updated))
+  } catch (error: any) {
+    console.error("[Update Proforma Error]:", error)
+    res.status(500).json(apiError("Failed to update the proforma"))
+  }
+}
+
+/**
+ * Convert a proforma into a real NS sale: creates a fresh, fully-fiscalized sale
+ * from the (optionally edited) proforma lines + the supplied payment, links it
+ * back via proformaSourceId, and moves the proforma to status CONVERTED. The
+ * proforma document itself is kept untouched.
+ *
+ * POST /:organizationId/:saleId/convert
+ *   body: { paymentType?, cashAmount?, debtAmount?, insuranceAmount?, payments?,
+ *           shiftId?, customerId?, items? }
+ */
+export const convertProforma = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId)
+    const saleId = parseInt(req.params.saleId)
+    // @ts-ignore
+    const userId = parseInt(req.user?.userId as string)
+    const branchId = await resolveBranchIdForWrite(req)
+    const { paymentType, cashAmount, debtAmount, insuranceAmount, payments: splitPayments, shiftId, customerId, items } = req.body
+
+    const proforma = await prisma.sale.findFirst({
+      where: { id: saleId, organizationId, ...buildBranchFilter(req) },
+      include: {
+        saleItems: true,
+        convertedSale: { select: { id: true, invoiceNumber: true } },
+      },
+    })
+    if (!proforma) return res.status(404).json(apiError("Proforma not found"))
+    if (!proforma.isProforma) return res.status(400).json(apiError("This sale is not a proforma"))
+    if (proforma.status === 'CONVERTED' || proforma.convertedSale) {
+      return res.status(409).json(apiError("This proforma has already been converted", undefined, { convertedSaleId: proforma.convertedSale?.id ?? null }))
+    }
+
+    // Use the edited lines when supplied, otherwise the proforma's current lines.
+    const resolvedItems = Array.isArray(items) && items.length > 0
+      ? items
+      : proforma.saleItems.map((si) => ({
+          productId: si.productId ?? undefined,
+          quantity: si.quantity,
+          unitPrice: Number(si.unitPrice),
+          itemType: si.itemType,
+          serviceName: si.serviceName ?? undefined,
+          serviceDescription: si.serviceDescription ?? undefined,
+          measurementUnit: si.measurementUnit,
+        }))
+
+    const { sale, completeSale, fiscalization } = await commitSale({
+      organizationId,
+      branchId: branchId as number,
+      userId,
+      customerId: customerId ? Number(customerId) : proforma.customerId,
+      items: resolvedItems,
+      paymentType,
+      cashAmount,
+      debtAmount,
+      insuranceAmount,
+      payments: splitPayments,
+      shiftId,
+      isProforma: false,
+      proformaSourceId: saleId,
+      inventoryMethod: req.body?.inventoryMethod,
+      req,
+    })
+
+    await prisma.sale.update({ where: { id: saleId }, data: { status: 'CONVERTED' } })
+
+    res.status(201).json(success({ ...(completeSale ?? sale), fiscalization, proformaSourceId: saleId }))
+  } catch (error: any) {
+    if (error instanceof CommitSaleError) {
+      return res.status(error.statusCode).json(apiError(error.message))
+    }
+    // proforma_source_id is unique — a concurrent convert loses this race.
+    if (error.code === 'P2002' && String(error.meta?.target ?? '').includes('proforma_source_id')) {
+      return res.status(409).json(apiError("This proforma has already been converted"))
+    }
+    if (error.message && error.message.includes('Insufficient stock')) {
+      return res.status(400).json(apiError(error.message))
+    }
+    if (error.message && error.message.includes('not found')) {
+      return res.status(404).json(apiError(error.message))
+    }
+    console.error("[Convert Proforma Error]:", error)
+    res.status(500).json(apiError("Failed to convert the proforma"))
   }
 }
 
@@ -652,7 +356,10 @@ export const getSales = async (req: BranchAuthRequest, res: Response) => {
           ebmTransactions: {
             orderBy: { createdAt: "desc" },
             take: 1,
-          }
+          },
+          // Proforma-conversion links so the UI can badge "Converted".
+          convertedSale: { select: { id: true, invoiceNumber: true, saleNumber: true } },
+          proformaSource: { select: { id: true, invoiceNumber: true } },
         },
         orderBy: {
           createdAt: 'desc',
@@ -722,6 +429,8 @@ export const getSaleById = async (req: BranchAuthRequest, res: Response) => {
             createdAt: true,
           },
         },
+        convertedSale: { select: { id: true, saleNumber: true, invoiceNumber: true, createdAt: true } },
+        proformaSource: { select: { id: true, saleNumber: true, invoiceNumber: true, createdAt: true } },
         ebmTransactions: {
           orderBy: { createdAt: "desc" },
         },

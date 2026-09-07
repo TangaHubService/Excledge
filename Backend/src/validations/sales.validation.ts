@@ -46,6 +46,34 @@ export const createSaleSchema = z.object({
   }),
 });
 
+export const updateProformaSchema = z.object({
+  body: z.object({
+    customerId: z.coerce.number().positive().optional(),
+    items: z.array(saleItemSchema).min(1, 'A proforma must have at least one item'),
+  }),
+  params: z.object({
+    organizationId: z.coerce.number().positive('Organization ID required'),
+    saleId: z.coerce.number().positive('Sale ID required'),
+  }),
+});
+
+export const convertProformaSchema = z.object({
+  body: z.object({
+    customerId: z.coerce.number().positive().optional(),
+    items: z.array(saleItemSchema).min(1).optional(),
+    paymentType: z.enum(['CASH', 'DEBT', 'INSURANCE', 'MIXED', 'MOBILE_MONEY', 'CREDIT_CARD']).optional(),
+    cashAmount: z.coerce.number().nonnegative().optional(),
+    debtAmount: z.coerce.number().nonnegative().optional(),
+    insuranceAmount: z.coerce.number().nonnegative().optional(),
+    shiftId: z.coerce.number().positive().optional(),
+    payments: z.array(salePaymentSchema).optional(),
+  }),
+  params: z.object({
+    organizationId: z.coerce.number().positive('Organization ID required'),
+    saleId: z.coerce.number().positive('Sale ID required'),
+  }),
+});
+
 export const cancelSaleSchema = z.object({
   body: z.object({
     reason: z.string().min(5, 'Cancellation reason must be at least 5 characters'),
@@ -58,3 +86,5 @@ export const cancelSaleSchema = z.object({
 
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 export type CancelSaleInput = z.infer<typeof cancelSaleSchema>;
+export type UpdateProformaInput = z.infer<typeof updateProformaSchema>;
+export type ConvertProformaInput = z.infer<typeof convertProformaSchema>;

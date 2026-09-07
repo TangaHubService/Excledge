@@ -600,6 +600,9 @@ model Sale {
   originalSaleId       Int?             @map("original_sale_id")
   shiftId              Int?             @map("shift_id")
   originHeldSaleId     Int?             @unique @map("origin_held_sale_id")
+  // When this (NS) sale was created by converting a proforma, points at that
+  // proforma. The proforma itself is kept and moved to status CONVERTED.
+  proformaSourceId     Int?             @unique @map("proforma_source_id")
   isProforma           Boolean          @default(false)
   reprintCount         Int              @default(0)
   invoiceNumber        String?          @unique @map("invoice_number")
@@ -628,6 +631,8 @@ model Sale {
   branch               Branch           @relation(fields: [branchId], references: [id]) // NEW
   originalSale         Sale?            @relation("RefundRelation", fields: [originalSaleId], references: [id])
   refunds              Sale[]           @relation("RefundRelation")
+  proformaSource       Sale?            @relation("ProformaConversion", fields: [proformaSourceId], references: [id])
+  convertedSale        Sale?            @relation("ProformaConversion")
   user                 User             @relation(fields: [userId], references: [id])
   salePayments         SalePayment[]
   shift                Shift?           @relation(fields: [shiftId], references: [id])
@@ -1630,6 +1635,7 @@ enum SaleStatus {
   PARTIALLY_PAID
   OVERPAID
   UNPAID
+  CONVERTED
 }
 
 enum LogModule {

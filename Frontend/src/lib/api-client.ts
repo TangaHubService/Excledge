@@ -611,6 +611,36 @@ class ApiClient {
     return this.request(`/sales/${this.getOrganizationId()}?${query}`);
   }
 
+  /** Replace a proforma's line items / customer (only before it is converted). */
+  async updateProforma(
+    saleId: string | number,
+    data: { customerId?: number; items: Array<{ productId?: number; quantity: number; unitPrice: number; itemType?: 'PRODUCT' | 'SERVICE'; serviceName?: string; serviceDescription?: string }> },
+  ) {
+    return this.request(`/sales/${this.getOrganizationId()}/${saleId}/proforma`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  /** Convert a proforma into a real, fiscalized NS sale. */
+  async convertProforma(
+    saleId: string | number,
+    data: {
+      paymentType?: string;
+      cashAmount?: number;
+      debtAmount?: number;
+      insuranceAmount?: number;
+      payments?: Array<{ paymentMethod: string; amount: number; reference?: string }>;
+      items?: Array<{ productId?: number; quantity: number; unitPrice: number; itemType?: 'PRODUCT' | 'SERVICE'; serviceName?: string }>;
+      customerId?: number;
+    },
+  ) {
+    return this.request(`/sales/${this.getOrganizationId()}/${saleId}/convert`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
   async getSale(id: string) {
     return this.request(`/sales/${this.getOrganizationId()}/${id}`);
   }

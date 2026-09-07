@@ -18,6 +18,9 @@ import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice';
 import { downloadInvoicePdf, type InvoicePdfFormat } from '../../../lib/invoice-pdf';
 import type { SaleEbmTransaction } from '../../../utils/invoiceFiscal';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
+import ProformaConvertDialog from '../../../components/sales/ProformaConvertDialog';
+import SaleSuccessModal, { type SaleSuccessData } from '../../../components/pos/SaleSuccessModal';
+import { useBranch } from '../../../context/BranchContext';
 import { useNavigate } from 'react-router-dom';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -61,7 +64,10 @@ type Sale = {
   saleNumber: string;
   invoiceNumber?: string;
   rcptLabel?: string | null;
-  customer: { name: string; email?: string; phone?: string };
+  isProforma?: boolean;
+  proformaSourceId?: number | null;
+  convertedSale?: { id: string | number; invoiceNumber?: string | null; saleNumber?: string | null } | null;
+  customer: { id?: string | number; name: string; email?: string; phone?: string };
   user: { name: string };
   paymentType: string;
   cashAmount: string;
@@ -164,7 +170,11 @@ export default function SalesPage() {
   // Named distinctly from date-fns's `format` (imported above) to avoid shadowing it.
   const [invoiceFormat, setInvoiceFormat] = useState<InvoicePdfFormat>('A4');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [proformaToConvert, setProformaToConvert] = useState<Sale | null>(null);
+  const [convertSuccess, setConvertSuccess] = useState<SaleSuccessData | null>(null);
+  const [convertedSaleRaw, setConvertedSaleRaw] = useState<Sale | null>(null);
   const [openRowMenu, setOpenRowMenu] = useState<string | null>(null);
+  const { selectedBranchId } = useBranch();
   const fetchSales = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -324,6 +334,49 @@ export default function SalesPage() {
     setPaymentFilter(''); setRcptLabelFilter('');
     setSearchTerm(''); setCurrentPage(1);
   };
+
+  // Poll GET /invoices/:saleId until VSDC confirms (200) or the wait gives up —
+  // the endpoint returns 425 while fiscalization is still in flight. Flips the
+  // success modal's indicator in place. Mirrors the POS checkout behaviour.
+  const pollFiscalization = useCallback(async (saleId: string | number) => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await new Promise((r) => setTimeout(r, 1500));
+      try {
+        await apiClient.getInvoice(saleId);
+        setConvertSuccess(prev => (prev && String(prev.id) === String(saleId) ? { ...prev, fiscalizationStatus: 'success' } : prev));
+        return;
+      } catch (e: any) {
+        if (e?.response?.status === 425) continue;
+        break;
+      }
+    }
+    setConvertSuccess(prev => (prev && String(prev.id) === String(saleId) ? { ...prev, fiscalizationStatus: 'failed' } : prev));
+  }, []);
+
+  const handleProformaConverted = useCallback((newSale: any) => {
+    setProformaToConvert(null);
+    fetchSales();
+    if (!newSale?.id) return;
+    const fiscalizationStatus: 'success' | 'pending' | 'failed' =
+      newSale?.fiscalization?.status ?? 'success';
+    setConvertedSaleRaw(newSale as Sale);
+    setConvertSuccess({
+      id: newSale.id,
+      invoiceNumber: newSale.invoiceNumber,
+      receiptNumber: newSale?.fiscalization?.sdcRcptNo != null ? String(newSale.fiscalization.sdcRcptNo) : undefined,
+      customerName: newSale?.customer?.name,
+      totalAmount: Number(newSale.totalAmount ?? 0),
+      totalItems: Array.isArray(newSale.saleItems)
+        ? newSale.saleItems.reduce((s: number, i: any) => s + Number(i.quantity ?? 0), 0)
+        : undefined,
+      paymentLabel: getPaymentMethodLabel(newSale.paymentType ?? ''),
+      amountPaid: Number(newSale.cashAmount ?? 0) + Number(newSale.insuranceAmount ?? 0),
+      changeReturned: 0,
+      date: newSale.createdAt ? new Date(newSale.createdAt) : new Date(),
+      fiscalizationStatus,
+    });
+    if (fiscalizationStatus === 'pending') pollFiscalization(newSale.id);
+  }, [fetchSales, pollFiscalization]);
 
   const pageWindowStart = Math.max(1, Math.min(currentPage - 2, Math.max(1, totalPages - 4)));
   const visiblePages = Array.from(
@@ -634,6 +687,15 @@ export default function SalesPage() {
                       ) : (
                         <span className="text-gray-300 text-sm">—</span>
                       )}
+                      {(sale.status === 'CONVERTED' || sale.convertedSale) && (
+                        <button
+                          onClick={e => { e.stopPropagation(); if (sale.convertedSale) handleViewSale(String(sale.convertedSale.id)); }}
+                          className="ml-1 inline-flex items-center px-1.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                          title={sale.convertedSale?.invoiceNumber ? `Converted → ${sale.convertedSale.invoiceNumber}` : 'Converted'}
+                        >
+                          Converted
+                        </button>
+                      )}
                     </TableCell>
 
                     {/* Total */}
@@ -680,7 +742,16 @@ export default function SalesPage() {
                                   : <Download className="h-3.5 w-3.5" />}
                                 Download 80mm
                               </button>
-                              {sale.status === 'COMPLETED' && (
+                              {sale.rcptLabel === 'PS' && sale.status !== 'CONVERTED' && !sale.convertedSale && (
+                                <button
+                                  onClick={() => { setProformaToConvert(sale); setOpenRowMenu(null); }}
+                                  className="w-full text-left px-3 py-2 flex items-center gap-2 text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                >
+                                  <ArrowUpRight className="h-3.5 w-3.5" />
+                                  Convert to sale
+                                </button>
+                              )}
+                              {sale.status === 'COMPLETED' && sale.rcptLabel !== 'PS' && (
                                 <button
                                   onClick={() => { handleOpenRefundModal(sale); setOpenRowMenu(null); }}
                                   className="w-full text-left px-3 py-2 flex items-center gap-2 text-amber-600 hover:bg-amber-50 transition-colors"
@@ -689,7 +760,7 @@ export default function SalesPage() {
                                   Refund Sale
                                 </button>
                               )}
-                              {sale.status === 'COMPLETED' && (
+                              {sale.status === 'COMPLETED' && sale.rcptLabel !== 'PS' && (
                                 <button
                                   onClick={() => { handleOpenCancelModal(sale); setOpenRowMenu(null); }}
                                   className="w-full text-left px-3 py-2 flex items-center gap-2 text-red-600 hover:bg-red-50 transition-colors"
@@ -898,6 +969,30 @@ export default function SalesPage() {
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+
+      {/* ── Proforma → sale conversion ───────────────────────────────────── */}
+      <ProformaConvertDialog
+        sale={proformaToConvert as any}
+        branchId={selectedBranchId as any}
+        open={!!proformaToConvert}
+        onClose={() => setProformaToConvert(null)}
+        onConverted={handleProformaConverted}
+      />
+
+      <SaleSuccessModal
+        isOpen={!!convertSuccess}
+        saleData={convertSuccess}
+        onPrint={() => convertedSaleRaw && handleDownloadInvoice(convertedSaleRaw, '80mm')}
+        onDownload={() => convertedSaleRaw && handleDownloadInvoice(convertedSaleRaw, invoiceFormat)}
+        onShare={() => convertedSaleRaw && handleDownloadInvoice(convertedSaleRaw, invoiceFormat)}
+        onNewSale={() => { setConvertSuccess(null); setConvertedSaleRaw(null); }}
+        onViewInvoice={() => {
+          const id = convertSuccess?.id;
+          setConvertSuccess(null);
+          setConvertedSaleRaw(null);
+          if (id != null) handleViewSale(String(id));
+        }}
+      />
 
       {/* ── Refund drawer ────────────────────────────────────────────────── */}
       <Drawer open={isRefundModalOpen} onOpenChange={setIsRefundModalOpen}>
