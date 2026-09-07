@@ -782,6 +782,33 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
     if (l4SalePrice !== undefined) data.l4SalePrice = l4SalePrice === '' ? null : l4SalePrice
     if (l5SalePrice !== undefined) data.l5SalePrice = l5SalePrice === '' ? null : l5SalePrice
 
+    // Auto-propagate edits back to RRA. syncProductToRra() skips an item whose
+    // ebmSyncStatus is already SYNCED, so a rename (or any other field that
+    // appears in the /items/saveItems payload) would never reach the VSDC.
+    // When one of those fields actually changes on a registered item, clear the
+    // skip-guard so the async sync below re-registers it. /items/saveItems is an
+    // upsert on itemCd, so this updates the existing RRA record in place.
+    const RRA_SYNCED_FIELDS = [
+      'name', 'itemClsCd', 'itemType', 'itemStandardName', 'origin',
+      'pkgUnitCd', 'qtyUnitCd', 'taxCode', 'batchNumber', 'barcode', 'unitPrice',
+      'l1SalePrice', 'l2SalePrice', 'l3SalePrice', 'l4SalePrice', 'l5SalePrice',
+      'additionalInfo', 'minStock', 'useInsurance',
+    ] as const
+    const valueChanged = (next: unknown, prev: unknown) => {
+      const n = next != null && typeof (next as any).toNumber === 'function' ? (next as any).toNumber() : next
+      const p = prev != null && typeof (prev as any).toNumber === 'function' ? (prev as any).toNumber() : prev
+      const nf = typeof n === 'number' || typeof n === 'string' ? Number(n) : NaN
+      const pf = typeof p === 'number' || typeof p === 'string' ? Number(p) : NaN
+      if (!Number.isNaN(nf) && !Number.isNaN(pf)) return nf !== pf
+      return (n ?? null) !== (p ?? null)
+    }
+    const rraFieldChanged = RRA_SYNCED_FIELDS.some(
+      (f) => f in data && valueChanged((data as any)[f], (existingProduct as any)[f]),
+    )
+    if (rraFieldChanged && existingProduct.itemCd && existingProduct.ebmSyncStatus === 'SYNCED') {
+      data.ebmSyncStatus = 'PENDING'
+    }
+
     // itemCd is generated once and then permanent (it's the identifier RRA
     // knows the item by) — only backfill it for legacy rows that never got
     // one; never regenerate an itemCd that's already registered.
