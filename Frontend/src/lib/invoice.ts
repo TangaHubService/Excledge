@@ -6,6 +6,8 @@
  * describe the metadata envelope used for status and filenames in the UI.
  */
 
+import type { InvoicePdfFormat } from "./invoice-pdf"
+
 export interface InvoiceCompany {
   logo?: string | null
   name: string
@@ -215,7 +217,7 @@ export function unwrapInvoice(payload: unknown): EbmInvoice {
 export function getInvoiceFilename(
   invoice: EbmInvoice | null | undefined,
   fallback = "invoice",
-  format: "A4" | "80mm" = "A4",
+  format: InvoicePdfFormat = "A4",
 ): string {
   const toFilenamePart = (value: unknown): string => String(value ?? "")
     .trim()
@@ -227,7 +229,7 @@ export function getInvoiceFilename(
   const invoiceNumber = toFilenamePart(invoice?.invoice?.invoiceNumber || invoice?.invoice?.saleNumber)
   const fallbackName = toFilenamePart(fallback) || "invoice"
   const name = invoiceNumber || fallbackName
-  const suffix = format === "80mm" ? "-80mm" : ""
+  const suffix = format === "80mm" ? "-80mm" : format === "A5" ? "-A5" : ""
 
   return `EBM-Invoice-${name}${suffix}.pdf`
 }

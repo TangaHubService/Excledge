@@ -7,7 +7,7 @@ const statsData = [
     icon: <Star className="h-4 w-4 sm:h-5 sm:w-5" />,
   },
   {
-    value: "50K+",
+    value: "50+",
     label: "Active Users",
     icon: <Users className="h-4 w-4 sm:h-5 sm:w-5" />,
   },
