@@ -2,7 +2,7 @@ import PDFDocument from "pdfkit"
 import type { RenderInvoicePayload } from "./invoice-render.service"
 import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, groupFiscalValue } from "./invoice-format.service"
 import { getOrganizationLogo, getRraCertificationLogo } from "./invoice-logo.service"
-import { NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_NOTICE, SYSTEM_FOOTER, TRAINING_MODE_LABEL } from "./system-branding.service"
+import { NOT_FISCALIZED_NOTICE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_NOTICE, SYSTEM_FOOTER, TRAINING_MODE_LABEL } from "./system-branding.service"
 import { dataUrlBuffer, documentIndicator, isFormalNoticeIndicator, isRefundTransaction, safe, taxGroups } from "./invoice-pdf.service"
 
 /**
@@ -99,6 +99,11 @@ function drawReceipt(
   if (indicator) {
     y += 2
     y = centeredText(doc, indicator, y, true, 8)
+  }
+  // Real sale printed before VSDC confirmed it — spell out that the slip is
+  // provisional right under the NOT FISCALISED title.
+  if (data.invoice.notFiscalized) {
+    y = centeredText(doc, NOT_FISCALIZED_NOTICE, y, true, 6)
   }
   // A copied refund (watermark title "COPY") is still a refund and keeps its
   // reference to the original sale, independent of which title printed above.

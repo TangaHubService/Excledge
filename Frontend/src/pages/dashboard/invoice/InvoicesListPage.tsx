@@ -98,7 +98,7 @@ export default function InvoicesListPage() {
   const handleDownload = async (invoice: Invoice) => {
     setDownloadingId(invoice.id);
     try {
-      const data = unwrapInvoice(await apiClient.getInvoice(invoice.id));
+      const data = unwrapInvoice(await apiClient.getInvoice(invoice.id, { allowPending: true }));
       const ok = await downloadInvoicePdf(
         invoice.id,
         getInvoiceFilename(data, invoice.saleNumber, invoiceFormat),

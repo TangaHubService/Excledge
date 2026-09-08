@@ -35,7 +35,7 @@ export default function InvoicePage() {
 
   const invoiceQuery = useQuery({
     queryKey: ["invoice", id],
-    queryFn: async () => unwrapInvoice(await apiClient.getInvoice(id!)),
+    queryFn: async () => unwrapInvoice(await apiClient.getInvoice(id!, { allowPending: true })),
     enabled: !!id,
     retry: 1,
     refetchInterval: 15_000,
@@ -181,19 +181,30 @@ export default function InvoicePage() {
             <h2 className="text-base font-bold text-slate-900">No invoice found</h2>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-300 bg-slate-200 p-2 shadow-sm sm:p-4">
-            <iframe
-              title={`Invoice ${data.invoice.invoiceNumber}`}
-              src={pdfUrl}
-              className={cn(
-                "mx-auto block min-h-[75vh] bg-white",
-                format === "80mm"
-                  ? "w-full max-w-[80mm]"
-                  : format === "A5"
-                    ? "aspect-[148/210] w-full max-w-[148mm]"
-                    : "aspect-[210/297] w-full max-w-[210mm]",
-              )}
-            />
+          <div className="space-y-2">
+            {data.invoice.notFiscalized ? (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+                <strong className="font-bold">NOT FISCALISED.</strong>{" "}
+                {data.invoice.notFiscalized === "failed"
+                  ? "This sale could not be confirmed by RRA VSDC. "
+                  : "This sale has not been confirmed by RRA VSDC yet. "}
+                The document below is provisional — it carries no SDC signature, receipt number or QR and is not a valid tax receipt.
+              </div>
+            ) : null}
+            <div className="overflow-hidden rounded-xl border border-slate-300 bg-slate-200 p-2 shadow-sm sm:p-4">
+              <iframe
+                title={`Invoice ${data.invoice.invoiceNumber}`}
+                src={pdfUrl}
+                className={cn(
+                  "mx-auto block min-h-[75vh] bg-white",
+                  format === "80mm"
+                    ? "w-full max-w-[80mm]"
+                    : format === "A5"
+                      ? "aspect-[148/210] w-full max-w-[148mm]"
+                      : "aspect-[210/297] w-full max-w-[210mm]",
+                )}
+              />
+            </div>
           </div>
         )}
       </div>

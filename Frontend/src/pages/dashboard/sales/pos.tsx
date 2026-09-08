@@ -851,7 +851,7 @@ export default function SalesForm() {
   const buildInvoicePdfBlob = useCallback(async (base: any): Promise<{ blob: Blob; filename: string } | null> => {
     if (!base?.id) return null
     try {
-      const invoice = unwrapInvoice(await apiClient.getInvoice(base.id))
+      const invoice = unwrapInvoice(await apiClient.getInvoice(base.id, { allowPending: true }))
       const blob = await getInvoicePdfBlob(base.id)
       return {
         blob,

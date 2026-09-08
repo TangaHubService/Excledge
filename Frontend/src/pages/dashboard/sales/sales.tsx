@@ -303,7 +303,7 @@ export default function SalesPage() {
   const handleDownloadInvoice = async (sale: Sale, downloadFormat: InvoicePdfFormat = invoiceFormat) => {
     setIsDownloadingInvoice(sale.id);
     try {
-      const invoice = unwrapInvoice(await apiClient.getInvoice(sale.id));
+      const invoice = unwrapInvoice(await apiClient.getInvoice(sale.id, { allowPending: true }));
       const ok = await downloadInvoicePdf(
         sale.id,
         getInvoiceFilename(invoice, sale.saleNumber, downloadFormat),

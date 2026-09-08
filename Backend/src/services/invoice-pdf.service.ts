@@ -2,7 +2,7 @@ import PDFDocument from "pdfkit"
 import type { RenderInvoiceLineItem, RenderInvoicePayload } from "./invoice-render.service"
 import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, groupFiscalValue } from "./invoice-format.service"
 import { getOrganizationLogo, getRraCertificationLogo } from "./invoice-logo.service"
-import { NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_DOCUMENT_LABEL, REFUND_NOTICE, SYSTEM_FOOTER, TRAINING_MODE_LABEL } from "./system-branding.service"
+import { NOT_FISCALIZED_NOTICE, NOT_FISCALIZED_TITLE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_DOCUMENT_LABEL, REFUND_NOTICE, SYSTEM_FOOTER, TRAINING_MODE_LABEL } from "./system-branding.service"
 import { TAX_RATE_BY_SLOT } from "./rra-ebm.service"
 
 // The layout below is authored in A4 coordinate space. A5 output renders the
@@ -80,6 +80,10 @@ export function documentIndicator(data: RenderInvoicePayload): string {
   if (data.invoice.isProforma || label === "PS") return "PROFORMA"
   if (label === "TS" || label === "TR") return TRAINING_MODE_LABEL
   if (data.invoice.isCopy || label === "CS" || label === "CR") return "COPY"
+  // A real sale downloaded before VSDC confirmed it: the title makes clear the
+  // document is provisional. Ranks below COPY/TRAINING/PROFORMA (which can't be
+  // pending anyway) and above the plain refund/blank case.
+  if (data.invoice.notFiscalized) return NOT_FISCALIZED_TITLE
   if (label === "NR" || (!label && data.invoice.status === "REFUNDED")) return REFUND_DOCUMENT_LABEL
   return ""
 }
@@ -434,6 +438,13 @@ function drawFinalFooter(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): v
       align: "center",
       characterSpacing: 0.3,
     })
+    if (data.invoice.notFiscalized) {
+      doc.font(FONT_BOLD).fontSize(6).text(NOT_FISCALIZED_NOTICE, LEFT, 638, {
+        width: RIGHT - LEFT,
+        align: "center",
+        characterSpacing: 0.2,
+      })
+    }
     doc.moveTo(LEFT, 642).lineTo(RIGHT, 642).dash(2, { space: 1.5 }).stroke().undash()
   }
 
@@ -450,6 +461,28 @@ function drawFinalFooter(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): v
       height: 10,
       ellipsis: true,
     })
+}
+
+/**
+ * Big translucent diagonal "NOT FISCALISED" stamp across a page, drawn for a
+ * real sale a user downloaded before VSDC confirmed it. Drawn in A4 coordinate
+ * space (the caller applies the A5 scale transform), on top of the content so
+ * it can't be missed or cropped out.
+ */
+function drawNotFiscalizedWatermark(doc: PDFKit.PDFDocument): void {
+  doc.save()
+  doc.rotate(-33, { origin: [PAGE_WIDTH / 2, PAGE_HEIGHT / 2] })
+  doc
+    .font(FONT_BOLD)
+    .fontSize(52)
+    .fillColor("#D32F2F")
+    .opacity(0.16)
+    .text(NOT_FISCALIZED_TITLE, PAGE_WIDTH / 2 - 360, PAGE_HEIGHT / 2 - 34, {
+      width: 720,
+      align: "center",
+      characterSpacing: 2,
+    })
+  doc.opacity(1).fillColor("#000000").restore()
 }
 
 /**
@@ -509,6 +542,7 @@ export async function generateEbmInvoicePdf(
     drawHeader(doc, data, companyLogo, certificationLogo, index + 1, pages.length)
     drawTable(doc, lines, finalPage)
     if (finalPage) drawFinalFooter(doc, data)
+    if (data.invoice.notFiscalized) drawNotFiscalizedWatermark(doc)
     doc.restore()
   })
 

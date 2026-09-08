@@ -27,3 +27,13 @@ export const TRAINING_MODE_LABEL = "TRAINING MODE"
  * receipt RRA has not (yet) certified.
  */
 export const NOT_OFFICIAL_RECEIPT_NOTICE = "THIS IS NOT AN OFFICIAL RECEIPT"
+
+/**
+ * Printed on a real (NS/NR) invoice that a user chose to download/print before
+ * VSDC confirmed the sale. Such a document is deliberately not a fiscal receipt
+ * — it carries no SDC signature, receipt number, or QR — so it is stamped
+ * unmistakably as provisional. `_TITLE` is the watermark/title; `_NOTICE` is the
+ * explanatory line shown with the "not an official receipt" block.
+ */
+export const NOT_FISCALIZED_TITLE = "NOT FISCALISED"
+export const NOT_FISCALIZED_NOTICE = "SALE NOT YET CONFIRMED BY RRA VSDC — NOT A VALID TAX RECEIPT"

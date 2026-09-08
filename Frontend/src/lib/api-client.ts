@@ -615,9 +615,16 @@ class ApiClient {
     return this.request(`/sales/${this.getOrganizationId()}/${id}`);
   }
 
-  /** Composed ERP invoice payload for the modern RRA/EBM invoice renderer. */
-  async getInvoice(id: string | number) {
-    return this.request(`/sales/${this.getOrganizationId()}/invoices/${id}`);
+  /**
+   * Composed ERP invoice payload for the modern RRA/EBM invoice renderer.
+   * Pass `allowPending` to also get the payload for a real sale VSDC has not
+   * confirmed yet (it comes back stamped NOT FISCALISED); without it the
+   * endpoint returns 425 while fiscalization is still in flight, which the
+   * fiscalization poll relies on.
+   */
+  async getInvoice(id: string | number, opts: { allowPending?: boolean } = {}) {
+    const query = opts.allowPending ? "?allowPending=1" : "";
+    return this.request(`/sales/${this.getOrganizationId()}/invoices/${id}${query}`);
   }
 
   /** Authoritative backend-generated EBM invoice PDF, in A4, A5, or 80mm (thermal receipt) format. */

@@ -1,5 +1,5 @@
 import { formatInvoiceAmount, formatInvoiceQuantity } from "./invoice-format.service"
-import { SYSTEM_POWERED_BY, NOT_OFFICIAL_RECEIPT_NOTICE } from "./system-branding.service"
+import { SYSTEM_POWERED_BY, NOT_OFFICIAL_RECEIPT_NOTICE, NOT_FISCALIZED_TITLE, NOT_FISCALIZED_NOTICE } from "./system-branding.service"
 // invoice-pdf.service only imports RenderInvoicePayload/RenderInvoiceLineItem
 // as types (`import type`, erased at build time), so importing its runtime
 // helpers here does not create a circular module dependency at runtime.
@@ -144,6 +144,14 @@ export interface RenderInvoicePayload {
     rcptLabelText?: NullableString
     isProforma: boolean
     isCopy: boolean
+    /**
+     * Set when this document was produced for a real sale that VSDC has not yet
+     * confirmed ("pending" — still being submitted/retried, or "failed" —
+     * permanently dead-lettered). Such a PDF/receipt is watermarked NOT
+     * FISCALISED and is not a valid tax receipt. Absent/null on a normal
+     * fiscalized sale and on proformas.
+     */
+    notFiscalized?: "pending" | "failed" | null
     currency: string
     /** Original sale's invoice number, when this document is a refund (RRA requires the reference printed). */
     originalReceiptNumber?: NullableString
@@ -1066,6 +1074,10 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
             </div>
           </div>
         </div>
+
+        ${data.invoice.notFiscalized
+          ? `<div class="not-official-notice">${escapeHtml(NOT_FISCALIZED_TITLE)} — ${escapeHtml(NOT_FISCALIZED_NOTICE)}</div>`
+          : ""}
 
         ${isFormalNoticeIndicator(documentIndicator(data)) || !data.certification.isCertified
           ? `<div class="not-official-notice">${escapeHtml(NOT_OFFICIAL_RECEIPT_NOTICE)}</div>`
