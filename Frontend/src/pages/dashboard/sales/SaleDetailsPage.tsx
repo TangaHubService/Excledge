@@ -122,7 +122,7 @@ export default function SaleDetailsPage() {
         if (!id) throw new Error('Sale ID is missing');
 
         await apiClient.reprintSale(id);
-        const invoice = unwrapInvoice(await apiClient.getInvoice(id));
+        const invoice = unwrapInvoice(await apiClient.getInvoice(id, { allowPending: true }));
         if (!invoice) throw new Error('Invoice was not returned by the backend.');
 
         const blob = await getInvoicePdfBlob(id, invoiceFormat);
@@ -210,7 +210,7 @@ export default function SaleDetailsPage() {
 
         setIsSharingInvoice(true);
         try {
-            const invoice = unwrapInvoice(await apiClient.getInvoice(id));
+            const invoice = unwrapInvoice(await apiClient.getInvoice(id, { allowPending: true }));
             if (!invoice) throw new Error('Invoice was not returned by the backend.');
             const filename = getInvoiceFilename(invoice, sale.saleNumber, invoiceFormat);
             const shared = await shareInvoicePdf(id, filename, invoiceFormat);

@@ -138,6 +138,12 @@ export interface InvoiceInvoice {
   rcptLabelText?: string | null
   isProforma: boolean
   isCopy: boolean
+  /**
+   * Set when this is a real sale downloaded before VSDC confirmed it
+   * ("pending" — still syncing, or "failed" — permanently dead-lettered). The
+   * document is watermarked NOT FISCALISED and is not a valid tax receipt.
+   */
+  notFiscalized?: 'pending' | 'failed' | null
   currency: string
 }
 

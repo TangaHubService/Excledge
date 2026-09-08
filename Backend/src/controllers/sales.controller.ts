@@ -1268,7 +1268,10 @@ export class FiscalizationPendingError extends Error {
   }
 }
 
-export async function composeInvoicePayload(req: BranchAuthRequest): Promise<RenderInvoicePayload | null> {
+export async function composeInvoicePayload(
+  req: BranchAuthRequest,
+  opts: { allowUnfiscalized?: boolean } = {},
+): Promise<RenderInvoicePayload | null> {
   const saleId = parseInt(req.params.saleId ?? req.params.id)
   const organizationId = parseInt(req.params.organizationId)
 
@@ -1290,6 +1293,12 @@ export async function composeInvoicePayload(req: BranchAuthRequest): Promise<Ren
     // reached SUCCEEDED before its receipt can be composed — anything else
     // (PENDING/PROCESSING/FAILED still retrying, or permanently DEAD_LETTER)
     // blocks here rather than silently degrading to an unsigned receipt.
+    // Set when the sale is real but VSDC has not confirmed it yet. By default
+    // that is a hard stop (RRA VSDC spec §16/§22 — no receipt without VSDC
+    // confirmation); when the caller passes allowUnfiscalized (a deliberate,
+    // user-initiated download/print), we instead compose the payload and stamp
+    // it NOT FISCALISED so the document can never pass as a real tax receipt.
+    let notFiscalized: "pending" | "failed" | null = null
     if (!sale.isProforma) {
       // Not filtered to operation:"SALE" — a refund sale's outbox row is
       // written with operation:"REFUND" (see refundSale), and a voided sale's
@@ -1300,7 +1309,9 @@ export async function composeInvoicePayload(req: BranchAuthRequest): Promise<Ren
         select: { status: true },
       })
       if (outboxRow && outboxRow.status !== "SUCCEEDED") {
-        throw new FiscalizationPendingError(outboxRow.status === "DEAD_LETTER" ? "failed" : "pending")
+        const reason = outboxRow.status === "DEAD_LETTER" ? "failed" : "pending"
+        if (!opts.allowUnfiscalized) throw new FiscalizationPendingError(reason)
+        notFiscalized = reason
       }
     }
 
@@ -1493,6 +1504,7 @@ export async function composeInvoicePayload(req: BranchAuthRequest): Promise<Ren
         rcptLabel,
         rcptLabelText: rcptLabel ? RCT_LABEL_DISPLAY[rcptLabel] ?? rcptLabel : null,
         isProforma: sale.isProforma,
+        notFiscalized,
         // CIS/VSDC spec §7.18/§15: only ONE original printout is allowed —
         // reprintCount is incremented on every deliberate "download" of this
         // invoice's PDF, so the first download (count reaches 1) stays the
@@ -1572,7 +1584,12 @@ export async function composeInvoicePayload(req: BranchAuthRequest): Promise<Ren
 
 export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
   try {
-    const invoiceData = await composeInvoicePayload(req)
+    // ?allowPending=1 — the caller wants the composed invoice even before VSDC
+    // confirms it (to view/download it, stamped NOT FISCALISED). Without it the
+    // endpoint keeps returning 425 while fiscalization is in flight, which the
+    // POS/sales fiscalization poll relies on.
+    const allowUnfiscalized = String(req.query.allowPending ?? "") === "1"
+    const invoiceData = await composeInvoicePayload(req, { allowUnfiscalized })
     if (!invoiceData) return res.status(404).json(apiError("Sale not found"))
 
     return res.json(success({
@@ -1591,7 +1608,10 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
 /** Authoritative backend-generated invoice PDF (A4, A5 or 80mm) for download, preview, sharing, and printing. */
 export const getInvoicePdf = async (req: BranchAuthRequest, res: Response) => {
   try {
-    const invoiceData = await composeInvoicePayload(req)
+    // A PDF download/print is always an explicit user action — allow it before
+    // VSDC confirmation and let the renderer stamp it NOT FISCALISED, rather
+    // than 425 and leave the user with no document at all.
+    const invoiceData = await composeInvoicePayload(req, { allowUnfiscalized: true })
     if (!invoiceData) return res.status(404).json(apiError("Sale not found"))
 
     const q = String(req.query.format ?? "").toUpperCase()
