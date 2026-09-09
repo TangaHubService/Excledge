@@ -151,9 +151,9 @@ export default function SaleSuccessModal({
                   Confirming with the tax authority (VSDC)…
                 </div>
               ) : saleData.fiscalizationStatus === "failed" ? (
-                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-700">
-                  <AlertTriangle className="size-4" />
-                  VSDC didn't confirm this receipt — find it in Sales to retry before printing.
+                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-700">
+                  <AlertTriangle className="size-4 shrink-0" />
+                  VSDC didn't confirm this receipt. You can still download or share it — it prints stamped NOT FISCALISED and is not a valid tax receipt. Retry from Sales once VSDC is reachable.
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-emerald-700">
@@ -163,7 +163,12 @@ export default function SaleSuccessModal({
 
               {/* Actions */}
               {(() => {
-                const printBlocked = saleData.fiscalizationStatus === "pending" || saleData.fiscalizationStatus === "failed"
+                // Print waits only while VSDC confirmation is still in flight
+                // (it resolves within seconds via the poll). A failed sale is
+                // not going to confirm on its own, so its invoice is allowed —
+                // it renders stamped NOT FISCALISED. Download/Share follow the
+                // same rule and stay enabled unless we're still waiting.
+                const printBlocked = saleData.fiscalizationStatus === "pending"
                 return (
                   <>
                     <div className="mt-5 flex flex-col gap-2 sm:flex-row">
