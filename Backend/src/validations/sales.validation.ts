@@ -5,17 +5,17 @@ export const saleItemSchema = z.object({
   quantity: z.coerce.number().positive('Quantity must be positive'),
   unitPrice: z.coerce.number().positive('Unit price must be positive'),
   discount: z.coerce.number().nonnegative('Discount cannot be negative').optional(),
-  itemType: z.enum(['PRODUCT', 'SERVICE']).default('PRODUCT'),
+  itemType: z.enum(['PRODUCT', 'RAW_MATERIAL', 'SERVICE']).default('PRODUCT'),
   serviceName: z.string().optional(),
   serviceDescription: z.string().optional(),
 }).refine(
   (data) => {
-    if (data.itemType === 'PRODUCT' && !data.productId) {
+    if (data.itemType !== 'SERVICE' && !data.productId) {
       return false;
     }
     return true;
   },
-  { message: 'productId is required for PRODUCT items', path: ['productId'] }
+  { message: 'productId is required for stock-tracked items', path: ['productId'] }
 );
 
 const salePaymentSchema = z.object({
@@ -84,7 +84,25 @@ export const cancelSaleSchema = z.object({
   }),
 });
 
+export const refundSaleSchema = z.object({
+  body: z.object({
+    reason: z.string().min(1, 'Refund reason is required').max(500).optional(),
+    // RRA refund reason code (VSDC code class 32, sent as rfdRsnCd). Optional
+    // for backwards compatibility — the controller defaults it to '06 Refund'.
+    rfdRsnCd: z.string().regex(/^\d{2}$/, 'Refund reason code must be two digits').optional(),
+    items: z.array(z.object({
+      saleItemId: z.coerce.number().positive().optional(),
+      quantity: z.coerce.number().positive().optional(),
+    })).optional(),
+  }),
+  params: z.object({
+    id: z.coerce.number().positive('Sale ID required'),
+    organizationId: z.coerce.number().positive('Organization ID required'),
+  }),
+});
+
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 export type CancelSaleInput = z.infer<typeof cancelSaleSchema>;
+export type RefundSaleInput = z.infer<typeof refundSaleSchema>;
 export type UpdateProformaInput = z.infer<typeof updateProformaSchema>;
 export type ConvertProformaInput = z.infer<typeof convertProformaSchema>;

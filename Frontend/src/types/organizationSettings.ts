@@ -24,6 +24,7 @@ export interface ISidebarConfig {
     users: boolean;
     activityLogs: boolean;
     ebmOutbox: boolean;
+    production: boolean;
     subscription: boolean;
     billingHistory: boolean;
     salesReports: boolean;
@@ -95,6 +96,7 @@ export const SIDEBAR_SECTIONS: { label: string; items: { key: keyof ISidebarConf
             { key: 'inventorySummary', label: 'Inventory Summary', route: '/dashboard/inventory-summary' },
             { key: 'stockTransfers', label: 'Stock Transfers', route: '/dashboard/stock-transfers' },
             { key: 'warehouses', label: 'Warehouses', route: '/dashboard/warehouses' },
+            { key: 'production', label: 'Production & BOM', route: '/dashboard/production' },
         ],
     },
     {

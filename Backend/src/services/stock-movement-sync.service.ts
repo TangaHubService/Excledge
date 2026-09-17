@@ -3,7 +3,6 @@ import type { InventoryMovementType, InventoryDirection } from '@prisma/client';
 import { isEbmEnabled, fix2, toRraDate } from './rra-ebm.service';
 import { buildVsdcEnvelope, saveStockItems, saveStockMaster, validateVsdcEnvelope } from './vsdc-api.service';
 import { getCurrentStock } from './inventory-ledger.service';
-import { DEFAULT_ITEM_CLASSIFICATION_CD } from './item-code.service';
 import logger from '../utils/logger';
 
 /**
@@ -101,6 +100,13 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
     });
     return { success: false, error: 'Product has no itemCd' };
   }
+  if (!product.itemClsCd?.trim()) {
+    await prisma.inventoryLedger.update({
+      where: { id: ledgerId },
+      data: { ebmSyncStatus: 'FAILED', ebmError: 'Product has no itemClsCd — select an RRA item classification first' },
+    });
+    return { success: false, error: 'Product has no itemClsCd' };
+  }
 
   const envelope = await buildVsdcEnvelope(entry.organizationId, entry.branchId);
   const envErr = validateVsdcEnvelope(envelope);
@@ -126,9 +132,11 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
     sarNo,
     orgSarNo: 0,
     regTyCd: 'M', // Manual
-    custTin: envelope.tin,
-    custNm: '',
-    custBhfId: envelope.bhfId,
+    // StockIOSaveReq sample uses null customer fields for non-transfer movements.
+    // Only inter-branch transfers should populate the counterparty TIN/bhfId.
+    custTin: null as string | null,
+    custNm: null as string | null,
+    custBhfId: null as string | null,
     sarTyCd,
     ocrnDt: toRraDate(now),
     totItemCnt: 1,
@@ -144,13 +152,14 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
       {
         itemSeq: 1,
         itemCd: product.itemCd,
-        itemClsCd: product.itemClsCd ?? DEFAULT_ITEM_CLASSIFICATION_CD,
+        itemClsCd: product.itemClsCd,
         itemNm: product.name,
-        bcd: product.barcode ?? undefined,
+        bcd: product.barcode ?? null,
         pkgUnitCd: product.pkgUnitCd ?? 'CT',
         pkg: qty,
         qtyUnitCd: product.qtyUnitCd ?? 'U',
         qty,
+        itemExprDt: null,
         prc,
         splyAmt,
         totDcAmt: 0,

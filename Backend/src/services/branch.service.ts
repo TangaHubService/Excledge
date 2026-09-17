@@ -20,10 +20,10 @@ export interface UpdateBranchParams {
   status?: BranchStatus;
   metadata?: any;
   // C10: RRA EBM device credentials
-  bhfId?: string;
-  ebmDeviceId?: string;
-  ebmSerialNo?: string;
-  vsdcUrl?: string;
+  bhfId?: string | null;
+  ebmDeviceId?: string | null;
+  ebmSerialNo?: string | null;
+  vsdcUrl?: string | null;
 }
 
 /**
@@ -133,11 +133,74 @@ export async function updateBranch(
     throw new Error(`Branch with ID ${branchId} not found`);
   }
 
-  // Update branch
-  return await prisma.branch.update({
-    where: { id: branchId },
-    data,
-  });
+  const patch: UpdateBranchParams & { bhfId?: string | null } = { ...data };
+
+  // RRA bhfId is unique per org (@@unique([organizationId, bhfId])).
+  // Normalize whitespace; empty → null so multiple unset branches don't collide.
+  if (data.bhfId !== undefined) {
+    const normalized =
+      data.bhfId == null || String(data.bhfId).trim() === ''
+        ? null
+        : String(data.bhfId).trim();
+    patch.bhfId = normalized;
+
+    if (normalized != null) {
+      const clash = await prisma.branch.findFirst({
+        where: {
+          organizationId,
+          bhfId: normalized,
+          NOT: { id: branchId },
+        },
+        select: { id: true, code: true, name: true },
+      });
+      if (clash) {
+        throw Object.assign(
+          new Error(
+            `Branch code (bhfId) "${normalized}" is already used by ${clash.name} (${clash.code}). Each branch needs a unique RRA branch id (e.g. MAIN=00, East=01).`,
+          ),
+          { statusCode: 409 },
+        );
+      }
+    }
+  }
+
+  if (data.ebmSerialNo !== undefined) {
+    patch.ebmSerialNo =
+      data.ebmSerialNo == null || String(data.ebmSerialNo).trim() === ''
+        ? null
+        : String(data.ebmSerialNo).trim().toUpperCase();
+  }
+
+  if (data.ebmDeviceId !== undefined) {
+    patch.ebmDeviceId =
+      data.ebmDeviceId == null || String(data.ebmDeviceId).trim() === ''
+        ? null
+        : String(data.ebmDeviceId).trim();
+  }
+
+  if (data.vsdcUrl !== undefined) {
+    patch.vsdcUrl =
+      data.vsdcUrl == null || String(data.vsdcUrl).trim() === ''
+        ? null
+        : String(data.vsdcUrl).trim();
+  }
+
+  try {
+    return await prisma.branch.update({
+      where: { id: branchId },
+      data: patch,
+    });
+  } catch (err: any) {
+    if (err?.code === 'P2002' && Array.isArray(err?.meta?.target) && err.meta.target.includes('bhfId')) {
+      throw Object.assign(
+        new Error(
+          `Branch code (bhfId) "${patch.bhfId ?? ''}" is already used by another branch. Each branch needs a unique RRA branch id (e.g. MAIN=00, East=01).`,
+        ),
+        { statusCode: 409 },
+      );
+    }
+    throw err;
+  }
 }
 
 /**

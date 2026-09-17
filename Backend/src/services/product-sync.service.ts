@@ -2,7 +2,7 @@ import { prisma } from '../lib/prisma';
 import { config } from '../config';
 import { isEbmEnabled } from './rra-ebm.service';
 import { buildVsdcEnvelope, saveItem } from './vsdc-api.service';
-import { DEFAULT_ITEM_CLASSIFICATION_CD, itemTypeCodeDigit, ORIGIN_NATION_CODE } from './item-code.service';
+import { itemTypeCodeDigit, getOriginNationCode } from './item-code.service';
 
 /**
  * Synchronize a product with the RRA VSDC gateway via POST /items/saveItems
@@ -14,6 +14,7 @@ import { DEFAULT_ITEM_CLASSIFICATION_CD, itemTypeCodeDigit, ORIGIN_NATION_CODE }
 export async function syncProductToRra(
   productId: number,
   userId?: number,
+  branchId?: number | null,
 ): Promise<{ success: boolean; error?: string }> {
   if (!isEbmEnabled()) {
     return { success: true };
@@ -37,8 +38,8 @@ export async function syncProductToRra(
   // always allocated at product-creation time (see inventory.controller.ts).
   // If either is still missing, refuse to sync rather than invent one — a
   // fabricated itemCd would corrupt RRA's item registry for this taxpayer.
-  // (itemClsCd, by contrast, falls back to DEFAULT_ITEM_CLASSIFICATION_CD
-  // below — see that constant's comment for why.)
+  // itemClsCd is required by RRA VSDC specification — fail sync if not set
+  // instead of silently falling back to a generic code.
   if (!product.itemCd || !product.qtyUnitCd) {
     await prisma.product.update({
       where: { id: productId },
@@ -47,8 +48,43 @@ export async function syncProductToRra(
     return { success: false, error: 'Product is missing itemCd/qtyUnitCd — cannot register with RRA' };
   }
 
+  if (!product.itemClsCd) {
+    await prisma.product.update({
+      where: { id: productId },
+      data: { ebmSyncStatus: 'FAILED' },
+    });
+    return { success: false, error: 'Product is missing RRA item classification (itemClsCd) — cannot register with RRA. Please select a valid RRA item classification.' };
+  }
+
+  if (!product.pkgUnitCd) {
+    await prisma.product.update({
+      where: { id: productId },
+      data: { ebmSyncStatus: 'FAILED' },
+    });
+    return { success: false, error: 'Product is missing packaging unit (pkgUnitCd) — cannot register with RRA.' };
+  }
+
+  if (!product.taxCode) {
+    await prisma.product.update({
+      where: { id: productId },
+      data: { ebmSyncStatus: 'FAILED' },
+    });
+    return { success: false, error: 'Product is missing tax code (taxTyCd) — cannot register with RRA.' };
+  }
+
   try {
-    const envelope = await buildVsdcEnvelope(product.organizationId);
+    // Prefer an explicit branch; otherwise use the org default branch so ItemSaveReq
+    // carries the correct RRA bhfId (HQ = "00") rather than a stale org fallback.
+    let resolvedBranchId = branchId ?? null;
+    if (resolvedBranchId == null) {
+      const def = await prisma.branch.findFirst({
+        where: { organizationId: product.organizationId, status: 'ACTIVE' },
+        orderBy: [{ isDefault: 'desc' }, { id: 'asc' }],
+        select: { id: true },
+      });
+      resolvedBranchId = def?.id ?? null;
+    }
+    const envelope = await buildVsdcEnvelope(product.organizationId, resolvedBranchId);
 
     const user = userId
       ? await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true } })
@@ -58,16 +94,19 @@ export async function syncProductToRra(
 
     // Field names match RRA VSDC API Documentation v1.0.5 §3.3.4.1 (ItemSaveReq)
     // exactly, so the payload can be read alongside the spec without translation.
+    // origin is stored on the product; fallback to org default if somehow missing
+    const origin = product.origin ?? (await getOriginNationCode(product.organizationId));
+
     const payload: Record<string, unknown> = {
       itemCd: product.itemCd,
-      itemClsCd: product.itemClsCd ?? DEFAULT_ITEM_CLASSIFICATION_CD,
+      itemClsCd: product.itemClsCd,
       itemTyCd: itemTypeCodeDigit(product.itemType),
       itemNm: product.name,
       itemStdNm: product.itemStandardName ?? undefined,
-      orgnNatCd: product.origin ?? ORIGIN_NATION_CODE,
-      pkgUnitCd: product.pkgUnitCd ?? 'CT',
+      orgnNatCd: origin,
+      pkgUnitCd: product.pkgUnitCd,
       qtyUnitCd: product.qtyUnitCd,
-      taxTyCd: product.taxCode ?? 'B',
+      taxTyCd: product.taxCode,
       btchNo: product.batchNumber ?? undefined,
       bcd: product.barcode ?? undefined,
       dftPrc: Number(product.unitPrice),
@@ -86,10 +125,10 @@ export async function syncProductToRra(
       modrId: regrId,
     };
 
-    const requestUrl = `${(envelope.vsdcUrl ?? '').replace(/\/$/, '')}${config.ebm.itemPath || '/items/saveItems'}`;
+    const requestUrl = `${(envelope.vsdcUrl ?? config.ebm.apiUrl ?? '').replace(/\/$/, '')}${config.ebm.itemPath || '/items/saveItems'}`;
     console.log(
       `[EBM][ProductSync] productId=${productId} orgId=${product.organizationId} itemCd=${product.itemCd} ` +
-      `POST ${requestUrl} request=${JSON.stringify({ ...envelope, vsdcUrl: undefined, ...payload })}`,
+      `POST ${requestUrl} request=${JSON.stringify({ tin: envelope.tin, bhfId: envelope.bhfId, ...payload })}`,
     );
 
     const result = await saveItem(envelope, payload);

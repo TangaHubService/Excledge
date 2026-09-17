@@ -38,22 +38,30 @@ during certification (`cis_sdc_certification@rra.gov.rw`).
 | Device initialization | `POST /initializer/selectInitInfo` | `vsdc-init.service.ts` |
 | Sale / refund / void | `POST /trnsSales/saveSales` | `rra-ebm.service.ts`, `ebm-outbox.service.ts` |
 | Save item | `POST /items/saveItems` | `product-sync.service.ts` |
+| Save item composition (BOM) | `POST /items/saveItemComposition` | `rra-branch-sync.service.ts` |
 | Select items (reconcile) | `POST /items/selectItems` | `rra-master-data.service.ts` |
 | Codes | `POST /code/selectCodes` | `rra-master-data.service.ts` |
 | Item classification (UNSPSC) | `POST /itemClass/selectItemsClass` | `rra-master-data.service.ts` |
 | Customer lookup | `POST /customers/selectCustomer` | `rra-master-data.service.ts` |
+| Branch list | `POST /branches/selectBranches` | `rra-branch-sync.service.ts` |
+| Save branch customers | `POST /branches/saveBrancheCustomers` | `rra-branch-sync.service.ts` |
+| Save branch users | `POST /branches/saveBrancheUsers` | `rra-branch-sync.service.ts` |
+| Save branch insurances (pharmacy) | `POST /branches/saveBrancheInsurances` | `rra-branch-sync.service.ts` |
 | Notices | `POST /notices/selectNotices` | `rra-master-data.service.ts` |
 | Stock in/out | `POST /stock/saveStockItems` | `stock-movement-sync.service.ts` |
+| Stock movements (pull) | `POST /stock/selectStockItems` | `rra-branch-sync.service.ts` |
 | Stock master (on-hand) | `POST /stockMaster/saveStockMaster` | `stock-movement-sync.service.ts` |
 | Received purchases | `POST /trnsPurchase/selectTrnsPurchaseSales` | `purchase-sync.service.ts` |
 | Confirm purchase | `POST /trnsPurchase/savePurchases` | `purchase-sync.service.ts` |
 | Import declarations | `POST /imports/selectImportItems` | `rra-import.service.ts` |
 | Update import status | `POST /imports/updateImportItems` | `rra-import.service.ts` |
 | Z report | `POST /reports/saveZReports` / `POST /reports/checkZReport` | `ebm-outbox.controller.ts`, `z-report.job.ts` |
+| Auditor overview (CIS) | `GET /organizations/:id/rra/audit-overview` | `ebm-master-data.controller.ts` |
+| Last receipt recovery (CIS) | `GET /sales/:id/last-receipt` | `sales.controller.ts` |
 
-Every request body carries the VSDC envelope: `{ tin, bhfId, sdcId, mrcNo,
-dvcSrlNo, ... }` built by `buildVsdcEnvelope()`; lookups also send an incremental
-`lastReqDt` (`yyyyMMddHHmmss`).
+Every **write** body is `{ tin, bhfId, ...businessPayload }` via `vsdcRequestBody()` —
+device fields (`sdcId`, `mrcNo`, `dvcSrlNo`, `env`) stay off the wire. Lookups also
+send an incremental `lastReqDt` (`yyyyMMddHHmmss`).
 
 ## Flows
 

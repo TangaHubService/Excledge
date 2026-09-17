@@ -27,9 +27,9 @@ dotenv.config()
 
 const prisma = new PrismaClient()
 
-const TEST_TIN = "999945560"
-const TEST_BHF_ID = "00"
-const TEST_DVC_SRL_NO = "excelwartest"
+const TEST_TIN = process.env.EBM_DEFAULT_TIN || "";
+const TEST_BHF_ID = process.env.EBM_DEFAULT_BHF_ID || "00";
+const TEST_DVC_SRL_NO = process.env.EBM_DEFAULT_DVC_SRL_NO || "excelwartest";
 
 async function main() {
   const [orgArg, branchCodeArg] = process.argv.slice(2)

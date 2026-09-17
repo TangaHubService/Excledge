@@ -9,7 +9,6 @@ import {
   toRraReqDt,
 } from './vsdc-api.service';
 import { addStock } from './inventory-ledger.service';
-import { DEFAULT_ITEM_CLASSIFICATION_CD } from './item-code.service';
 import logger from '../utils/logger';
 
 /**
@@ -160,7 +159,10 @@ export async function actionRraImport(
     : null;
   const modr = { id: String(user?.id ?? 'system'), name: user?.name ?? 'System' };
 
-  const itemClsCd = opts.itemClsCd ?? line.itemClsCd ?? DEFAULT_ITEM_CLASSIFICATION_CD;
+  const itemClsCd = (opts.itemClsCd ?? line.itemClsCd ?? '').trim();
+  if (action === 'approve' && !itemClsCd) {
+    return { success: false, error: 'itemClsCd is required to approve an import — pick an RRA item classification' };
+  }
   const itemCd = opts.itemCd ?? line.itemCd ?? undefined;
 
   const payload: Record<string, unknown> = {

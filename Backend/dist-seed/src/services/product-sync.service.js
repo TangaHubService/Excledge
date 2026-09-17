@@ -14,7 +14,7 @@ const item_code_service_1 = require("./item-code.service");
  * Idempotent: if the product is already SYNCED and no relevant fields
  * have changed, the call is skipped.
  */
-async function syncProductToRra(productId, userId) {
+async function syncProductToRra(productId, userId, branchId) {
     if (!(0, rra_ebm_service_1.isEbmEnabled)()) {
         return { success: true };
     }
@@ -33,8 +33,8 @@ async function syncProductToRra(productId, userId) {
     // always allocated at product-creation time (see inventory.controller.ts).
     // If either is still missing, refuse to sync rather than invent one — a
     // fabricated itemCd would corrupt RRA's item registry for this taxpayer.
-    // (itemClsCd, by contrast, falls back to DEFAULT_ITEM_CLASSIFICATION_CD
-    // below — see that constant's comment for why.)
+    // itemClsCd is required by RRA VSDC specification — fail sync if not set
+    // instead of silently falling back to a generic code.
     if (!product.itemCd || !product.qtyUnitCd) {
         await prisma_1.prisma.product.update({
             where: { id: productId },
@@ -42,8 +42,40 @@ async function syncProductToRra(productId, userId) {
         });
         return { success: false, error: 'Product is missing itemCd/qtyUnitCd — cannot register with RRA' };
     }
+    if (!product.itemClsCd) {
+        await prisma_1.prisma.product.update({
+            where: { id: productId },
+            data: { ebmSyncStatus: 'FAILED' },
+        });
+        return { success: false, error: 'Product is missing RRA item classification (itemClsCd) — cannot register with RRA. Please select a valid RRA item classification.' };
+    }
+    if (!product.pkgUnitCd) {
+        await prisma_1.prisma.product.update({
+            where: { id: productId },
+            data: { ebmSyncStatus: 'FAILED' },
+        });
+        return { success: false, error: 'Product is missing packaging unit (pkgUnitCd) — cannot register with RRA.' };
+    }
+    if (!product.taxCode) {
+        await prisma_1.prisma.product.update({
+            where: { id: productId },
+            data: { ebmSyncStatus: 'FAILED' },
+        });
+        return { success: false, error: 'Product is missing tax code (taxTyCd) — cannot register with RRA.' };
+    }
     try {
-        const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(product.organizationId);
+        // Prefer an explicit branch; otherwise use the org default branch so ItemSaveReq
+        // carries the correct RRA bhfId (HQ = "00") rather than a stale org fallback.
+        let resolvedBranchId = branchId ?? null;
+        if (resolvedBranchId == null) {
+            const def = await prisma_1.prisma.branch.findFirst({
+                where: { organizationId: product.organizationId, status: 'ACTIVE' },
+                orderBy: [{ isDefault: 'desc' }, { id: 'asc' }],
+                select: { id: true },
+            });
+            resolvedBranchId = def?.id ?? null;
+        }
+        const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(product.organizationId, resolvedBranchId);
         const user = userId
             ? await prisma_1.prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true } })
             : null;
@@ -51,16 +83,18 @@ async function syncProductToRra(productId, userId) {
         const regrId = user ? String(user.id) : 'system';
         // Field names match RRA VSDC API Documentation v1.0.5 §3.3.4.1 (ItemSaveReq)
         // exactly, so the payload can be read alongside the spec without translation.
+        // origin is stored on the product; fallback to org default if somehow missing
+        const origin = product.origin ?? (await (0, item_code_service_1.getOriginNationCode)(product.organizationId));
         const payload = {
             itemCd: product.itemCd,
-            itemClsCd: product.itemClsCd ?? item_code_service_1.DEFAULT_ITEM_CLASSIFICATION_CD,
+            itemClsCd: product.itemClsCd,
             itemTyCd: (0, item_code_service_1.itemTypeCodeDigit)(product.itemType),
             itemNm: product.name,
             itemStdNm: product.itemStandardName ?? undefined,
-            orgnNatCd: product.origin ?? item_code_service_1.ORIGIN_NATION_CODE,
-            pkgUnitCd: product.pkgUnitCd ?? 'CT',
+            orgnNatCd: origin,
+            pkgUnitCd: product.pkgUnitCd,
             qtyUnitCd: product.qtyUnitCd,
-            taxTyCd: product.taxCode ?? 'B',
+            taxTyCd: product.taxCode,
             btchNo: product.batchNumber ?? undefined,
             bcd: product.barcode ?? undefined,
             dftPrc: Number(product.unitPrice),
@@ -78,9 +112,9 @@ async function syncProductToRra(productId, userId) {
             modrNm: regrNm,
             modrId: regrId,
         };
-        const requestUrl = `${(envelope.vsdcUrl ?? '').replace(/\/$/, '')}${config_1.config.ebm.itemPath || '/items/saveItems'}`;
+        const requestUrl = `${(envelope.vsdcUrl ?? config_1.config.ebm.apiUrl ?? '').replace(/\/$/, '')}${config_1.config.ebm.itemPath || '/items/saveItems'}`;
         console.log(`[EBM][ProductSync] productId=${productId} orgId=${product.organizationId} itemCd=${product.itemCd} ` +
-            `POST ${requestUrl} request=${JSON.stringify({ ...envelope, vsdcUrl: undefined, ...payload })}`);
+            `POST ${requestUrl} request=${JSON.stringify({ tin: envelope.tin, bhfId: envelope.bhfId, ...payload })}`);
         const result = await (0, vsdc_api_service_1.saveItem)(envelope, payload);
         console.log(`[EBM][ProductSync] productId=${productId} itemCd=${product.itemCd} ` +
             `success=${result.success} httpStatus=${result.rawStatus} ` +
@@ -122,4 +156,3 @@ async function syncProductToRra(productId, userId) {
 function syncProductToRraAsync(productId, userId) {
     syncProductToRra(productId, userId).catch((err) => console.error(`[EBM] Product sync #${productId} failed:`, err));
 }
-//# sourceMappingURL=product-sync.service.js.map

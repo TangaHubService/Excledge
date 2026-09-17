@@ -12,8 +12,22 @@ type PrismaClientOrTx = typeof prisma | Prisma.TransactionClient;
  * `pkgUnitCd` — never the raw RRA codes.
  */
 
-// Rwanda is the only origin this system files EBM invoices for.
-export const ORIGIN_NATION_CODE = 'RW';
+/**
+ * Gets the origin nation code for an organization's product registration.
+ * Falls back to 'RW' (Rwanda) if not configured.
+ * Stored in OrganizationSetting.preferences.originCountryCode
+ */
+export async function getOriginNationCode(
+  organizationId: number,
+  client: PrismaClientOrTx = prisma,
+): Promise<string> {
+  const settings = await client.organizationSetting.findUnique({
+    where: { organizationId },
+    select: { preferences: true },
+  });
+  const prefs = (settings?.preferences as Record<string, any>) ?? {};
+  return prefs.originCountryCode ?? 'RW';
+}
 
 /**
  * Fallback RRA item-classification code (§3.3.2.2) used when a product has
@@ -28,18 +42,20 @@ export const ORIGIN_NATION_CODE = 'RW';
  * '5020230302', comes back `resultCd: "910"` ("Invalid item class code").
  * '5059690800' — the code used in the VSDC spec's own JSON examples — is
  * accepted (`resultCd: "000"`). Products can still override this via the
- * optional `itemClsCd` field once a real classification-code lookup exists.
+ * `itemClsCd` field. Product create/sync now require an explicit classification —
+ * this constant remains only for legacy sale-line fallbacks that still need one.
  */
 export const DEFAULT_ITEM_CLASSIFICATION_CD = '5059690800';
 
-// Generic "unpackaged" fallback — matches the fallback already used at
-// sale-time in rra-ebm.service.ts, so an item registered without an explicit
-// pkgUnitCd fiscalizes consistently whether it's a new item or a sale line.
+// Fallback only for building itemCd when an older row lacks pkgUnitCd.
+// New creates require an explicit packaging unit; product-sync refuses to invent one.
 export const DEFAULT_PKG_UNIT_CD = 'CT';
 
 /** VSDC §4.3 Product Type: 1=Raw Material, 2=Finished Product, 3=Service. */
-export function itemTypeCodeDigit(itemType: ItemType): '2' | '3' {
-  return itemType === 'SERVICE' ? '3' : '2';
+export function itemTypeCodeDigit(itemType: ItemType): '1' | '2' | '3' {
+  if (itemType === 'SERVICE') return '3';
+  if (itemType === 'RAW_MATERIAL') return '1';
+  return '2';
 }
 
 /**
@@ -66,15 +82,17 @@ export function deriveQtyUnitCd(measurementUnit: string | null | undefined): str
 
 /**
  * Builds the itemCd candidate string per §4.17:
- *   RW + productTypeDigit + pkgUnitCd + qtyUnitCd + 7-digit sequence
- * e.g. "RW2CTKG0000012"
+ *   <origin> + productTypeDigit + pkgUnitCd + qtyUnitCd + 7-digit sequence
+ * e.g. "RW2CTKG0000012", "UG2NTBA0000013", "KE1CTKG0000014"
  *
  * Exported (as well as wrapped by `allocateItemCd` below) so bulk-import
  * flows can allocate a contiguous block of sequence numbers for one
  * `createMany` call instead of counting per row.
  */
-export function buildItemCd(itemType: ItemType, pkgUnitCd: string | null | undefined, qtyUnitCd: string, seq: number): string {
-  return `${ORIGIN_NATION_CODE}${itemTypeCodeDigit(itemType)}${pkgUnitCd || DEFAULT_PKG_UNIT_CD}${qtyUnitCd}${String(seq).padStart(7, '0')}`;
+export function buildItemCd(itemType: ItemType, pkgUnitCd: string | null | undefined, qtyUnitCd: string, seq: number, origin: string): string {
+  const typeDigit = itemTypeCodeDigit(itemType);
+  const pkg = pkgUnitCd || DEFAULT_PKG_UNIT_CD;
+  return `${origin}${typeDigit}${pkg}${qtyUnitCd}${String(seq).padStart(7, '0')}`;
 }
 
 /**
@@ -122,16 +140,20 @@ export async function allocateItemCd(
   itemType: ItemType,
   pkgUnitCd: string | null | undefined,
   qtyUnitCd: string,
+  origin: string,
   client: PrismaClientOrTx = prisma,
 ): Promise<string> {
   const seq = await nextItemCdSequence(organizationId, 1, client);
-  return buildItemCd(itemType, pkgUnitCd, qtyUnitCd, seq);
+  return buildItemCd(itemType, pkgUnitCd, qtyUnitCd, seq, origin);
 }
 
 /**
  * Atomically reserves a contiguous block of `count` sequence numbers for a
  * bulk create — returns the base such that item `i` (0-indexed) uses
  * `base + i + 1`, matching `allocateItemCd`'s single-item numbering.
+ * Note: The origin parameter is not used here since the block allocation
+ * only reserves sequence numbers. The caller must use buildItemCd with
+ * the appropriate origin for each product.
  */
 export async function allocateItemCdBlock(
   organizationId: number,

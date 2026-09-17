@@ -1,15 +1,21 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isEbmEnabled = void 0;
 exports.createSaleWithOutbox = createSaleWithOutbox;
 exports.payDebtWithTransaction = payDebtWithTransaction;
 exports.processEbmOutboxBatch = processEbmOutboxBatch;
+exports.retryEbmOutboxEntry = retryEbmOutboxEntry;
 const prisma_1 = require("../lib/prisma");
 const config_1 = require("../config");
 const rra_ebm_service_1 = require("./rra-ebm.service");
 Object.defineProperty(exports, "isEbmEnabled", { enumerable: true, get: function () { return rra_ebm_service_1.isEbmEnabled; } });
+const rra_code_service_1 = require("./rra-code.service");
 const vsdc_api_service_1 = require("./vsdc-api.service");
 const electronic_journal_service_1 = require("./electronic-journal.service");
+const logger_1 = __importDefault(require("../utils/logger"));
 const tax_service_1 = require("./tax.service");
 const inventory_ledger_service_1 = require("./inventory-ledger.service");
 // ──────────────────────────────────────────────
@@ -34,6 +40,12 @@ async function createSaleWithOutbox(input) {
     const { organizationId, branchId, userId, customerId, items, paymentType, cashAmount, insuranceAmount, debtAmount, shiftId, } = input;
     const totalAmount = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
     const saleNumber = `SALE-${Date.now()}`;
+    const org = await prisma_1.prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { vatRegistered: true, isTaxExempt: true },
+    });
+    const vatRegistered = org?.vatRegistered ?? false;
+    const isTaxExempt = org?.isTaxExempt ?? false;
     const operation = 'SALE';
     const sale = await prisma_1.prisma.$transaction(async (tx) => {
         // 1. Validate stock with row-level locking
@@ -52,8 +64,8 @@ async function createSaleWithOutbox(input) {
                 throw new Error(`Insufficient stock for ${prod?.name ?? `#${item.productId}`}. Available: ${stock}, requested: ${item.quantity}`);
             }
         }
-        // 2. Calculate tax
-        const taxSummary = await tax_service_1.TaxService.calculateSaleTax(organizationId, items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })));
+        // 2. Calculate tax (forced to A for tax-exempt entities, else D for non-VAT-registered taxpayers)
+        const taxSummary = await tax_service_1.TaxService.calculateSaleTax(organizationId, items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })), vatRegistered, isTaxExempt);
         // 3. Create sale + items
         const saleItemsData = items.map((item, idx) => {
             const t = taxSummary.items[idx];
@@ -221,6 +233,7 @@ async function resolveOrphanedSubmission(outboxEntry) {
  */
 async function processEbmOutboxBatch(limit = 25) {
     if (!(0, rra_ebm_service_1.isEbmEnabled)()) {
+        logger_1.default.info('[EBM-OUTBOX] processEbmOutboxBatch skipped: EBM disabled');
         return { processed: 0, succeeded: 0, failed: 0 };
     }
     // A VSDC call can take up to the configured request timeout. Do not let the
@@ -242,6 +255,7 @@ async function processEbmOutboxBatch(limit = 25) {
     let processed = 0;
     let succeeded = 0;
     let failed = 0;
+    logger_1.default.info(`[EBM-OUTBOX] processEbmOutboxBatch: fetched ${rows.length} due row(s) (limit=${limit})`);
     for (const row of rows) {
         // Claim the row before building its payload or calling VSDC. The previous
         // implementation selected then updated it, allowing simultaneous requests
@@ -253,9 +267,11 @@ async function processEbmOutboxBatch(limit = 25) {
             data: { status: 'PROCESSING' },
         });
         if (claim.count !== 1) {
+            logger_1.default.warn(`[EBM-OUTBOX] row ${row.id} (op=${row.operation}) not claimed (concurrent worker) — skipping`);
             continue;
         }
         processed += 1;
+        logger_1.default.info(`[EBM-OUTBOX] row ${row.id} (op=${row.operation}, saleId=${row.saleId}, org=${row.organizationId}) claimed — processing (status=${row.status}, retry=${row.retryCount})`);
         // ── Orphan reconciliaition ──
         if (row.status === 'PROCESSING') {
             const resolution = await resolveOrphanedSubmission(row);
@@ -274,7 +290,7 @@ async function processEbmOutboxBatch(limit = 25) {
             include: {
                 saleItems: {
                     include: {
-                        product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true } },
+                        product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true, packagingQty: true, barcode: true, useInsurance: true } },
                     },
                 },
                 customer: true,
@@ -287,9 +303,11 @@ async function processEbmOutboxBatch(limit = 25) {
                 where: { id: row.id },
                 data: { status: 'DEAD_LETTER', lastError: 'Sale not found' },
             });
+            logger_1.default.error(`[EBM-OUTBOX] row ${row.id}: sale ${row.saleId} not found — DEAD_LETTER`);
             failed += 1;
             continue;
         }
+        logger_1.default.info(`[EBM-OUTBOX] row ${row.id}: sale ${sale.id} loaded (invoice=${sale.invoiceNumber}, vsdcInvcNo=${sale.vsdcInvcNo ?? 'N/A'}, custTin=${sale.customer?.TIN ?? 'N/A'}, cust prcOrdCd=${sale.customer?.prcOrdCd ?? 'N/A'}, sale prcOrdCd=${sale.prcOrdCd ?? 'N/A'})`);
         // For SALE operations only: skip if the sale was voided/refunded before we submitted it.
         // For REFUND/VOID operations the sale status is *expected* to be REFUNDED/CANCELLED.
         if (row.operation === 'SALE' && (sale.status === 'REFUNDED' || sale.status === 'CANCELLED')) {
@@ -312,19 +330,54 @@ async function processEbmOutboxBatch(limit = 25) {
             failed += 1;
             continue;
         }
+        // ── Auto-allocate an RRA purchase code when the sale has none on record ──
+        // The sandbox rejects every sale without a real single-use code (881/882).
+        // Allocation is strictly buyer-scoped (consumeAnyOrgPurchaseCode): a code
+        // pooled for another buyer TIN carries the wrong checksum and is rejected
+        // with 882, so we never borrow across buyers. When this buyer's pool is
+        // empty the payload builder throws an actionable top-up error and the row
+        // retries with backoff until the operator tops the pool up.
+        // Only persists when an allocation is actually made, so retries reuse the
+        // same code (a consumed code cannot be re-submitted: 883).
+        if (row.operation === 'SALE') {
+            const needsCode = !(sale.prcOrdCd?.trim())
+                && !(sale.customer?.prcOrdCd?.trim());
+            logger_1.default.info(`[EBM-OUTBOX] row ${row.id}: SALE code check — needsCode=${needsCode}`);
+            if (needsCode) {
+                const allocated = await (0, rra_ebm_service_1.consumeAnyOrgPurchaseCode)(row.organizationId, sale.id, prisma_1.prisma, (0, rra_ebm_service_1.effectiveBuyerTin)(sale) || undefined)
+                    ?? (sale.customer?.prcOrdCd ?? null);
+                logger_1.default.info(`[EBM-OUTBOX] row ${row.id}: allocated purchase code = ${allocated ?? 'NONE (pool empty, no customer fallback)'}`);
+                if (allocated) {
+                    await prisma_1.prisma.sale.update({
+                        where: { id: sale.id },
+                        data: { prcOrdCd: allocated },
+                    });
+                    sale.prcOrdCd = allocated;
+                }
+            }
+        }
         // Build gateway payload based on operation type
         let payload;
         if (row.operation === 'SALE') {
+            let rraPaymentCode;
             try {
-                payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org);
+                rraPaymentCode = await (0, rra_code_service_1.getRraPaymentCode)(row.organizationId, sale.paymentType);
             }
             catch (e) {
-                // A bad tax code on this sale should not block the rest of the batch —
-                // dead-letter this row only, it will never succeed on retry either.
                 await prisma_1.prisma.ebmOutbox.update({
                     where: { id: row.id },
-                    data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid sale payload' },
+                    data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid payment method mapping' },
                 });
+                failed += 1;
+                continue;
+            }
+            try {
+                payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org, rraPaymentCode);
+            }
+            catch (e) {
+                // A structurally bad sale dead-letters alone without blocking the
+                // batch; a missing purchase code backs off for retry (transient).
+                await handleBuildError(row, e);
                 failed += 1;
                 continue;
             }
@@ -360,22 +413,59 @@ async function processEbmOutboxBatch(limit = 25) {
             const originalSale = originalSaleId
                 ? await prisma_1.prisma.sale.findFirst({ where: { id: originalSaleId }, select: { invoiceNumber: true, vsdcInvcNo: true, totalAmount: true } })
                 : null;
+            let rraPaymentCode;
             try {
-                // §4.16 Refund Reason Code: '06' = Refund (generic — the free-text
-                // reason from the outbox row payload goes into `remark` instead).
-                payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org, {
+                rraPaymentCode = await (0, rra_code_service_1.getRraPaymentCode)(row.organizationId, sale.paymentType);
+            }
+            catch (e) {
+                await prisma_1.prisma.ebmOutbox.update({
+                    where: { id: row.id },
+                    data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid payment method mapping' },
+                });
+                failed += 1;
+                continue;
+            }
+            try {
+                // RRA refund reason (code class 32, sent as rfdRsnCd): the operator's
+                // selection travels on the outbox payload (preferred) with the refund
+                // sale's stored code as fallback; anything outside RRA's list is a
+                // permanent error (the sandbox rejects it with 910), so validate
+                // before submitting. Default '06 Refund' when neither carries one.
+                const rawRsn = row.payload?.rfdRsnCd
+                    ?? sale.rfdRsnCd
+                    ?? rra_code_service_1.DEFAULT_RFD_RSN_CD;
+                let rfdRsnCd;
+                try {
+                    rfdRsnCd = (0, rra_code_service_1.validateRefundReasonCode)(rawRsn);
+                }
+                catch (e) {
+                    await prisma_1.prisma.ebmOutbox.update({
+                        where: { id: row.id },
+                        data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid refund reason code' },
+                    });
+                    failed += 1;
+                    continue;
+                }
+                // A refund is a fresh fiscal document (new invcNo, salesSttsCd=05),
+                // so it needs its own unconsumed purchase code for the customer TIN —
+                // a code already consumed by the original sale is rejected (883), and
+                // a missing/invalid one is rejected (881/882).
+                const refundCustTin = (0, rra_ebm_service_1.effectiveBuyerTin)(sale);
+                const refundCode = await (0, rra_ebm_service_1.consumeAnyOrgPurchaseCode)(row.organizationId, sale.id, prisma_1.prisma, refundCustTin || undefined);
+                if (refundCode) {
+                    await prisma_1.prisma.sale.update({ where: { id: sale.id }, data: { prcOrdCd: refundCode } });
+                    sale.prcOrdCd = refundCode;
+                }
+                payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org, rraPaymentCode, {
                     orgInvcNo: originalSale?.vsdcInvcNo ?? undefined,
                     rfdDt: new Date(),
-                    rfdRsnCd: '06',
+                    rfdRsnCd,
                 });
                 payload.remark = row.payload?.reason ?? '';
                 payload.idempotencyKey = row.idempotencyKey;
             }
             catch (e) {
-                await prisma_1.prisma.ebmOutbox.update({
-                    where: { id: row.id },
-                    data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid refund payload' },
-                });
+                await handleBuildError(row, e);
                 failed += 1;
                 continue;
             }
@@ -395,22 +485,41 @@ async function processEbmOutboxBatch(limit = 25) {
                 succeeded += 1;
                 continue;
             }
+            let rraPaymentCode;
+            try {
+                rraPaymentCode = await (0, rra_code_service_1.getRraPaymentCode)(row.organizationId, sale.paymentType);
+            }
+            catch (e) {
+                await prisma_1.prisma.ebmOutbox.update({
+                    where: { id: row.id },
+                    data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid payment method mapping' },
+                });
+                failed += 1;
+                continue;
+            }
             try {
                 // A cancellation is a NEW sales-transaction document (fresh invcNo)
                 // with cnclDt/cnclReqDt set and salesSttsCd='04' — the sandbox
                 // rejects a resubmitted invcNo (924) and rejects orgInvcNo on a void
                 // (910: orgInvcNo is refund-only). Confirmed against the RRA VSDC
                 // sandbox 2026-08-10.
+                //
+                // A void is a fresh submission, so it needs a fresh unconsumed
+                // purchase code too: reusing the original sale's (already consumed)
+                // code is rejected with 883. Allocate a new valid one for the buyer.
+                const voidCustTin = (0, rra_ebm_service_1.effectiveBuyerTin)(sale);
+                const voidCode = await (0, rra_ebm_service_1.consumeAnyOrgPurchaseCode)(row.organizationId, sale.id, prisma_1.prisma, voidCustTin || undefined);
+                if (voidCode) {
+                    await prisma_1.prisma.sale.update({ where: { id: sale.id }, data: { prcOrdCd: voidCode } });
+                    sale.prcOrdCd = voidCode;
+                }
                 const { vsdcInvcNo: voidInvcNo } = await (0, rra_ebm_service_1.generateInvoiceNumber)(row.organizationId, sale.branchId);
-                payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org, { cnclDt: new Date(), invcNoOverride: voidInvcNo });
+                payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org, rraPaymentCode, { cnclDt: new Date(), invcNoOverride: voidInvcNo });
                 payload.remark = row.payload?.reason ?? '';
                 payload.idempotencyKey = row.idempotencyKey;
             }
             catch (e) {
-                await prisma_1.prisma.ebmOutbox.update({
-                    where: { id: row.id },
-                    data: { status: 'DEAD_LETTER', lastError: e instanceof Error ? e.message : 'Invalid void payload' },
-                });
+                await handleBuildError(row, e);
                 failed += 1;
                 continue;
             }
@@ -456,10 +565,12 @@ async function processEbmOutboxBatch(limit = 25) {
                 continue;
             }
             const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(row.organizationId, sale.branchId);
-            const result = await (0, vsdc_api_service_1.saveInvc)(envelope, payload);
-            if (!result.success || !result.data?.rcptNo) {
-                const msg = result.error ?? 'VSDC gateway error';
-                await failSubmission(txRow.id, msg);
+            // §22: never submit against a device that is not usable (missing/invalid
+            // TIN or no MRC serial). Retryable — the operator can fix the config and
+            // the next cron cycle picks the row back up.
+            const envelopeError = (0, vsdc_api_service_1.validateVsdcEnvelope)(envelope);
+            if (envelopeError) {
+                await failSubmission(txRow.id, envelopeError);
                 const nextRetry = scheduleNextRetry(row.retryCount);
                 const isDead = row.retryCount + 1 >= (config_1.config.ebm.maxQueueRetries ?? 10);
                 await prisma_1.prisma.ebmOutbox.update({
@@ -467,15 +578,73 @@ async function processEbmOutboxBatch(limit = 25) {
                     data: {
                         status: isDead ? 'DEAD_LETTER' : 'FAILED',
                         retryCount: { increment: 1 },
-                        lastError: msg,
+                        lastError: envelopeError,
                         nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
                     },
                 });
-                if (isDead)
-                    failed += 1;
+                logger_1.default.warn(`[EBM-OUTBOX] row ${row.id}: device not configured — ${envelopeError}`);
+                failed += 1;
                 continue;
             }
-            const { data: vsdc } = result;
+            logger_1.default.info(`[EBM-OUTBOX] row ${row.id}: calling saveInvc (${config_1.config.ebm.apiUrl ?? ''}/trnsSales/saveSales) — prcOrdCd=${payload.prcOrdCd ?? 'N/A'}, custTin=${payload.receipt?.custTin ?? 'N/A'}, invcNo=${payload.invcNo ?? 'N/A'}`);
+            let result = await (0, vsdc_api_service_1.saveInvc)(envelope, payload);
+            logger_1.default.info(`[EBM-OUTBOX] row ${row.id}: saveInvc returned success=${result.success} error=${result.error ?? 'none'} rawStatus=${result.rawStatus} rawBody=${JSON.stringify(result.rawBody)?.slice(0, 500)}`);
+            if (!result.success || !result.data?.rcptNo) {
+                const msg = result.error ?? 'VSDC gateway error';
+                // Idempotency: resultCd 924 ("Invoice number already exists.") means
+                // this invcNo was already fiscalized by a prior attempt (or a manual
+                // re-submission) — treat it as a success, not a failure.
+                const raw = result.rawBody;
+                const replayed = raw && String(raw.resultCd) === '924';
+                const replayedVsdc = replayed ? (0, vsdc_api_service_1.parseVsdcResponse)(raw) : null;
+                if (replayedVsdc?.rcptNo) {
+                    result = { ...result, success: true, data: replayedVsdc };
+                    logger_1.default.info(`[EBM-OUTBOX] row ${row.id}: already fiscalized (924) — treating as SUCCEEDED rcptNo=${replayedVsdc.rcptNo}`);
+                }
+                else {
+                    logger_1.default.warn(`[EBM-OUTBOX] row ${row.id}: submission FAILED — ${msg}`);
+                    // 882/883 = the purchase code itself is bad (invalid checksum, or
+                    // already burned in the sandbox ledger by a prior probe). Burning it
+                    // in the pool prevents every future allocation from re-drawing the
+                    // same poisoned code. Also clear it from the sale so the next retry
+                    // allocates a fresh valid one instead of re-sending the same code.
+                    if (/VSDC error (882|883):/.test(msg)) {
+                        const usedCode = sale.prcOrdCd?.trim();
+                        if (usedCode) {
+                            await prisma_1.prisma.organizationPurchaseCode.updateMany({
+                                where: { organizationId: row.organizationId, code: usedCode, consumed: false },
+                                data: { consumed: true, consumedSaleId: sale.id, consumedAt: new Date() },
+                            });
+                            await prisma_1.prisma.sale.update({
+                                where: { id: sale.id },
+                                data: { prcOrdCd: null },
+                            });
+                            logger_1.default.warn(`[EBM-OUTBOX] row ${row.id}: burned purchase code ${usedCode} (${msg}) — cleared from sale for re-allocation`);
+                        }
+                    }
+                    // 899 = SQLite persistence failure (disk pressure) — transient infrastructure issue
+                    if (msg.includes('SQLite') || msg.includes('persistence') || msg.includes('disk pressure')) {
+                        logger_1.default.warn(`[EBM-OUTBOX] row ${row.id}: submission FAILED — transient infrastructure error, retrying...`);
+                        // Re-raise the error to trigger retry mechanism
+                        throw new Error(`Transient VSDC error: ${msg}`);
+                    }
+                    await failSubmission(txRow.id, msg);
+                    const nextRetry = scheduleNextRetry(row.retryCount);
+                    const isDead = row.retryCount + 1 >= (config_1.config.ebm.maxQueueRetries ?? 10);
+                    await prisma_1.prisma.ebmOutbox.update({
+                        where: { id: row.id },
+                        data: {
+                            status: isDead ? 'DEAD_LETTER' : 'FAILED',
+                            retryCount: { increment: 1 },
+                            lastError: msg,
+                            nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
+                        },
+                    });
+                    failed += 1;
+                    continue;
+                }
+            }
+            const vsdc = result.data;
             const sdcDateTime = vsdc.sdcDateTime ? new Date(vsdc.sdcDateTime) : null;
             // C8: build electronic journal text
             const rcptLabel = sale.rcptLabel ?? (row.operation === 'REFUND' ? 'NR' : 'NS');
@@ -530,9 +699,11 @@ async function processEbmOutboxBatch(limit = 25) {
                 }),
             ]);
             succeeded += 1;
+            logger_1.default.info(`[EBM-OUTBOX] row ${row.id}: SUCCEEDED — rcptNo=${vsdc.rcptNo}, sdcId=${vsdc.sdcId ?? 'N/A'}, sdcDateTime=${sdcDateTime?.toISOString() ?? 'N/A'}`);
         }
         catch (e) {
             const message = e instanceof Error ? e.message : 'EBM request failed';
+            logger_1.default.error(`[EBM-OUTBOX] row ${row.id}: EXCEPTION during submission — ${message}`);
             await failSubmission(txRow.id, message);
             const nextRetry = scheduleNextRetry(row.retryCount);
             const isDead = row.retryCount + 1 >= (config_1.config.ebm.maxQueueRetries ?? 10);
@@ -545,10 +716,10 @@ async function processEbmOutboxBatch(limit = 25) {
                     nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
                 },
             });
-            if (isDead)
-                failed += 1;
+            failed += 1;
         }
     }
+    logger_1.default.info(`[EBM-OUTBOX] processEbmOutboxBatch done: processed=${processed} succeeded=${succeeded} failed=${failed}`);
     return { processed, succeeded, failed };
 }
 // ──────────────────────────────────────────────
@@ -569,6 +740,33 @@ function scheduleNextRetry(currentRetryCount) {
     return new Date(Date.now() + delayMs);
 }
 /**
+ * Classify a payload-build failure. A missing purchase code is TRANSIENT (the
+ * operator tops the pool up and the retry succeeds), so the row backs off
+ * with retries; anything else structural (bad tax code, bad TIN, unknown
+ * product) can never heal and dead-letters immediately with the reason.
+ */
+async function handleBuildError(row, e) {
+    const message = e instanceof Error ? e.message : 'Invalid sale payload';
+    if (e instanceof rra_ebm_service_1.PurchaseCodeMissingError) {
+        const nextRetry = scheduleNextRetry(row.retryCount);
+        const isDead = row.retryCount + 1 >= (config_1.config.ebm.maxQueueRetries ?? 10);
+        await prisma_1.prisma.ebmOutbox.update({
+            where: { id: row.id },
+            data: {
+                status: isDead ? 'DEAD_LETTER' : 'FAILED',
+                retryCount: { increment: 1 },
+                lastError: message,
+                nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
+            },
+        });
+        return;
+    }
+    await prisma_1.prisma.ebmOutbox.update({
+        where: { id: row.id },
+        data: { status: 'DEAD_LETTER', lastError: message },
+    });
+}
+/**
  * Sentinel `nextAttemptAt` for a DEAD_LETTER row. `nextAttemptAt` is a
  * non-nullable `DateTime`, so instead of `null` we store a far-future timestamp
  * meaning "never retry" — the worker only selects PENDING/PROCESSING/FAILED
@@ -576,4 +774,44 @@ function scheduleNextRetry(currentRetryCount) {
  */
 function deadLetterAttemptAt() {
     return new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000);
+}
+/**
+ * Manually re-queue a FAILED or DEAD_LETTER outbox row so the worker will
+ * attempt fiscalization again (e.g. after fixing a missing itemClsCd).
+ * Resets status to PENDING with nextAttemptAt=now and optionally kicks the
+ * batch processor immediately.
+ */
+async function retryEbmOutboxEntry(organizationId, outboxId, opts) {
+    const entry = await prisma_1.prisma.ebmOutbox.findFirst({
+        where: { id: outboxId, organizationId },
+        select: { id: true, status: true, saleId: true, operation: true },
+    });
+    if (!entry) {
+        return { success: false, error: 'Outbox entry not found' };
+    }
+    if (entry.status === 'SUCCEEDED') {
+        return { success: false, error: 'Already fiscalized — nothing to retry' };
+    }
+    if (entry.status === 'PROCESSING') {
+        return { success: false, error: 'Entry is currently processing — wait and try again' };
+    }
+    if (entry.status !== 'FAILED' && entry.status !== 'DEAD_LETTER' && entry.status !== 'PENDING') {
+        return { success: false, error: `Cannot retry status ${entry.status}` };
+    }
+    const updated = await prisma_1.prisma.ebmOutbox.update({
+        where: { id: outboxId },
+        data: {
+            status: 'PENDING',
+            retryCount: 0,
+            nextAttemptAt: new Date(),
+            lastError: entry.status === 'DEAD_LETTER'
+                ? `Re-queued from DEAD_LETTER for retry`
+                : null,
+        },
+        select: { id: true, status: true, saleId: true },
+    });
+    if (opts?.processNow !== false) {
+        processEbmOutboxBatch(5).catch((e) => console.error(`[EBM-OUTBOX] immediate retry after re-queue #${outboxId} failed:`, e));
+    }
+    return { success: true, entry: updated };
 }

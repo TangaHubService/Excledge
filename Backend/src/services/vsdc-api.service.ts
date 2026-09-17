@@ -1,8 +1,18 @@
 import { prisma } from '../lib/prisma';
 import { config } from '../config';
+import logger from '../utils/logger';
 
 /** RRA EBM API may require a security_key header for authentication. */
 const RRA_SECURITY_KEY: string = config.ebm.securityKey || '';
+
+/** Safe JSON stringify for RRA request/response logs (handles circular refs / BigInt). */
+function stringifyRraLog(value: unknown): string {
+  try {
+    return JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
+  } catch {
+    return String(value);
+  }
+}
 
 // ──────────────────────────────────────────────
 // VSDC result-code table (RRA VSDC API Documentation v1.0.5 §4.14)
@@ -87,6 +97,8 @@ export interface VsdcResponse {
   /** VSDC device id — needed client-side to build the printed QR string (CIS spec §7.24.7). */
   sdcId: string;
   sdcDateTime: string;
+  /** Device serial (MRC) echoed back by the VSDC on saveSales. */
+  mrcNo: string;
 }
 
 export interface VsdcApiResult {
@@ -121,7 +133,7 @@ export async function buildVsdcEnvelope(
 
   // Prefer per-branch credentials (RRA issues device per branch).
   // Fall back to org-level credentials for single-branch setups not yet migrated.
-  let bhfId = '00';
+  let bhfId = config.ebm.defaultBhfId;
   let sdcId = org.ebmDeviceId ?? '';
   let mrcNo = org.ebmSerialNo ?? '';
 
@@ -250,6 +262,18 @@ function authHeader(): string | undefined {
   return undefined;
 }
 
+/**
+ * VSDC write/lookup bodies carry only `tin` + `bhfId` from the device envelope
+ * (RRA VSDC API v1.0.5 JSON samples). `sdcId` / `mrcNo` / `dvcSrlNo` / `env`
+ * are CIS-local credentials — spreading them into the body risks resultCd 910.
+ */
+export function vsdcRequestBody(
+  envelope: Pick<VsdcEnvelope, 'tin' | 'bhfId'>,
+  payload: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return { tin: envelope.tin, bhfId: envelope.bhfId, ...payload };
+}
+
 async function postToEndpoint(
   path: string,
   body: Record<string, unknown>,
@@ -263,6 +287,7 @@ async function postToEndpoint(
   }
 
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  logger.info(`[RRA][REQ] POST ${url} payload=${stringifyRraLog(body)}`);
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), config.ebm.requestTimeoutMs);
 
@@ -293,6 +318,10 @@ async function postToEndpoint(
     } catch {
       json = rawText;
     }
+
+    logger.info(
+      `[RRA][RES] POST ${url} http=${res.status} body=${stringifyRraLog(json)?.slice(0, 4000)}`,
+    );
 
     if (!res.ok) {
       const detail = json && typeof json === 'object'
@@ -328,6 +357,7 @@ async function postToEndpoint(
     return { success: true, data: parsed, rawStatus: res.status, rawBody: json };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'VSDC request failed';
+    logger.error(`[RRA][ERR] POST ${url} error=${message} payload=${stringifyRraLog(body)}`);
     return { success: false, error: message, rawStatus: 0, rawBody: null };
   } finally {
     clearTimeout(t);
@@ -360,6 +390,7 @@ export function parseVsdcResponse(raw: unknown): VsdcResponse {
     totRcptNo: '',
     sdcId: '',
     sdcDateTime: '',
+    mrcNo: '',
   };
 
   if (!raw || typeof raw !== 'object') {
@@ -388,6 +419,7 @@ export function parseVsdcResponse(raw: unknown): VsdcResponse {
     totRcptNo: pick('totRcptNo'),
     sdcId: pick('sdcId'),
     sdcDateTime: rawDateTime ? parseRraCompactDateTime(rawDateTime) : '',
+    mrcNo: pick('mrcNo'),
   };
 }
 
@@ -406,11 +438,10 @@ export async function saveInvc(
   if (config.ebm.useMock) {
     return mockResult('INVC', envelope.sdcId);
   }
-  const { vsdcUrl, ...envelopeFields } = envelope;
   return postToEndpoint(
     config.ebm.salePath || '/trnsSales/saveSales',
-    { ...envelopeFields, ...payload },
-    vsdcUrl,
+    vsdcRequestBody(envelope, payload),
+    envelope.vsdcUrl,
     { requiresReceiptNumber: true },
   );
 }
@@ -446,6 +477,7 @@ async function postLookup<T = unknown>(
     return { success: false, resultCd: '?', resultMsg: 'EBM_API_URL is not configured', data: null, raw: null }
   }
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`
+  logger.info(`[RRA][REQ] POST ${url} payload=${stringifyRraLog(body)}`)
   const controller = new AbortController()
   const t = setTimeout(() => controller.abort(), config.ebm.requestTimeoutMs)
   try {
@@ -458,6 +490,10 @@ async function postLookup<T = unknown>(
     const text = await res.text()
     let json: any = null
     try { json = text ? JSON.parse(text) : null } catch { json = text }
+
+    logger.info(
+      `[RRA][RES] POST ${url} http=${res.status} body=${stringifyRraLog(json)?.slice(0, 4000)}`,
+    )
 
     if (!res.ok) {
       return { success: false, resultCd: String(res.status), resultMsg: `Gateway HTTP ${res.status}`, data: null, raw: json }
@@ -474,7 +510,9 @@ async function postLookup<T = unknown>(
       raw: json,
     }
   } catch (e: unknown) {
-    return { success: false, resultCd: '?', resultMsg: e instanceof Error ? e.message : 'VSDC lookup failed', data: null, raw: null }
+    const message = e instanceof Error ? e.message : 'VSDC lookup failed'
+    logger.error(`[RRA][ERR] POST ${url} error=${message} payload=${stringifyRraLog(body)}`)
+    return { success: false, resultCd: '?', resultMsg: message, data: null, raw: null }
   } finally {
     clearTimeout(t)
   }
@@ -563,36 +601,61 @@ export async function saveItem(
   if (config.ebm.useMock) {
     return mockResult('ITEM');
   }
-  const { vsdcUrl, ...envelopeFields } = envelope;
-  return postToEndpoint(config.ebm.itemPath || '/items/saveItems', { ...envelopeFields, ...payload }, vsdcUrl);
+  return postToEndpoint(
+    config.ebm.itemPath || '/items/saveItems',
+    vsdcRequestBody(envelope, payload),
+    envelope.vsdcUrl,
+  );
+}
+
+/**
+ * POST /items/saveItemComposition — BOM / item composition (ItemCpstSaveReq §3.3.4.2).
+ * Used for client restore; not selectable back from the server.
+ */
+export async function saveItemComposition(
+  envelope: VsdcEnvelope,
+  payload: {
+    itemCd: string;
+    cpstItemCd: string;
+    cpstQty: number;
+    regrId: string;
+    regrNm: string;
+    modrId: string;
+    modrNm: string;
+  },
+): Promise<VsdcApiResult> {
+  if (config.ebm.useMock) return mockResult('ITEMCPST');
+  return postToEndpoint('/items/saveItemComposition', vsdcRequestBody(envelope, payload), envelope.vsdcUrl);
 }
 
 /**
  * @deprecated Not a real VSDC route. Use saveStockItems / saveStockMaster.
  */
 export async function selectMvmt(
-  envelope: VsdcEnvelope,
-  payload: Record<string, unknown>,
+  _envelope: VsdcEnvelope,
+  _payload: Record<string, unknown>,
 ): Promise<VsdcApiResult> {
-  if (config.ebm.useMock) {
-    return mockResult('MVMT');
-  }
-  const { vsdcUrl, ...envelopeFields } = envelope;
-  return postToEndpoint('/selectMvmt', { ...envelopeFields, ...payload }, vsdcUrl);
+  return {
+    success: false,
+    error: 'Deprecated non-spec path /selectMvmt — use /stock/saveStockItems and /stockMaster/saveStockMaster',
+    rawStatus: 0,
+    rawBody: null,
+  };
 }
 
 /**
  * @deprecated Wrong path. Use savePurchase (/trnsPurchase/savePurchases).
  */
 export async function savePurc(
-  envelope: VsdcEnvelope,
-  payload: Record<string, unknown>,
+  _envelope: VsdcEnvelope,
+  _payload: Record<string, unknown>,
 ): Promise<VsdcApiResult> {
-  if (config.ebm.useMock) {
-    return mockResult('PURC');
-  }
-  const { vsdcUrl, ...envelopeFields } = envelope;
-  return postToEndpoint('/savePurc', { ...envelopeFields, ...payload }, vsdcUrl);
+  return {
+    success: false,
+    error: 'Deprecated non-spec path /savePurc — use /trnsPurchase/savePurchases',
+    rawStatus: 0,
+    rawBody: null,
+  };
 }
 
 // ──────────────────────────────────────────────
@@ -602,8 +665,52 @@ export async function savePurc(
 /** POST /stock/saveStockItems — record one stock IN or OUT movement (StockIoSaveReq). */
 export async function saveStockItems(envelope: VsdcEnvelope, payload: Record<string, unknown>): Promise<VsdcApiResult> {
   if (config.ebm.useMock) return mockResult('STOCKIO');
-  const { vsdcUrl, ...envelopeFields } = envelope;
-  return postToEndpoint('/stock/saveStockItems', { ...envelopeFields, ...payload }, vsdcUrl);
+  return postToEndpoint('/stock/saveStockItems', vsdcRequestBody(envelope, payload), envelope.vsdcUrl);
+}
+
+export interface RraStockMoveLVO {
+  custTin?: string | null;
+  custBhfId?: string | null;
+  sarNo: number;
+  ocrnDt?: string;
+  totItemCnt?: number;
+  totTaxblAmt?: number;
+  totTaxAmt?: number;
+  totAmt?: number;
+  remark?: string | null;
+  itemList?: Array<{
+    itemSeq: number;
+    itemCd?: string;
+    itemClsCd?: string;
+    itemNm?: string;
+    bcd?: string | null;
+    pkgUnitCd?: string;
+    pkg?: number;
+    qtyUnitCd?: string;
+    qty: number;
+    itemExprDt?: string | null;
+    prc?: number;
+    splyAmt?: number;
+    totDcAmt?: number;
+    taxblAmt?: number;
+    taxTyCd?: string;
+    taxAmt?: number;
+    totAmt?: number;
+  }>;
+}
+
+/** POST /stock/selectStockItems — HQ↔branch stock movements (StockMoveReq §3.3.8.1). */
+export function selectStockItems(envelope: VsdcEnvelope, lastReqDt: string) {
+  if (config.ebm.useMock) {
+    return Promise.resolve<VsdcLookupResult<{ stockList: RraStockMoveLVO[] }>>({
+      success: true, resultCd: '000', resultMsg: 'It is succeeded', raw: null, data: { stockList: [] },
+    });
+  }
+  return postLookup<{ stockList: RraStockMoveLVO[] }>(
+    '/stock/selectStockItems',
+    envelope,
+    { tin: envelope.tin, bhfId: envelope.bhfId, lastReqDt },
+  );
 }
 
 /** POST /stockMaster/saveStockMaster — set the remaining on-hand quantity for one item (StockMasterSaveReq). */
@@ -654,8 +761,67 @@ export function selectPurchases(envelope: VsdcEnvelope, lastReqDt: string) {
 /** POST /trnsPurchase/savePurchases — record/confirm a received B2B purchase (TrnsPurchaseSaveReq). */
 export async function savePurchase(envelope: VsdcEnvelope, payload: Record<string, unknown>): Promise<VsdcApiResult> {
   if (config.ebm.useMock) return mockResult('PURCHASE');
-  const { vsdcUrl, ...envelopeFields } = envelope;
-  return postToEndpoint('/trnsPurchase/savePurchases', { ...envelopeFields, ...payload }, vsdcUrl);
+  return postToEndpoint('/trnsPurchase/savePurchases', vsdcRequestBody(envelope, payload), envelope.vsdcUrl);
+}
+
+export interface RraBranchLVO {
+  tin?: string;
+  bhfId: string;
+  bhfNm?: string;
+  bhfSttsCd?: string;
+  prvncNm?: string;
+  dstrtNm?: string;
+  sctrNm?: string;
+  locDesc?: string | null;
+  mgrNm?: string;
+  mgrTelNo?: string;
+  mgrEmail?: string;
+  hqYn?: string;
+}
+
+/** POST /branches/selectBranches — taxpayer branch list (§3.3.2.4). */
+export function selectBranches(envelope: VsdcEnvelope, lastReqDt: string) {
+  if (config.ebm.useMock) {
+    return Promise.resolve<VsdcLookupResult<{ bhfList: RraBranchLVO[] }>>({
+      success: true, resultCd: '000', resultMsg: 'It is succeeded', raw: null,
+      data: { bhfList: [{ tin: envelope.tin, bhfId: envelope.bhfId, bhfNm: 'HQ', hqYn: 'Y', bhfSttsCd: '01' }] },
+    });
+  }
+  return postLookup<{ bhfList: RraBranchLVO[] }>(
+    '/branches/selectBranches',
+    envelope,
+    { tin: envelope.tin, bhfId: envelope.bhfId, lastReqDt },
+  );
+}
+
+/** POST /branches/saveBrancheCustomers — push CIS customer master (BhfCustSaveReq §3.3.3.1). */
+export async function saveBrancheCustomer(
+  envelope: VsdcEnvelope,
+  payload: Record<string, unknown>,
+): Promise<VsdcApiResult> {
+  if (config.ebm.useMock) return mockResult('BHFCUST');
+  return postToEndpoint('/branches/saveBrancheCustomers', vsdcRequestBody(envelope, payload), envelope.vsdcUrl);
+}
+
+/** POST /branches/saveBrancheUsers — push branch user accounts (BhfUserSaveReq §3.3.3.2). */
+export async function saveBrancheUser(
+  envelope: VsdcEnvelope,
+  payload: Record<string, unknown>,
+): Promise<VsdcApiResult> {
+  if (config.ebm.useMock) return mockResult('BHFUSER');
+  return postToEndpoint('/branches/saveBrancheUsers', vsdcRequestBody(envelope, payload), envelope.vsdcUrl);
+}
+
+/**
+ * POST /branches/saveBrancheInsurances — pharmacy insurance companies (BhfInsuranceSaveReq §3.3.3.3).
+ * Optional for non-pharmacy CIS tenants.
+ */
+export async function saveBrancheInsurance(
+  envelope: VsdcEnvelope,
+  payload: Record<string, unknown>,
+): Promise<VsdcApiResult> {
+  if (config.ebm.useMock) return mockResult('BHFINS');
+  return postToEndpoint('/branches/saveBrancheInsurances', vsdcRequestBody(envelope, payload), envelope.vsdcUrl);
 }
 
 // ──────────────────────────────────────────────
@@ -736,8 +902,7 @@ export function selectImportItems(envelope: VsdcEnvelope, lastReqDt: string) {
 /** POST /imports/updateImportItems — approve/reject one import declaration line (§68). */
 export async function updateImportItems(envelope: VsdcEnvelope, payload: Record<string, unknown>): Promise<VsdcApiResult> {
   if (config.ebm.useMock) return mockResult('IMPORTUPD');
-  const { vsdcUrl, ...envelopeFields } = envelope;
-  return postToEndpoint('/imports/updateImportItems', { ...envelopeFields, ...payload }, vsdcUrl);
+  return postToEndpoint('/imports/updateImportItems', vsdcRequestBody(envelope, payload), envelope.vsdcUrl);
 }
 
 /**
@@ -771,6 +936,7 @@ export async function vsdcHeartbeat(
         totRcptNo: '',
         sdcId: '',
         sdcDateTime: new Date().toISOString(),
+        mrcNo: '',
       },
       rawStatus: 200,
       rawBody: null,
@@ -784,6 +950,20 @@ export async function vsdcHeartbeat(
 }
 
 /**
+ * Normalize `rptDe` to the 14-digit `yyyyMMddHHmmss` (`yyyyMMddHH24MISS`)
+ * timestamp the VSDC validates against. An 8-digit report date (`yyyyMMdd`,
+ * e.g. from `?date=` query params or daily-report code) is expanded to
+ * start-of-day (`yyyyMMdd000000`); a 14-digit timestamp passes through
+ * unchanged. This fixes VSDC error 910:
+ * "Must be a valid date in yyyyMMddHH24MISS format. rejected value: '20260915'".
+ */
+export function toRptDeTimestampValue(rptDe: string): string {
+  const digits = (rptDe ?? '').replace(/\D/g, '');
+  if (/^\d{8}$/.test(digits)) return `${digits}000000`;
+  return rptDe;
+}
+
+/**
  * POST /reports/saveZReports — daily Z (closing) report.
  *
  * Endpoint path and request shape confirmed against the RRA reference sandbox
@@ -794,15 +974,13 @@ export async function vsdcHeartbeat(
  * `/trnsSales/saveSales`, it does not take them as input.
  *
  * `rptDe` here is the **report generation timestamp**, `yyyyMMddHHmmss` (14
- * digits) — confirmed by the sandbox's own validation error message when
- * given an 8-digit date. This differs from `checkZReport`, which takes an
- * 8-digit report *date*.
+ * digits, Oracle `yyyyMMddHH24MISS`). 8-digit dates are normalized to
+ * start-of-day via `toRptDeTimestampValue` for robustness.
  *
  * `/reports/saveZReports` has been seen to accept a request without returning a
  * conclusive success body, so callers should not treat a bare `saveZReport`
  * result as proof the day was closed — use `saveAndVerifyZReport`, which
- * confirms the close with the live-tested `/reports/checkZReport` before
- * recording it.
+ * confirms the close with `/reports/checkZReport` before recording it.
  */
 export async function saveZReport(
   envelope: VsdcEnvelope,
@@ -811,14 +989,18 @@ export async function saveZReport(
   if (config.ebm.useMock) {
     return mockResult('ZREPORT', envelope.sdcId);
   }
-  return postToEndpoint('/reports/saveZReports', { tin: envelope.tin, bhfId: envelope.bhfId, rptDe }, envelope.vsdcUrl);
+  return postToEndpoint('/reports/saveZReports', { tin: envelope.tin, bhfId: envelope.bhfId, rptDe: toRptDeTimestampValue(rptDe) }, envelope.vsdcUrl);
 }
 
 /**
  * POST /reports/checkZReport — look up a previously saved Z report.
- * `rptDe` here is an 8-digit report **date** (`yyyyMMdd`), unlike
- * `saveZReport`'s 14-digit timestamp — confirmed by the sandbox's validation
- * error ("length must be between 8 and 8").
+ *
+ * `rptDe` must be a 14-digit report timestamp (`yyyyMMddHHmmss` /
+ * `yyyyMMddHH24MISS`) — the VSDC rejects an 8-digit `yyyyMMdd` date with
+ * error 910 ("Must be a valid date in yyyyMMddHH24MISS format"). 8-digit
+ * input is therefore normalized to `yyyyMMdd000000` via
+ * `toRptDeTimestampValue` so date-only callers (`?date=yyyyMMdd`,
+ * daily-report cross-checks) keep working.
  */
 export async function checkZReport(
   envelope: VsdcEnvelope,
@@ -827,7 +1009,7 @@ export async function checkZReport(
   if (config.ebm.useMock) {
     return mockResult('ZREPORT-CHECK', envelope.sdcId);
   }
-  return postToEndpoint('/reports/checkZReport', { tin: envelope.tin, bhfId: envelope.bhfId, rptDe }, envelope.vsdcUrl);
+  return postToEndpoint('/reports/checkZReport', { tin: envelope.tin, bhfId: envelope.bhfId, rptDe: toRptDeTimestampValue(rptDe) }, envelope.vsdcUrl);
 }
 
 export interface ZReportOutcome {
@@ -835,9 +1017,9 @@ export interface ZReportOutcome {
   saved: boolean;
   /** /reports/checkZReport confirms RRA has the day's Z report on record. */
   verified: boolean;
-  /** 14-digit generation timestamp sent to saveZReports. */
+  /** 14-digit generation timestamp sent to saveZReports (and checkZReport). */
   rptDeTimestamp: string;
-  /** 8-digit report date sent to checkZReport. */
+  /** 8-digit report date (yyyyMMdd) derived from the timestamp, for display. */
   rptDeDate: string;
   saveError?: string;
   verifyError?: string;
@@ -846,8 +1028,8 @@ export interface ZReportOutcome {
 
 /**
  * Close a day at the VSDC and prove it stuck: POST `/reports/saveZReports`,
- * then immediately confirm with `/reports/checkZReport` (8-digit date,
- * live-verified against the RRA sandbox). A Z close is only trustworthy for
+ * then immediately confirm with `/reports/checkZReport` using the same
+ * 14-digit generation timestamp. A Z close is only trustworthy for
  * certification evidence once `verified` is true; `saved && !verified` means
  * RRA took the request but has not yet surfaced the report and it should be
  * re-checked (via `GET /:org/z-report`).
@@ -861,7 +1043,10 @@ export async function saveAndVerifyZReport(
   const rptDeTimestamp = `${ymd}${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
 
   const save = await saveZReport(envelope, rptDeTimestamp);
-  const check = await checkZReport(envelope, ymd);
+  // Verify with the exact timestamp just saved: its date part matches the
+  // report day (so date-truncating servers verify), and exact-match servers
+  // also verify — whereas a midnight-expanded date would fail exact match.
+  const check = await checkZReport(envelope, rptDeTimestamp);
 
   return {
     saved: save.success,
@@ -887,14 +1072,15 @@ function mockResult(prefix: string, sdcId?: string): VsdcApiResult {
   const totRcptNo = String(Math.floor(Date.now() / 1000) % 1000000);
   return {
     success: true,
-    data: {
-      rcptNo,
-      intrlData: `MOCK-INTERNAL-${ref}`,
-      vsdcSignature: `MOCK-SIG-${ref}`,
-      totRcptNo,
-      sdcId: sdcId || 'SDC000000000',
-      sdcDateTime: new Date().toISOString(),
-    },
+      data: {
+        rcptNo,
+        intrlData: `MOCK-INTERNAL-${ref}`,
+        vsdcSignature: `MOCK-SIG-${ref}`,
+        totRcptNo,
+        sdcId: sdcId || 'SDC000000000',
+        sdcDateTime: new Date().toISOString(),
+        mrcNo: 'MOCKMRC0001',
+      },
     rawStatus: 200,
     rawBody: { resultCd: '000', resultMsg: 'It is succeeded', mock: true, data: { rcptNo, totRcptNo } },
   };

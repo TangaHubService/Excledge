@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { useTranslation } from "react-i18next"
 import { AnimatePresence, motion } from "framer-motion"
 import { Printer, Plus, ReceiptText, Download, Share2, Loader2, AlertTriangle } from "lucide-react"
 
@@ -53,6 +54,8 @@ export default function SaleSuccessModal({
   onDownload,
   onShare,
 }: SaleSuccessModalProps) {
+  const { t } = useTranslation()
+
   // Keyboard shortcut: Enter → Print Invoice
   useEffect(() => {
     if (!isOpen) return
@@ -148,16 +151,25 @@ export default function SaleSuccessModal({
               {saleData.fiscalizationStatus === "pending" ? (
                 <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-700">
                   <Loader2 className="size-4 animate-spin" />
-                  Confirming with the tax authority (VSDC)…
+                  {t(
+                    "pos.fiscalPending",
+                    "Confirming this receipt with the tax office…",
+                  )}
                 </div>
               ) : saleData.fiscalizationStatus === "failed" ? (
                 <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-700">
                   <AlertTriangle className="size-4 shrink-0" />
-                  VSDC didn't confirm this receipt. You can still download or share it — it prints stamped NOT FISCALISED and is not a valid tax receipt. Retry from Sales once VSDC is reachable.
+                  {t(
+                    "pos.fiscalFailed",
+                    "Sale saved, but the tax office has not approved this receipt yet. You can still print or share a copy — it will be marked as not tax-approved. Open Sales and try again when your connection is working.",
+                  )}
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-emerald-700">
-                  Thank you! The sale has been completed successfully and inventory has been updated.
+                  {t(
+                    "pos.saleCompleted",
+                    "Thank you! The sale has been completed successfully and inventory has been updated.",
+                  )}
                 </p>
               )}
 

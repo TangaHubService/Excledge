@@ -251,7 +251,7 @@ exports.createOrganization = createOrganization;
 const updateOrganization = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
-        const { name, businessType, address, phone, email, TIN, currency, ebmDeviceId, ebmSerialNo, } = req.body;
+        const { name, businessType, address, phone, email, TIN, VRN, vatRegistered, isTaxExempt, taxExemptionReason, currency, ebmDeviceId, ebmSerialNo, trainingMode, } = req.body;
         //@ts-ignore
         const userId = parseInt(req.user?.userId);
         const userOrganization = await prisma_1.prisma.userOrganization.findFirst({
@@ -282,11 +282,30 @@ const updateOrganization = async (req, res) => {
                 email,
                 TIN,
                 currency,
+                ...(VRN !== undefined
+                    ? { VRN: VRN === "" ? null : VRN }
+                    : {}),
+                ...(vatRegistered !== undefined
+                    ? { vatRegistered: !!vatRegistered }
+                    : {}),
+                ...(isTaxExempt !== undefined
+                    ? { isTaxExempt: !!isTaxExempt }
+                    : {}),
+                ...(taxExemptionReason !== undefined
+                    ? { taxExemptionReason: taxExemptionReason === "" ? null : taxExemptionReason }
+                    : {}),
                 ...(ebmDeviceId !== undefined
                     ? { ebmDeviceId: ebmDeviceId === "" ? null : ebmDeviceId }
                     : {}),
                 ...(ebmSerialNo !== undefined
                     ? { ebmSerialNo: ebmSerialNo === "" ? null : ebmSerialNo }
+                    : {}),
+                // CIS/VSDC spec §16: while on, every new sale/refund is recorded as a
+                // TRAINING receipt (TS/TR) instead of a real NS/NR — excluded from
+                // fiscal submission and the daily report's legal totals. Admin-only,
+                // same as the other fiscal-behavior fields above.
+                ...(trainingMode !== undefined
+                    ? { trainingMode: !!trainingMode }
                     : {}),
             },
         });
@@ -343,15 +362,20 @@ const updateOrgSettings = async (req, res) => {
                     .json({ error: "Only admins can update organization settings" });
             }
         }
-        const { sidebarConfig, featureFlags, preferences } = req.body ?? {};
+        const { sidebarConfig, featureFlags, preferences, ebmConfig } = req.body ?? {};
         const patch = {};
-        for (const [key, value] of Object.entries({ sidebarConfig, featureFlags, preferences })) {
+        for (const [key, value] of Object.entries({ sidebarConfig, featureFlags, preferences, ebmConfig })) {
             if (value === undefined)
                 continue;
-            if (!isPlainPatchObject(value)) {
+            if (!isPlainPatchObject(value) && key !== "ebmConfig") {
                 return res.status(400).json({ error: `${key} must be an object` });
             }
-            patch[key] = value;
+            if (key === "ebmConfig") {
+                patch.ebmConfig = value;
+            }
+            else {
+                patch[key] = value;
+            }
         }
         const settings = await (0, organization_settings_service_1.upsertOrganizationSettings)(organizationId, patch);
         await auditLogger_1.auditLogger.system(req, {

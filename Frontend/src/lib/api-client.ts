@@ -159,7 +159,9 @@ class ApiClient {
   }
 
   /** Read the currently selected branch from localStorage, if any. */
-  private getBranchQueryParam(): string {
+  private getBranchQueryParam(endpoint?: string): string {
+    // An explicit branch in the request takes precedence over the selected branch.
+    if (endpoint && new URLSearchParams(endpoint.split('?')[1] || '').has('branchId')) return '';
     if (typeof window === 'undefined') return '';
     const saved = localStorage.getItem('selected_branch_id');
     if (saved && saved !== 'all' && saved !== 'undefined' && saved !== 'null') {
@@ -188,7 +190,7 @@ class ApiClient {
     }
 
     // ── Auto-inject branchId into query string ──────────────────────
-    const branchParam = this.getBranchQueryParam();
+    const branchParam = this.getBranchQueryParam(endpoint);
     const separator = endpoint.includes('?') ? '&' : '?';
     const url = branchParam ? `${API_URL}${endpoint}${separator}${branchParam}` : `${API_URL}${endpoint}`;
 
@@ -247,7 +249,7 @@ class ApiClient {
     // ── Auto-inject branchId into query string (same as request()) ──
     // File downloads/exports must respect the selected branch too, or an
     // export could silently include other branches' data.
-    const branchParam = this.getBranchQueryParam();
+    const branchParam = this.getBranchQueryParam(endpoint);
     const separator = endpoint.includes('?') ? '&' : '?';
     const url = branchParam ? `${API_URL}${endpoint}${separator}${branchParam}` : `${API_URL}${endpoint}`;
 
@@ -561,12 +563,22 @@ class ApiClient {
   }
 
   // Add to api-client.ts
-  async refundSale(saleId: string, data: { reason?: string; items?: Array<{ saleItemId: string; quantity: number }> }) {
+  async refundSale(saleId: string, data: { reason?: string; rfdRsnCd?: string; items?: Array<{ saleItemId: string; quantity: number }> }) {
     const organizationId = this.getOrganizationId();
     return this.request(`/sales/${saleId}/refund/${organizationId}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  /** RRA refund reason codes (code class 32) for the refund-reason dropdown. */
+  async getRraRefundReasons() {
+    return this.request(`${this.rraBase()}/refund-reasons`);
+  }
+
+  /** ERP → RRA payment-method mappings for display/validation. */
+  async getRraPaymentMappings() {
+    return this.request(`${this.rraBase()}/payment-mappings`);
   }
 
   /** Void/cancel a sale (marks it CANCELLED, restores stock, fiscalizes a VOID invoice). */
@@ -614,7 +626,7 @@ class ApiClient {
   /** Replace a proforma's line items / customer (only before it is converted). */
   async updateProforma(
     saleId: string | number,
-    data: { customerId?: number; items: Array<{ productId?: number; quantity: number; unitPrice: number; itemType?: 'PRODUCT' | 'SERVICE'; serviceName?: string; serviceDescription?: string }> },
+    data: { customerId?: number; items: Array<{ productId?: number; quantity: number; unitPrice: number; itemType?: 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE'; serviceName?: string; serviceDescription?: string }> },
   ) {
     return this.request(`/sales/${this.getOrganizationId()}/${saleId}/proforma`, {
       method: "PUT",
@@ -631,7 +643,7 @@ class ApiClient {
       debtAmount?: number;
       insuranceAmount?: number;
       payments?: Array<{ paymentMethod: string; amount: number; reference?: string }>;
-      items?: Array<{ productId?: number; quantity: number; unitPrice: number; itemType?: 'PRODUCT' | 'SERVICE'; serviceName?: string }>;
+      items?: Array<{ productId?: number; quantity: number; unitPrice: number; itemType?: 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE'; serviceName?: string }>;
       customerId?: number;
     },
   ) {
@@ -1185,6 +1197,72 @@ class ApiClient {
     body: { itemClsCd?: string; itemCd?: string; linkProductId?: number; remark?: string } = {},
   ) {
     return this.request(`${this.rraBase()}/imports/${id}/${action}`, { method: "POST", body: JSON.stringify(body) });
+  }
+
+  /** POST /branches/selectBranches — pull RRA-registered branches for this TIN. */
+  async syncRraBranches() {
+    return this.request(`${this.rraBase()}/branches/sync`, { method: "POST" });
+  }
+
+  /** POST /stock/selectStockItems — pull HQ↔branch stock movements from VSDC. */
+  async syncRraStockMoves() {
+    return this.request(`${this.rraBase()}/stock-moves/sync`, { method: "POST" });
+  }
+
+  /** POST /branches/saveBrancheCustomers — push one CIS customer to VSDC. */
+  async syncCustomerToRra(customerId: number | string) {
+    return this.request(`${this.rraBase()}/customers/${customerId}/sync`, { method: "POST" });
+  }
+
+  /** POST /branches/saveBrancheInsurances — push pharmacy insurer to VSDC. */
+  async syncInsuranceToRra(customerId: number | string) {
+    return this.request(`${this.rraBase()}/customers/${customerId}/insurance/sync`, { method: "POST" });
+  }
+
+  /** CIS §7.26 — auditor overview of software settings + fiscal DB state. */
+  async getRraAuditOverview(branchId?: number | string) {
+    const q = branchId != null && branchId !== "" ? `?branchId=${branchId}` : "";
+    return this.request(`${this.rraBase()}/audit-overview${q}`);
+  }
+
+  /** CIS §7.28 — last finalized receipt for power/paper recovery reprint. */
+  async getLastReceipt() {
+    return this.request(`/sales/${this.getOrganizationId()}/last-receipt`);
+  }
+
+  /** POST /branches/saveBrancheUsers — push one CIS user/cashier to VSDC. */
+  async syncUserToRra(userId: number | string) {
+    return this.request(`${this.rraBase()}/users/${userId}/sync`, { method: "POST" });
+  }
+
+  /** POST /items/saveItemComposition — push one BOM component to VSDC. */
+  async syncBomCompositionToRra(productId: number | string, componentId: number | string) {
+    return this.request(
+      `${this.rraBase()}/items/${productId}/composition/${componentId}/sync`,
+      { method: "POST" },
+    );
+  }
+
+  /** POST /ebm/initialize — one-time VSDC device init for a branch. */
+  async initializeEbmDevice(body: { branchId?: number; dvcSrlNo?: string } = {}) {
+    return this.request(`/organizations/${this.getOrganizationId()}/ebm/initialize`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  /** POST /z-report — submit the daily Z closing report to VSDC. */
+  async submitVsdcZReport(body: { branchId?: number; rptDe?: string } = {}) {
+    return this.request(`/organizations/${this.getOrganizationId()}/z-report`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  /** GET /z-report — last VSDC Z-report status for this org/branch. */
+  async getVsdcZReportStatus(branchId?: number) {
+    const q = branchId != null ? `?branchId=${branchId}` : "";
+    return this.request(`/organizations/${this.getOrganizationId()}/z-report${q}`);
   }
 
   async exportReport(reportType: string, params: any) {
@@ -2038,6 +2116,90 @@ class ApiClient {
   async getSupplierPayments(params?: any) {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";
     return this.request(`/supplier-payments/${this.getOrganizationId()}${query}`);
+  }
+
+  // ==================== BOM & Production ====================
+
+  async getBomComponents(organizationId: string | number, productId: number) {
+    return this.request(`/inventory/${organizationId}/products/${productId}/bom`);
+  }
+
+  async addBomComponent(organizationId: string | number, productId: number, data: {
+    componentProductId: number;
+    quantity: number;
+    unit: string;
+  }) {
+    return this.request(`/inventory/${organizationId}/products/${productId}/bom`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateBomComponent(organizationId: string | number, productId: number, componentProductId: number, data: {
+    quantity?: number;
+    unit?: string;
+  }) {
+    return this.request(`/inventory/${organizationId}/products/${productId}/bom/${componentProductId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async removeBomComponent(organizationId: string | number, productId: number, componentProductId: number) {
+    return this.request(`/inventory/${organizationId}/products/${productId}/bom/${componentProductId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getBomCost(organizationId: string | number, productId: number) {
+    return this.request(`/inventory/${organizationId}/products/${productId}/bom/cost`);
+  }
+
+  async checkProductionRequirements(organizationId: string | number, productId: number, params: {
+    quantity: number;
+    branchId: number;
+  }) {
+    const query = new URLSearchParams({
+      quantity: params.quantity.toString(),
+      branchId: params.branchId.toString(),
+    }).toString();
+    return this.request(`/inventory/${organizationId}/products/${productId}/production/requirements?${query}`);
+  }
+
+  async createProductionRun(organizationId: string | number, data: {
+    branchId: number;
+    productId: number;
+    quantity: number;
+    batchNumber?: string;
+    expiryDate?: string;
+    note?: string;
+  }) {
+    return this.request(`/inventory/${organizationId}/production/runs`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getProductionRuns(organizationId: string | number, params?: {
+    branchId?: number;
+    productId?: number;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const query = new URLSearchParams(params as Record<string, string>).toString();
+    return this.request(`/inventory/${organizationId}/production/runs${query ? '?' + query : ''}`);
+  }
+
+  async getProductionRun(organizationId: string | number, runId: number) {
+    return this.request(`/inventory/${organizationId}/production/runs/${runId}`);
+  }
+
+  async reverseProductionRun(organizationId: string | number, runId: number) {
+    return this.request(`/inventory/${organizationId}/production/runs/${runId}/reverse`, {
+      method: 'POST',
+    });
   }
 
   // ==================== Tax Codes ====================

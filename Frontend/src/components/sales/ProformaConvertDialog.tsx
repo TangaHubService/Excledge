@@ -31,7 +31,7 @@ type Line = {
   name: string;
   quantity: number;
   unitPrice: number;
-  itemType: 'PRODUCT' | 'SERVICE';
+  itemType: 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE';
   serviceName?: string;
 };
 

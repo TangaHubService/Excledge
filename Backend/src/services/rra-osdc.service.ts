@@ -1,10 +1,12 @@
 import { prisma } from '../lib/prisma';
 import { config } from '../config';
+import logger from '../utils/logger';
 import {
   buildRraSendReceiptPayload,
   toRraDateTime,
   type SaleWithRelations,
 } from './rra-ebm.service';
+import { getRraPaymentCode } from './rra-code.service';
 
 /**
  * RRA EBM 2.1 / OSDC (Online Sales Data Controller) integration.
@@ -50,7 +52,7 @@ export async function getOsdcCreds(
     select: { TIN: true, ebmSerialNo: true },
   });
 
-  let bhfId = '00';
+  let bhfId = config.ebm.defaultBhfId;
   let dvcSrlNo = org?.ebmSerialNo ?? '';
 
   if (branchId != null) {
@@ -93,6 +95,7 @@ async function osdcPost(
   body: Record<string, unknown>,
 ): Promise<{ ok: boolean; status: number; jsonBody: any | null; rawText: string }> {
   const url = `${baseUrl()}${path}`;
+  logger.info(`[RRA][OSDC][REQ] POST ${url} payload=${JSON.stringify(body)}`);
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), config.ebm.requestTimeoutMs);
   try {
@@ -109,7 +112,14 @@ async function osdcPost(
     } catch {
       json = null;
     }
+    logger.info(
+      `[RRA][OSDC][RES] POST ${url} http=${res.status} body=${(rawText || JSON.stringify(json) || '').slice(0, 4000)}`,
+    );
     return { ok: res.ok, status: res.status, jsonBody: json, rawText };
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'OSDC request failed';
+    logger.error(`[RRA][OSDC][ERR] POST ${url} error=${message} payload=${JSON.stringify(body)}`);
+    throw e;
   } finally {
     clearTimeout(t);
   }
@@ -243,10 +253,22 @@ export async function submitSalesToOsdc(params: {
     return { success: false, error };
   }
 
+  let rraPaymentCode: string;
+  try {
+    rraPaymentCode = await getRraPaymentCode(params.organizationId, params.sale.paymentType);
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Invalid payment method mapping' };
+  }
+
   // Reuse the VSDC payload builder (fields are largely shared) and adjust the
   // EBM 2.1 specifics: body carries device identity, receipt gets a publish
   // date, and each line carries its own tax total.
-  const payload: Record<string, any> = buildRraSendReceiptPayload(params.sale, org) as any;
+  let payload: Record<string, any>;
+  try {
+    payload = buildRraSendReceiptPayload(params.sale, org, rraPaymentCode) as any;
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Invalid sales payload' };
+  }
   const creds = await getOsdcCreds(params.organizationId, params.branchId);
   payload.tin = creds.tin;
   payload.bhfId = creds.bhfId;

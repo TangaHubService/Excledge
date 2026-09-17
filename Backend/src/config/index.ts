@@ -49,6 +49,9 @@ export const config = {
     apiKey: process.env.EBM_API_KEY || "",
     apiSecret: process.env.EBM_API_SECRET || "",
     environment: process.env.EBM_ENVIRONMENT || "sandbox",
+    defaultTin: process.env.EBM_DEFAULT_TIN || "",
+    defaultBhfId: process.env.EBM_DEFAULT_BHF_ID || "00",
+    defaultDvcSrlNo: process.env.EBM_DEFAULT_DVC_SRL_NO || "",
     // Canonical RRA VSDC endpoints (RRA VSDC API Documentation v1.0.5, §3.2.1)
     // Sale, refund, and cancellation all go through the same sales-transaction
     // endpoint — they're distinguished by rcptTyCd/salesSttsCd/orgInvcNo in the
@@ -66,6 +69,7 @@ export const config = {
     movementPath: process.env.EBM_MOVEMENT_PATH || "/selectMvmt",
     purchasePath: process.env.EBM_PURCHASE_PATH || "/savePurc",
     importPath: process.env.EBM_IMPORT_PATH || "/selectImportInvc",
+    // CIS for VSDC §24.2.1: CIS must wait ≤1000 ms for a VSDC reply, then resend.
     requestTimeoutMs: Number.parseInt(process.env.EBM_REQUEST_TIMEOUT_MS || "1000", 10),
     useMock: process.env.EBM_USE_MOCK === "true",
     maxQueueRetries: Number.parseInt(process.env.EBM_MAX_QUEUE_RETRIES || "10", 10),
@@ -78,7 +82,7 @@ export const config = {
     securityKey: process.env.EBM_SECURITY_KEY || "",
     // ── EBM 2.1 / OSDC (Online Sales Data Controller) integration ────────────
     // protocol: 'vsdc' (v1, the /trnsSales/saveSales path) or 'osdc' (v2.1).
-    protocol: process.env.EBM_PROTOCOL || "vsd",
+    protocol: process.env.EBM_PROTOCOL || "vsdc",
     // Base URL for the OSDC device. Either the deployed RRA OSDC WAR
     // (e.g. http://localhost:8080/osdc) or, if direct, the RRA EBM 2.1 server.
     osdcApiUrl: process.env.OSDC_API_URL || "",

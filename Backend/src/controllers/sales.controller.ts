@@ -23,7 +23,9 @@ import { renderSalesInvoiceHtml, type RenderInvoicePayload } from "../services/i
 import { generateEbmInvoicePdf, getEbmInvoiceFilename, type InvoicePdfFormat } from "../services/invoice-pdf.service"
 import { generateEbmReceiptPdf80mm } from "../services/invoice-receipt-pdf.service"
 import { commitSale, CommitSaleError } from "../services/sale-commit.service"
+import { validateRefundReasonCode, DEFAULT_RFD_RSN_CD } from "../services/rra-code.service"
 import { SYSTEM_FOOTER, SYSTEM_POWERED_BY, CIS_VERSION_LABEL } from "../services/system-branding.service"
+import { getOrganizationLogo } from "../services/invoice-logo.service"
 import QRCode from "qrcode"
 
 export const createSale = async (req: BranchAuthRequest, res: Response) => {
@@ -89,8 +91,8 @@ export const updateProforma = async (req: BranchAuthRequest, res: Response) => {
     const organizationId = parseInt(req.params.organizationId)
     const saleId = parseInt(req.params.saleId)
     const { customerId, items } = req.body as {
-      customerId?: number
-      items: Array<{ productId?: number; quantity: number; unitPrice: number; itemType?: 'PRODUCT' | 'SERVICE'; serviceName?: string; serviceDescription?: string; measurementUnit?: string }>
+customerId?: number
+  items: Array<{ productId?: number; quantity: number; unitPrice: number; itemType?: 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE'; serviceName?: string; serviceDescription?: string; measurementUnit?: string }>
     }
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -147,7 +149,10 @@ export const updateProforma = async (req: BranchAuthRequest, res: Response) => {
         measurementUnit: (i.measurementUnit as any) || 'PCS',
         serviceName: isService ? (i.serviceName || null) : null,
         serviceDescription: isService ? (i.serviceDescription || null) : null,
-        ...(isService ? {} : { product: { connect: { id: Number(i.productId) } } }),
+        // Services from the catalog still need productId for RRA itemClsCd/itemCd.
+        ...(i.productId
+          ? { product: { connect: { id: Number(i.productId) } } }
+          : {}),
       }
     })
 
@@ -405,7 +410,11 @@ export const getSaleById = async (req: BranchAuthRequest, res: Response) => {
             TIN: true,
             customerType: true,
             email: true,
-            address: true
+            address: true,
+            custPrvncNm: true,
+            custDstrtNm: true,
+            custSctrNm: true,
+            custLocDesc: true
           }
         },
         user: {
@@ -538,8 +547,21 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
     const orgSettings = await getOrganizationSettings(organizationId);
     const result = await executeWithRetry(async () => {
       return await prisma.$transaction(async (prisma) => {
-        const { reason, items: refundItems } = req.body;
+        const { reason, items: refundItems, rfdRsnCd: rfdRsnCdRaw } = req.body;
         const userId = req.user?.userId;
+
+        // RRA refund reason (code class 32): the operator's selection, validated
+        // now so a bad code is a 400 instead of a dead-lettered fiscal refund.
+        // Stored on the refund sale and carried on the outbox payload to VSDC
+        // as rfdRsnCd; the free-text `reason` stays the human note (remark).
+        let rfdRsnCd: string;
+        try {
+          rfdRsnCd = validateRefundReasonCode(
+            typeof rfdRsnCdRaw === 'string' && rfdRsnCdRaw.trim() ? rfdRsnCdRaw.trim() : DEFAULT_RFD_RSN_CD,
+          );
+        } catch (e: unknown) {
+          throw { status: 400, message: e instanceof Error ? e.message : 'Invalid refund reason code' };
+        }
 
         // Get the sale with items
         const sale = await prisma.sale.findFirst({
@@ -639,9 +661,18 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
         });
         const refundRcptLabel = refundOrg?.trainingMode ? 'TR' : 'NR';
 
+        // A fiscal refund is a NEW sales-transaction document: allocate a fresh
+        // VSDC invoice number for it (the sandbox rejects a resubmitted invcNo
+        // with 924, and a refund with orgInvcNo=0 with 910). The original sale
+        // is referenced via orgInvcNo at submission time (see outbox worker).
+        const { invoiceNumber: refundInvoiceNumber, vsdcInvcNo: refundVsdcInvcNo } =
+          await generateInvoiceNumber(organizationId!, (sale as any).branchId, prisma);
+
         const refundSale = await prisma.sale.create({
           data: {
             saleNumber: refundSaleNumber,
+            invoiceNumber: refundInvoiceNumber,
+            vsdcInvcNo: refundVsdcInvcNo,
             customerId: sale.customerId,
             userId: parseInt(userId as string),
             organizationId: organizationId!,
@@ -655,6 +686,7 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             taxableAmount: -totalRefundTaxable,
             status: 'REFUNDED',
             refundReason: reason,
+            rfdRsnCd,
             rcptLabel: refundRcptLabel as any,
             originalSaleId: id, // Link to original sale
             shiftId: (sale as any).shiftId ?? undefined, // Refund belongs to the original sale's shift
@@ -761,6 +793,7 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
                 organizationId: organizationId!,
                 operation: 'REFUND',
                 originalSaleId: id,
+                rfdRsnCd,
               } as any,
               status: 'PENDING',
               nextAttemptAt: new Date(),
@@ -923,6 +956,22 @@ export const regenerateInvoice = async (req: BranchAuthRequest, res: Response) =
                     reprintCount: { increment: 1 },
                     updatedAt: new Date(),
                 },
+            });
+
+            // Supersede any still-pending SALE outbox rows for this sale: they
+            // carry the previous (now replaced) invcNo, and letting the worker
+            // submit them would fiscalize a stale number alongside the new one.
+            await tx.ebmOutbox.updateMany({
+              where: {
+                saleId,
+                organizationId,
+                operation: 'SALE',
+                status: { in: ['PENDING', 'FAILED', 'PROCESSING'] },
+              },
+              data: {
+                status: 'DEAD_LETTER',
+                lastError: `Superseded by invoice regeneration (${sale.invoiceNumber} → ${invoiceNumber})`,
+              },
             });
 
             // Create a new EBM transaction record for the regenerated invoice
@@ -1278,7 +1327,7 @@ export async function composeInvoicePayload(
     const sale = await prisma.sale.findFirst({
       where: { id: saleId, organizationId, ...buildBranchFilter(req) },
       include: {
-        customer: { select: { id: true, name: true, phone: true, TIN: true, email: true, address: true } },
+        customer: { select: { id: true, name: true, phone: true, TIN: true, email: true, address: true, custPrvncNm: true, custDstrtNm: true, custSctrNm: true, custLocDesc: true } },
         user: { select: { id: true, name: true } },
         saleItems: { include: { product: true } },
         ebmTransactions: { orderBy: { createdAt: "desc" } },
@@ -1331,15 +1380,17 @@ export async function composeInvoicePayload(
     // falling back to org.ebmSerialNo) are configured — NOT ebmDeviceId, which
     // is just the SDC ID RRA hands back after a successful transaction and is
     // still empty for a freshly-registered device that hasn't fiscalized yet.
-    // bhfId defaults to "00" everywhere else in the codebase, so it alone
-    // can't signal registration either.
+    // bhfId is sourced from branch.bhfId (configurable in Organization Settings),
+    // falling back to config.ebm.defaultBhfId
     const isEbmLinked = Boolean(org?.TIN && (branch?.ebmSerialNo || org?.ebmSerialNo))
 
     const fiscalTx = (sale.ebmTransactions ?? []).find((t) => t.submissionStatus === "SUCCESS" && (!t.operation || t.operation === "SALE" || t.operation === "REFUND"))
-    const responseData = fiscalTx?.responseData as { normalized?: { ebmInvoiceNumber?: string; verificationCode?: string; sdcDateTime?: string; intrlData?: string; vsdcSignature?: string } } | null | undefined
+    const responseData = fiscalTx?.responseData as { normalized?: { ebmInvoiceNumber?: string; verificationCode?: string; sdcDateTime?: string; intrlData?: string; vsdcSignature?: string; mrcNo?: string } } | null | undefined
     const norm = responseData?.normalized
 
-    const mrcNo = branch?.ebmSerialNo ?? org?.ebmSerialNo ?? null
+    // MRC: device-serial configured on branch/org, falling back to the serial
+    // the VSDC itself echoed back on the successful response.
+    const mrcNo = branch?.ebmSerialNo ?? org?.ebmSerialNo ?? norm?.mrcNo ?? null
     // Prefer the ID stamped in the successful RRA response. Configured device
     // values are a fallback only; this keeps the printed SDC identifier aligned
     // with the actual fiscal receipt.
@@ -1438,7 +1489,7 @@ export async function composeInvoicePayload(
         // checkout flow. The tax is an extraction from the gross line, not an
         // amount to add again on the printed invoice.
         total: net,
-        itemType: line.itemType ?? "PRODUCT",
+        itemType: line.itemType,
       }
     })
 
@@ -1453,6 +1504,11 @@ export async function composeInvoicePayload(
 
     // QR image is generated server-side — the frontend only renders the image returned by the API.
     const qrRaw = fiscalTx?.qrPayload ?? buildRraQrString({ sdcDateTime, sdcId, sdcRcptNo, internalData, receiptSignature })
+    // CIS §7.29 — official RRA logo on every receipt type.
+    const rraLogoBuf = await getOrganizationLogo()
+    const rraLogo = rraLogoBuf
+      ? `data:image/png;base64,${rraLogoBuf.toString("base64")}`
+      : null
     const qrCodeImage = qrRaw
       ? await QRCode.toDataURL(qrRaw, { errorCorrectionLevel: "M", margin: 1, width: 220, color: { dark: "#000000", light: "#FFFFFF" } })
       : null
@@ -1488,7 +1544,15 @@ export async function composeInvoicePayload(
         tin: sale.customer?.TIN ?? null,
         phone: sale.customer?.phone ?? null,
         email: sale.customer?.email ?? null,
-        address: sale.customer?.address ?? null,
+        // Free-text legacy address first, then the structured RRA buyer
+        // address parts (street/cell, sector, district, province) when set.
+        address: [
+          sale.customer?.address,
+          sale.customer?.custLocDesc,
+          sale.customer?.custSctrNm,
+          sale.customer?.custDstrtNm,
+          sale.customer?.custPrvncNm,
+        ].filter((p) => p && String(p).trim()).join(', ') || null,
         vatNo: sale.customer?.TIN ?? null,
       },
       invoice: {
@@ -1570,7 +1634,7 @@ export async function composeInvoicePayload(
       },
       branding: {
         primaryColor: "#1565C0",
-        rraLogo: null,
+        rraLogo,
         poweredBy: SYSTEM_POWERED_BY,
       },
       footer: {
@@ -1631,5 +1695,45 @@ export const getInvoicePdf = async (req: BranchAuthRequest, res: Response) => {
     }
     console.error("[Get Invoice PDF Error]:", error)
     return res.status(500).json(apiError("Failed to generate invoice PDF"))
+  }
+}
+
+/**
+ * CIS §7.28 — recover the last finalized receipt after power/paper failure so
+ * the operator can reprint without re-entering the sale.
+ * GET /api/sales/:organizationId/last-receipt
+ */
+export const getLastReceipt = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId)
+    const branchFilter = buildBranchFilter(req)
+    const sale = await prisma.sale.findFirst({
+      where: {
+        organizationId,
+        ...branchFilter,
+        status: { in: ["COMPLETED", "REFUNDED"] },
+        OR: [
+          { isProforma: true },
+          { ebmTransactions: { some: { submissionStatus: "SUCCESS" } } },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        saleNumber: true,
+        invoiceNumber: true,
+        rcptLabel: true,
+        status: true,
+        totalAmount: true,
+        reprintCount: true,
+        createdAt: true,
+        isProforma: true,
+      },
+    })
+    if (!sale) return res.status(404).json(apiError("No recoverable receipt found for this branch"))
+    return res.json(success({ sale }))
+  } catch (error: any) {
+    console.error("[Last Receipt Error]:", error)
+    return res.status(500).json(apiError("Failed to load last receipt"))
   }
 }

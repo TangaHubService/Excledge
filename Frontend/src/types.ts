@@ -27,7 +27,7 @@ export interface Product {
     imageUrl?: string;
     taxCode?: string;
     taxCategory?: string;
-    itemType?: 'PRODUCT' | 'SERVICE';
+    itemType?: 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE';
     measurementUnit?: string;
     barcode?: string;
     pkgUnitCd?: string | null;

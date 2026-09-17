@@ -27,10 +27,11 @@ function QrCanvas({ payload }: { payload: string }) {
 /**
  * Official verification data. Shown after real fiscalisation, and also for
  * training (TS/TR) and proforma (PS) receipts — neither is ever submitted to
- * the VSDC (see the warranty statement's Warranted Function 5/18, and the
- * "Certified Receipt" definition excluding both), so the block still needs
- * to appear (with blank Internal Data / Receipt Signature) rather than
- * silently disappear.
+ * the VSDC, so the block still needs to appear (with blank Internal Data /
+ * Receipt Signature) rather than silently disappear.
+ *
+ * Layout matches the RRA thermal sample: SDC INFORMATION heading, fiscal
+ * fields, bottom RECEIPT NUMBER:{vsdcInvcNo} + Date + MRC, then CIS branding.
  */
 export function EBMSection({ data }: { data: EbmSectionProps }) {
   const sdc = data.sdcInformation
@@ -45,33 +46,28 @@ export function EBMSection({ data }: { data: EbmSectionProps }) {
 
   if (!hasSdc) return null
 
-  const internalDataDisplay = internalData !== "—" ? dashEvery4(internalData) : ""
-  const signatureDisplay = signature !== "—" ? dashEvery4(signature) : ""
+  const branding =
+    safeText(sdc?.poweredBy) !== "—"
+      ? safeText(sdc?.poweredBy)
+      : "Excledge ERP v1.0.0 Powered by RRA VSDC EBM 2.1."
 
-  const leftRows = [
-    { label: "SDC ID", value: safeText(sdc?.sdcId) },
-    { label: "RECEIPT NUMBER", value: safeText(sdc?.receiptNumber ?? data.invoice?.receiptNumber) },
-    { label: "MRC", value: safeText(sdc?.mrcNo) },
-    { label: "INTERNAL DATA", value: internalDataDisplay },
-  ]
-  const rightRows = [
-    { label: "RECEIPT SIGNATURE", value: signatureDisplay },
-    { label: "DATE", value: formatDateShort(sdc?.date ?? data.invoice?.invoiceDate) },
-    { label: "TIME", value: formatTime(sdc?.time ?? data.invoice?.time) },
-    { label: "SOFTWARE VERSION", value: safeText(sdc?.softwareVersion) },
-  ]
+  const dateStr = formatDateShort(sdc?.date ?? data.invoice?.invoiceDate)
+  const timeStr = formatTime(sdc?.time ?? data.invoice?.time)
+  const receiptNo = safeText(sdc?.receiptNumber ?? data.invoice?.receiptNumber)
+  const invoiceNo = safeText(data.invoice?.invoiceNumber)
+  const internalDataDisplay = internalData !== "—" ? dashEvery4(internalData) : "—"
+  const signatureDisplay = signature !== "—" ? dashEvery4(signature) : "—"
+  const mrc = safeText(sdc?.mrcNo)
 
-  const labelStyle: React.CSSProperties = { width: 116, padding: "0 4px 6px 0", color: C.ink, fontSize: 9.5, fontWeight: 800, textTransform: "uppercase", verticalAlign: "top", whiteSpace: "nowrap" }
-  const colonStyle: React.CSSProperties = { width: 12, padding: "0 4px 6px 0", color: C.body, fontSize: 9.5, fontWeight: 700, textAlign: "center", verticalAlign: "top" }
-  const valueStyle: React.CSSProperties = { paddingBottom: 6, color: C.body, fontSize: 9.5, fontWeight: 500, lineHeight: 1.25, verticalAlign: "top", overflowWrap: "anywhere" }
-
-  const renderRows = (rows: typeof leftRows) => rows.map((row) => (
-    <tr key={row.label}>
-      <td style={labelStyle}>{row.label}</td>
-      <td style={colonStyle}>:</td>
-      <td style={valueStyle}>{row.value}</td>
-    </tr>
-  ))
+  const lineStyle: React.CSSProperties = {
+    margin: 0,
+    color: C.body,
+    fontSize: 10,
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+    fontWeight: 500,
+    lineHeight: 1.45,
+    letterSpacing: 0.1,
+  }
 
   return (
     <section style={{ display: "flex", marginTop: 10, border: `1.5px solid ${C.green}`, borderRadius: 8, overflow: "hidden", background: "#FFFFFF" }}>
@@ -89,15 +85,28 @@ export function EBMSection({ data }: { data: EbmSectionProps }) {
         </p>
       </div>
 
-      <div style={{ flex: 1, minWidth: 0, padding: "9px 16px 8px" }}>
-        <div style={{ color: C.green, fontSize: 10.5, fontWeight: 900, letterSpacing: 0.6, textAlign: "center", textTransform: "uppercase" }}>SDC Information</div>
-        <div style={{ display: "flex", gap: 22, marginTop: 9 }}>
-          <table style={{ width: "56%", borderCollapse: "collapse", tableLayout: "fixed" }}><tbody>{renderRows(leftRows)}</tbody></table>
-          <table style={{ flex: 1, borderCollapse: "collapse", tableLayout: "fixed" }}><tbody>{renderRows(rightRows)}</tbody></table>
-        </div>
-        <div style={{ marginTop: 1, color: C.body, fontSize: 10, textAlign: "center" }}>
-          Powered by <span style={{ color: C.navy, fontWeight: 900, letterSpacing: 0.3, textTransform: "uppercase" }}>{safeText(data.branding?.poweredBy)}</span>
-        </div>
+      <div style={{ flex: 1, minWidth: 0, padding: "10px 16px 10px" }}>
+        <p style={{ ...lineStyle, color: C.green, fontWeight: 800, textAlign: "center", marginBottom: 4 }}>
+          SDC INFORMATION
+        </p>
+        <div style={{ borderTop: `1px dashed ${C.borderStrong}`, margin: "4px 0 6px" }} />
+
+        <p style={lineStyle}>Date: {dateStr}   {timeStr}</p>
+        <p style={lineStyle}>SDC ID : {safeText(sdc?.sdcId)}</p>
+        <p style={lineStyle}>RECEIPT NUMBER : {receiptNo}</p>
+        <p style={{ ...lineStyle, overflowWrap: "anywhere" }}>Internal Data:{internalDataDisplay}</p>
+        <p style={{ ...lineStyle, overflowWrap: "anywhere" }}>Receipt Signature:{signatureDisplay}</p>
+
+        <div style={{ borderTop: `1px dashed ${C.borderStrong}`, margin: "8px 0 6px" }} />
+
+        {/* Bottom block — RRA sample style: RECEIPT NUMBER:{vsdcInvcNo} */}
+        <p style={{ ...lineStyle, fontWeight: 800 }}>RECEIPT NUMBER:{invoiceNo}</p>
+        <p style={lineStyle}>Date : {dateStr}   {timeStr}</p>
+        <p style={lineStyle}>MRC : {mrc}</p>
+
+        <p style={{ ...lineStyle, marginTop: 8, textAlign: "center", fontSize: 9, color: C.green, fontWeight: 700 }}>
+          {branding}
+        </p>
       </div>
     </section>
   )

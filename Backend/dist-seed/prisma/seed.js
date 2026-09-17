@@ -11,6 +11,8 @@ const batch_service_1 = require("../src/services/batch.service");
 const inventory_ledger_service_1 = require("../src/services/inventory-ledger.service");
 const tax_service_1 = require("../src/services/tax.service");
 const rra_ebm_service_1 = require("../src/services/rra-ebm.service");
+const item_code_service_1 = require("../src/services/item-code.service");
+const purchase_code_checksum_1 = require("../src/services/purchase-code.checksum");
 const prisma = new client_1.PrismaClient();
 /** Demo login password for all seeded users (development only). */
 exports.DEMO_PASSWORD = "TestDemo#123";
@@ -364,6 +366,7 @@ async function seedDemoDataset() {
             code: "MAIN",
             location: "Kigali City Center",
             status: "ACTIVE",
+            isDefault: true,
             // RRA VSDC test device (matching working demo org): bhfId "00", serial "excelwartest"
             bhfId: "00",
             ebmSerialNo: "excelwartest",
@@ -431,6 +434,17 @@ async function seedDemoDataset() {
             isEmailVerified: true,
         },
     });
+    const eastSellerUser = await prisma.user.create({
+        data: {
+            email: "demo.eastseller@exceledge.test",
+            password: passwordHash,
+            name: "Demo East Seller",
+            phone: "+250788000005",
+            role: client_1.UserRole.SELLER,
+            isActive: true,
+            isEmailVerified: true,
+        },
+    });
     await prisma.userOrganization.createMany({
         data: [
             {
@@ -452,6 +466,12 @@ async function seedDemoDataset() {
                 isOwner: false,
             },
             {
+                userId: eastSellerUser.id,
+                organizationId: org.id,
+                role: client_1.UserRole.SELLER,
+                isOwner: false,
+            },
+            {
                 userId: accountantUser.id,
                 organizationId: org.id,
                 role: client_1.UserRole.ACCOUNTANT,
@@ -465,6 +485,7 @@ async function seedDemoDataset() {
             { userId: adminUser.id, branchId: eastBranch.id, isPrimary: false },
             { userId: managerUser.id, branchId: eastBranch.id, isPrimary: true },
             { userId: sellerUser.id, branchId: mainBranch.id, isPrimary: true },
+            { userId: eastSellerUser.id, branchId: eastBranch.id, isPrimary: true },
             { userId: accountantUser.id, branchId: mainBranch.id, isPrimary: true },
             { userId: accountantUser.id, branchId: eastBranch.id, isPrimary: false },
         ],
@@ -488,139 +509,322 @@ async function seedDemoDataset() {
             contactPerson: "Mary Wholesale",
         },
     });
-    const products = await prisma.$transaction([
-        prisma.product.create({
-            data: {
-                organizationId: org.id,
-                supplierId: supplierA.id,
+    // VSDC §4.3 item types + §4.17 origin (orgnNatCd) must vary in demo data:
+    // 1=RAW_MATERIAL, 2=PRODUCT (finished), 3=SERVICE — each from different countries.
+    const products = await prisma.$transaction(async (tx) => {
+        const defs = [
+            // ── Finished products (itemTyCd=2) ──
+            {
                 name: "Paracetamol 500mg Tablets",
                 sku: "PARA-500",
                 category: "Pain relief",
-                description: "Blister 20 tablets",
-                quantity: 100,
-                unitPrice: new client_1.Prisma.Decimal("150.00"),
+                description: "Blister 20 tablets — finished product (RW)",
+                unitPrice: "150.00",
                 minStock: 20,
-                taxCategory: "STANDARD",
-                taxCode: "A",
-                measurementUnit: "PCS",
+                taxCategory: client_1.TaxCategory.STANDARD,
+                taxCode: client_1.RraTaxCode.A,
+                measurementUnit: client_1.MeasurementUnit.PCS,
                 barcode: "8901000000001",
-            },
-        }),
-        prisma.product.create({
-            data: {
-                organizationId: org.id,
+                itemClsCd: "5059690800",
+                itemType: client_1.ItemType.PRODUCT,
+                origin: "RW",
                 supplierId: supplierA.id,
+                initialQty: 100,
+            },
+            {
                 name: "Amoxicillin 250mg",
                 sku: "AMOX-250",
                 category: "Antibiotics",
-                quantity: 100,
-                unitPrice: new client_1.Prisma.Decimal("800.00"),
+                description: "Finished product imported from Kenya",
+                unitPrice: "800.00",
                 minStock: 10,
-                taxCategory: "STANDARD",
-                taxCode: "A",
-                measurementUnit: "PCS",
+                taxCategory: client_1.TaxCategory.STANDARD,
+                taxCode: client_1.RraTaxCode.A,
+                measurementUnit: client_1.MeasurementUnit.PCS,
                 barcode: "8901000000002",
+                itemClsCd: "5059690800",
+                itemType: client_1.ItemType.PRODUCT,
+                origin: "KE",
+                supplierId: supplierA.id,
+                initialQty: 100,
             },
-        }),
-        prisma.product.create({
-            data: {
-                organizationId: org.id,
-                supplierId: supplierB.id,
+            {
                 name: "Vitamin C 1000mg",
                 sku: "VIT-C-1K",
                 category: "Vitamins",
-                quantity: 100,
-                unitPrice: new client_1.Prisma.Decimal("3500.00"),
+                description: "Finished product from Uganda",
+                unitPrice: "3500.00",
                 minStock: 5,
-                taxCategory: "ZERO_RATED",
-                taxCode: "B",
-                measurementUnit: "PCS",
+                taxCategory: client_1.TaxCategory.ZERO_RATED,
+                taxCode: client_1.RraTaxCode.B,
+                measurementUnit: client_1.MeasurementUnit.PCS,
                 barcode: "8901000000003",
-            },
-        }),
-        prisma.product.create({
-            data: {
-                organizationId: org.id,
+                itemClsCd: "5059690800",
+                itemType: client_1.ItemType.PRODUCT,
+                origin: "UG",
                 supplierId: supplierB.id,
+                initialQty: 100,
+            },
+            {
                 name: "Hand Sanitizer 500ml",
                 sku: "SAN-500",
                 category: "Hygiene",
-                quantity: 100,
-                unitPrice: new client_1.Prisma.Decimal("2500.00"),
+                description: "Finished product from China",
+                unitPrice: "2500.00",
                 minStock: 15,
-                taxCategory: "STANDARD",
-                taxCode: "A",
-                measurementUnit: "PCS",
+                taxCategory: client_1.TaxCategory.STANDARD,
+                taxCode: client_1.RraTaxCode.A,
+                measurementUnit: client_1.MeasurementUnit.PCS,
                 barcode: "8901000000004",
+                itemClsCd: "5059690800",
+                itemType: client_1.ItemType.PRODUCT,
+                origin: "CN",
+                supplierId: supplierB.id,
+                initialQty: 100,
             },
-        }),
-        prisma.product.create({
-            data: {
-                organizationId: org.id,
-                supplierId: supplierA.id,
+            {
                 name: "Cotton Roll 500g",
                 sku: "COT-500",
                 category: "Supplies",
-                quantity: 100,
-                unitPrice: new client_1.Prisma.Decimal("4200.00"),
+                description: "Finished product from Tanzania",
+                unitPrice: "4200.00",
                 minStock: 8,
-                taxCategory: "EXEMPT",
-                taxCode: "A",
-                measurementUnit: "PCS",
+                taxCategory: client_1.TaxCategory.EXEMPT,
+                taxCode: client_1.RraTaxCode.A,
+                measurementUnit: client_1.MeasurementUnit.PCS,
                 barcode: "8901000000005",
-            },
-        }),
-        prisma.product.create({
-            data: {
-                organizationId: org.id,
+                itemClsCd: "5059690800",
+                itemType: client_1.ItemType.PRODUCT,
+                origin: "TZ",
                 supplierId: supplierA.id,
+                initialQty: 100,
+            },
+            {
                 name: "Digital Thermometer",
                 sku: "THERM-D1",
                 category: "Devices",
-                quantity: 100,
-                unitPrice: new client_1.Prisma.Decimal("12000.00"),
+                description: "Finished product from India",
+                unitPrice: "12000.00",
                 minStock: 3,
-                taxCategory: "STANDARD",
-                taxCode: "A",
-                measurementUnit: "PCS",
+                taxCategory: client_1.TaxCategory.STANDARD,
+                taxCode: client_1.RraTaxCode.B,
+                measurementUnit: client_1.MeasurementUnit.PCS,
                 barcode: "8901000000006",
+                itemClsCd: "3026530200",
+                itemType: client_1.ItemType.PRODUCT,
+                origin: "IN",
+                supplierId: supplierA.id,
+                initialQty: 100,
             },
-        }),
-    ]);
-    const [p1, p2, p3, p4, p5, p6] = products;
-    for (const p of [p1, p2, p4, p5, p6]) {
+            // ── Raw materials (itemTyCd=1) ──
+            {
+                name: "API Paracetamol Powder",
+                sku: "RM-PARA-API",
+                category: "Raw materials",
+                description: "Active pharmaceutical ingredient from India",
+                unitPrice: "45000.00",
+                minStock: 5,
+                taxCategory: client_1.TaxCategory.STANDARD,
+                taxCode: client_1.RraTaxCode.A,
+                measurementUnit: client_1.MeasurementUnit.KG,
+                barcode: "8901000000011",
+                itemClsCd: "5059690800",
+                itemType: client_1.ItemType.RAW_MATERIAL,
+                origin: "IN",
+                supplierId: supplierA.id,
+                initialQty: 50,
+            },
+            {
+                name: "Empty Blister Packs",
+                sku: "RM-BLISTER",
+                category: "Raw materials",
+                description: "Packaging component from China",
+                unitPrice: "200.00",
+                minStock: 100,
+                taxCategory: client_1.TaxCategory.STANDARD,
+                taxCode: client_1.RraTaxCode.A,
+                measurementUnit: client_1.MeasurementUnit.PCS,
+                barcode: "8901000000012",
+                itemClsCd: "5059690800",
+                itemType: client_1.ItemType.RAW_MATERIAL,
+                origin: "CN",
+                supplierId: supplierB.id,
+                initialQty: 500,
+            },
+            {
+                name: "Ethanol 96%",
+                sku: "RM-ETH-96",
+                category: "Raw materials",
+                description: "Solvent / sanitizer base from Kenya",
+                unitPrice: "8000.00",
+                minStock: 10,
+                taxCategory: client_1.TaxCategory.STANDARD,
+                taxCode: client_1.RraTaxCode.A,
+                measurementUnit: client_1.MeasurementUnit.LTR,
+                barcode: "8901000000013",
+                itemClsCd: "5059690800",
+                itemType: client_1.ItemType.RAW_MATERIAL,
+                origin: "KE",
+                supplierId: supplierB.id,
+                initialQty: 80,
+            },
+            {
+                name: "Glycerin USP",
+                sku: "RM-GLYCERIN",
+                category: "Raw materials",
+                description: "Excipient from Uganda",
+                unitPrice: "5500.00",
+                minStock: 8,
+                taxCategory: client_1.TaxCategory.STANDARD,
+                taxCode: client_1.RraTaxCode.A,
+                measurementUnit: client_1.MeasurementUnit.LTR,
+                barcode: "8901000000014",
+                itemClsCd: "5059690800",
+                itemType: client_1.ItemType.RAW_MATERIAL,
+                origin: "UG",
+                supplierId: supplierA.id,
+                initialQty: 40,
+            },
+            // ── Services (itemTyCd=3) — no stock ──
+            {
+                name: "Pharmacy Consultation",
+                sku: "SVC-CONSULT",
+                category: "Services",
+                description: "In-store pharmacist consultation (Rwanda)",
+                unitPrice: "5000.00",
+                minStock: 0,
+                taxCategory: client_1.TaxCategory.STANDARD,
+                taxCode: client_1.RraTaxCode.A,
+                measurementUnit: client_1.MeasurementUnit.PCS,
+                barcode: "8901000000021",
+                itemClsCd: "5059690800",
+                itemType: client_1.ItemType.SERVICE,
+                origin: "RW",
+                supplierId: null,
+                initialQty: 0,
+            },
+            {
+                name: "Home Delivery Fee",
+                sku: "SVC-DELIVER",
+                category: "Services",
+                description: "Last-mile delivery service (Burundi origin code for demo)",
+                unitPrice: "2000.00",
+                minStock: 0,
+                taxCategory: client_1.TaxCategory.STANDARD,
+                taxCode: client_1.RraTaxCode.A,
+                measurementUnit: client_1.MeasurementUnit.PCS,
+                barcode: "8901000000022",
+                itemClsCd: "5059690800",
+                itemType: client_1.ItemType.SERVICE,
+                origin: "BI",
+                supplierId: null,
+                initialQty: 0,
+            },
+            {
+                name: "Prescription Review",
+                sku: "SVC-RX-REV",
+                category: "Services",
+                description: "Prescription validation service (DRC)",
+                unitPrice: "3000.00",
+                minStock: 0,
+                taxCategory: client_1.TaxCategory.EXEMPT,
+                taxCode: client_1.RraTaxCode.A,
+                measurementUnit: client_1.MeasurementUnit.PCS,
+                barcode: "8901000000023",
+                itemClsCd: "5059690800",
+                itemType: client_1.ItemType.SERVICE,
+                origin: "CD",
+                supplierId: null,
+                initialQty: 0,
+            },
+        ];
+        const created = [];
+        for (const def of defs) {
+            const pkgUnitCd = "NT";
+            const qtyUnitCd = (0, item_code_service_1.deriveQtyUnitCd)(def.measurementUnit);
+            const itemCd = await (0, item_code_service_1.allocateItemCd)(org.id, def.itemType, pkgUnitCd, qtyUnitCd, def.origin, tx);
+            const product = await tx.product.create({
+                data: {
+                    organizationId: org.id,
+                    supplierId: def.supplierId,
+                    name: def.name,
+                    sku: def.sku,
+                    category: def.category,
+                    description: def.description,
+                    quantity: def.initialQty,
+                    unitPrice: new client_1.Prisma.Decimal(def.unitPrice),
+                    minStock: def.minStock,
+                    taxCategory: def.taxCategory,
+                    taxCode: def.taxCode,
+                    measurementUnit: def.measurementUnit,
+                    barcode: def.barcode,
+                    itemType: def.itemType,
+                    origin: def.origin,
+                    pkgUnitCd,
+                    qtyUnitCd,
+                    itemClsCd: def.itemClsCd || item_code_service_1.DEFAULT_ITEM_CLASSIFICATION_CD,
+                    itemCd,
+                    ebmSyncStatus: "PENDING",
+                },
+            });
+            created.push(product);
+        }
+        return created;
+    });
+    const finished = products.filter((p) => p.itemType === client_1.ItemType.PRODUCT);
+    const rawMaterials = products.filter((p) => p.itemType === client_1.ItemType.RAW_MATERIAL);
+    const services = products.filter((p) => p.itemType === client_1.ItemType.SERVICE);
+    const [p1, p2, p3, p4, p5, p6] = finished;
+    const [rm1, rm2] = rawMaterials;
+    console.log(`Seeded ${products.length} items: ${finished.length} finished / ${rawMaterials.length} raw / ${services.length} service (mixed origins)`);
+    // Stock batches only for finished + raw materials (services have no inventory).
+    const stockable = [...finished, ...rawMaterials];
+    for (const p of stockable) {
+        const isVitC = p.sku === "VIT-C-1K";
         await (0, batch_service_1.createBatch)({
             productId: p.id,
             organizationId: org.id,
             branchId: mainBranch.id,
             userId: adminUser.id,
-            batchNumber: `B-${p.sku}-MAIN-1`,
-            quantity: 200,
-            unitCost: Number(p.unitPrice) * 0.55,
-            expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            batchNumber: isVitC ? "B-VIT-C-MAIN-1" : `B-${p.sku}-MAIN-1`,
+            quantity: isVitC ? 80 : 200,
+            unitCost: isVitC ? 1200 : Number(p.unitPrice) * 0.55,
+            expiryDate: new Date(Date.now() + (isVitC ? 180 : 365) * 24 * 60 * 60 * 1000),
         });
     }
-    await (0, batch_service_1.createBatch)({
-        productId: p3.id,
-        organizationId: org.id,
-        branchId: mainBranch.id,
-        userId: adminUser.id,
-        batchNumber: "B-VIT-C-MAIN-1",
-        quantity: 80,
-        unitCost: 1200,
-        expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
-    });
-    for (const p of [p1, p2, p3, p4, p5, p6]) {
+    for (const p of stockable) {
         await (0, batch_service_1.createBatch)({
             productId: p.id,
             organizationId: org.id,
             branchId: eastBranch.id,
             userId: adminUser.id,
             batchNumber: `B-${p.sku}-EAST-1`,
-            quantity: 50,
+            quantity: p.itemType === client_1.ItemType.RAW_MATERIAL ? 30 : 50,
             unitCost: Number(p.unitPrice) * 0.5,
             expiryDate: new Date(Date.now() + 300 * 24 * 60 * 60 * 1000),
         });
+    }
+    // BOM: 1× Paracetamol finished uses API powder + blister packs (RRA composition).
+    if (p1 && rm1 && rm2) {
+        await prisma.bomComponent.createMany({
+            data: [
+                {
+                    organizationId: org.id,
+                    parentProductId: p1.id,
+                    componentProductId: rm1.id,
+                    quantity: new client_1.Prisma.Decimal("0.010"),
+                    unit: "KG",
+                },
+                {
+                    organizationId: org.id,
+                    parentProductId: p1.id,
+                    componentProductId: rm2.id,
+                    quantity: new client_1.Prisma.Decimal("1"),
+                    unit: "PCS",
+                },
+            ],
+        });
+        console.log(`Seeded BOM for ${p1.name}: ${rm1.name} + ${rm2.name}`);
     }
     const walkIn = await prisma.customer.create({
         data: {
@@ -648,20 +852,37 @@ async function seedDemoDataset() {
     const insuranceCustomer = await prisma.customer.create({
         data: {
             organizationId: org.id,
-            name: "Insurance Member Jane",
+            name: "RSSB Insurance",
             phone: "+250788333003",
             customerType: client_1.CustomerType.INSURANCE,
+            // VSDC BhfInsuranceSaveReq sample (§3.3.3.3)
+            isrccCd: "ISRCC01",
+            isrcRt: new client_1.Prisma.Decimal("20"),
+            TIN: "100000001",
             balance: new client_1.Prisma.Decimal("0"),
         },
     });
-    // Org-level RRA purchase-code pool for buyer TIN 100000000. The local v3.0.2
-    // sandbox issues these codes bound to that buyer; each business sale consumes
-    // one via consumeOrgPurchaseCode(). Codes 010307–010310 are unused in the
-    // sandbox, so a fresh seed can fiscalize repeat sales to Credit Wholesale Ltd.
-    for (const code of ["010307", "010308", "010309", "010310"]) {
-        await prisma.organizationPurchaseCode.create({
-            data: { organizationId: org.id, code, buyerTin: "100000000" },
-        });
+    // Org-level RRA purchase-code pools (buyer-scoped checksum). Seed enough for
+    // walk-in B2C (placeholder TIN) + the B2B corporate buyer + insurer.
+    const walkInBuyerTin = (0, rra_ebm_service_1.walkInCustTin)(walkIn.id);
+    const sellerTin = org.TIN.trim();
+    const purchasePools = [
+        { buyerTin: "100000000", count: 30 },
+        { buyerTin: walkInBuyerTin, count: 40 },
+        { buyerTin: "100000001", count: 10 },
+    ];
+    // Codes are unique per org (not per buyer), so share the exclusion set
+    // across pools to avoid P2002 collisions.
+    const usedCodes = new Set();
+    for (const pool of purchasePools) {
+        const codes = (0, purchase_code_checksum_1.generateValidPurchaseCodes)(pool.buyerTin, sellerTin, pool.count, usedCodes);
+        for (const code of codes) {
+            await prisma.organizationPurchaseCode.create({
+                data: { organizationId: org.id, code, buyerTin: pool.buyerTin },
+            });
+            usedCodes.add(code);
+        }
+        console.log(`Seeded ${codes.length} purchase codes for buyer TIN ${pool.buyerTin}`);
     }
     const ctx = {
         orgId: org.id,
@@ -977,6 +1198,7 @@ async function seedDemoDataset() {
     console.log(`  ${DEMO_ADMIN_EMAIL} (ADMIN)`);
     console.log(`  demo.manager@exceledge.test (BRANCH_MANAGER)`);
     console.log(`  demo.seller@exceledge.test (SELLER)`);
+    console.log(`  demo.eastseller@exceledge.test (SELLER, East Branch)`);
     console.log(`  demo.accountant@exceledge.test (ACCOUNTANT)`);
     console.log(`Sample sales: cash, mixed/debt + partial debt payment, insurance, proforma`);
     console.log(`Purchase orders: pending #${pendingPo.id}, completed #${completedPo.id} + supplier payment`);
