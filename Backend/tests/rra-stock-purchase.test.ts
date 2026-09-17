@@ -121,6 +121,10 @@ describe("submitStockLedgerEntryToEbm (§72/§73)", () => {
     expect(stockItemsPayload.itemList[0].qty).toBe(10)
     // input VAT extracted from the 118 x 10 supply
     expect(stockItemsPayload.itemList[0].taxAmt).toBeCloseTo(180, 0)
+    // StockIOSaveReq sample: custTin/custBhfId null unless a real counterparty
+    expect(stockItemsPayload.custTin).toBeNull()
+    expect(stockItemsPayload.custBhfId).toBeNull()
+    expect(stockItemsPayload.custNm).toBeNull()
 
     expect(stockMasterArgs.itemCd).toBe("RW2CTU0000001")
     expect(stockMasterArgs.rsdQty).toBe(250)
@@ -137,10 +141,13 @@ describe("confirmRraPurchase (§71)", () => {
     expect(savePurchasePayload.spplrTin).toBe("200000001")
     expect(savePurchasePayload.spplrInvcNo).toBe(4321)
     expect(savePurchasePayload.pchsSttsCd).toBe("02")
-    expect(savePurchasePayload.taxblAmtB).toBeCloseTo(1000, 0)
+    // VSDC §3.3.7.2 sample: tax-inclusive — totAmt == totTaxblAmt (not + tax)
+    expect(savePurchasePayload.taxblAmtB).toBeCloseTo(1180, 0)
     expect(savePurchasePayload.taxAmtB).toBeCloseTo(180, 0)
     expect(savePurchasePayload.totAmt).toBeCloseTo(1180, 0)
+    expect(savePurchasePayload.totAmt).toBe(savePurchasePayload.totTaxblAmt)
     expect(savePurchasePayload.itemList[0].taxTyCd).toBe("B")
+    expect(savePurchasePayload.itemList[0].totAmt).toBe(savePurchasePayload.itemList[0].taxblAmt)
   })
 
   it("§74: books the received quantity into branch stock, without re-reporting it to the VSDC", async () => {

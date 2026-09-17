@@ -1,5 +1,5 @@
-import { formatInvoiceAmount, formatInvoiceQuantity } from "./invoice-format.service"
-import { SYSTEM_POWERED_BY, NOT_OFFICIAL_RECEIPT_NOTICE, NOT_FISCALIZED_TITLE, NOT_FISCALIZED_NOTICE } from "./system-branding.service"
+import { formatInvoiceAmount } from "./invoice-format.service"
+import { SYSTEM_FOOTER, SYSTEM_POWERED_BY, NOT_OFFICIAL_RECEIPT_NOTICE, NOT_FISCALIZED_TITLE, NOT_FISCALIZED_NOTICE } from "./system-branding.service"
 // invoice-pdf.service only imports RenderInvoicePayload/RenderInvoiceLineItem
 // as types (`import type`, erased at build time), so importing its runtime
 // helpers here does not create a circular module dependency at runtime.
@@ -398,15 +398,13 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
   type SummaryRow = readonly [string, number, boolean]
 
   // RRA checklist §46: print the tax value under each A/B/C/D label actually
-  // in play (taxGroups already force-includes B at zero per §48), alongside
-  // — not instead of — the aggregate VAT/TAX rows above.
-  const taxBreakdownRows: SummaryRow[] = taxGroups(data).flatMap((group) => {
-    const groupLabel = /^[A-D]$/.test(group.code) ? `${group.code}-${formatInvoiceQuantity(group.rate)}%` : group.code
-    return [
-      [`TOTAL ${groupLabel}`, group.total, false] as SummaryRow,
-      [`TOTAL TAX ${group.code}`, group.tax, false] as SummaryRow,
-    ]
-  })
+  // in play. Skip zero-tax bands (e.g. TOTAL TAX A 0.00); keep B even at 0
+  // (RRA §48). Per-band SALES totals ("TOTAL A …") are not shown.
+  const taxBreakdownRows: SummaryRow[] = taxGroups(data)
+    .filter((group) => group.code === "B" || Math.abs(group.tax) > 0)
+    .map((group) => (
+      [`TOTAL TAX ${group.code}`, group.tax, false] as SummaryRow
+    ))
 
   const summaryRows: SummaryRow[] = [
     ["SUBTOTAL (VAT INCL.)", data.totals.grandTotal, true],
@@ -994,7 +992,9 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
       <div class="sheet">
         <div class="top-grid">
           <div class="brand">
-            ${rraLogoSvg()}
+            ${data.branding?.rraLogo
+              ? `<img src="${escapeHtml(data.branding.rraLogo)}" alt="Rwanda Revenue Authority" width="120" height="48" style="object-fit:contain" />`
+              : rraLogoSvg()}
             <div class="brand-name">Rwanda Revenue Authority</div>
             <div class="brand-tag">Taxes for Growth and Development</div>
           </div>
@@ -1097,22 +1097,21 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
             </div>
 
             <div class="verification-right">
-              <h3>SDC Information</h3>
+              <h3>SDC INFORMATION</h3>
               <div class="sdc-columns">
                 <div class="sdc-col">
+                  <div class="cell"><span class="label">Date</span><span class="sep">:</span><span class="value">${escapeHtml(formatDateShort(sdc.date ?? data.invoice.invoiceDate))} ${escapeHtml(safeText(sdc.time ?? data.invoice.time))}</span></div>
                   <div class="cell"><span class="label">SDC ID</span><span class="sep">:</span><span class="value mono">${escapeHtml(safeText(sdc.sdcId))}</span></div>
                   <div class="cell"><span class="label">Receipt Number</span><span class="sep">:</span><span class="value mono">${escapeHtml(safeText(sdc.receiptNumber ?? data.invoice.receiptNumber))}</span></div>
-                  <div class="cell"><span class="label">MRC</span><span class="sep">:</span><span class="value mono">${escapeHtml(safeText(sdc.mrcNo))}</span></div>
                   <div class="cell"><span class="label">Internal Data</span><span class="sep">:</span><span class="value mono">${escapeHtml(internalDataDisplay)}</span></div>
                 </div>
                 <div class="sdc-col">
                   <div class="cell"><span class="label">Receipt Signature</span><span class="sep">:</span><span class="value mono">${escapeHtml(receiptSignatureDisplay)}</span></div>
-                  <div class="cell"><span class="label">Date</span><span class="sep">:</span><span class="value">${escapeHtml(formatDateShort(sdc.date ?? data.invoice.invoiceDate))}</span></div>
-                  <div class="cell"><span class="label">Time</span><span class="sep">:</span><span class="value">${escapeHtml(safeText(sdc.time ?? data.invoice.time))}</span></div>
-                  <div class="cell"><span class="label">Software Version</span><span class="sep">:</span><span class="value">${escapeHtml(safeText(sdc.softwareVersion))}</span></div>
+                  <div class="cell"><span class="label">Receipt Number</span><span class="sep">:</span><span class="value mono">${escapeHtml(safeText(data.invoice.invoiceNumber))}</span></div>
+                  <div class="cell"><span class="label">MRC</span><span class="sep">:</span><span class="value mono">${escapeHtml(safeText(sdc.mrcNo))}</span></div>
                 </div>
               </div>
-              <div class="powered">Powered by <strong>${escapeHtml(poweredBy)}</strong></div>
+              <div class="powered">${escapeHtml(safeText(sdc.poweredBy, SYSTEM_FOOTER))}</div>
             </div>
           </div>
         </div>

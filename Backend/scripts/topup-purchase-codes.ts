@@ -4,10 +4,11 @@
  *
  * These codes stand in for codes the buyer's own VSDC/OSDC would issue in
  * production (see consumeOrgPurchaseCode / consumeAnyOrgPurchaseCode in
- * src/services/rra-ebm.service.ts). The sandbox accepts any 6-character code,
- * so freshly generated ones work fine for testing — this script just keeps
- * the pool from running dry. Idempotent: skips any code that already exists
- * for the organization.
+ * src/services/rra-ebm.service.ts). Codes are buyer-scoped: the sandbox binds
+ * each code's checksum to the buyer TIN it was generated for and rejects
+ * cross-buyer codes with 882, so always top up for the exact buyer TIN that
+ * will be submitted. Idempotent: skips any code that already exists for the
+ * organization.
  *
  * Usage:
  *   npx tsx scripts/topup-purchase-codes.ts [organizationId] [buyerTin] [count]

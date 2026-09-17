@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { VALID_RRA_COUNTRY_CODES } from '../constants/rra-country-codes';
+
+const rraCountryCodeEnum = z.enum(VALID_RRA_COUNTRY_CODES as [string, ...string[]]);
 
 export const createProductSchema = z.object({
   body: z.object({
@@ -12,17 +15,21 @@ export const createProductSchema = z.object({
     minStock: z.coerce.number().nonnegative('Minimum stock cannot be negative').default(10),
     taxCategory: z.enum(['STANDARD', 'ZERO_RATED', 'EXEMPT']).default('STANDARD'),
     // E is reserved for RRA internal use only and must never be assignable to a product.
-    taxCode: z.enum(['A', 'B', 'C', 'D']).optional(),
+    taxCode: z.enum(['A', 'B', 'C', 'D'], {
+      message: 'Tax code must be one of A, B, C, or D',
+    }),
     measurementUnit: z.enum(['PCS', 'KG', 'LTR', 'MTR', 'BOX', 'PAIR', 'DOZEN', 'GRAM', 'ML', 'OTHER']).default('PCS'),
-    itemType: z.enum(['PRODUCT', 'SERVICE']).default('PRODUCT'),
+    itemType: z.enum(['PRODUCT', 'RAW_MATERIAL', 'SERVICE']).default('PRODUCT'),
     expiryDate: z.string().datetime().optional(),
     barcode: z.string().optional(),
-    pkgUnitCd: z.string().optional(),
-    qtyUnitCd: z.string().optional(),
+    // VSDC ItemSaveReq requires pkgUnitCd — do not invent a silent default at sync time.
+    pkgUnitCd: z.string().min(1, 'Packaging unit code (pkgUnitCd) is required').max(5),
+    qtyUnitCd: z.string().min(1).max(5).optional(),
     packagingQty: z.coerce.number().int().positive('Packaging quantity must be positive').optional(),
-    itemClsCd: z.string().optional(),
+    // Required for all item types including SERVICE (VSDC §3.3.4.1).
+    itemClsCd: z.string().min(1, 'RRA item classification (itemClsCd) is required').max(10),
     itemStandardName: z.string().max(200, 'Item standard name too long').optional(),
-    origin: z.string().length(2, 'Origin must be a 2-letter country code').optional(),
+    origin: rraCountryCodeEnum.optional(),
     useInsurance: z.coerce.boolean().default(false),
     additionalInfo: z.string().max(7, 'Additional info must be 7 characters or fewer').optional(),
     l1SalePrice: z.coerce.number().nonnegative('Price tier 1 cannot be negative').optional(),
@@ -30,6 +37,20 @@ export const createProductSchema = z.object({
     l3SalePrice: z.coerce.number().nonnegative('Price tier 3 cannot be negative').optional(),
     l4SalePrice: z.coerce.number().nonnegative('Price tier 4 cannot be negative').optional(),
     l5SalePrice: z.coerce.number().nonnegative('Price tier 5 cannot be negative').optional(),
+    bomComponents: z.array(z.object({
+      componentProductId: z.coerce.number().int().positive(),
+      quantity: z.coerce.number().positive().max(999999999999.999).refine(
+        (quantity) => Math.abs(quantity * 1000 - Math.round(quantity * 1000)) <= 1e-7,
+        'Quantity can have at most 3 decimal places',
+      ),
+      unit: z.string().min(1).max(20),
+    })).max(50).refine(
+      (components) => new Set(components.map((component) => component.componentProductId)).size === components.length,
+      'Each raw material can be used only once',
+    ).optional(),
+  }).refine((data) => !data.bomComponents?.length || data.itemType === 'PRODUCT', {
+    message: 'Bill of Materials can only be added to finished products',
+    path: ['bomComponents'],
   }),
   params: z.object({
     organizationId: z.coerce.number().positive('Organization ID required'),
@@ -49,7 +70,7 @@ export const updateProductSchema = z.object({
     // E is reserved for RRA internal use only and must never be assignable to a product.
     taxCode: z.enum(['A', 'B', 'C', 'D']).optional(),
     measurementUnit: z.enum(['PCS', 'KG', 'LTR', 'MTR', 'BOX', 'PAIR', 'DOZEN', 'GRAM', 'ML', 'OTHER']).optional(),
-    itemType: z.enum(['PRODUCT', 'SERVICE']).optional(),
+    itemType: z.enum(['PRODUCT', 'RAW_MATERIAL', 'SERVICE']).optional(),
     expiryDate: z.string().datetime().optional().nullable(),
     barcode: z.string().optional().nullable(),
     pkgUnitCd: z.string().optional().nullable(),
@@ -57,7 +78,7 @@ export const updateProductSchema = z.object({
     packagingQty: z.coerce.number().int().positive('Packaging quantity must be positive').optional().nullable(),
     itemClsCd: z.string().optional().nullable(),
     itemStandardName: z.string().max(200, 'Item standard name too long').optional().nullable(),
-    origin: z.string().length(2, 'Origin must be a 2-letter country code').optional().nullable(),
+    origin: rraCountryCodeEnum.optional().nullable(),
     useInsurance: z.coerce.boolean().optional(),
     additionalInfo: z.string().max(7, 'Additional info must be 7 characters or fewer').optional().nullable(),
     l1SalePrice: z.coerce.number().nonnegative('Price tier 1 cannot be negative').optional().nullable(),
@@ -65,6 +86,19 @@ export const updateProductSchema = z.object({
     l3SalePrice: z.coerce.number().nonnegative('Price tier 3 cannot be negative').optional().nullable(),
     l4SalePrice: z.coerce.number().nonnegative('Price tier 4 cannot be negative').optional().nullable(),
     l5SalePrice: z.coerce.number().nonnegative('Price tier 5 cannot be negative').optional().nullable(),
+  }).refine((data) => {
+    // Never clear a required RRA classification once set.
+    if (data.itemClsCd === null || data.itemClsCd === '') return false;
+    return true;
+  }, {
+    message: 'RRA item classification (itemClsCd) is required and cannot be cleared',
+    path: ['itemClsCd'],
+  }).refine((data) => {
+    if (data.pkgUnitCd === null || data.pkgUnitCd === '') return false;
+    return true;
+  }, {
+    message: 'Packaging unit code (pkgUnitCd) is required and cannot be cleared',
+    path: ['pkgUnitCd'],
   }),
   params: z.object({
     organizationId: z.coerce.number().positive('Organization ID required'),

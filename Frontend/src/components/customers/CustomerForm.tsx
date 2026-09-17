@@ -41,10 +41,26 @@ export function CustomerForm({
             email: '',
             phone: '',
             tin: '',
+            address: '',
+            custPrvncNm: '',
+            custDstrtNm: '',
+            custSctrNm: '',
+            custLocDesc: '',
             type: 'INDIVIDUAL',
             balance: 0,
+            isrccCd: '',
+            isrcRt: undefined,
         },
     });
+
+    const customerType = watch('type');
+
+    useEffect(() => {
+        if (customerType === 'INDIVIDUAL') {
+            setValue('tin', '', { shouldValidate: true });
+            setRraCheck({ state: 'idle' });
+        }
+    }, [customerType, setValue]);
 
     useEffect(() => {
         if (initialData) {
@@ -53,8 +69,15 @@ export function CustomerForm({
                 email: initialData.email || '',
                 phone: initialData.phone || '',
                 tin: initialData.tin || '',
+                address: (initialData as any).address || '',
+                custPrvncNm: (initialData as any).custPrvncNm || '',
+                custDstrtNm: (initialData as any).custDstrtNm || '',
+                custSctrNm: (initialData as any).custSctrNm || '',
+                custLocDesc: (initialData as any).custLocDesc || '',
                 type: initialData.type || 'INDIVIDUAL',
                 balance: initialData.balance || 0,
+                isrccCd: (initialData as any).isrccCd || '',
+                isrcRt: (initialData as any).isrcRt ?? undefined,
             };
             reset(formData);
         } else {
@@ -63,8 +86,15 @@ export function CustomerForm({
                 email: '',
                 phone: '',
                 tin: '',
+                address: '',
+                custPrvncNm: '',
+                custDstrtNm: '',
+                custSctrNm: '',
+                custLocDesc: '',
                 type: 'INDIVIDUAL',
                 balance: 0,
+                isrccCd: '',
+                isrcRt: undefined,
             });
         }
     }, [initialData, reset]);
@@ -74,6 +104,11 @@ export function CustomerForm({
 
 
     const handleFormSubmit = (data: CustomerFormData) => {
+        // Walk-in / individual customers never store a TIN.
+        if (data.type === 'INDIVIDUAL') {
+            onSubmit({ ...data, tin: '' });
+            return;
+        }
         onSubmit(data);
     };
 
@@ -142,12 +177,14 @@ export function CustomerForm({
                                 />
                             </div>
 
+                            {customerType !== 'INDIVIDUAL' && (
                             <div>
                                 <label
                                     htmlFor="tin"
                                     className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                                 >
-                                    {t('customers.tinNumber')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                    {t('customers.tinNumber')}{' '}
+                                    <span className="text-red-500">*</span>
                                 </label>
                                 <div className="flex gap-2">
                                     <input
@@ -178,6 +215,14 @@ export function CustomerForm({
                                                 if (data?.found) {
                                                     if (data.taxprNm && !watch('name')) setValue('name', data.taxprNm, { shouldValidate: true });
                                                     setRraCheck({ state: 'ok', message: `RRA: ${data.taxprNm ?? 'registered'}${data.taxprSttsCd ? ` (status ${data.taxprSttsCd})` : ''}` });
+                                                    const customerId = (initialData as any)?.id;
+                                                    if (customerId) {
+                                                        try {
+                                                            await apiClient.syncCustomerToRra(customerId);
+                                                        } catch {
+                                                            /* push is best-effort after verify */
+                                                        }
+                                                    }
                                                 } else {
                                                     setRraCheck({ state: 'error', message: 'RRA has no taxpayer for this TIN' });
                                                 }
@@ -200,6 +245,66 @@ export function CustomerForm({
                                 {rraCheck.state === 'error' && (
                                     <p className="mt-1 flex items-center gap-1.5 text-sm text-amber-600"><AlertTriangle className="size-4" />{rraCheck.message}</p>
                                 )}
+                            </div>
+                            )}
+                            {customerType === 'INDIVIDUAL' && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Walk-in / individual customers do not need a TIN.
+                              </p>
+                            )}
+
+                            <div>
+                                <label
+                                    htmlFor="address"
+                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                >
+                                    {t('customers.address')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                </label>
+                                <input
+                                    id="address"
+                                    type="text"
+                                    placeholder={t('customers.addressPlaceholder') || 'e.g. KG 7 Ave, Kigali'}
+                                    className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.address ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
+                                    {...register('address')}
+                                />
+                                {formErrors.address && (
+                                    <p className="mt-1 text-sm text-red-600">{formErrors.address.message}</p>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label htmlFor="custPrvncNm" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        {t('customers.province')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                    </label>
+                                    <input id="custPrvncNm" type="text" placeholder="e.g. Kigali City"
+                                        className="w-full rounded-md border bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                        {...register('custPrvncNm')} />
+                                </div>
+                                <div>
+                                    <label htmlFor="custDstrtNm" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        {t('customers.district')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                    </label>
+                                    <input id="custDstrtNm" type="text" placeholder="e.g. Gasabo"
+                                        className="w-full rounded-md border bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                        {...register('custDstrtNm')} />
+                                </div>
+                                <div>
+                                    <label htmlFor="custSctrNm" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        {t('customers.sector')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                    </label>
+                                    <input id="custSctrNm" type="text" placeholder="e.g. Remera"
+                                        className="w-full rounded-md border bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                        {...register('custSctrNm')} />
+                                </div>
+                                <div>
+                                    <label htmlFor="custLocDesc" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        {t('customers.streetCell')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                    </label>
+                                    <input id="custLocDesc" type="text" placeholder="e.g. KG 7 Ave"
+                                        className="w-full rounded-md border bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                        {...register('custLocDesc')} />
+                                </div>
                             </div>
 
                             <div>
@@ -227,6 +332,51 @@ export function CustomerForm({
                                     <p className="mt-1 text-sm text-red-600">{formErrors.type.message}</p>
                                 )}
                             </div>
+
+                            {customerType === 'INSURANCE' && (
+                                <>
+                                    <div>
+                                        <label
+                                            htmlFor="isrccCd"
+                                            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                        >
+                                            Insurance code (isrccCd) *
+                                        </label>
+                                        <input
+                                            id="isrccCd"
+                                            type="text"
+                                            maxLength={10}
+                                            placeholder="ISRCC01"
+                                            className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.isrccCd ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
+                                            {...register('isrccCd')}
+                                        />
+                                        {formErrors.isrccCd && (
+                                            <p className="mt-1 text-sm text-red-600">{formErrors.isrccCd.message}</p>
+                                        )}
+                                        <p className="mt-1 text-xs text-gray-500">RRA insurance company code pushed via saveBrancheInsurances.</p>
+                                    </div>
+                                    <div>
+                                        <label
+                                            htmlFor="isrcRt"
+                                            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                        >
+                                            Premium rate (%)
+                                        </label>
+                                        <input
+                                            id="isrcRt"
+                                            type="number"
+                                            step="0.01"
+                                            min={0}
+                                            max={100}
+                                            className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.isrcRt ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
+                                            {...register('isrcRt')}
+                                        />
+                                        {formErrors.isrcRt && (
+                                            <p className="mt-1 text-sm text-red-600">{formErrors.isrcRt.message}</p>
+                                        )}
+                                    </div>
+                                </>
+                            )}
 
                             <div>
                                 <label

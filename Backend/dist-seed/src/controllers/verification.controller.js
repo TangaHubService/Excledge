@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resetPassword = exports.requestPasswordReset = exports.resendVerification = exports.verifyAccount = void 0;
+exports.resetPassword = exports.verifyPasswordResetCode = exports.requestPasswordReset = exports.resendVerification = exports.verifyAccount = void 0;
 const email_service_1 = require("../services/email.service");
 const token_utils_1 = require("../utils/token.utils");
 const crypto_1 = __importDefault(require("crypto"));
@@ -102,7 +102,7 @@ const requestPasswordReset = async (req, res) => {
         if (!user) {
             return res.status(404).json({ error: "No account found with this email address" });
         }
-        // Generate password reset token (opaque random token)
+        // Generate a password reset OTP and only store its hash.
         const { token, expires } = (0, token_utils_1.generatePasswordResetToken)();
         const hashedToken = crypto_1.default.createHash('sha256').update(token).digest('hex');
         // Update user with password reset token
@@ -115,7 +115,7 @@ const requestPasswordReset = async (req, res) => {
         });
         // Send password reset email
         await email_service_1.emailService.sendPasswordResetEmail(user.email, user.name, token);
-        console.log(`[Password Reset] Requested for user=${user.email} userId=${user.id} tokenPrefix=${token.slice(0, 8)}...`);
+        console.log(`[Password Reset] Requested for user=${user.email} userId=${user.id}`);
         return res.json({ message: "Password reset email sent successfully" });
     }
     catch (error) {
@@ -124,21 +124,58 @@ const requestPasswordReset = async (req, res) => {
     }
 };
 exports.requestPasswordReset = requestPasswordReset;
-// Reset password with token
+// Verify a mobile password-reset OTP without consuming it. The OTP is consumed
+// only after the user submits a valid new password through resetPassword.
+const verifyPasswordResetCode = async (req, res) => {
+    try {
+        const { email, code } = req.body;
+        if (!email || !code) {
+            return res.status(400).json({ error: "Email and verification code are required" });
+        }
+        const normalizedCode = String(code).trim();
+        if (!/^\d{6}$/.test(normalizedCode)) {
+            return res.status(400).json({ error: "Enter the 6-digit verification code" });
+        }
+        const incomingTokenHash = crypto_1.default.createHash('sha256').update(normalizedCode).digest('hex');
+        const user = await prisma_1.prisma.user.findFirst({
+            where: {
+                email,
+                passwordResetToken: incomingTokenHash,
+                passwordResetExpiry: { gt: new Date() },
+            },
+            select: { id: true },
+        });
+        if (!user) {
+            return res.status(400).json({ error: "Invalid or expired verification code" });
+        }
+        return res.json({ message: "Verification code is valid" });
+    }
+    catch (error) {
+        console.error("[Verify Password Reset Code Error]:", error);
+        return res.status(500).json({ error: "Failed to verify password reset code" });
+    }
+};
+exports.verifyPasswordResetCode = verifyPasswordResetCode;
+// Reset password with the email-bound OTP.
 const resetPassword = async (req, res) => {
     try {
-        const { code, newPassword } = req.body;
-        if (!code || !newPassword) {
-            return res.status(400).json({ error: "Verification code and new password are required" });
+        const { email, code, newPassword } = req.body;
+        if (!email || !code || !newPassword) {
+            return res.status(400).json({ error: "Email, verification code, and new password are required" });
         }
         // Validate password strength
         if (newPassword.length < 8) {
             return res.status(400).json({ error: "Password must be at least 8 characters long" });
         }
-        // Hash incoming token and look up user by stored hash
-        const incomingTokenHash = crypto_1.default.createHash('sha256').update(code).digest('hex');
+        const normalizedCode = String(code).trim();
+        if (!/^\d{6}$/.test(normalizedCode)) {
+            return res.status(400).json({ error: "Enter the 6-digit verification code" });
+        }
+        // Hash incoming OTP and look up the matching user/reset request.
+        const incomingTokenHash = crypto_1.default.createHash('sha256').update(normalizedCode).digest('hex');
         const user = await prisma_1.prisma.user.findFirst({
             where: {
+                email,
                 passwordResetToken: incomingTokenHash,
                 passwordResetExpiry: { gt: new Date() },
             },

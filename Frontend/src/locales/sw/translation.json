@@ -568,7 +568,8 @@
         "fetchError": "Imeshindwa kupakia maelezo ya mauzo",
         "saleNotFound": "Mauzo hayajapatikana",
         "insuranceAmount": "Kiasi cha Bima",
-        "status": "Hali"
+        "status": "Hali",
+        "refundReasonCode": "Sababu ya RRA ya kurejesha"
     },
     "customers": {
         "importCustomers": "Ingiza wateja",
@@ -611,7 +612,13 @@
         },
         "customerDetails": "Maelezo ya Mteja",
         "customerId": "Kitambulisho cha Mteja",
-        "import": "Ingiza"
+        "import": "Ingiza",
+        "address": "Anwani",
+        "addressPlaceholder": "k.m. KG 7 Ave, Kigali",
+        "province": "Mkoa",
+        "district": "Wilaya",
+        "sector": "Kata",
+        "streetCell": "Mtaa / Seli"
     },
     "suppliers": {
         "suppliers": "Wasambazaji",
@@ -879,7 +886,10 @@
         },
         "offlineMode": "Kwa sasa hauko mtandaoni. Mauzo yatawekwa foleni na kusawazishwa mtandao utakaporejea.",
         "offlineQueued": "Nje ya mtandao: Mauzo yamewekwa foleni na yatasawazishwa ukiwa mtandaoni.",
-        "syncComplete": "Mauzo ya nje ya mtandao yamesawazishwa."
+        "syncComplete": "Mauzo ya nje ya mtandao yamesawazishwa.",
+        "fiscalPending": "Inaridhi inathibitishwa na ofisi ya kodi…",
+        "fiscalFailed": "Mauzo yamehifadhiwa, lakini ofisi ya kodi bado haijaidhinisha risiti hii. Bado unaweza kuchapisha au kushiriki nakala — itawekwa alama kuwa haijaidhinishwa. Fungua Mauzo na ujaribu tena unapokuwa na muunganisho.",
+        "saleCompleted": "Asante! Mauzo yamekamilika kwa mafanikio na hisa imesasishwa."
     },
     "debtReports": {
         "title": "Ripoti ya Madeni Yaliyolipwa",

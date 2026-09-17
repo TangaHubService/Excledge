@@ -49,7 +49,7 @@ export const productSchema = yup.object({
   /* ── Item Type ─────────────────────────────── */
   itemType: yup
     .string()
-    .oneOf(['PRODUCT', 'SERVICE'], 'Must be either PRODUCT or SERVICE')
+    .oneOf(['PRODUCT', 'RAW_MATERIAL', 'SERVICE'], 'Must be either PRODUCT, RAW_MATERIAL, or SERVICE')
     .default('PRODUCT'),
 
   /* ── Stock Settings ────────────────────────── */

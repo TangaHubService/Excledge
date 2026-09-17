@@ -2,7 +2,7 @@ import PDFDocument from "pdfkit"
 import type { RenderInvoicePayload } from "./invoice-render.service"
 import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, groupFiscalValue } from "./invoice-format.service"
 import { getOrganizationLogo, getRraCertificationLogo } from "./invoice-logo.service"
-import { NOT_FISCALIZED_NOTICE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_NOTICE, SYSTEM_FOOTER, TRAINING_MODE_LABEL } from "./system-branding.service"
+import { NOT_FISCALIZED_NOTICE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_NOTICE, SYSTEM_FOOTER } from "./system-branding.service"
 import { dataUrlBuffer, documentIndicator, isFormalNoticeIndicator, isRefundTransaction, safe, taxGroups } from "./invoice-pdf.service"
 
 /**
@@ -94,11 +94,15 @@ function drawReceipt(
   y = centeredText(doc, `TIN: ${safe(data.company.tin, "-")}`, y)
 
   const indicator = documentIndicator(data)
-  const isTraining = indicator === TRAINING_MODE_LABEL
-  const isProforma = indicator === "PROFORMA"
   if (indicator) {
     y += 2
-    y = centeredText(doc, indicator, y, true, 8)
+    // CIS §11: designation COPY/TRAINING/PROFORMA must dominate amount text.
+    y = centeredText(doc, indicator, y, true, 12)
+  }
+  // Real sale printed before VSDC confirmed it — spell out that the slip is
+  // provisional right under the NOT FISCALISED title.
+  if (data.invoice.notFiscalized) {
+    y = centeredText(doc, NOT_FISCALIZED_NOTICE, y, true, 6)
   }
   // Real sale printed before VSDC confirmed it — spell out that the slip is
   // provisional right under the NOT FISCALISED title.
@@ -143,13 +147,15 @@ function drawReceipt(
 
   const currency = safe(data.invoice.currency || data.company.currency, "RWF")
   const currencyLabel = currency.toUpperCase() === "RWF" ? "" : ` ${currency.toUpperCase()}`
-  const groups = taxGroups(data)
-  const totalTax = groups.reduce((sum, group) => sum + group.tax, 0)
+  // Skip zero-tax bands (e.g. TOTAL TAX A 0.00). Keep B even at 0 (RRA §48).
+  const groups = taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.tax) > 0)
+  const totalTax = taxGroups(data).reduce((sum, group) => sum + group.tax, 0)
 
   y = labelValueLine(doc, `TOTAL${currencyLabel}`, formatInvoiceAmount(data.totals.grandTotal), y, true)
+  // One authoritative total: per-band SALES totals ("TOTAL A …") are not
+  // printed (they duplicate the grand total sliced by band); per-band TAX
+  // rows carry the RRA-required breakdown.
   for (const group of groups) {
-    const groupLabel = /^[A-D]$/.test(group.code) ? `${group.code}-${formatInvoiceQuantity(group.rate)}%` : group.code
-    y = labelValueLine(doc, `TOTAL ${groupLabel}`, formatInvoiceAmount(group.total), y)
     y = labelValueLine(doc, `TOTAL TAX ${group.code}`, formatInvoiceAmount(group.tax), y)
   }
   y = labelValueLine(doc, "TOTAL TAX", formatInvoiceAmount(totalTax), y)
@@ -165,39 +171,32 @@ function drawReceipt(
 
   const requiresNotice = isFormalNoticeIndicator(indicator) || !data.certification.isCertified
   if (requiresNotice) {
-    y = centeredText(doc, NOT_OFFICIAL_RECEIPT_NOTICE, y, true, 6.6)
+    // CIS §11: at least twice the amount-line size (~6.2 pt → ≥ 12.4 pt).
+    y = centeredText(doc, NOT_OFFICIAL_RECEIPT_NOTICE, y, true, 12.4)
     y += 3
   }
 
   const sdc = data.sdcInformation
-  // §11/§15-17: COPY repeats its title once more directly above SDC
-  // INFORMATION. TRAINING MODE and PROFORMA already print once at the top of
-  // the receipt — repeating either here is redundant.
-  if (isFormalNoticeIndicator(indicator) && !isTraining && !isProforma) {
-    dashedLine(doc, y)
-    y += 3
-    y = centeredText(doc, indicator, y, true)
-    y += 1
-  }
-  y = centeredText(doc, "SDC INFORMATION", y, true)
+  // RRA sample: "SDC INFORMATION" heading, then one divider, then fiscal fields.
+  // CIS branding (SYSTEM_FOOTER) prints once more at the very bottom.
+  // Do not reprint COPY here — it already appears at the top / as watermark.
+  y = centeredText(doc, "SDC INFORMATION", y, true, 5.6)
   y += 1
-  // Proforma / training slips have no VSDC signature but must still print the
-  // transaction date/time and receipt number here — fall back to the
-  // invoice-level values when the fiscal-specific fields are absent.
+  dashedLine(doc, y)
+  y += 3
+
   const sdcDate = formatInvoiceDateTime(sdc.sdcDateTime || sdc.date || data.invoice.invoiceDate)
   const sdcReceiptNo = safe(sdc.receiptNumber) || safe(data.invoice.receiptNumber)
   if (sdcDate.date || sdcDate.time) {
-    y = wrappedLine(doc, `Date: ${sdcDate.date}  Time: ${sdcDate.time}`, y)
+    y = wrappedLine(doc, `Date: ${sdcDate.date}   ${sdcDate.time}`, y)
   }
-  if (sdc.sdcId) y = wrappedLine(doc, `SDC ID: ${safe(sdc.sdcId)}`, y)
-  if (sdcReceiptNo) y = wrappedLine(doc, `RECEIPT NUMBER: ${sdcReceiptNo}`, y)
+  if (sdc.sdcId) y = wrappedLine(doc, `SDC ID : ${safe(sdc.sdcId)}`, y)
+  if (sdcReceiptNo) y = wrappedLine(doc, `RECEIPT NUMBER : ${sdcReceiptNo}`, y)
   if (sdc.internalData) {
-    y = wrappedLine(doc, "Internal Data:", y)
-    y = centeredText(doc, groupFiscalValue(sdc.internalData), y, false, 5.8)
+    y = wrappedLine(doc, `Internal Data:${groupFiscalValue(sdc.internalData)}`, y)
   }
   if (sdc.receiptSignature) {
-    y = wrappedLine(doc, "Receipt Signature:", y)
-    y = centeredText(doc, groupFiscalValue(sdc.receiptSignature), y, false, 5.8)
+    y = wrappedLine(doc, `Receipt Signature:${groupFiscalValue(sdc.receiptSignature)}`, y)
   }
 
   const qr = dataUrlBuffer(data.verification.qrCodeImage)
@@ -214,22 +213,16 @@ function drawReceipt(
   y += 2
   dashedLine(doc, y)
   y += 5
-  // No repeated "RECEIPT NUMBER" here — it already prints once above (SDC
-  // INFORMATION block) and the invoice number already shows once at the top
-  // of the receipt; showing either again here is just a duplicate value under
-  // a new label, most confusing for proforma/training receipts.
+  // Bottom block matches RRA sample: plain CIS/VSDC sequence under
+  // "RECEIPT NUMBER" (e.g. "RECEIPT NUMBER:8"), distinct from the SDC
+  // counter pair printed above ("1190/1190 NS").
+  y = wrappedLine(doc, `RECEIPT NUMBER:${safe(data.invoice.invoiceNumber, "-")}`, y)
   const invoiceDate = formatInvoiceDateTime(data.invoice.invoiceDate)
-  y = wrappedLine(doc, `DATE: ${invoiceDate.date}  TIME: ${invoiceDate.time}`, y)
-  if (data.company.mrc) y = wrappedLine(doc, `MRC: ${safe(data.company.mrc)}`, y)
-  // Proforma and training-mode slips share the same non-fiscal SDC
-  // INFORMATION block: they repeat the SDC ID here instead of the software
-  // version. §21 still requires the software version on every other (real)
-  // receipt type.
-  if (isProforma || isTraining) {
-    if (sdc.sdcId) y = wrappedLine(doc, `SDC ID: ${safe(sdc.sdcId)}`, y)
-  } else if (sdc.softwareVersion) {
-    y = wrappedLine(doc, safe(sdc.softwareVersion), y)
+  if (invoiceDate.date || invoiceDate.time) {
+    y = wrappedLine(doc, `Date : ${invoiceDate.date}   ${invoiceDate.time}`, y)
   }
+  const mrc = safe(sdc.mrcNo) || safe(data.company.mrc)
+  if (mrc) y = wrappedLine(doc, `MRC : ${mrc}`, y)
 
   y += 3
   dashedLine(doc, y)

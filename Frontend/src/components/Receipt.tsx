@@ -9,11 +9,15 @@ export interface EbmReceiptData {
   sdcId?: string;
   mrcNo?: string;
   sdcRcptNo?: number;
+  totalRcptNo?: number;
   internalData?: string;
   receiptSignature?: string;
   sdcDateTime?: string;
   qrPayload?: string;
   rcptLabel?: string; // NS/NR/CS/CR/TS/TR/PS
+  /** VSDC invcNo — printed as bottom "RECEIPT NUMBER:8" */
+  vsdcInvcNo?: number | string;
+  ebmInvoiceNumber?: string;
 }
 
 interface TaxBandTotal {
@@ -117,7 +121,6 @@ export const Receipt: React.FC<ReceiptProps> = ({
         {(organization as any)?.email  && <p>Email: {(organization as any).email}</p>}
         {(organization as any)?.TIN    && <p>TIN: {(organization as any).TIN}</p>}
         {(organization as any)?.VRN    && <p>VRN: {(organization as any).VRN}</p>}
-        {ebm?.mrcNo && <p className="text-xs">MRC: {ebm.mrcNo}</p>}
       </div>
 
       <div className="border-b border-dashed border-gray-400 my-2" />
@@ -186,23 +189,38 @@ export const Receipt: React.FC<ReceiptProps> = ({
       {ebm?.sdcId && (
         <>
           <div className="border-b border-dashed border-gray-400 my-2" />
-          <div className="mb-2">
-            <p className="font-bold text-center">--- RRA FISCAL DATA ---</p>
-            <p><span className="font-bold">SDC ID:</span> {ebm.sdcId}</p>
-            <p><span className="font-bold">Receipt No:</span> {ebm.sdcRcptNo}</p>
-            {ebm.sdcDateTime && <p><span className="font-bold">SDC Time:</span> {new Date(ebm.sdcDateTime).toLocaleString()}</p>}
+          <div className="mb-2 text-left">
+            <p className="font-bold text-center">SDC INFORMATION</p>
+            <div className="border-b border-dashed border-gray-400 my-1" />
+            {ebm.sdcDateTime && (
+              <p>Date: {new Date(ebm.sdcDateTime).toLocaleString()}</p>
+            )}
+            <p>SDC ID : {ebm.sdcId}</p>
+            {ebm.sdcRcptNo != null && (
+              <p>
+                RECEIPT NUMBER : {ebm.sdcRcptNo}
+                {ebm.totalRcptNo != null ? `/${ebm.totalRcptNo}` : ""}
+                {ebm.rcptLabel ? ` ${ebm.rcptLabel}` : ""}
+              </p>
+            )}
             {ebm.internalData && (
-              <p className="break-all"><span className="font-bold">Internal Data:</span> {dashEvery4(ebm.internalData)}</p>
+              <p className="break-all">Internal Data:{dashEvery4(ebm.internalData)}</p>
             )}
             {ebm.receiptSignature && (
-              <p className="break-all"><span className="font-bold">Signature:</span> {dashEvery4(ebm.receiptSignature)}</p>
+              <p className="break-all">Receipt Signature:{dashEvery4(ebm.receiptSignature)}</p>
             )}
             {qrDataUrl && (
               <div className="text-center mt-2">
                 <img src={qrDataUrl} alt="RRA Fiscal QR" className="w-32 h-32 mx-auto" />
-                <p className="text-xs text-gray-500">Scan to verify on RRA portal</p>
               </div>
             )}
+            <div className="border-b border-dashed border-gray-400 my-1" />
+            <p className="font-bold">RECEIPT NUMBER:{ebm.vsdcInvcNo ?? ebm.ebmInvoiceNumber ?? receiptNumber}</p>
+            {ebm.sdcDateTime && (
+              <p>Date : {new Date(ebm.sdcDateTime).toLocaleString()}</p>
+            )}
+            {ebm.mrcNo && <p>MRC : {ebm.mrcNo}</p>}
+            <p className="text-center mt-2 text-[10px]">Excledge ERP v1.0.0 Powered by RRA VSDC EBM 2.1.</p>
           </div>
         </>
       )}

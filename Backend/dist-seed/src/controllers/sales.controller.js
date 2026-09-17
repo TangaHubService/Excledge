@@ -3,410 +3,54 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getInvoice = exports.cancelSale = exports.getEbmReceipt = exports.regenerateInvoice = exports.reprintSaleReceipt = exports.refundSale = exports.payDebt = exports.getSaleById = exports.getSales = exports.createSale = void 0;
+exports.getLastReceipt = exports.getInvoicePdf = exports.getInvoice = exports.FiscalizationPendingError = exports.cancelSale = exports.getEbmReceipt = exports.regenerateInvoice = exports.reprintSaleReceipt = exports.refundSale = exports.payDebt = exports.getSaleById = exports.getSales = exports.convertProforma = exports.updateProforma = exports.createSale = void 0;
+exports.composeInvoicePayload = composeInvoicePayload;
 const prisma_1 = require("../lib/prisma");
 const auditLogger_1 = require("../utils/auditLogger");
 const inventory_ledger_service_1 = require("../services/inventory-ledger.service");
 const rra_ebm_service_1 = require("../services/rra-ebm.service");
 const ebm_outbox_service_1 = require("../services/ebm-outbox.service");
-const batch_service_1 = require("../services/batch.service");
-const cost_price_service_1 = require("../services/cost-price.service");
 const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
 const apiResponse_1 = require("../utils/apiResponse");
 const tax_service_1 = require("../services/tax.service");
 const organization_settings_service_1 = require("../services/organization-settings.service");
 const invoice_render_service_1 = require("../services/invoice-render.service");
+const invoice_pdf_service_1 = require("../services/invoice-pdf.service");
+const invoice_receipt_pdf_service_1 = require("../services/invoice-receipt-pdf.service");
+const sale_commit_service_1 = require("../services/sale-commit.service");
+const rra_code_service_1 = require("../services/rra-code.service");
+const system_branding_service_1 = require("../services/system-branding.service");
+const invoice_logo_service_1 = require("../services/invoice-logo.service");
 const qrcode_1 = __importDefault(require("qrcode"));
 const createSale = async (req, res) => {
     try {
-        const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma, payments: splitPayments, shiftId } = req.body;
+        const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma, payments: splitPayments, shiftId, inventoryMethod } = req.body;
         // @ts-ignore
         const userId = parseInt(req.user?.userId);
         const organizationId = parseInt(req.params.organizationId);
         const branchId = await (0, branchAuth_middleware_1.resolveBranchIdForWrite)(req);
-        const orgSettings = await (0, organization_settings_service_1.getOrganizationSettings)(organizationId);
-        // Validate items
-        if (!items || items.length === 0) {
-            return res.status(400).json((0, apiResponse_1.error)("Sale must have at least one item"));
-        }
-        // If the mobile POS sent a shiftId, it must be this user's own open shift —
-        // prevents attributing a sale to someone else's till or a already-closed shift.
-        let resolvedShiftId;
-        if (shiftId !== undefined && shiftId !== null && shiftId !== '') {
-            const shift = await prisma_1.prisma.shift.findFirst({
-                where: { id: parseInt(shiftId), organizationId, userId, status: 'OPEN' },
-                select: { id: true },
-            });
-            if (!shift) {
-                return res.status(400).json((0, apiResponse_1.error)("Shift is not open or does not belong to you"));
-            }
-            resolvedShiftId = shift.id;
-        }
-        // ── B2B purchase-code pre-check ──
-        // RRA rejects (resultCd 910) any business-TIN (non-7-prefix) sale
-        // submitted without a valid 6-character prcOrdCd — confirmed against the
-        // sandbox. Catching this before the sale commits avoids completing a
-        // checkout (payment taken, stock deducted) that can never be fiscalized.
-        if ((0, rra_ebm_service_1.isEbmEnabled)() && orgSettings.featureFlags.ebmIntegrationEnabled) {
-            const customer = await prisma_1.prisma.customer.findUnique({
-                where: { id: parseInt(customerId) },
-                select: { TIN: true, prcOrdCd: true },
-            });
-            const custTin = customer?.TIN?.trim() ?? '';
-            if (custTin && !custTin.startsWith('7')) {
-                const poolCount = await prisma_1.prisma.organizationPurchaseCode.count({
-                    where: { organizationId, buyerTin: custTin, consumed: false },
-                });
-                const fallbackCode = customer?.prcOrdCd?.trim();
-                const hasValidFallback = !!fallbackCode && fallbackCode.length === 6;
-                if (poolCount === 0 && !hasValidFallback) {
-                    return res.status(400).json((0, apiResponse_1.error)(`This customer has a business TIN (${custTin}) but no RRA purchase order code on file. Add a 6-character purchase code for this customer before completing the sale.`));
-                }
-            }
-        }
-        // Separate product items from service items
-        const productItems = items.filter((i) => i.itemType !== 'SERVICE');
-        const serviceItems = items.filter((i) => i.itemType === 'SERVICE');
-        // ── Server-side mathematical gatekeeper (Module 2.2) ──
-        // Re-compute totals server-side; reject if client delta > 0.01 RWF
-        const clientTotal = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unitPrice), 0);
-        // Pre-validate payment amounts using client total (rough check; precise check uses Decimal inside txn)
-        const calculatedDebt = clientTotal - (cashAmount || 0) - (insuranceAmount || 0);
-        if (Math.abs(calculatedDebt - (debtAmount || 0)) > 0.01) {
-            return res.status(400).json((0, apiResponse_1.error)("Payment amounts do not match total. Total must equal cashAmount + insuranceAmount + debtAmount"));
-        }
-        // Fetch all products once up-front for tax calculation
-        const productIds = productItems
-            .map((i) => parseInt(i.productId))
-            .filter((id) => !isNaN(id));
-        const products = productIds.length > 0
-            ? await prisma_1.prisma.product.findMany({
-                where: { id: { in: productIds }, organizationId },
-                select: { id: true, unitPrice: true, taxCategory: true, taxCode: true, name: true },
-            })
-            : [];
-        const productMap = new Map(products.map(p => [p.id, p]));
-        // When the org disallows manual discounts, sellers may not submit a unit
-        // price below the catalog price — the POS UI already locks the price
-        // field in that case, but the API must not trust the client either.
-        if (!orgSettings.featureFlags.allowManualDiscounts) {
-            for (const item of productItems) {
-                const product = productMap.get(parseInt(item.productId));
-                if (!product)
-                    continue;
-                const catalogPrice = Number(product.unitPrice);
-                if (Number(item.unitPrice) < catalogPrice - 0.01) {
-                    return res.status(400).json((0, apiResponse_1.error)(`Manual price overrides are disabled for this organization. "${product.name}" must be sold at ${catalogPrice}.`));
-                }
-            }
-        }
-        // Automatically determine paymentType if multiple payment methods are used
-        let finalPaymentType = paymentType;
-        const hasCash = (cashAmount || 0) > 0;
-        const hasInsurance = (insuranceAmount || 0) > 0;
-        const hasDebt = (debtAmount || 0) > 0;
-        const paymentMethodCount = [hasCash, hasInsurance, hasDebt].filter(Boolean).length;
-        // Handle payment type determination
-        // If paymentType is MOBILE_MONEY or CREDIT_CARD and there's cash amount, keep it
-        if (paymentType === 'MOBILE_MONEY' || paymentType === 'CREDIT_CARD') {
-            // If it's a standalone mobile money or card payment, keep the payment type
-            if (hasCash && !hasInsurance && !hasDebt) {
-                finalPaymentType = paymentType;
-            }
-            else if (paymentMethodCount > 1) {
-                // Multiple methods, use MIXED
-                finalPaymentType = 'MIXED';
-            }
-        }
-        else if (paymentMethodCount > 1 && paymentType !== 'MIXED') {
-            // If multiple payment methods are used, ensure paymentType is MIXED
-            finalPaymentType = 'MIXED';
-        }
-        else if (hasDebt && !hasCash && !hasInsurance) {
-            // Only debt, no other payments
-            finalPaymentType = 'DEBT';
-        }
-        else if (hasInsurance && !hasCash && !hasDebt) {
-            // Only insurance, no other payments
-            finalPaymentType = 'INSURANCE';
-        }
-        else if (hasCash && !hasInsurance && !hasDebt && !paymentType) {
-            // Only cash, no other payments, and no payment type specified
-            finalPaymentType = 'CASH';
-        }
-        // Sale number now; invoice number is allocated inside the transaction below so
-        // that a rollback (e.g. insufficient stock, tax mismatch) also rolls back the
-        // sequence increment — otherwise a failed sale permanently burns an RRA invoice
-        // number, leaving a gap in the mandated gapless sequence.
-        const saleNumber = `SALE-${Date.now()}`;
-        // C6: determine receipt type label (NS/TS/PS)
-        const org = await prisma_1.prisma.organization.findUnique({
-            where: { id: organizationId },
-            select: { trainingMode: true },
+        const { sale, completeSale, fiscalization } = await (0, sale_commit_service_1.commitSale)({
+            organizationId,
+            branchId: branchId,
+            userId,
+            customerId: parseInt(customerId),
+            items,
+            paymentType,
+            cashAmount,
+            debtAmount,
+            insuranceAmount,
+            payments: splitPayments,
+            shiftId,
+            isProforma: !!isProforma,
+            inventoryMethod,
+            req,
         });
-        const rcptLabel = isProforma ? 'PS' : (org?.trainingMode ? 'TS' : 'NS');
-        // ── Atomic transaction ──
-        const sale = await prisma_1.prisma.$transaction(async (tx) => {
-            // 1. Validate stock availability for PRODUCT items only
-            for (const item of productItems) {
-                const product = productMap.get(parseInt(item.productId));
-                if (!product) {
-                    throw new Error(`Product with ID ${item.productId} not found`);
-                }
-                const stockAggregates = await tx.inventoryLedger.groupBy({
-                    by: ['direction'],
-                    where: {
-                        productId: parseInt(item.productId),
-                        organizationId: organizationId,
-                        branchId: { equals: branchId },
-                    },
-                    _sum: { quantity: true },
-                });
-                const inQty = stockAggregates.find(a => a.direction === 'IN')?._sum.quantity || 0;
-                const outQty = stockAggregates.find(a => a.direction === 'OUT')?._sum.quantity || 0;
-                const currentStock = inQty - outQty;
-                if (currentStock < item.quantity && !orgSettings.featureFlags.allowNegativeStock) {
-                    throw new Error(`Insufficient stock for product ${product.name}. Available: ${currentStock}, Requested: ${item.quantity}`);
-                }
-            }
-            // 2. Server-side tax computation with Decimal arithmetic
-            const allItemsForTax = items.map((i) => ({
-                productId: i.productId ? parseInt(i.productId) : undefined,
-                quantity: i.quantity,
-                unitPrice: i.unitPrice,
-                itemType: i.itemType || 'PRODUCT',
-            }));
-            const taxSummary = await tax_service_1.TaxService.calculateSaleTax(organizationId, allItemsForTax);
-            // ── MODULE 2.2: Reconcile server-computed total vs client total ──
-            const computedTotal = taxSummary.items.reduce((sum, ti) => sum + Number(ti.taxableAmount) + Number(ti.taxAmount), 0);
-            if (Math.abs(computedTotal - clientTotal) > 0.01) {
-                throw new Error(`Total amount mismatch: server computed ${computedTotal.toFixed(2)}, client submitted ${clientTotal.toFixed(2)}`);
-            }
-            // 3. Select batches and calculate costs for PRODUCT items only
-            const inventoryMethod = req.body.inventoryMethod || 'FIFO';
-            const saleItemsData = [];
-            for (let i = 0; i < items.length; i++) {
-                const item = items[i];
-                const isService = item.itemType === 'SERVICE';
-                const quantity = item.quantity;
-                const unitPrice = item.unitPrice;
-                const itemTax = taxSummary.items[i];
-                if (isService) {
-                    saleItemsData.push({
-                        quantity,
-                        unitPrice,
-                        totalPrice: quantity * unitPrice,
-                        costPrice: 0,
-                        profit: quantity * unitPrice,
-                        taxRate: itemTax?.taxRate || 0,
-                        taxAmount: itemTax?.taxAmount || 0,
-                        taxCode: itemTax?.taxCode || null,
-                        itemType: 'SERVICE',
-                        serviceName: item.serviceName || null,
-                        serviceDescription: item.serviceDescription || null,
-                        measurementUnit: item.measurementUnit || 'PCS',
-                        exemptionReference: item.exemptionReference || null,
-                    });
-                    continue;
-                }
-                const productId = parseInt(item.productId);
-                let batchId = null;
-                let costPrice = 0;
-                try {
-                    const selectedBatches = await (0, batch_service_1.selectBatchesForSale)({
-                        productId,
-                        organizationId: organizationId,
-                        quantity,
-                        method: inventoryMethod,
-                        branchId: branchId,
-                    }, tx);
-                    if (selectedBatches.length > 0) {
-                        batchId = selectedBatches[0].batchId;
-                        costPrice = selectedBatches[0].unitCost;
-                        for (const batch of selectedBatches) {
-                            await (0, batch_service_1.updateBatchQuantity)(batch.batchId, batch.quantity, organizationId, tx);
-                        }
-                    }
-                    else {
-                        const avgCost = await (0, cost_price_service_1.getAverageCost)(productId, organizationId, branchId);
-                        costPrice = avgCost?.averageCost || 0;
-                    }
-                }
-                catch (error) {
-                    const avgCost = await (0, cost_price_service_1.getAverageCost)(productId, organizationId, branchId);
-                    costPrice = avgCost?.averageCost || 0;
-                }
-                const profit = (unitPrice - costPrice) * quantity;
-                saleItemsData.push({
-                    quantity,
-                    unitPrice,
-                    totalPrice: quantity * unitPrice,
-                    costPrice,
-                    profit,
-                    taxRate: itemTax.taxRate,
-                    taxAmount: itemTax.taxAmount,
-                    taxCode: itemTax.taxCode,
-                    itemType: 'PRODUCT',
-                    measurementUnit: item.measurementUnit || 'PCS',
-                    exemptionReference: item.exemptionReference || null,
-                    product: { connect: { id: productId } },
-                    ...(batchId !== null ? { batch: { connect: { id: batchId } } } : {}),
-                });
-            }
-            // 4. Allocate the RRA invoice sequence number and create the sale together,
-            // so a rollback of this transaction also rolls back the sequence increment.
-            const { invoiceNumber, vsdcInvcNo } = await (0, rra_ebm_service_1.generateInvoiceNumber)(organizationId, branchId, tx);
-            const newSale = await tx.sale.create({
-                data: {
-                    saleNumber,
-                    invoiceNumber,
-                    vsdcInvcNo,
-                    customerId: parseInt(customerId),
-                    userId: userId,
-                    organizationId: organizationId,
-                    branchId: branchId,
-                    paymentType: finalPaymentType,
-                    cashAmount: cashAmount || 0,
-                    insuranceAmount: insuranceAmount || 0,
-                    debtAmount: debtAmount || 0,
-                    shiftId: resolvedShiftId,
-                    totalAmount: computedTotal,
-                    vatAmount: taxSummary.vatAmount,
-                    taxableAmount: taxSummary.taxableAmount,
-                    status: 'COMPLETED',
-                    isProforma: !!isProforma,
-                    rcptLabel: rcptLabel,
-                    saleItems: { create: saleItemsData },
-                },
-                include: {
-                    saleItems: { include: { product: true, batch: true } },
-                    customer: true,
-                },
-            });
-            // 4b. Consume an organization-level RRA purchase code for business (B2B)
-            // buyers. Test codes are configured once at the org level (not per customer)
-            // and are single-use, so each business sale draws a fresh unused code. Falls
-            // back to the legacy per-customer prcOrdCd when the org pool is empty.
-            const custTin = newSale.customer?.TIN?.trim() ?? '';
-            if (custTin && !custTin.startsWith('7')) {
-                const allocated = await (0, rra_ebm_service_1.consumeOrgPurchaseCode)(organizationId, custTin, newSale.id, tx)
-                    ?? (newSale.customer?.prcOrdCd ?? null);
-                if (allocated) {
-                    await tx.sale.update({
-                        where: { id: newSale.id },
-                        data: { prcOrdCd: allocated },
-                    });
-                    newSale.prcOrdCd = allocated;
-                }
-            }
-            // 5. Record stock movements for PRODUCT items only (MODULE 2.4: guard reference)
-            for (const item of productItems) {
-                const saleItem = newSale.saleItems?.find((si) => si.productId === parseInt(item.productId));
-                if (!saleNumber || saleNumber.trim().length === 0) {
-                    throw new Error('Stock movement reference cannot be empty');
-                }
-                await (0, inventory_ledger_service_1.removeStock)({
-                    organizationId: organizationId,
-                    productId: parseInt(item.productId),
-                    userId: userId,
-                    quantity: item.quantity,
-                    movementType: 'SALE',
-                    branchId: branchId,
-                    reference: saleNumber,
-                    referenceType: 'SALE',
-                    note: `Sale #${saleNumber}`,
-                    batchId: saleItem?.batchId || null,
-                    tx,
-                });
-            }
-            // 6. Update customer balance if debt (atomic with sale)
-            const remainingDebt = computedTotal - (cashAmount || 0) - (insuranceAmount || 0);
-            if (remainingDebt > 0) {
-                await tx.customer.update({
-                    where: { id: parseInt(customerId) },
-                    data: { balance: { increment: remainingDebt } },
-                });
-            }
-            // 7. Write transactional outbox entry (atomic with the sale)
-            if ((0, rra_ebm_service_1.isEbmEnabled)() && orgSettings.featureFlags.ebmIntegrationEnabled) {
-                const operation = 'SALE';
-                const idempotencyKey = `ebm-${operation}-${organizationId}-${newSale.id}`;
-                await tx.ebmOutbox.create({
-                    data: {
-                        organizationId: organizationId,
-                        saleId: newSale.id,
-                        operation,
-                        idempotencyKey,
-                        payload: { version: 1, saleId: newSale.id, organizationId: organizationId, operation },
-                        status: 'PENDING',
-                        nextAttemptAt: new Date(),
-                    },
-                });
-            }
-            return newSale;
-        }, {
-            maxWait: 30000, // 30 seconds
-            timeout: 60000, // 60 seconds
-        });
-        // Fire the outbox worker immediately (fire-and-forget) so the invoice hits
-        // the WAR right at sale time instead of waiting for the 2-minute cron tick.
-        // The outbox row stays the single source of truth, so idempotency is kept
-        // and the cron job remains a retry/backstop if this run fails or times out.
-        if ((0, rra_ebm_service_1.isEbmEnabled)() && orgSettings.featureFlags.ebmIntegrationEnabled) {
-            void (0, ebm_outbox_service_1.processEbmOutboxBatch)(50).catch((e) => {
-                console.error('[EBM] immediate fiscalization error:', e);
-            });
-        }
-        // 7. Record split payments if provided
-        if (splitPayments && Array.isArray(splitPayments) && splitPayments.length > 0) {
-            const validPaymentMethods = ['CASH', 'BANK', 'CARD', 'PAYPACK', 'MTN_MOMO', 'AIRTEL_MONEY', 'WALLET', 'GIFT_CARD', 'STORE_CREDIT'];
-            let totalSplitAmount = 0;
-            for (const pmt of splitPayments) {
-                if (!validPaymentMethods.includes(pmt.paymentMethod))
-                    continue;
-                const amount = Number(pmt.amount) || 0;
-                if (amount <= 0)
-                    continue;
-                totalSplitAmount += amount;
-                await prisma_1.prisma.salePayment.create({
-                    data: {
-                        saleId: sale.id,
-                        organizationId,
-                        amount,
-                        paymentMethod: pmt.paymentMethod,
-                        reference: pmt.reference || null,
-                        status: 'COMPLETED',
-                        processedAt: new Date(),
-                        metadata: pmt.metadata || null,
-                    },
-                });
-            }
-        }
-        // 8. Log activity (outside transaction for performance, but after successful sale)
-        await auditLogger_1.auditLogger.sales(req, {
-            type: 'SALE_COMPLETED',
-            description: `Sale completed (Invoice #${sale.invoiceNumber || saleNumber})`,
-            entityType: 'Sale',
-            entityId: sale.id,
-            metadata: {
-                invoiceNumber: sale.invoiceNumber,
-                totalAmount: sale.totalAmount,
-                paymentType: sale.paymentType,
-                splitPayments: splitPayments?.length || 0,
-            }
-        });
-        // Fetch the complete sale with payments
-        const completeSale = await prisma_1.prisma.sale.findUnique({
-            where: { id: sale.id },
-            include: {
-                saleItems: { include: { product: true, batch: true } },
-                customer: true,
-                salePayments: true,
-            },
-        });
-        res.status(201).json((0, apiResponse_1.success)(completeSale || sale));
+        res.status(201).json((0, apiResponse_1.success)({ ...(completeSale ?? sale), fiscalization }));
     }
     catch (error) {
+        if (error instanceof sale_commit_service_1.CommitSaleError) {
+            return res.status(error.statusCode).json((0, apiResponse_1.error)(error.message));
+        }
         console.error("[Create Sale Error]:", error);
         // Return appropriate status code based on error type
         if (error.message && error.message.includes('Insufficient stock')) {
@@ -422,10 +66,191 @@ const createSale = async (req, res) => {
     }
 };
 exports.createSale = createSale;
+/**
+ * Recompute a proforma's line items / customer before it is converted.
+ * A proforma never touched inventory, VSDC or the customer balance, so this is a
+ * pure recompute: replace saleItems, refresh totals. Only allowed while the
+ * proforma has not been converted yet.
+ *
+ * PUT /:organizationId/:saleId/proforma   body: { customerId?, items: [...] }
+ */
+const updateProforma = async (req, res) => {
+    try {
+        const organizationId = parseInt(req.params.organizationId);
+        const saleId = parseInt(req.params.saleId);
+        const { customerId, items } = req.body;
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json((0, apiResponse_1.error)("A proforma must have at least one item"));
+        }
+        const sale = await prisma_1.prisma.sale.findFirst({
+            where: { id: saleId, organizationId, ...(0, branchAuth_middleware_1.buildBranchFilter)(req) },
+            include: { convertedSale: { select: { id: true } } },
+        });
+        if (!sale)
+            return res.status(404).json((0, apiResponse_1.error)("Proforma not found"));
+        if (!sale.isProforma)
+            return res.status(400).json((0, apiResponse_1.error)("Only a proforma can be edited this way"));
+        if (sale.status === 'CONVERTED' || sale.convertedSale) {
+            return res.status(409).json((0, apiResponse_1.error)("This proforma has already been converted to a sale"));
+        }
+        const org = await prisma_1.prisma.organization.findUnique({
+            where: { id: organizationId },
+            select: { vatRegistered: true, isTaxExempt: true },
+        });
+        const itemsForTax = items.map((i) => ({
+            productId: i.productId ? Number(i.productId) : undefined,
+            quantity: Number(i.quantity),
+            unitPrice: Number(i.unitPrice),
+            itemType: i.itemType || 'PRODUCT',
+        }));
+        const taxSummary = await tax_service_1.TaxService.calculateSaleTax(organizationId, itemsForTax, org?.vatRegistered ?? false, org?.isTaxExempt ?? false);
+        const computedTotal = taxSummary.items.reduce((sum, ti) => sum + Number(ti.taxableAmount) + Number(ti.taxAmount), 0);
+        const saleItemsData = items.map((i, idx) => {
+            const t = taxSummary.items[idx];
+            const isService = (i.itemType || 'PRODUCT') === 'SERVICE';
+            const quantity = Number(i.quantity);
+            const unitPrice = Number(i.unitPrice);
+            return {
+                quantity,
+                unitPrice,
+                totalPrice: quantity * unitPrice,
+                costPrice: 0,
+                profit: 0,
+                taxRate: t?.taxRate ?? 0,
+                taxAmount: t?.taxAmount ?? 0,
+                taxCode: t?.taxCode ?? null,
+                itemType: isService ? 'SERVICE' : 'PRODUCT',
+                measurementUnit: i.measurementUnit || 'PCS',
+                serviceName: isService ? (i.serviceName || null) : null,
+                serviceDescription: isService ? (i.serviceDescription || null) : null,
+                // Services from the catalog still need productId for RRA itemClsCd/itemCd.
+                ...(i.productId
+                    ? { product: { connect: { id: Number(i.productId) } } }
+                    : {}),
+            };
+        });
+        const updated = await prisma_1.prisma.$transaction(async (tx) => {
+            await tx.saleItem.deleteMany({ where: { saleId } });
+            return tx.sale.update({
+                where: { id: saleId },
+                data: {
+                    ...(customerId ? { customerId: Number(customerId) } : {}),
+                    totalAmount: computedTotal,
+                    vatAmount: taxSummary.vatAmount,
+                    taxableAmount: taxSummary.taxableAmount,
+                    debtAmount: computedTotal,
+                    cashAmount: 0,
+                    insuranceAmount: 0,
+                    saleItems: { create: saleItemsData },
+                },
+                include: {
+                    saleItems: { include: { product: true } },
+                    customer: true,
+                },
+            });
+        });
+        await auditLogger_1.auditLogger.sales(req, {
+            type: 'SALE_UPDATE',
+            description: `Proforma #${sale.invoiceNumber ?? saleId} edited`,
+            entityType: 'Sale',
+            entityId: saleId,
+            metadata: { itemCount: items.length, totalAmount: computedTotal },
+        });
+        res.json((0, apiResponse_1.success)(updated));
+    }
+    catch (error) {
+        console.error("[Update Proforma Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)("Failed to update the proforma"));
+    }
+};
+exports.updateProforma = updateProforma;
+/**
+ * Convert a proforma into a real NS sale: creates a fresh, fully-fiscalized sale
+ * from the (optionally edited) proforma lines + the supplied payment, links it
+ * back via proformaSourceId, and moves the proforma to status CONVERTED. The
+ * proforma document itself is kept untouched.
+ *
+ * POST /:organizationId/:saleId/convert
+ *   body: { paymentType?, cashAmount?, debtAmount?, insuranceAmount?, payments?,
+ *           shiftId?, customerId?, items? }
+ */
+const convertProforma = async (req, res) => {
+    try {
+        const organizationId = parseInt(req.params.organizationId);
+        const saleId = parseInt(req.params.saleId);
+        // @ts-ignore
+        const userId = parseInt(req.user?.userId);
+        const branchId = await (0, branchAuth_middleware_1.resolveBranchIdForWrite)(req);
+        const { paymentType, cashAmount, debtAmount, insuranceAmount, payments: splitPayments, shiftId, customerId, items } = req.body;
+        const proforma = await prisma_1.prisma.sale.findFirst({
+            where: { id: saleId, organizationId, ...(0, branchAuth_middleware_1.buildBranchFilter)(req) },
+            include: {
+                saleItems: true,
+                convertedSale: { select: { id: true, invoiceNumber: true } },
+            },
+        });
+        if (!proforma)
+            return res.status(404).json((0, apiResponse_1.error)("Proforma not found"));
+        if (!proforma.isProforma)
+            return res.status(400).json((0, apiResponse_1.error)("This sale is not a proforma"));
+        if (proforma.status === 'CONVERTED' || proforma.convertedSale) {
+            return res.status(409).json((0, apiResponse_1.error)("This proforma has already been converted", undefined, { convertedSaleId: proforma.convertedSale?.id ?? null }));
+        }
+        // Use the edited lines when supplied, otherwise the proforma's current lines.
+        const resolvedItems = Array.isArray(items) && items.length > 0
+            ? items
+            : proforma.saleItems.map((si) => ({
+                productId: si.productId ?? undefined,
+                quantity: si.quantity,
+                unitPrice: Number(si.unitPrice),
+                itemType: si.itemType,
+                serviceName: si.serviceName ?? undefined,
+                serviceDescription: si.serviceDescription ?? undefined,
+                measurementUnit: si.measurementUnit,
+            }));
+        const { sale, completeSale, fiscalization } = await (0, sale_commit_service_1.commitSale)({
+            organizationId,
+            branchId: branchId,
+            userId,
+            customerId: customerId ? Number(customerId) : proforma.customerId,
+            items: resolvedItems,
+            paymentType,
+            cashAmount,
+            debtAmount,
+            insuranceAmount,
+            payments: splitPayments,
+            shiftId,
+            isProforma: false,
+            proformaSourceId: saleId,
+            inventoryMethod: req.body?.inventoryMethod,
+            req,
+        });
+        await prisma_1.prisma.sale.update({ where: { id: saleId }, data: { status: 'CONVERTED' } });
+        res.status(201).json((0, apiResponse_1.success)({ ...(completeSale ?? sale), fiscalization, proformaSourceId: saleId }));
+    }
+    catch (error) {
+        if (error instanceof sale_commit_service_1.CommitSaleError) {
+            return res.status(error.statusCode).json((0, apiResponse_1.error)(error.message));
+        }
+        // proforma_source_id is unique — a concurrent convert loses this race.
+        if (error.code === 'P2002' && String(error.meta?.target ?? '').includes('proforma_source_id')) {
+            return res.status(409).json((0, apiResponse_1.error)("This proforma has already been converted"));
+        }
+        if (error.message && error.message.includes('Insufficient stock')) {
+            return res.status(400).json((0, apiResponse_1.error)(error.message));
+        }
+        if (error.message && error.message.includes('not found')) {
+            return res.status(404).json((0, apiResponse_1.error)(error.message));
+        }
+        console.error("[Convert Proforma Error]:", error);
+        res.status(500).json((0, apiResponse_1.error)("Failed to convert the proforma"));
+    }
+};
+exports.convertProforma = convertProforma;
 const getSales = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
-        const { startDate, endDate, customerId, page, limit, search, status, paymentType } = req.query;
+        const { startDate, endDate, customerId, page, limit, search, status, paymentType, rcptLabel } = req.query;
         const requestedPage = Number(page);
         const pageNumber = Number.isFinite(requestedPage) && requestedPage > 0
             ? Math.floor(requestedPage)
@@ -457,6 +282,9 @@ const getSales = async (req, res) => {
         }
         if (paymentType) {
             where.paymentType = paymentType;
+        }
+        if (rcptLabel) {
+            where.rcptLabel = rcptLabel;
         }
         if (search) {
             where.OR = [
@@ -495,7 +323,10 @@ const getSales = async (req, res) => {
                     ebmTransactions: {
                         orderBy: { createdAt: "desc" },
                         take: 1,
-                    }
+                    },
+                    // Proforma-conversion links so the UI can badge "Converted".
+                    convertedSale: { select: { id: true, invoiceNumber: true, saleNumber: true } },
+                    proformaSource: { select: { id: true, invoiceNumber: true } },
                 },
                 orderBy: {
                     createdAt: 'desc',
@@ -540,7 +371,11 @@ const getSaleById = async (req, res) => {
                         TIN: true,
                         customerType: true,
                         email: true,
-                        address: true
+                        address: true,
+                        custPrvncNm: true,
+                        custDstrtNm: true,
+                        custSctrNm: true,
+                        custLocDesc: true
                     }
                 },
                 user: {
@@ -553,6 +388,19 @@ const getSaleById = async (req, res) => {
                 saleItems: {
                     include: { product: true },
                 },
+                salePayments: {
+                    orderBy: { createdAt: "asc" },
+                },
+                originalSale: {
+                    select: {
+                        id: true,
+                        saleNumber: true,
+                        invoiceNumber: true,
+                        createdAt: true,
+                    },
+                },
+                convertedSale: { select: { id: true, saleNumber: true, invoiceNumber: true, createdAt: true } },
+                proformaSource: { select: { id: true, saleNumber: true, invoiceNumber: true, createdAt: true } },
                 ebmTransactions: {
                     orderBy: { createdAt: "desc" },
                 },
@@ -652,8 +500,19 @@ const refundSale = async (req, res) => {
         const orgSettings = await (0, organization_settings_service_1.getOrganizationSettings)(organizationId);
         const result = await executeWithRetry(async () => {
             return await prisma_1.prisma.$transaction(async (prisma) => {
-                const { reason, items: refundItems } = req.body;
+                const { reason, items: refundItems, rfdRsnCd: rfdRsnCdRaw } = req.body;
                 const userId = req.user?.userId;
+                // RRA refund reason (code class 32): the operator's selection, validated
+                // now so a bad code is a 400 instead of a dead-lettered fiscal refund.
+                // Stored on the refund sale and carried on the outbox payload to VSDC
+                // as rfdRsnCd; the free-text `reason` stays the human note (remark).
+                let rfdRsnCd;
+                try {
+                    rfdRsnCd = (0, rra_code_service_1.validateRefundReasonCode)(typeof rfdRsnCdRaw === 'string' && rfdRsnCdRaw.trim() ? rfdRsnCdRaw.trim() : rra_code_service_1.DEFAULT_RFD_RSN_CD);
+                }
+                catch (e) {
+                    throw { status: 400, message: e instanceof Error ? e.message : 'Invalid refund reason code' };
+                }
                 // Get the sale with items
                 const sale = await prisma.sale.findFirst({
                     where: {
@@ -688,13 +547,23 @@ const refundSale = async (req, res) => {
                 if (refundItems && refundItems.length > 0 && refundItems.length < sale.saleItems.length) {
                     throw { status: 400, message: "Partial refunds are not allowed. Only full refunds are permitted." };
                 }
-                // Get all sale items for full refund — include batchId to restore batch quantities
+                // Get all sale items for full refund — include batchId to restore batch quantities.
+                // Tax code / rate / amount and any line discount are carried over from the
+                // original line so the refund is fiscalised (and printed) as a true mirror
+                // of the original — otherwise a refund of an 18% VAT sale would be reported
+                // to RRA as a tax-exempt, zero-VAT refund (RRA checklist §9/§56).
                 const itemsToRefund = (sale.saleItems || []).map((item) => ({
                     saleItemId: item.id,
                     productId: item.productId,
                     quantity: item.quantity,
                     unitPrice: item.unitPrice.toNumber(),
                     totalPrice: item.totalPrice.toNumber(),
+                    taxRate: Number(item.taxRate ?? 0),
+                    taxAmount: Number(item.taxAmount ?? 0),
+                    taxCode: item.taxCode ?? null,
+                    dcRate: Number(item.dcRate ?? 0),
+                    dcAmt: Number(item.dcAmt ?? 0),
+                    measurementUnit: item.measurementUnit ?? 'PCS',
                     batchId: item.batchId || item.batch?.id || null,
                     itemType: item.itemType || 'PRODUCT',
                     serviceName: item.serviceName || null,
@@ -702,6 +571,8 @@ const refundSale = async (req, res) => {
                 }));
                 // Calculate total refund amount
                 const totalRefundAmount = itemsToRefund.reduce((sum, item) => sum + item.totalPrice, 0);
+                const totalRefundVat = itemsToRefund.reduce((sum, item) => sum + item.taxAmount, 0);
+                const totalRefundTaxable = totalRefundAmount - totalRefundVat;
                 // ── MODULE 2.3: Reject if refund exceeds original total (defense-in-depth) ──
                 const originalTotal = Number(sale.totalAmount);
                 if (totalRefundAmount > originalTotal + 0.01) {
@@ -728,9 +599,16 @@ const refundSale = async (req, res) => {
                     select: { trainingMode: true },
                 });
                 const refundRcptLabel = refundOrg?.trainingMode ? 'TR' : 'NR';
+                // A fiscal refund is a NEW sales-transaction document: allocate a fresh
+                // VSDC invoice number for it (the sandbox rejects a resubmitted invcNo
+                // with 924, and a refund with orgInvcNo=0 with 910). The original sale
+                // is referenced via orgInvcNo at submission time (see outbox worker).
+                const { invoiceNumber: refundInvoiceNumber, vsdcInvcNo: refundVsdcInvcNo } = await (0, rra_ebm_service_1.generateInvoiceNumber)(organizationId, sale.branchId, prisma);
                 const refundSale = await prisma.sale.create({
                     data: {
                         saleNumber: refundSaleNumber,
+                        invoiceNumber: refundInvoiceNumber,
+                        vsdcInvcNo: refundVsdcInvcNo,
                         customerId: sale.customerId,
                         userId: parseInt(userId),
                         organizationId: organizationId,
@@ -740,16 +618,34 @@ const refundSale = async (req, res) => {
                         insuranceAmount: 0,
                         debtAmount: 0,
                         totalAmount: -totalRefundAmount, // Negative total
+                        vatAmount: -totalRefundVat, // Negative — mirrors the original VAT being refunded
+                        taxableAmount: -totalRefundTaxable,
                         status: 'REFUNDED',
                         refundReason: reason,
+                        rfdRsnCd,
                         rcptLabel: refundRcptLabel,
                         originalSaleId: id, // Link to original sale
+                        shiftId: sale.shiftId ?? undefined, // Refund belongs to the original sale's shift
                         saleItems: {
                             create: itemsToRefund.map((item) => ({
                                 productId: item.productId || undefined,
+                                // quantity negative x unitPrice positive = totalPrice negative;
+                                // unitPrice itself stays positive here so that identity holds —
+                                // the printed minus sign on the per-unit price (RRA checklist
+                                // §56) is applied at render time (composeInvoicePayload), not
+                                // stored, to avoid double-negating the line total.
                                 quantity: -item.quantity,
                                 unitPrice: item.unitPrice,
                                 totalPrice: -item.totalPrice,
+                                // Tax + discount mirror the original line with the sign flipped so
+                                // the refund fiscalises with the correct tax code/amount and the
+                                // printed receipt shows every amount negative (RRA checklist §56).
+                                taxRate: item.taxRate,
+                                taxAmount: -item.taxAmount,
+                                taxCode: item.taxCode ?? undefined,
+                                dcRate: item.dcRate,
+                                dcAmt: -item.dcAmt,
+                                measurementUnit: item.measurementUnit,
                                 itemType: item.itemType,
                                 serviceName: item.serviceName,
                                 serviceDescription: item.serviceDescription,
@@ -828,6 +724,7 @@ const refundSale = async (req, res) => {
                                 organizationId: organizationId,
                                 operation: 'REFUND',
                                 originalSaleId: id,
+                                rfdRsnCd,
                             },
                             status: 'PENDING',
                             nextAttemptAt: new Date(),
@@ -846,7 +743,29 @@ const refundSale = async (req, res) => {
                 timeout: 60000, // 60 seconds
             });
         });
-        res.status(200).json((0, apiResponse_1.success)(result));
+        // Bounded wait (same rationale as createSale — RRA checklist §16/§22: a
+        // refund receipt must not be issued before VSDC confirms it either). The
+        // outbox row stays the single source of truth; the 2-minute cron job
+        // remains the retry/backstop if this wait times out.
+        let refundFiscalization = { status: 'success' };
+        if ((0, rra_ebm_service_1.isEbmEnabled)() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+            const EBM_INLINE_WAIT_MS = 5000;
+            await Promise.race([
+                (0, ebm_outbox_service_1.processEbmOutboxBatch)(5).catch((e) => {
+                    console.error('[EBM] immediate refund fiscalization error:', e);
+                }),
+                new Promise((resolve) => setTimeout(resolve, EBM_INLINE_WAIT_MS)),
+            ]);
+            const outboxRow = await prisma_1.prisma.ebmOutbox.findFirst({
+                where: { saleId: result.refundSale.id, operation: 'REFUND' },
+                orderBy: { createdAt: 'desc' },
+                select: { status: true },
+            });
+            refundFiscalization = {
+                status: outboxRow?.status === 'SUCCEEDED' ? 'success' : outboxRow?.status === 'DEAD_LETTER' ? 'failed' : 'pending',
+            };
+        }
+        res.status(200).json((0, apiResponse_1.success)({ ...result, fiscalization: refundFiscalization }));
     }
     catch (error) {
         console.error("[Refund Error]:", error);
@@ -857,8 +776,13 @@ const refundSale = async (req, res) => {
 };
 exports.refundSale = refundSale;
 /**
- * Reprint a sale receipt — increments reprintCount atomically and returns
- * the sale with isCopy=true so the frontend can render a "COPY RECEIPT" label.
+ * Registers one download/print of this sale's invoice PDF — called by the
+ * frontend right before it fetches the actual PDF for every deliberate
+ * download. CIS/VSDC spec §7.18: "print only one original receipt. Reprint
+ * shall have a watermark with mention Copy." There's no separate "copy"
+ * action: the FIRST registered download stays the original (reprintCount
+ * reaches 1, isCopy stays false in getSaleInvoiceData); every one after that
+ * is automatically rendered as a COPY (CS/CR) receipt.
  */
 const reprintSaleReceipt = async (req, res) => {
     try {
@@ -866,34 +790,33 @@ const reprintSaleReceipt = async (req, res) => {
         const organizationId = parseInt(req.params.organizationId);
         const sale = await prisma_1.prisma.sale.findFirst({
             where: { id: saleId, organizationId, ...(0, branchAuth_middleware_1.buildBranchFilter)(req) },
-            include: {
-                saleItems: { include: { product: true } },
-                customer: true,
-            },
+            select: { id: true, saleNumber: true, status: true, rcptLabel: true },
         });
         if (!sale) {
             return res.status(404).json((0, apiResponse_1.error)("Sale not found"));
         }
-        // C6: CS = copy of a sale, CR = copy of a refund
+        // C6: CS = copy of a sale, CR = copy of a refund. This is a display-only
+        // label for the printout being produced right now — it must NOT overwrite
+        // the sale's own rcptLabel (NS/NR/TS/TR), which is the fiscal record of
+        // what the original receipt actually was. Persisting CS/CR onto the sale
+        // previously made reprinted TRAINING receipts (TS/TR) look like normal
+        // sales/refunds everywhere the sale's rcptLabel is read from, including
+        // the daily X/Z report's training exclusion filter.
         const copyLabel = (sale.status === 'REFUNDED' || sale.rcptLabel === 'NR' || sale.rcptLabel === 'TR')
             ? 'CR'
             : 'CS';
         const updated = await prisma_1.prisma.sale.update({
             where: { id: saleId },
-            data: {
-                reprintCount: { increment: 1 },
-                rcptLabel: copyLabel,
-            },
+            data: { reprintCount: { increment: 1 } },
         });
         await auditLogger_1.auditLogger.sales(req, {
             type: 'SALE_REPRINTED',
-            description: `Receipt reprinted for Sale #${sale.saleNumber} (count: ${updated.reprintCount})`,
+            description: `Invoice downloaded for Sale #${sale.saleNumber} (download #${updated.reprintCount})`,
             entityType: 'Sale',
             entityId: saleId,
-            metadata: { reprintCount: updated.reprintCount },
+            metadata: { reprintCount: updated.reprintCount, copyLabel },
         });
         res.json((0, apiResponse_1.success)({
-            ...sale,
             isCopy: updated.reprintCount > 1,
             reprintCount: updated.reprintCount,
             rcptLabel: copyLabel,
@@ -924,6 +847,15 @@ const regenerateInvoice = async (req, res) => {
         if (sale.status === 'CANCELLED' || sale.status === 'REFUNDED') {
             return res.status(400).json((0, apiResponse_1.error)(`Cannot regenerate invoice for a ${sale.status.toLowerCase()} sale`));
         }
+        // RRA checklist §28: an approved (VSDC-signed) receipt must never be
+        // modified — that includes re-numbering it. Regeneration is only for a
+        // sale whose invoice number was never accepted by VSDC (still pending or
+        // permanently failed). A fiscalised sale can only be corrected via a
+        // refund against the original receipt.
+        const alreadyFiscalised = sale.ebmTransactions.some((t) => (t.operation === 'SALE' || !t.operation) && t.submissionStatus === 'SUCCESS' && t.ebmInvoiceNumber != null);
+        if (alreadyFiscalised) {
+            return res.status(409).json((0, apiResponse_1.error)('This sale already has a VSDC-signed receipt and cannot be re-numbered. Issue a refund against the original receipt instead.'));
+        }
         const result = await prisma_1.prisma.$transaction(async (tx) => {
             // Generate new invoice number
             const { invoiceNumber, vsdcInvcNo } = await (0, rra_ebm_service_1.generateInvoiceNumber)(organizationId, branchId, tx);
@@ -935,6 +867,21 @@ const regenerateInvoice = async (req, res) => {
                     vsdcInvcNo,
                     reprintCount: { increment: 1 },
                     updatedAt: new Date(),
+                },
+            });
+            // Supersede any still-pending SALE outbox rows for this sale: they
+            // carry the previous (now replaced) invcNo, and letting the worker
+            // submit them would fiscalize a stale number alongside the new one.
+            await tx.ebmOutbox.updateMany({
+                where: {
+                    saleId,
+                    organizationId,
+                    operation: 'SALE',
+                    status: { in: ['PENDING', 'FAILED', 'PROCESSING'] },
+                },
+                data: {
+                    status: 'DEAD_LETTER',
+                    lastError: `Superseded by invoice regeneration (${sale.invoiceNumber} → ${invoiceNumber})`,
                 },
             });
             // Create a new EBM transaction record for the regenerated invoice
@@ -1001,7 +948,7 @@ const getEbmReceipt = async (req, res) => {
                 saleId,
                 organizationId,
                 submissionStatus: 'SUCCESS',
-                operation: 'SALE',
+                operation: { in: ['SALE', 'REFUND'] },
             },
             orderBy: { createdAt: 'desc' },
         });
@@ -1026,7 +973,10 @@ const getEbmReceipt = async (req, res) => {
             })
             : null;
         const mrcNo = branch?.ebmSerialNo ?? org?.ebmSerialNo ?? null;
-        const sdcId = branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null;
+        // `tx` is this sale's own successful VSDC response — prefer the ID it was
+        // actually stamped with over the (possibly still-unconfigured) device
+        // setting, same precedence composeInvoicePayload uses.
+        const sdcId = tx.sdcId ?? branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null;
         res.json({
             status: 'success',
             ebm: {
@@ -1172,6 +1122,15 @@ const cancelSale = async (req, res) => {
                 });
             }
         });
+        // Fire the outbox worker immediately (fire-and-forget) so the void hits
+        // the WAR right at cancel time instead of waiting for the cron tick. The
+        // outbox row stays the single source of truth for idempotency; the cron
+        // job remains a retry/backstop if this run fails or times out.
+        if ((0, rra_ebm_service_1.isEbmEnabled)() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+            void (0, ebm_outbox_service_1.processEbmOutboxBatch)(50).catch((e) => {
+                console.error('[EBM] immediate void fiscalization error:', e);
+            });
+        }
         res.status(200).json((0, apiResponse_1.success)({ message: "Sale cancelled successfully" }));
     }
     catch (error) {
@@ -1229,222 +1188,421 @@ const PAYMENT_METHOD_LABEL = {
  * All money arithmetic (subtotal, discount, VAT, tax, paid, balance, grand
  * total) is performed here in the backend; the frontend merely displays it.
  */
+/**
+ * Thrown by composeInvoicePayload when a real (non-proforma) sale has not yet
+ * been confirmed by VSDC — RRA VSDC spec forbids issuing/printing a receipt
+ * without that confirmation (checklist §16/§22), so callers must surface this
+ * distinctly instead of falling back to a degraded, unsigned receipt.
+ */
+class FiscalizationPendingError extends Error {
+    constructor(reason) {
+        super(`Sale not yet confirmed by VSDC (${reason})`);
+        this.reason = reason;
+        this.name = "FiscalizationPendingError";
+    }
+}
+exports.FiscalizationPendingError = FiscalizationPendingError;
+async function composeInvoicePayload(req, opts = {}) {
+    const saleId = parseInt(req.params.saleId ?? req.params.id);
+    const organizationId = parseInt(req.params.organizationId);
+    const sale = await prisma_1.prisma.sale.findFirst({
+        where: { id: saleId, organizationId, ...(0, branchAuth_middleware_1.buildBranchFilter)(req) },
+        include: {
+            customer: { select: { id: true, name: true, phone: true, TIN: true, email: true, address: true, custPrvncNm: true, custDstrtNm: true, custSctrNm: true, custLocDesc: true } },
+            user: { select: { id: true, name: true } },
+            saleItems: { include: { product: true } },
+            ebmTransactions: { orderBy: { createdAt: "desc" } },
+            originalSale: { select: { vsdcInvcNo: true, invoiceNumber: true, saleNumber: true } },
+        },
+    });
+    if (!sale)
+        return null;
+    // Proforma sales are never submitted to VSDC by design and have no outbox
+    // row to check. A real (NS/NR) sale that does have an outbox row must have
+    // reached SUCCEEDED before its receipt can be composed — anything else
+    // (PENDING/PROCESSING/FAILED still retrying, or permanently DEAD_LETTER)
+    // blocks here rather than silently degrading to an unsigned receipt.
+    // Set when the sale is real but VSDC has not confirmed it yet. By default
+    // that is a hard stop (RRA VSDC spec §16/§22 — no receipt without VSDC
+    // confirmation); when the caller passes allowUnfiscalized (a deliberate,
+    // user-initiated download/print), we instead compose the payload and stamp
+    // it NOT FISCALISED so the document can never pass as a real tax receipt.
+    let notFiscalized = null;
+    if (!sale.isProforma) {
+        // Not filtered to operation:"SALE" — a refund sale's outbox row is
+        // written with operation:"REFUND" (see refundSale), and a voided sale's
+        // with "VOID"; whichever applies to this sale is what must have SUCCEEDED.
+        const outboxRow = await prisma_1.prisma.ebmOutbox.findFirst({
+            where: { saleId: sale.id },
+            orderBy: { createdAt: "desc" },
+            select: { status: true },
+        });
+        if (outboxRow && outboxRow.status !== "SUCCEEDED") {
+            const reason = outboxRow.status === "DEAD_LETTER" ? "failed" : "pending";
+            if (!opts.allowUnfiscalized)
+                throw new FiscalizationPendingError(reason);
+            notFiscalized = reason;
+        }
+    }
+    const [org, branch] = await Promise.all([
+        prisma_1.prisma.organization.findUnique({
+            where: { id: organizationId },
+            select: { name: true, avatar: true, address: true, phone: true, email: true, TIN: true, VRN: true, currency: true, ebmDeviceId: true, ebmSerialNo: true },
+        }),
+        prisma_1.prisma.branch.findUnique({
+            where: { id: sale.branchId },
+            select: { name: true, bhfId: true, ebmDeviceId: true, ebmSerialNo: true, address: true },
+        }),
+    ]);
+    // "Linked to RRA/EBM" means the VSDC device credentials actually used to
+    // talk to RRA (see getOsdcCreds/getVsdcCreds: org.TIN + branch.ebmSerialNo,
+    // falling back to org.ebmSerialNo) are configured — NOT ebmDeviceId, which
+    // is just the SDC ID RRA hands back after a successful transaction and is
+    // still empty for a freshly-registered device that hasn't fiscalized yet.
+    // bhfId is sourced from branch.bhfId (configurable in Organization Settings),
+    // falling back to config.ebm.defaultBhfId
+    const isEbmLinked = Boolean(org?.TIN && (branch?.ebmSerialNo || org?.ebmSerialNo));
+    const fiscalTx = (sale.ebmTransactions ?? []).find((t) => t.submissionStatus === "SUCCESS" && (!t.operation || t.operation === "SALE" || t.operation === "REFUND"));
+    const responseData = fiscalTx?.responseData;
+    const norm = responseData?.normalized;
+    // MRC: device-serial configured on branch/org, falling back to the serial
+    // the VSDC itself echoed back on the successful response.
+    const mrcNo = branch?.ebmSerialNo ?? org?.ebmSerialNo ?? norm?.mrcNo ?? null;
+    // Prefer the ID stamped in the successful RRA response. Configured device
+    // values are a fallback only; this keeps the printed SDC identifier aligned
+    // with the actual fiscal receipt.
+    let sdcId = fiscalTx?.sdcId ?? branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null;
+    // Proforma/training documents never get their own fiscalTx (never
+    // submitted to VSDC), and the device may not have its ebmDeviceId
+    // backfilled in Organization/Branch settings — but the SDC ID is a fixed
+    // per-device identifier, so reuse the one this branch's device was last
+    // handed back on any real, successfully-fiscalized sale.
+    if (!sdcId) {
+        const lastKnownDevice = await prisma_1.prisma.ebmTransaction.findFirst({
+            where: { organizationId, sdcId: { not: null }, sale: { branchId: sale.branchId } },
+            orderBy: { createdAt: "desc" },
+            select: { sdcId: true },
+        });
+        sdcId = lastKnownDevice?.sdcId ?? null;
+    }
+    const sdcRcptNo = fiscalTx?.sdcRcptNo ?? null;
+    const totalRcptNo = fiscalTx?.totalRcptNo ?? null;
+    const internalData = fiscalTx?.internalData ?? norm?.intrlData ?? null;
+    const receiptSignature = fiscalTx?.receiptSignature ?? norm?.vsdcSignature ?? norm?.verificationCode ?? null;
+    // Proforma has no fiscalTx (never sent to VSDC), so it has no VSDC-stamped
+    // time either — fall back to the CIS's own creation time, same as the
+    // spec's own proforma example still prints a date/time under SDC INFORMATION.
+    const sdcDateTime = fiscalTx?.sdcDateTime ?? norm?.sdcDateTime ?? (sale.isProforma ? sale.createdAt : null);
+    const ebmInvoiceNumber = fiscalTx?.ebmInvoiceNumber ?? norm?.ebmInvoiceNumber ?? sale.invoiceNumber ?? null;
+    const rcptLabel = fiscalTx?.rcptLabel ?? sale.rcptLabel ?? null;
+    // Proforma is never submitted to VSDC (see createSale step 4/7), so it never
+    // has a fiscalTx/sdcRcptNo — it prints its own local, non-fiscal counter pair
+    // instead: localReceiptSeq (this type only) / localReceiptTotalSeq (every
+    // locally-numbered type combined), the same distinct-A/B shape as a real
+    // VSDC counter (spec §7.25's own example: "168/258 NS" — two different numbers).
+    const fiscalReceiptNumber = sdcRcptNo != null
+        ? `${sdcRcptNo}/${totalRcptNo ?? sdcRcptNo}${rcptLabel ? ` ${rcptLabel}` : ""}`
+        : sale.localReceiptSeq != null
+            ? `${sale.localReceiptSeq}/${sale.localReceiptTotalSeq ?? sale.localReceiptSeq}${rcptLabel ? ` ${rcptLabel}` : ""}`
+            : sale.saleNumber;
+    // The invoice number is the sequence submitted to VSDC (invcNo), not the
+    // SDC device identifier. SDC ID and receipt counters are printed separately.
+    const fiscalInvoiceNumber = sale.vsdcInvcNo != null
+        ? String(sale.vsdcInvcNo)
+        : ebmInvoiceNumber ?? sale.invoiceNumber ?? sale.saleNumber;
+    const originalReceiptNumber = sale.originalSale
+        ? (sale.originalSale.vsdcInvcNo != null
+            ? String(sale.originalSale.vsdcInvcNo)
+            : sale.originalSale.invoiceNumber ?? sale.originalSale.saleNumber)
+        : null;
+    const currency = org?.currency ?? "RWF";
+    const toNumber = (v) => (v == null ? 0 : typeof v === "number" ? v : Number(String(v)));
+    const totalAmount = toNumber(sale.totalAmount);
+    const cashAmount = toNumber(sale.cashAmount);
+    const debtAmount = toNumber(sale.debtAmount);
+    const insuranceAmount = toNumber(sale.insuranceAmount);
+    const vatAmount = toNumber(sale.vatAmount);
+    const taxableAmount = toNumber(sale.taxableAmount);
+    // A refund stores every amount negative; compute the residual sale-level
+    // discount on magnitudes and re-apply the document's sign so a refund
+    // receipt shows the discount negative too (RRA checklist §56) instead of a
+    // spurious positive value.
+    const docSign = totalAmount < 0 ? -1 : 1;
+    const discountAmount = docSign * Math.max(0, Math.abs(totalAmount) - Math.abs(cashAmount) - Math.abs(debtAmount) - Math.abs(insuranceAmount) - Math.abs(vatAmount) - Math.abs(taxableAmount));
+    const items = (sale.saleItems ?? []).map((line, index) => {
+        const qty = toNumber(line.quantity);
+        const unitPrice = toNumber(line.unitPrice);
+        const gross = qty * unitPrice;
+        const dcAmt = toNumber(line.dcAmt);
+        const dcRate = toNumber(line.dcRate);
+        const taxAmt = toNumber(line.taxAmount);
+        const taxRate = toNumber(line.taxRate);
+        const net = gross - dcAmt;
+        return {
+            id: String(line.id),
+            line: index + 1,
+            code: line.product?.itemCd ?? line.product?.sku ?? line.product?.barcode ?? line.product?.name ?? line.serviceName ?? "",
+            description: line.serviceName ?? line.product?.name ?? line.serviceDescription ?? "",
+            quantity: qty,
+            unit: line.measurementUnit ?? "PCS",
+            // Per-unit price always prints positive, refund or not — only qty and
+            // the amounts derived from it (gross/net/total) carry the refund's
+            // negative sign. qty is already stored negative for a refund line, so
+            // qty*unitPrice still yields the correct negative line total below.
+            unitPrice: Math.abs(unitPrice),
+            discountPct: dcRate,
+            discountAmt: dcAmt,
+            taxCode: line.taxCode ?? null,
+            vatPct: taxRate,
+            taxAmount: taxAmt,
+            subtotal: gross,
+            net,
+            // Unit prices and `sale.totalAmount` are VAT-inclusive throughout the
+            // checkout flow. The tax is an extraction from the gross line, not an
+            // amount to add again on the printed invoice.
+            total: net,
+            itemType: line.itemType,
+        };
+    });
+    const subtotal = items.reduce((s, i) => s + i.subtotal, 0);
+    const itemDiscount = items.reduce((s, i) => s + i.discountAmt, 0);
+    const lineTax = items.reduce((s, i) => s + i.taxAmount, 0);
+    // §56: keep the discount signed with the document (negative on a refund).
+    const discount = docSign * Math.max(0, Math.round(Math.abs(itemDiscount) + Math.abs(discountAmount)));
+    const grandTotal = Math.round(totalAmount);
+    const paid = Math.round(cashAmount + insuranceAmount);
+    const balance = Math.round(debtAmount);
+    // QR image is generated server-side — the frontend only renders the image returned by the API.
+    const qrRaw = fiscalTx?.qrPayload ?? buildRraQrString({ sdcDateTime, sdcId, sdcRcptNo, internalData, receiptSignature });
+    // CIS §7.29 — official RRA logo on every receipt type.
+    const rraLogoBuf = await (0, invoice_logo_service_1.getOrganizationLogo)();
+    const rraLogo = rraLogoBuf
+        ? `data:image/png;base64,${rraLogoBuf.toString("base64")}`
+        : null;
+    const qrCodeImage = qrRaw
+        ? await qrcode_1.default.toDataURL(qrRaw, { errorCorrectionLevel: "M", margin: 1, width: 220, color: { dark: "#000000", light: "#FFFFFF" } })
+        : null;
+    const isCertified = !!fiscalTx;
+    const verificationUrl = isCertified && sdcId ? `https://esbm.rra.gov.rw/tax-invoice/verification?sdcId=${encodeURIComponent(sdcId)}&receipt=${encodeURIComponent(String(sdcRcptNo))}` : null;
+    const dateObj = new Date(sale.createdAt);
+    const p2 = (x) => String(x).padStart(2, "0");
+    const time = `${p2(dateObj.getHours())}:${p2(dateObj.getMinutes())}:${p2(dateObj.getSeconds())}`;
+    const invoiceDate = dateObj.toISOString();
+    const paymentMethodLabel = PAYMENT_METHOD_LABEL[sale.paymentType] ?? sale.paymentType ?? "";
+    const invoiceData = {
+        company: {
+            logo: org?.avatar ?? null,
+            name: org?.name ?? "",
+            address: branch?.address ?? org?.address ?? "",
+            branchName: branch?.name ?? null,
+            bhfId: branch?.bhfId ?? null,
+            phone: org?.phone ?? null,
+            email: org?.email ?? null,
+            tin: org?.TIN ?? null,
+            vrn: org?.VRN ?? null,
+            mrc: mrcNo,
+            website: null,
+            currency,
+            ebmLinked: isEbmLinked,
+        },
+        customer: {
+            name: sale.customer?.name ?? "",
+            tin: sale.customer?.TIN ?? null,
+            phone: sale.customer?.phone ?? null,
+            email: sale.customer?.email ?? null,
+            // Free-text legacy address first, then the structured RRA buyer
+            // address parts (street/cell, sector, district, province) when set.
+            address: [
+                sale.customer?.address,
+                sale.customer?.custLocDesc,
+                sale.customer?.custSctrNm,
+                sale.customer?.custDstrtNm,
+                sale.customer?.custPrvncNm,
+            ].filter((p) => p && String(p).trim()).join(', ') || null,
+            vatNo: sale.customer?.TIN ?? null,
+        },
+        invoice: {
+            id: String(sale.id),
+            saleNumber: sale.saleNumber,
+            invoiceNumber: fiscalInvoiceNumber,
+            receiptNumber: fiscalReceiptNumber,
+            invoiceDate,
+            time,
+            paymentMethod: paymentMethodLabel,
+            cashier: sale.user?.name ?? "",
+            status: sale.status,
+            rcptLabel,
+            rcptLabelText: rcptLabel ? RCT_LABEL_DISPLAY[rcptLabel] ?? rcptLabel : null,
+            isProforma: sale.isProforma,
+            notFiscalized,
+            // CIS/VSDC spec §7.18/§15: only ONE original printout is allowed —
+            // reprintCount is incremented on every deliberate "download" of this
+            // invoice's PDF, so the first download (count reaches 1) stays the
+            // original and every one after (count > 1) renders as a COPY.
+            isCopy: (sale.reprintCount ?? 0) > 1,
+            currency,
+            originalReceiptNumber,
+        },
+        items,
+        totals: {
+            subtotal: Math.round(subtotal),
+            discount,
+            taxable: Math.round(taxableAmount),
+            vat: Math.round(vatAmount),
+            tax: Math.round(lineTax),
+            shipping: 0,
+            paid,
+            balance,
+            grandTotal,
+        },
+        charges: {
+            vatAmount: Math.round(vatAmount),
+            taxableAmount: Math.round(taxableAmount),
+            discountAmount: Math.round(discountAmount),
+            cashAmount: Math.round(cashAmount),
+            insuranceAmount: Math.round(insuranceAmount),
+            debtAmount: Math.round(debtAmount),
+            totalAmount: Math.round(totalAmount),
+            shipping: 0,
+        },
+        payment: {
+            method: sale.paymentType ?? "",
+            methodLabel: paymentMethodLabel,
+            reference: null,
+            bank: null,
+            cashAmount: Math.round(cashAmount),
+            insuranceAmount: Math.round(insuranceAmount),
+            debtAmount: Math.round(debtAmount),
+        },
+        sdcInformation: {
+            sdcId,
+            mrcNo,
+            receiptNumber: (sdcRcptNo != null || sale.isProforma) ? fiscalReceiptNumber : null,
+            receiptSignature,
+            internalData,
+            sdcDateTime: sdcDateTime ? String(sdcDateTime) : null,
+            date: sdcDateTime ? new Date(sdcDateTime).toISOString() : null,
+            time: sdcDateTime ? `${p2(new Date(sdcDateTime).getHours())}:${p2(new Date(sdcDateTime).getMinutes())}:${p2(new Date(sdcDateTime).getSeconds())}` : null,
+            ebmInvoiceNumber: ebmInvoiceNumber,
+            rcptLabel,
+            poweredBy: system_branding_service_1.SYSTEM_FOOTER,
+            softwareVersion: system_branding_service_1.CIS_VERSION_LABEL,
+        },
+        certification: {
+            isCertified,
+            certificateImage: null,
+            certificateText: isCertified ? "This is a fiscalized EBM receipt certified by the Rwanda Revenue Authority." : null,
+        },
+        verification: {
+            qrCodeImage,
+            qrPayload: qrRaw,
+            verificationUrl,
+        },
+        branding: {
+            primaryColor: "#1565C0",
+            rraLogo,
+            poweredBy: system_branding_service_1.SYSTEM_POWERED_BY,
+        },
+        footer: {
+            message: "Thank you for your business.",
+            note: null,
+        },
+    };
+    return invoiceData;
+}
 const getInvoice = async (req, res) => {
     try {
-        const saleId = parseInt(req.params.saleId ?? req.params.id);
-        const organizationId = parseInt(req.params.organizationId);
-        const sale = await prisma_1.prisma.sale.findFirst({
-            where: { id: saleId, organizationId, ...(0, branchAuth_middleware_1.buildBranchFilter)(req) },
-            include: {
-                customer: { select: { id: true, name: true, phone: true, TIN: true, email: true, address: true } },
-                user: { select: { id: true, name: true } },
-                saleItems: { include: { product: true } },
-                ebmTransactions: { orderBy: { createdAt: "desc" } },
-            },
-        });
-        if (!sale)
+        // ?allowPending=1 — the caller wants the composed invoice even before VSDC
+        // confirms it (to view/download it, stamped NOT FISCALISED). Without it the
+        // endpoint keeps returning 425 while fiscalization is in flight, which the
+        // POS/sales fiscalization poll relies on.
+        const allowUnfiscalized = String(req.query.allowPending ?? "") === "1";
+        const invoiceData = await composeInvoicePayload(req, { allowUnfiscalized });
+        if (!invoiceData)
             return res.status(404).json((0, apiResponse_1.error)("Sale not found"));
-        const [org, branch] = await Promise.all([
-            prisma_1.prisma.organization.findUnique({
-                where: { id: organizationId },
-                select: { name: true, avatar: true, address: true, phone: true, email: true, TIN: true, VRN: true, currency: true, ebmDeviceId: true, ebmSerialNo: true },
-            }),
-            prisma_1.prisma.branch.findUnique({
-                where: { id: sale.branchId },
-                select: { name: true, bhfId: true, ebmDeviceId: true, ebmSerialNo: true, address: true },
-            }),
-        ]);
-        const fiscalTx = (sale.ebmTransactions ?? []).find((t) => t.submissionStatus === "SUCCESS" && (!t.operation || t.operation === "SALE"));
-        const responseData = fiscalTx?.responseData;
-        const norm = responseData?.normalized;
-        const mrcNo = branch?.ebmSerialNo ?? org?.ebmSerialNo ?? null;
-        // Prefer the ID stamped in the successful RRA response. Configured device
-        // values are a fallback only; this keeps the printed SDC identifier aligned
-        // with the actual fiscal receipt.
-        const sdcId = fiscalTx?.sdcId ?? branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null;
-        const sdcRcptNo = fiscalTx?.sdcRcptNo ?? null;
-        const totalRcptNo = fiscalTx?.totalRcptNo ?? null;
-        const internalData = fiscalTx?.internalData ?? norm?.intrlData ?? null;
-        const receiptSignature = fiscalTx?.receiptSignature ?? norm?.vsdcSignature ?? norm?.verificationCode ?? null;
-        const sdcDateTime = fiscalTx?.sdcDateTime ?? norm?.sdcDateTime ?? null;
-        const ebmInvoiceNumber = fiscalTx?.ebmInvoiceNumber ?? norm?.ebmInvoiceNumber ?? sale.invoiceNumber ?? null;
-        const rcptLabel = fiscalTx?.rcptLabel ?? sale.rcptLabel ?? null;
-        const fiscalReceiptNumber = sdcRcptNo != null
-            ? `${sdcRcptNo}/${totalRcptNo ?? sdcRcptNo}${rcptLabel ? ` ${rcptLabel}` : ""}`
-            : sale.saleNumber;
-        const fiscalInvoiceNumber = fiscalTx && sdcId && sdcRcptNo != null
-            ? `${sdcId}-${sdcRcptNo}`
-            : ebmInvoiceNumber ?? sale.invoiceNumber ?? sale.saleNumber;
-        const currency = org?.currency ?? "RWF";
-        const toNumber = (v) => (v == null ? 0 : typeof v === "number" ? v : Number(String(v)));
-        const totalAmount = toNumber(sale.totalAmount);
-        const cashAmount = toNumber(sale.cashAmount);
-        const debtAmount = toNumber(sale.debtAmount);
-        const insuranceAmount = toNumber(sale.insuranceAmount);
-        const vatAmount = toNumber(sale.vatAmount);
-        const taxableAmount = toNumber(sale.taxableAmount);
-        const discountAmount = Math.max(0, totalAmount - cashAmount - debtAmount - insuranceAmount - vatAmount - taxableAmount);
-        const items = (sale.saleItems ?? []).map((line, index) => {
-            const qty = toNumber(line.quantity);
-            const unitPrice = toNumber(line.unitPrice);
-            const gross = qty * unitPrice;
-            const dcAmt = toNumber(line.dcAmt);
-            const dcRate = toNumber(line.dcRate);
-            const taxAmt = toNumber(line.taxAmount);
-            const taxRate = toNumber(line.taxRate);
-            const net = gross - dcAmt;
-            return {
-                id: String(line.id),
-                line: index + 1,
-                code: line.product?.itemCd ?? line.product?.sku ?? line.product?.barcode ?? line.product?.name ?? line.serviceName ?? "",
-                description: line.serviceName ?? line.product?.name ?? line.serviceDescription ?? "",
-                quantity: qty,
-                unit: line.measurementUnit ?? "PCS",
-                unitPrice,
-                discountPct: dcRate,
-                discountAmt: dcAmt,
-                taxCode: line.taxCode ?? null,
-                vatPct: taxRate,
-                taxAmount: taxAmt,
-                subtotal: gross,
-                net,
-                // Unit prices and `sale.totalAmount` are VAT-inclusive throughout the
-                // checkout flow. The tax is an extraction from the gross line, not an
-                // amount to add again on the printed invoice.
-                total: net,
-                itemType: line.itemType ?? "PRODUCT",
-            };
-        });
-        const subtotal = items.reduce((s, i) => s + i.subtotal, 0);
-        const itemDiscount = items.reduce((s, i) => s + i.discountAmt, 0);
-        const lineTax = items.reduce((s, i) => s + i.taxAmount, 0);
-        const discount = Math.max(0, Math.round(itemDiscount + discountAmount));
-        const grandTotal = Math.round(totalAmount);
-        const paid = Math.round(cashAmount + insuranceAmount);
-        const balance = Math.round(debtAmount);
-        // QR image is generated server-side — the frontend only renders the image returned by the API.
-        const qrRaw = fiscalTx?.qrPayload ?? buildRraQrString({ sdcDateTime, sdcId, sdcRcptNo, internalData, receiptSignature });
-        const qrCodeImage = qrRaw
-            ? await qrcode_1.default.toDataURL(qrRaw, { errorCorrectionLevel: "M", margin: 1, width: 220, color: { dark: "#000000", light: "#FFFFFF" } })
-            : null;
-        const isCertified = !!fiscalTx;
-        const verificationUrl = isCertified && sdcId ? `https://esbm.rra.gov.rw/tax-invoice/verification?sdcId=${encodeURIComponent(sdcId)}&receipt=${encodeURIComponent(String(sdcRcptNo))}` : null;
-        const dateObj = new Date(sale.createdAt);
-        const p2 = (x) => String(x).padStart(2, "0");
-        const time = `${p2(dateObj.getHours())}:${p2(dateObj.getMinutes())}:${p2(dateObj.getSeconds())}`;
-        const invoiceDate = dateObj.toISOString();
-        const paymentMethodLabel = PAYMENT_METHOD_LABEL[sale.paymentType] ?? sale.paymentType ?? "";
-        const invoiceData = {
-            company: {
-                logo: org?.avatar ?? null,
-                name: org?.name ?? "",
-                address: branch?.address ?? org?.address ?? "",
-                branchName: branch?.name ?? null,
-                bhfId: branch?.bhfId ?? null,
-                phone: org?.phone ?? null,
-                email: org?.email ?? null,
-                tin: org?.TIN ?? null,
-                vrn: org?.VRN ?? null,
-                mrc: mrcNo,
-                website: null,
-                currency,
-            },
-            customer: {
-                name: sale.customer?.name ?? "",
-                tin: sale.customer?.TIN ?? null,
-                phone: sale.customer?.phone ?? null,
-                email: sale.customer?.email ?? null,
-                address: sale.customer?.address ?? null,
-                vatNo: sale.customer?.TIN ?? null,
-            },
-            invoice: {
-                id: String(sale.id),
-                saleNumber: sale.saleNumber,
-                invoiceNumber: fiscalInvoiceNumber,
-                receiptNumber: fiscalReceiptNumber,
-                invoiceDate,
-                time,
-                paymentMethod: paymentMethodLabel,
-                cashier: sale.user?.name ?? "",
-                status: sale.status,
-                rcptLabel,
-                rcptLabelText: rcptLabel ? RCT_LABEL_DISPLAY[rcptLabel] ?? rcptLabel : null,
-                isProforma: sale.isProforma,
-                isCopy: (sale.reprintCount ?? 0) > 0,
-                currency,
-            },
-            items,
-            totals: {
-                subtotal: Math.round(subtotal),
-                discount,
-                taxable: Math.round(taxableAmount),
-                vat: Math.round(vatAmount),
-                tax: Math.round(lineTax),
-                shipping: 0,
-                paid,
-                balance,
-                grandTotal,
-            },
-            charges: {
-                vatAmount: Math.round(vatAmount),
-                taxableAmount: Math.round(taxableAmount),
-                discountAmount: Math.round(discountAmount),
-                cashAmount: Math.round(cashAmount),
-                insuranceAmount: Math.round(insuranceAmount),
-                debtAmount: Math.round(debtAmount),
-                totalAmount: Math.round(totalAmount),
-                shipping: 0,
-            },
-            payment: {
-                method: sale.paymentType ?? "",
-                methodLabel: paymentMethodLabel,
-                reference: null,
-                bank: null,
-                cashAmount: Math.round(cashAmount),
-                insuranceAmount: Math.round(insuranceAmount),
-                debtAmount: Math.round(debtAmount),
-            },
-            sdcInformation: {
-                sdcId,
-                mrcNo,
-                receiptNumber: sdcRcptNo != null ? fiscalReceiptNumber : null,
-                receiptSignature,
-                internalData,
-                sdcDateTime: sdcDateTime ? String(sdcDateTime) : null,
-                date: sdcDateTime ? new Date(sdcDateTime).toISOString() : null,
-                time: sdcDateTime ? `${p2(new Date(sdcDateTime).getHours())}:${p2(new Date(sdcDateTime).getMinutes())}:${p2(new Date(sdcDateTime).getSeconds())}` : null,
-                ebmInvoiceNumber: ebmInvoiceNumber,
-                rcptLabel,
-                poweredBy: null,
-            },
-            certification: {
-                isCertified,
-                certificateImage: null,
-                certificateText: isCertified ? "This is a fiscalized EBM receipt certified by the Rwanda Revenue Authority." : null,
-            },
-            verification: {
-                qrCodeImage,
-                qrPayload: qrRaw,
-                verificationUrl,
-            },
-            branding: {
-                primaryColor: "#1565C0",
-                rraLogo: null,
-                poweredBy: "EXCEL EDGE ERP",
-            },
-            footer: {
-                message: "Thank you for your business.",
-                note: null,
-            },
-        };
-        res.json((0, apiResponse_1.success)({
+        return res.json((0, apiResponse_1.success)({
             ...invoiceData,
             renderedHtml: (0, invoice_render_service_1.renderSalesInvoiceHtml)(invoiceData),
         }));
     }
     catch (error) {
+        if (error instanceof FiscalizationPendingError) {
+            return res.status(425).json({ success: false, status: "pending_fiscalization", reason: error.reason, error: error.message });
+        }
         console.error("[Get Invoice Error]:", error);
-        res.status(500).json((0, apiResponse_1.error)("Failed to get invoice"));
+        return res.status(500).json((0, apiResponse_1.error)("Failed to get invoice"));
     }
 };
 exports.getInvoice = getInvoice;
+/** Authoritative backend-generated invoice PDF (A4, A5 or 80mm) for download, preview, sharing, and printing. */
+const getInvoicePdf = async (req, res) => {
+    try {
+        // A PDF download/print is always an explicit user action — allow it before
+        // VSDC confirmation and let the renderer stamp it NOT FISCALISED, rather
+        // than 425 and leave the user with no document at all.
+        const invoiceData = await composeInvoicePayload(req, { allowUnfiscalized: true });
+        if (!invoiceData)
+            return res.status(404).json((0, apiResponse_1.error)("Sale not found"));
+        const q = String(req.query.format ?? "").toUpperCase();
+        const format = q === "80MM" ? "80mm" : q === "A5" ? "A5" : "A4";
+        const pdf = format === "80mm"
+            ? await (0, invoice_receipt_pdf_service_1.generateEbmReceiptPdf80mm)(invoiceData)
+            : await (0, invoice_pdf_service_1.generateEbmInvoicePdf)(invoiceData, format === "A5" ? "A5" : "A4");
+        const filename = (0, invoice_pdf_service_1.getEbmInvoiceFilename)(invoiceData, format);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Length", String(pdf.length));
+        res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+        res.setHeader("Cache-Control", "private, no-store");
+        return res.status(200).send(pdf);
+    }
+    catch (error) {
+        if (error instanceof FiscalizationPendingError) {
+            return res.status(425).json({ success: false, status: "pending_fiscalization", reason: error.reason, error: error.message });
+        }
+        console.error("[Get Invoice PDF Error]:", error);
+        return res.status(500).json((0, apiResponse_1.error)("Failed to generate invoice PDF"));
+    }
+};
+exports.getInvoicePdf = getInvoicePdf;
+/**
+ * CIS §7.28 — recover the last finalized receipt after power/paper failure so
+ * the operator can reprint without re-entering the sale.
+ * GET /api/sales/:organizationId/last-receipt
+ */
+const getLastReceipt = async (req, res) => {
+    try {
+        const organizationId = parseInt(req.params.organizationId);
+        const branchFilter = (0, branchAuth_middleware_1.buildBranchFilter)(req);
+        const sale = await prisma_1.prisma.sale.findFirst({
+            where: {
+                organizationId,
+                ...branchFilter,
+                status: { in: ["COMPLETED", "REFUNDED"] },
+                OR: [
+                    { isProforma: true },
+                    { ebmTransactions: { some: { submissionStatus: "SUCCESS" } } },
+                ],
+            },
+            orderBy: { createdAt: "desc" },
+            select: {
+                id: true,
+                saleNumber: true,
+                invoiceNumber: true,
+                rcptLabel: true,
+                status: true,
+                totalAmount: true,
+                reprintCount: true,
+                createdAt: true,
+                isProforma: true,
+            },
+        });
+        if (!sale)
+            return res.status(404).json((0, apiResponse_1.error)("No recoverable receipt found for this branch"));
+        return res.json((0, apiResponse_1.success)({ sale }));
+    }
+    catch (error) {
+        console.error("[Last Receipt Error]:", error);
+        return res.status(500).json((0, apiResponse_1.error)("Failed to load last receipt"));
+    }
+};
+exports.getLastReceipt = getLastReceipt;

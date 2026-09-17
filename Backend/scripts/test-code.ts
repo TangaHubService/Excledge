@@ -11,7 +11,7 @@ async function main() {
   if (!sale || !org) { console.log('no sale'); return; }
   const code = process.argv[2] || '999999';
   const invc = 9100 + Math.floor(Math.random()*900);
-  const p = buildRraSendReceiptPayload(sale as any, org as any, { invcNoOverride: invc });
+  const p = buildRraSendReceiptPayload(sale as any, org as any, '01', { invcNoOverride: invc });
   p.prcOrdCd = code;
   (p.receipt as any).custTin = '100000004';
   const body = { tin: '999945560', bhfId: '00', dvcSrlNo: 'excelwartest', ...p };

@@ -107,6 +107,7 @@ const baseNavigation: NavItem[] = [
   { id: "inventory-summary", name: "nav.inventorySummary", href: "inventory-summary", icon: BarChart3, moduleKey: "inventorySummary" },
   { id: "stock-transfers", name: "nav.stockTransfers", href: "stock-transfers", icon: GitBranch, restrictedRoles: ["SELLER"], moduleKey: "stockTransfers", featureFlag: "stockTransfersEnabled" },
   { id: "warehouses", name: "nav.warehouses", href: "warehouses", icon: Building2, restrictedRoles: ["SELLER"], moduleKey: "warehouses", featureFlag: "stockTransfersEnabled" },
+  { id: "production", name: "Production & BOM", href: "production", icon: Package, restrictedRoles: ["SELLER"], moduleKey: "production" },
 
   { id: "orders-header", name: "nav.ordersHeader", href: "", type: "header" },
   { id: "orders", name: "nav.orders", href: "orders", icon: ShoppingCart, moduleKey: "orders" },

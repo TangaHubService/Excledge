@@ -31,17 +31,40 @@ const tinNotPhoneIssue = {
   path: ['TIN'],
 };
 
+// Structured RRA buyer-address parts (province / district / sector /
+// street-or-cell). Free-text, optional, capped at sane lengths.
+const addressPartField = z.string().max(120).optional().nullable();
+
 export const createCustomerSchema = z.object({
   body: z.object({
     name: z.string().min(1, 'Customer name required').max(255, 'Customer name too long'),
     phone: phoneField,
     email: z.string().email('Invalid email address').optional(),
-    address: z.string().optional(),
-    customerType: z.enum(['INDIVIDUAL', 'CORPORATE']).default('INDIVIDUAL'),
+    address: z.string().max(500).optional(),
+    custPrvncNm: addressPartField,
+    custDstrtNm: addressPartField,
+    custSctrNm: addressPartField,
+    custLocDesc: z.string().max(255).optional().nullable(),
+    customerType: z.enum(['INDIVIDUAL', 'CORPORATE', 'INSURANCE']).default('INDIVIDUAL'),
     TIN: tinField,
     tin: tinField,
     prcOrdCd: z.string().min(1, 'Purchase order code too short').optional(),
-  }).refine(tinNotPhone, tinNotPhoneIssue),
+    isrccCd: z.string().max(10, 'Insurance code max 10 characters').optional().nullable(),
+    isrcRt: z.coerce.number().min(0).max(100).optional().nullable(),
+  })
+    .refine(tinNotPhone, tinNotPhoneIssue)
+    .superRefine((data, ctx) => {
+      // Walk-in / individual customers do not need a TIN. Business buyers do.
+      if (data.customerType === 'INDIVIDUAL') return;
+      const tinValue = (data.TIN ?? data.tin ?? '').toString().trim();
+      if (!TIN_PATTERN.test(tinValue)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'TIN is required for corporate and insurance customers',
+          path: ['TIN'],
+        });
+      }
+    }),
   params: z.object({
     organizationId: z.coerce.number().positive('Organization ID required'),
   }),
@@ -52,12 +75,30 @@ export const updateCustomerSchema = z.object({
     name: z.string().min(1, 'Customer name required').max(255, 'Customer name too long').optional(),
     phone: phoneField,
     email: z.string().email('Invalid email address').optional(),
-    address: z.string().optional(),
-    customerType: z.enum(['INDIVIDUAL', 'CORPORATE']).optional(),
+    address: z.string().max(500).optional(),
+    custPrvncNm: addressPartField,
+    custDstrtNm: addressPartField,
+    custSctrNm: addressPartField,
+    custLocDesc: z.string().max(255).optional().nullable(),
+    customerType: z.enum(['INDIVIDUAL', 'CORPORATE', 'INSURANCE']).optional(),
     TIN: tinField,
     tin: tinField,
     prcOrdCd: z.string().optional(),
-  }).refine(tinNotPhone, tinNotPhoneIssue),
+    isrccCd: z.string().max(10, 'Insurance code max 10 characters').optional().nullable(),
+    isrcRt: z.coerce.number().min(0).max(100).optional().nullable(),
+  })
+    .refine(tinNotPhone, tinNotPhoneIssue)
+    .superRefine((data, ctx) => {
+      if (data.customerType !== 'CORPORATE' && data.customerType !== 'INSURANCE') return;
+      const tinValue = (data.TIN ?? data.tin ?? '').toString().trim();
+      if (!TIN_PATTERN.test(tinValue)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'TIN is required for corporate and insurance customers',
+          path: ['TIN'],
+        });
+      }
+    }),
   params: z.object({
     organizationId: z.coerce.number().positive('Organization ID required'),
     id: z.coerce.number().positive('Customer ID required'),

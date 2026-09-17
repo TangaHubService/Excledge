@@ -5,6 +5,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
+// Prisma exposes some columns (e.g. RraPurchase.spplrInvcNo) as BigInt, which
+// JSON.stringify cannot serialize. Emit them as strings in every API response.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+BigInt.prototype.toJSON = function () {
+    return this.toString();
+};
 // Critical Security Check
 if (!process.env.JWT_SECRET) {
     console.error("FATAL ERROR: JWT_SECRET is not defined in environment variables.");
@@ -44,13 +50,18 @@ const error_middleware_1 = require("./middleware/error.middleware");
 const paypack_webhook_routes_1 = __importDefault(require("./routes/paypack-webhook.routes"));
 const subscription_job_1 = require("./jobs/subscription.job");
 const product_expiry_job_1 = require("./jobs/product-expiry.job");
-const ebm_queue_job_1 = require("./jobs/ebm-queue.job");
 const ebm_outbox_job_1 = require("./jobs/ebm-outbox.job");
 const vsdc_heartbeat_job_1 = require("./jobs/vsdc-heartbeat.job");
+const z_report_job_1 = require("./jobs/z-report.job");
+const rra_master_data_job_1 = require("./jobs/rra-master-data.job");
+const stock_sync_job_1 = require("./jobs/stock-sync.job");
 const pesapal_route_1 = __importDefault(require("./routes/pesapal.route"));
+const system_branding_service_1 = require("./services/system-branding.service");
 const upload_route_1 = __importDefault(require("./routes/upload.route"));
 const supplier_invoice_routes_1 = __importDefault(require("./routes/supplier-invoice.routes"));
 const supplier_portal_routes_1 = __importDefault(require("./routes/supplier-portal.routes"));
+const bom_production_routes_1 = __importDefault(require("./routes/bom-production.routes"));
+const swagger_1 = require("./docs/swagger");
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app);
 const PORT = process.env.PORT || 5000;
@@ -108,6 +119,7 @@ app.use("/api/auth/reset-password", authLimiter);
 app.use("/api/auth/verify-email", authLimiter);
 app.use("/api/auth/resend-verification", authLimiter);
 app.use("/api/auth/request-password-reset", authLimiter);
+app.use("/api/auth/verify-password-reset-code", authLimiter);
 app.use("/api/auth", auth_routes_1.default);
 app.use("/api/organizations", organization_routes_1.default);
 app.use("/api/dashboard", dashboard_routes_1.default);
@@ -134,9 +146,12 @@ app.use("/api/stock-transfers", stock_transfer_routes_1.default);
 app.use("/api/organizations", ebm_outbox_routes_1.default);
 app.use("/api/supplier-invoices", supplier_invoice_routes_1.default);
 app.use("/api/supplier-portal", supplier_portal_routes_1.default);
+app.use("/api/inventory", bom_production_routes_1.default);
 app.use("/api/shifts", shift_routes_1.default);
 app.use("/api/held-sales", held_sale_routes_1.default);
 app.use("/api/devices", device_routes_1.default);
+// Interactive OpenAPI docs (full API + RRA-focused)
+(0, swagger_1.mountApiDocs)(app);
 // Serve uploaded files statically
 app.use('/uploads', express_1.default.static('uploads'));
 /* ----------------------------------
@@ -144,6 +159,17 @@ app.use('/uploads', express_1.default.static('uploads'));
 ------------------------------------- */
 app.get("/health", (req, res) => {
     res.json({ status: "ok", message: "Business Management API is running" });
+});
+/* ----------------------------------
+   🔖 CIS SOFTWARE VERSION (RRA CIS/VSDC §21)
+   Verifiable software version; the same value is printed on every receipt.
+------------------------------------- */
+app.get(["/api/version", "/version"], (req, res) => {
+    res.json({
+        name: system_branding_service_1.SYSTEM_NAME,
+        version: system_branding_service_1.SYSTEM_VERSION,
+        label: system_branding_service_1.CIS_VERSION_LABEL,
+    });
 });
 app.use(error_middleware_1.errorHandler);
 /* ----------------------------------
@@ -154,9 +180,11 @@ if (process.env.RUN_JOBS !== "false") {
     subscription_job_1.subscriptionStatusTransitionJob.start();
     product_expiry_job_1.productExpiryAlertJob.start();
     product_expiry_job_1.dailyReportJob.start();
-    ebm_queue_job_1.ebmQueueJob.start();
     ebm_outbox_job_1.ebmOutboxJob.start();
     vsdc_heartbeat_job_1.vsdcHeartbeatJob.start();
+    z_report_job_1.zReportJob.start();
+    rra_master_data_job_1.rraMasterDataJob.start();
+    stock_sync_job_1.stockSyncJob.start();
     // Run an immediate subscription status transition on boot so that
     // overdue statuses (TRIALING, ACTIVE, GRACE_PERIOD) are always caught
     // even if the hourly cron was down for a while.
@@ -168,6 +196,9 @@ if (process.env.RUN_JOBS !== "false") {
 httpServer.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`API docs:     http://localhost:${PORT}/api/docs`);
+    console.log(`Full Swagger: http://localhost:${PORT}/api/docs/full`);
+    console.log(`RRA Swagger:  http://localhost:${PORT}/api/docs/rra`);
 });
 // Handle graceful shutdown
 process.on('SIGTERM', () => {

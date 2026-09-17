@@ -176,6 +176,11 @@ export const createUser = async (req: AuthRequest, res: Response) => {
       }
     });
 
+    const { syncUserToRraAsync } = await import('../services/rra-branch-sync.service');
+    syncUserToRraAsync(organizationId!, user.id, {
+      actorUserId: req.user?.userId ? Number(req.user.userId) : undefined,
+    });
+
     res.status(201).json({ id: user.id, email: user.email, name: user.name });
   } catch (error) {
     console.error("[Create User Error]:", error);
