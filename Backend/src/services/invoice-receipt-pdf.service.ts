@@ -104,6 +104,11 @@ function drawReceipt(
   if (data.invoice.notFiscalized) {
     y = centeredText(doc, NOT_FISCALIZED_NOTICE, y, true, 6)
   }
+  // Real sale printed before VSDC confirmed it — spell out that the slip is
+  // provisional right under the NOT FISCALISED title.
+  if (data.invoice.notFiscalized) {
+    y = centeredText(doc, NOT_FISCALIZED_NOTICE, y, true, 6)
+  }
   // A copied refund (watermark title "COPY") is still a refund and keeps its
   // reference to the original sale, independent of which title printed above.
   if (isRefundTransaction(data)) {
