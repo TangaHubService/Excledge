@@ -46,7 +46,7 @@ interface Product {
   imageUrl?: string
   category?: string
   taxCode?: string
-  itemType?: 'PRODUCT' | 'SERVICE'
+  itemType?: 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE'
   barcode?: string
   sku?: string
   pkgUnitCd?: string
@@ -295,6 +295,9 @@ const AddCustomerDrawer = memo(({
     if (!formData.name.trim()) errs.name = t('validation.required')
     if (formData.phone && formData.phone.length < 10) errs.phone = t('validation.invalidPhone')
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errs.email = t('validation.invalidEmail')
+    if (formData.type !== 'INDIVIDUAL' && !/^\d{9}$/.test(formData.tin.trim())) {
+      errs.tin = 'TIN is required for corporate and insurance customers'
+    }
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -308,7 +311,8 @@ const AddCustomerDrawer = memo(({
         ? (formData.phone.startsWith('+') ? formData.phone : `${formData.countryCode}${formData.phone}`)
         : undefined
       const { countryCode, ...rest } = { ...formData, phone }
-      const newCustomer = await apiClient.createCustomer({ ...rest, tin: formData.tin || undefined })
+      const tin = formData.type === 'INDIVIDUAL' ? undefined : (formData.tin || undefined)
+      const newCustomer = await apiClient.createCustomer({ ...rest, tin })
       toast.success(t('messages.customerCreated'))
       onCustomerAdded(newCustomer)
       onOpenChange(false)
@@ -349,12 +353,13 @@ const AddCustomerDrawer = memo(({
             {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
           </div>
           <div className="space-y-1.5">
-            <Label>{t('customers.tinNumber')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span></Label>
-            <Input name="tin" value={formData.tin} onChange={handleChange} placeholder="e.g. 123456789" />
-          </div>
-          <div className="space-y-1.5">
             <Label>{t('pos.customerType')}</Label>
-            <Select value={formData.type} onValueChange={v => setFormData(p => ({ ...p, type: v }))}>
+            <Select value={formData.type} onValueChange={v => setFormData(p => ({
+              ...p,
+              type: v,
+              // Walk-in / individual customers do not use a TIN.
+              tin: v === 'INDIVIDUAL' ? '' : p.tin,
+            }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="INDIVIDUAL">{t('customers.individual')}</SelectItem>
@@ -363,6 +368,15 @@ const AddCustomerDrawer = memo(({
               </SelectContent>
             </Select>
           </div>
+          {formData.type !== 'INDIVIDUAL' ? (
+            <div className="space-y-1.5">
+              <Label>{t('customers.tinNumber')} <span className="text-red-500">*</span></Label>
+              <Input name="tin" value={formData.tin} onChange={handleChange} placeholder="e.g. 123456789" maxLength={9} />
+              {errors.tin && <p className="text-xs text-red-500">{errors.tin}</p>}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">Walk-in / individual customers do not need a TIN.</p>
+          )}
           <div className="flex gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">{t('common.cancel')}</Button>
             <Button onClick={handleSubmit} disabled={isSubmitting} className="flex-1 bg-blue-600 hover:bg-blue-700">
@@ -420,6 +434,45 @@ export default function SalesForm() {
     window.addEventListener('online', on)
     window.addEventListener('offline', off)
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
+
+  // CIS §7.28 — after power/paper recovery, offer to reprint the last finalized receipt.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const flag = sessionStorage.getItem('pos-recovery-checked')
+        if (flag === '1') return
+        sessionStorage.setItem('pos-recovery-checked', '1')
+        const res = await apiClient.getLastReceipt()
+        const sale = (res as any)?.data?.sale ?? (res as any)?.sale
+        if (cancelled || !sale?.id) return
+        toast.info(
+          `Last receipt ${sale.saleNumber} available for recovery reprint`,
+          {
+            autoClose: 12_000,
+            onClick: async () => {
+              try {
+                await apiClient.reprintSale(sale.id)
+                setSuccessSale({
+                  id: sale.id,
+                  invoiceNumber: sale.invoiceNumber,
+                  receiptNumber: sale.saleNumber,
+                  totalAmount: Number(sale.totalAmount),
+                  fiscalizationStatus: 'success',
+                })
+                setIsSuccessOpen(true)
+              } catch (e: any) {
+                toast.error(e?.message ?? 'Failed to reprint last receipt')
+              }
+            },
+          },
+        )
+      } catch {
+        /* no recoverable receipt — ignore */
+      }
+    })()
+    return () => { cancelled = true }
   }, [])
 
   // Close customer dropdown on outside click
@@ -716,7 +769,12 @@ export default function SalesForm() {
 
       const payload = {
         customerId: selectedCustomer,
-        items: cart.map(i => ({ productId: i.product.id, quantity: i.quantity, unitPrice: i.unitPrice })),
+        items: cart.map(i => ({
+          productId: i.product.id,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          itemType: i.product.itemType === 'SERVICE' ? 'SERVICE' : (i.product.itemType === 'RAW_MATERIAL' ? 'RAW_MATERIAL' : 'PRODUCT'),
+        })),
         paymentType,
         cashAmount,
         insuranceAmount,
@@ -803,7 +861,12 @@ export default function SalesForm() {
       setIsSubmitting(true)
       const payload = {
         customerId: selectedCustomer,
-        items: cart.map(i => ({ productId: i.product.id, quantity: i.quantity, unitPrice: i.unitPrice })),
+        items: cart.map(i => ({
+          productId: i.product.id,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          itemType: i.product.itemType === 'SERVICE' ? 'SERVICE' : (i.product.itemType === 'RAW_MATERIAL' ? 'RAW_MATERIAL' : 'PRODUCT'),
+        })),
         cashAmount: 0,
         insuranceAmount: 0,
         debtAmount: total,

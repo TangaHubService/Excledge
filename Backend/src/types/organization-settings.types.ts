@@ -33,6 +33,7 @@ export interface ISidebarConfig {
   users: boolean;
   activityLogs: boolean;
   ebmOutbox: boolean;
+  production: boolean;
   subscription: boolean;
   billingHistory: boolean;
   salesReports: boolean;
@@ -63,6 +64,8 @@ export interface IPreferences {
   dateFormat: string;
   defaultLandingPage: string;
   lowStockThresholdOverride: number | null;
+  /** Default country of origin for new products (ISO 3166-1 alpha-2, RRA-supported) */
+  originCountryCode: string | null;
   /** Payment method codes the organization accepts at the point of sale. */
   enabledPaymentMethods: string[];
   /** Shift-management business rules (stored alongside preferences JSON). */
@@ -83,6 +86,13 @@ export interface IOrganizationSettings {
   /** Business/taxpayer is registered for VAT. False → every sale uses RRA tax
    *  code D regardless of product category. Mirrors Organization.vatRegistered. */
   vatRegistered: boolean;
+  /** RRA EBM/VSDC device credentials configurable from Organization Settings. */
+  ebmConfig?: {
+    tin?: string;
+    bhfId?: string;
+    dvcSrlNo?: string;
+    ebmDeviceId?: string;
+  };
 }
 
 /** Fallback applied to any record — including rows created before a given key
@@ -112,6 +122,7 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
     users: true,
     activityLogs: true,
     ebmOutbox: true,
+    production: true,
     subscription: true,
     billingHistory: true,
     salesReports: true,
@@ -137,6 +148,7 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
     dateFormat: "DD/MM/YYYY",
     defaultLandingPage: "dashboard",
     lowStockThresholdOverride: null,
+    originCountryCode: null,
     enabledPaymentMethods: ["CASH", "MOBILE_MONEY", "CARD", "BANK_TRANSFER", "DEBT"],
     shiftConfig: {
       approvalRequired: false,
@@ -144,10 +156,16 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
       varianceThreshold: 0,
     },
   },
-  // Defaults to true: matches the existing behavior where VAT-registered
-  // products charge 18%, so organizations that never touch this setting keep
-  // their current tax treatment.
+// Defaults to true: matches the existing behavior where VAT-registered
+// products charge 18%, so organizations that never touch this setting keep
+// their current tax treatment.
   vatRegistered: true,
+  ebmConfig: {
+    tin: "",
+    bhfId: "",
+    dvcSrlNo: "",
+    ebmDeviceId: "",
+  },
 };
 
 /** Partial update payloads: every leaf is optional so callers can patch a
@@ -160,4 +178,10 @@ export interface OrganizationSettingsPatch {
   sidebarConfig?: SidebarConfigPatch;
   featureFlags?: FeatureFlagsPatch;
   preferences?: PreferencesPatch;
+  ebmConfig?: {
+    tin?: string;
+    bhfId?: string;
+    dvcSrlNo?: string;
+    ebmDeviceId?: string;
+  };
 }

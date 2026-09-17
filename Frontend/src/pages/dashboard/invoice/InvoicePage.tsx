@@ -184,11 +184,11 @@ export default function InvoicePage() {
           <div className="space-y-2">
             {data.invoice.notFiscalized ? (
               <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
-                <strong className="font-bold">NOT FISCALISED.</strong>{" "}
+                <strong className="font-bold">Not tax-approved yet.</strong>{" "}
                 {data.invoice.notFiscalized === "failed"
-                  ? "This sale could not be confirmed by RRA VSDC. "
-                  : "This sale has not been confirmed by RRA VSDC yet. "}
-                The document below is provisional — it carries no SDC signature, receipt number or QR and is not a valid tax receipt.
+                  ? "The tax office could not approve this sale. "
+                  : "The tax office has not approved this sale yet. "}
+                You can still view or print a copy — it is marked as provisional and is not a valid tax receipt. Try again from Sales when your connection is working.
               </div>
             ) : null}
             <div className="overflow-hidden rounded-xl border border-slate-300 bg-slate-200 p-2 shadow-sm sm:p-4">

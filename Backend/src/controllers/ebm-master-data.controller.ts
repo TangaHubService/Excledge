@@ -15,6 +15,18 @@ import { syncRraPurchases, confirmRraPurchase } from '../services/purchase-sync.
 import { syncRraImports, actionRraImport } from '../services/rra-import.service';
 import { syncProductToRra } from '../services/product-sync.service';
 import { RraTaxCode } from '@prisma/client';
+import { getRefundReasonCodes, getPaymentMethodMappings, DEFAULT_RFD_RSN_CD } from '../services/rra-code.service';
+import {
+  syncRraBranches,
+  syncCustomerToRra,
+  syncUserToRra,
+  syncRraStockMoves,
+  syncBomComponentToRra,
+  syncInsuranceToRra,
+} from '../services/rra-branch-sync.service';
+import { getOrganizationSettings } from '../services/organization-settings.service';
+import { config } from '../config';
+import { isEbmEnabled } from '../services/rra-ebm.service';
 
 const branchOf = (req: BranchAuthRequest): number | null => {
   const b = req.query.branchId ?? req.body?.branchId;
@@ -374,5 +386,226 @@ export async function masterDataStatus(req: BranchAuthRequest, res: Response) {
   } catch (e: any) {
     console.error('[RRA master-data status]', e);
     res.status(500).json(apiError('Failed to read RRA master-data status'));
+  }
+}
+
+// ── Fiscal document lookups (refund reasons / payment mappings) ──
+
+/**
+ * RRA refund reason codes (code class 32) for the refund-reason dropdown.
+ * Served from the centralized RRA code service — the same list the fiscal
+ * refund validator enforces, so the UI can never offer a code VSDC rejects.
+ */
+export async function listRefundReasons(req: BranchAuthRequest, res: Response) {
+  try {
+    res.json(success({ reasons: getRefundReasonCodes(), default: DEFAULT_RFD_RSN_CD }));
+  } catch (e: any) {
+    console.error('[RRA refund reasons]', e);
+    res.status(500).json(apiError('Failed to list RRA refund reasons'));
+  }
+}
+
+/**
+ * ERP → RRA payment-method mappings with the RRA code names, for checkout
+ * display and operator validation.
+ */
+export async function listPaymentMappings(req: BranchAuthRequest, res: Response) {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const mappings = await getPaymentMethodMappings(organizationId);
+    res.json(success({ mappings }));
+  } catch (e: any) {
+    console.error('[RRA payment mappings]', e);
+    res.status(502).json(apiError(e instanceof Error ? e.message : 'Failed to list payment mappings'));
+  }
+}
+
+// ── Branch / customer / user / composition / stock-move (§3.3.2–3.3.3, §3.3.8.1) ──
+
+export async function syncBranches(req: BranchAuthRequest, res: Response) {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const result = await syncRraBranches(organizationId, branchOf(req));
+    return result.ok
+      ? res.json(success(result))
+      : res.status(502).json(apiError(result.error ?? 'Branch sync failed', undefined, result));
+  } catch (e: any) {
+    console.error('[RRA branches sync]', e);
+    res.status(500).json(apiError('Failed to sync RRA branches'));
+  }
+}
+
+export async function syncStockMoves(req: BranchAuthRequest, res: Response) {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const result = await syncRraStockMoves(organizationId, branchOf(req));
+    return result.ok
+      ? res.json(success(result))
+      : res.status(502).json(apiError(result.error ?? 'Stock-move pull failed', undefined, result));
+  } catch (e: any) {
+    console.error('[RRA stock moves sync]', e);
+    res.status(500).json(apiError('Failed to pull stock movements from RRA'));
+  }
+}
+
+export async function pushCustomer(req: BranchAuthRequest, res: Response) {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const customerId = parseInt(req.params.customerId);
+    const result = await syncCustomerToRra(organizationId, customerId, {
+      branchId: branchOf(req),
+      userId: (req as any).user?.userId,
+    });
+    return result.success
+      ? res.json(success(result))
+      : res.status(502).json(apiError(result.error ?? 'Customer push failed'));
+  } catch (e: any) {
+    console.error('[RRA customer push]', e);
+    res.status(500).json(apiError('Failed to push customer to VSDC'));
+  }
+}
+
+export async function pushUser(req: BranchAuthRequest, res: Response) {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const userId = parseInt(req.params.userId);
+    const result = await syncUserToRra(organizationId, userId, {
+      branchId: branchOf(req),
+      actorUserId: (req as any).user?.userId,
+    });
+    return result.success
+      ? res.json(success(result))
+      : res.status(502).json(apiError(result.error ?? 'User push failed'));
+  } catch (e: any) {
+    console.error('[RRA user push]', e);
+    res.status(500).json(apiError('Failed to push user to VSDC'));
+  }
+}
+
+export async function pushBomComposition(req: BranchAuthRequest, res: Response) {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const parentProductId = parseInt(req.params.productId);
+    const componentProductId = parseInt(req.params.componentId);
+    const result = await syncBomComponentToRra(organizationId, parentProductId, componentProductId, {
+      branchId: branchOf(req),
+      userId: (req as any).user?.userId,
+    });
+    return result.success
+      ? res.json(success(result))
+      : res.status(502).json(apiError(result.error ?? 'Composition push failed'));
+  } catch (e: any) {
+    console.error('[RRA BOM composition push]', e);
+    res.status(500).json(apiError('Failed to push item composition to VSDC'));
+  }
+}
+
+/** POST /branches/saveBrancheInsurances — pharmacy insurer registration. */
+export async function pushInsurance(req: BranchAuthRequest, res: Response) {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const customerId = parseInt(req.params.customerId);
+    const result = await syncInsuranceToRra(organizationId, customerId, {
+      branchId: branchOf(req),
+      userId: (req as any).user?.userId,
+    });
+    if (result.skipped) return res.json(success({ ...result, message: 'Not an insurance customer — skipped' }));
+    return result.success
+      ? res.json(success(result))
+      : res.status(502).json(apiError(result.error ?? 'Insurance push failed'));
+  } catch (e: any) {
+    console.error('[RRA insurance push]', e);
+    res.status(500).json(apiError('Failed to push insurance company to VSDC'));
+  }
+}
+
+/**
+ * CIS §7.26 — auditor overview of software settings and fiscal database state.
+ * GET /organizations/:organizationId/rra/audit-overview
+ */
+export async function getAuditOverview(req: BranchAuthRequest, res: Response) {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const branchId = branchOf(req);
+
+    const [org, branches, settings, cursors, counters, outboxStats, lastSale] = await Promise.all([
+      prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: {
+          id: true,
+          name: true,
+          TIN: true,
+          address: true,
+          trainingMode: true,
+          ebmDeviceId: true,
+          ebmSerialNo: true,
+          lastSuccessfulVdsContact: true,
+        },
+      }),
+      prisma.branch.findMany({
+        where: { organizationId, status: 'ACTIVE', ...(branchId != null ? { id: branchId } : {}) },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          bhfId: true,
+          ebmDeviceId: true,
+          ebmSerialNo: true,
+          vsdcUrl: true,
+          ebmInitializedAt: true,
+          isDefault: true,
+        },
+        orderBy: [{ isDefault: 'desc' }, { id: 'asc' }],
+      }),
+      getOrganizationSettings(organizationId),
+      prisma.rraSyncCursor.findMany({
+        where: { organizationId },
+        select: { resource: true, lastReqDt: true, lastRunAt: true, lastResult: true },
+        orderBy: { resource: 'asc' },
+      }),
+      prisma.vsdcDeviceCounter.findMany({
+        where: { organizationId },
+        select: { deviceKey: true, nextSequence: true, updatedAt: true },
+      }),
+      prisma.ebmOutbox.groupBy({
+        by: ['status'],
+        where: { organizationId },
+        _count: { _all: true },
+      }),
+      prisma.sale.findFirst({
+        where: { organizationId, ...(branchId != null ? { branchId } : {}), status: { in: ['COMPLETED', 'REFUNDED'] } },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, saleNumber: true, invoiceNumber: true, rcptLabel: true, createdAt: true, status: true },
+      }),
+    ]);
+
+    return res.json(success({
+      cis: {
+        appName: config.appName,
+        ebmEnabled: isEbmEnabled(),
+        ebmProtocol: config.ebm.protocol,
+        environment: config.ebm.environment,
+        requestTimeoutMs: config.ebm.requestTimeoutMs,
+      },
+      organization: org,
+      branches,
+      settings: {
+        featureFlags: settings.featureFlags,
+        vatRegistered: settings.vatRegistered,
+        preferences: {
+          timezone: settings.preferences.timezone,
+          dateFormat: settings.preferences.dateFormat,
+          enabledPaymentMethods: settings.preferences.enabledPaymentMethods,
+        },
+      },
+      syncCursors: cursors,
+      invoiceCounters: counters,
+      outboxByStatus: Object.fromEntries(outboxStats.map((r) => [r.status, r._count._all])),
+      lastFiscalSale: lastSale,
+      generatedAt: new Date().toISOString(),
+    }));
+  } catch (e: any) {
+    console.error('[RRA audit overview]', e);
+    res.status(500).json(apiError('Failed to load auditor overview'));
   }
 }

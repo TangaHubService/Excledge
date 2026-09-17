@@ -40,7 +40,14 @@ const createExpense = async (req, res) => {
                 description,
                 reference,
                 expenseDate: new Date(expenseDate),
-                notes
+                notes,
+                // Business rule: expenses are linked to the active shift so the
+                // shift reconciliation can deduct cash-paid expenses from the float.
+                shiftId: req.body.shiftId ? Number(req.body.shiftId) : (await prisma_1.prisma.shift.findFirst({
+                    where: { organizationId: Number(organizationId), userId: Number(userId), status: { in: ['OPEN', 'REOPENED'] } },
+                    orderBy: { openedAt: 'desc' },
+                    select: { id: true },
+                }))?.id,
             }
         });
         // Log activity

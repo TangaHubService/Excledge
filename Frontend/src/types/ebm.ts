@@ -32,6 +32,8 @@ export enum MeasurementUnit {
   OTHER = 'OTHER',
 }
 
+export type ProductType = 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE';
+
 export const MEASUREMENT_UNIT_LABELS: Record<MeasurementUnit, string> = {
   [MeasurementUnit.PCS]: 'Pieces',
   [MeasurementUnit.KG]: 'Kilograms',
@@ -252,6 +254,33 @@ export const ORIGIN_COUNTRY_LABELS: Record<string, string> = {
 
 export const ORIGIN_COUNTRY_OPTIONS = Object.entries(ORIGIN_COUNTRY_LABELS).map(
   ([value, label]) => ({ value, label: `${label} (${value})` }),
+);
+
+/**
+ * Built-in RRA item classification codes (`itemClsCd`) for offline create when
+ * `/itemClass/selectItemsClass` sync is unavailable (VSDC often returns 894
+ * when RRA is unreachable).
+ *
+ * Only 10-digit codes verified against local VSDC `/items/saveItems`
+ * (resultCd 000). Prefer syncing the live list via Fiscal Reports when the
+ * gateway can reach RRA. Unknown codes are rejected with resultCd 910.
+ */
+/** Codes verified against local VSDC `/items/saveItems` (resultCd 000). */
+export const ITEM_CLASSIFICATION_LABELS: Record<string, string> = {
+  '5059690800': 'General merchandise',
+  '5022110801': 'Food products',
+  '5015151300': 'Beverages',
+  '1110170400': 'Soft drinks / beverages',
+  '1110162100': 'Grocery commodities',
+  '1110151600': 'Packaged food',
+  '1110160600': 'Raw / mineral materials',
+  '3026530000': 'Metal bars / construction materials',
+  '5612180500': 'Furniture & fittings materials',
+  '3133130600': 'Non-metallic structural components',
+};
+
+export const ITEM_CLASSIFICATION_OPTIONS = Object.entries(ITEM_CLASSIFICATION_LABELS).map(
+  ([value, label]) => ({ value, label }),
 );
 
 export type EbmOutboxStatus = 'PENDING' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'DEAD_LETTER';

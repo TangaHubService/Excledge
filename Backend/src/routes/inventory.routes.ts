@@ -29,6 +29,8 @@ import { authenticate, authorize } from "../middleware/auth.middleware";
 import { branchAuth } from "../middleware/branchAuth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
 import { requireActiveSubscription } from '../middleware/feature-access.middleware';
+import { validate } from "../middleware/validate.middleware";
+import { createProductSchema, updateProductSchema } from "../validations/products.validation";
 
 const router = Router();
 
@@ -46,6 +48,7 @@ router.post(
   orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
+  validate(createProductSchema),
   createProduct
 );
 router.post(
@@ -62,6 +65,7 @@ router.put(
   orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"),
+  validate(updateProductSchema),
   updateProduct
 );
 

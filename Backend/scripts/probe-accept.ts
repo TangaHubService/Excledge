@@ -10,7 +10,7 @@ async function main() {
   const org = await prisma.organization.findUnique({ where: { id: 2 }, select: { TIN: true, name: true, address: true } });
   if (!sale || !org) { console.log('no sale'); return; }
   const invc = 9100 + Math.floor(Math.random()*900);
-  const p = buildRraSendReceiptPayload(sale as any, org as any, { invcNoOverride: invc });
+  const p = buildRraSendReceiptPayload(sale as any, org as any, '01', { invcNoOverride: invc });
   p.prcOrdCd = '000000';
   (p.receipt as any).custTin = '100000004';
   (p.receipt as any).prchrAcptcYn = process.argv[2] ?? 'Y';

@@ -101,8 +101,9 @@ export function isRefundTransaction(data: RenderInvoicePayload): boolean {
 
 /**
  * CIS/VSDC spec §11: COPY, TRAINING MODE, and PROFORMA must carry the "not an
- * official receipt" notice and repeat their title above SDC INFORMATION — a
- * genuine NORMAL sale/refund (label "" or REFUND) must not.
+ * official receipt" notice. Title/watermark still print at the top of the
+ * document — they are not repeated immediately above SDC INFORMATION.
+ * A genuine NORMAL sale/refund (label "" or REFUND) must not carry the notice.
  */
 export function isFormalNoticeIndicator(indicator: string): boolean {
   return indicator !== "" && indicator !== REFUND_DOCUMENT_LABEL
@@ -325,14 +326,16 @@ export function taxGroups(data: RenderInvoicePayload): TaxGroup[] {
 function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void {
   const currency = safe(data.invoice.currency || data.company.currency, "RWF")
   const currencyLabel = currency.toUpperCase() === "RWF" ? "Rwf" : currency.toUpperCase()
-  const groups = taxGroups(data)
-  const totalTax = groups.reduce((sum, group) => sum + group.tax, 0)
+  // Skip zero-tax bands (e.g. "Total Tax A Rwf 0.00"). Keep B even at 0
+  // (RRA checklist §48 — statutory 18% band must always print).
+  const groups = taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.tax) > 0)
+  const totalTax = taxGroups(data).reduce((sum, group) => sum + group.tax, 0)
+  // One authoritative invoice total. Per-tax-slot SALES totals ("Total A …",
+  // "Total B …") are deliberately not printed: they duplicate the grand total
+  // sliced by tax band and were mistaken for the amount due. The per-band TAX
+  // rows below carry the RRA-required tax breakdown instead.
   const rows: Array<[string, number | string]> = [[`Total ${currencyLabel}`, data.totals.grandTotal]]
   for (const group of groups) {
-    const groupLabel = /^[A-D]$/.test(group.code)
-      ? `${group.code}-${formatInvoiceQuantity(group.rate)}%`
-      : group.code
-    rows.push([`Total ${groupLabel} ${currencyLabel}`, group.total])
     rows.push([`Total Tax ${group.code} ${currencyLabel}`, group.tax])
   }
   rows.push([`Total Tax ${currencyLabel}`, totalTax])
@@ -363,60 +366,48 @@ function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void 
 function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void {
   const sdc = data.sdcInformation
   // Proforma and training-mode slips carry no VSDC signature, but the printout
-  // must still show the transaction's date/time and receipt number under SDC
-  // INFORMATION (spec §16/§17 worked examples) — fall back to the invoice-level
-  // values whenever the fiscal-specific fields are absent.
+  // must still show the transaction's date/time and receipt number — fall back
+  // to the invoice-level values whenever the fiscal-specific fields are absent.
   const sdcDate = formatInvoiceDateTime(sdc.sdcDateTime || sdc.date || data.invoice.invoiceDate)
   const sdcReceiptNo = safe(sdc.receiptNumber) || safe(data.invoice.receiptNumber)
   const invoiceDate = formatInvoiceDateTime(data.invoice.invoiceDate)
   const indicator = documentIndicator(data)
-  const isTraining = indicator === TRAINING_MODE_LABEL
-  const isProforma = indicator === "PROFORMA"
   const lines = [
-    sdcDate.date || sdcDate.time ? `Date: ${sdcDate.date}${sdcDate.time ? ` Time: ${sdcDate.time}` : ""}` : "",
-    sdc.sdcId ? `SDC ID: ${safe(sdc.sdcId)}` : "",
-    sdcReceiptNo ? `RECEIPT NUMBER: ${sdcReceiptNo}` : "",
-    sdc.internalData ? `Internal Data: ${groupFiscalValue(sdc.internalData)}` : "",
-    sdc.receiptSignature ? `Receipt Signature: ${groupFiscalValue(sdc.receiptSignature)}` : "",
+    sdcDate.date || sdcDate.time ? `Date: ${sdcDate.date}   ${sdcDate.time}` : "",
+    sdc.sdcId ? `SDC ID : ${safe(sdc.sdcId)}` : "",
+    sdcReceiptNo ? `RECEIPT NUMBER : ${sdcReceiptNo}` : "",
+    sdc.internalData ? `Internal Data:${groupFiscalValue(sdc.internalData)}` : "",
+    sdc.receiptSignature ? `Receipt Signature:${groupFiscalValue(sdc.receiptSignature)}` : "",
   ].filter(Boolean)
 
   doc.fillColor("#000000").font(FONT).fontSize(5.2)
 
-  // §11/§15-17: COPY repeats its title once more directly above SDC
-  // INFORMATION. TRAINING MODE and PROFORMA already print once at the top of
-  // the receipt (Warranted Function 5/18) — repeating either here is redundant.
-  let sdcTop = 650
-  if (isFormalNoticeIndicator(indicator) && !isTraining && !isProforma) {
-    doc.moveTo(LEFT, sdcTop).lineTo(176, sdcTop).dash(2, { space: 1.5 }).stroke().undash()
-    doc.font(FONT_BOLD).fontSize(5.6).text(indicator, LEFT, sdcTop + 3, { width: 151, align: "center", characterSpacing: 0.5 })
-    sdcTop += 12
-    doc.font(FONT).fontSize(5.2)
-  }
+  // Start below the "not official" notice block when present so we don't
+  // stack a second divider on top of the notice's closing line.
+  const hasNotice = isFormalNoticeIndicator(indicator) || !data.certification.isCertified
+  let sdcTop = hasNotice ? 658 : 650
 
-  doc.text("SDC INFORMATION", LEFT, sdcTop, { width: 226 })
-  doc.moveTo(LEFT, sdcTop + 9).lineTo(176, sdcTop + 9).dash(2, { space: 1.5 }).stroke().undash()
-  let y = sdcTop + 14
+  // RRA sample heading — single divider under it (no COPY reprint above).
+  doc.font(FONT_BOLD).fontSize(5.4).text("SDC INFORMATION", LEFT, sdcTop, {
+    width: 230,
+    height: 10,
+    ellipsis: true,
+  })
+  doc.moveTo(LEFT, sdcTop + 11).lineTo(176, sdcTop + 11).dash(2, { space: 1.5 }).stroke().undash()
+  let y = sdcTop + 15
+  doc.font(FONT).fontSize(5.2)
   for (const line of lines) {
     const lineHeight = Math.max(8, doc.heightOfString(line, { width: 230 }))
     doc.text(line, LEFT, y, { width: 230, height: lineHeight, ellipsis: true })
     y += lineHeight + 2
   }
 
-  // No repeated "RECEIPT NUMBER" here — it already shows once above (SDC
-  // block) and the invoice number already shows once in the header ("INVOICE
-  // NO"). Repeating either here just prints a duplicate value under a
-  // different label — most confusing for proforma/training, which have no
-  // real VSDC number sitting between the two to visually break the pattern.
+  // Bottom block: same as RRA sample — "RECEIPT NUMBER:8" (VSDC invcNo),
+  // not the SDC A/B counter printed above.
   const extraLines = [
-    invoiceDate.date ? `Date: ${invoiceDate.date}${data.invoice.time ? ` Time: ${safe(data.invoice.time)}` : ""}` : "",
-    sdc.mrcNo ? `MRC: ${safe(sdc.mrcNo)}` : "",
-    // Proforma and training-mode slips share the same non-fiscal SDC
-    // INFORMATION block: they repeat the SDC ID here instead of the software
-    // version. §21 still requires the software version on every other (real)
-    // receipt type.
-    isProforma || isTraining
-      ? (sdc.sdcId ? `SDC ID: ${safe(sdc.sdcId)}` : "")
-      : (sdc.softwareVersion ? safe(sdc.softwareVersion) : ""),
+    `RECEIPT NUMBER:${safe(data.invoice.invoiceNumber, "-")}`,
+    invoiceDate.date ? `Date : ${invoiceDate.date}   ${data.invoice.time ? safe(data.invoice.time) : invoiceDate.time}` : "",
+    (sdc.mrcNo || data.company.mrc) ? `MRC : ${safe(sdc.mrcNo || data.company.mrc)}` : "",
   ].filter(Boolean)
   if (extraLines.length) {
     doc.moveTo(LEFT, y + 1).lineTo(176, y + 1).dash(2, { space: 1.5 }).stroke().undash()
@@ -433,19 +424,21 @@ function drawFinalFooter(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): v
   // NORMAL sale/refund falls back to it too since it isn't official yet either.
   if (isFormalNoticeIndicator(documentIndicator(data)) || !data.certification.isCertified) {
     doc.moveTo(LEFT, 625).lineTo(RIGHT, 625).dash(2, { space: 1.5 }).stroke().undash()
-    doc.font(FONT_BOLD).fontSize(7.5).text(NOT_OFFICIAL_RECEIPT_NOTICE, LEFT, 630, {
+    // CIS §11: "THIS IS NOT AN OFFICIAL RECEIPT" must be at least twice the
+    // amount text size (amount lines use ~6–7.5 pt → notice ≥ 14–15 pt).
+    doc.font(FONT_BOLD).fontSize(15).text(NOT_OFFICIAL_RECEIPT_NOTICE, LEFT, 628, {
       width: RIGHT - LEFT,
       align: "center",
       characterSpacing: 0.3,
     })
     if (data.invoice.notFiscalized) {
-      doc.font(FONT_BOLD).fontSize(6).text(NOT_FISCALIZED_NOTICE, LEFT, 638, {
+      doc.font(FONT_BOLD).fontSize(6).text(NOT_FISCALIZED_NOTICE, LEFT, 644, {
         width: RIGHT - LEFT,
         align: "center",
         characterSpacing: 0.2,
       })
     }
-    doc.moveTo(LEFT, 642).lineTo(RIGHT, 642).dash(2, { space: 1.5 }).stroke().undash()
+    doc.moveTo(LEFT, 652).lineTo(RIGHT, 652).dash(2, { space: 1.5 }).stroke().undash()
   }
 
   drawFiscalInformation(doc, data)
@@ -464,25 +457,11 @@ function drawFinalFooter(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): v
 }
 
 /**
- * Big translucent diagonal "NOT FISCALISED" stamp across a page, drawn for a
- * real sale a user downloaded before VSDC confirmed it. Drawn in A4 coordinate
- * space (the caller applies the A5 scale transform), on top of the content so
- * it can't be missed or cropped out.
+ * Big translucent diagonal stamp — kept as a thin wrapper for callers/tests
+ * that still reference the older name.
  */
 function drawNotFiscalizedWatermark(doc: PDFKit.PDFDocument): void {
-  doc.save()
-  doc.rotate(-33, { origin: [PAGE_WIDTH / 2, PAGE_HEIGHT / 2] })
-  doc
-    .font(FONT_BOLD)
-    .fontSize(52)
-    .fillColor("#D32F2F")
-    .opacity(0.16)
-    .text(NOT_FISCALIZED_TITLE, PAGE_WIDTH / 2 - 360, PAGE_HEIGHT / 2 - 34, {
-      width: 720,
-      align: "center",
-      characterSpacing: 2,
-    })
-  doc.opacity(1).fillColor("#000000").restore()
+  drawDiagonalWatermark(doc, NOT_FISCALIZED_TITLE, PAGE_WIDTH, PAGE_HEIGHT, "#D32F2F")
 }
 
 /**
@@ -542,10 +521,41 @@ export async function generateEbmInvoicePdf(
     drawHeader(doc, data, companyLogo, certificationLogo, index + 1, pages.length)
     drawTable(doc, lines, finalPage)
     if (finalPage) drawFinalFooter(doc, data)
-    if (data.invoice.notFiscalized) drawNotFiscalizedWatermark(doc)
     doc.restore()
+    // Watermarks drawn AFTER restore so they span the physical page.
+    const indicator = documentIndicator(data)
+    if (data.invoice.notFiscalized) drawDiagonalWatermark(doc, NOT_FISCALIZED_TITLE, sheetW, sheetH, "#D32F2F")
+    else if (indicator === "COPY" || indicator === TRAINING_MODE_LABEL || indicator === "PROFORMA") {
+      drawDiagonalWatermark(doc, indicator, sheetW, sheetH, "#424242")
+    }
   })
 
   doc.end()
   return output
+}
+
+/**
+ * CIS §11 / §15–17: large diagonal watermark for COPY, TRAINING, PROFORMA
+ * (and NOT FISCALISED). Drawn across the physical page so it cannot be missed.
+ */
+function drawDiagonalWatermark(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  pageW: number,
+  pageH: number,
+  color: string,
+): void {
+  doc.save()
+  doc.rotate(-33, { origin: [pageW / 2, pageH / 2] })
+  doc
+    .font(FONT_BOLD)
+    .fontSize(Math.max(36, Math.min(56, pageW * 0.09)))
+    .fillColor(color)
+    .opacity(0.14)
+    .text(text, pageW / 2 - pageW * 0.55, pageH / 2 - 34, {
+      width: pageW * 1.1,
+      align: "center",
+      characterSpacing: 2,
+    })
+  doc.opacity(1).fillColor("#000000").restore()
 }

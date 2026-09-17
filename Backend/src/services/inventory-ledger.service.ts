@@ -79,6 +79,7 @@ export interface AddStockParams {
    * would double-count.
    */
   skipEbmSync?: boolean;
+  batchId?: number | null;
   tx?: any; // Optional transaction client for use within existing transactions
 }
 

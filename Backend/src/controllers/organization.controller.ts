@@ -366,15 +366,19 @@ export const updateOrgSettings = async (req: Request, res: Response) => {
       }
     }
 
-    const { sidebarConfig, featureFlags, preferences } = req.body ?? {};
+    const { sidebarConfig, featureFlags, preferences, ebmConfig } = req.body ?? {};
     const patch: OrganizationSettingsPatch = {};
 
-    for (const [key, value] of Object.entries({ sidebarConfig, featureFlags, preferences })) {
+    for (const [key, value] of Object.entries({ sidebarConfig, featureFlags, preferences, ebmConfig })) {
       if (value === undefined) continue;
-      if (!isPlainPatchObject(value)) {
+      if (!isPlainPatchObject(value) && key !== "ebmConfig") {
         return res.status(400).json({ error: `${key} must be an object` });
       }
-      (patch as Record<string, unknown>)[key] = value;
+      if (key === "ebmConfig") {
+        patch.ebmConfig = value as OrganizationSettingsPatch["ebmConfig"];
+      } else {
+        (patch as Record<string, unknown>)[key] = value;
+      }
     }
 
     const settings = await upsertOrganizationSettings(organizationId, patch);

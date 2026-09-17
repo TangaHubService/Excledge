@@ -11,6 +11,7 @@ import {
   getEbmReceipt,
   getInvoice,
   getInvoicePdf,
+  getLastReceipt,
   updateProforma,
   convertProforma,
 } from "../controllers/sales.controller";
@@ -20,7 +21,7 @@ import { requireOrganizationAccess } from "../middleware/organizationAccess.midd
 import { requireActiveSubscription } from '../middleware/feature-access.middleware';
 import { vsdcOnlineGuard } from "../middleware/vsdc-offline-guard.middleware";
 import { validate } from "../middleware/validate.middleware";
-import { createSaleSchema, cancelSaleSchema, updateProformaSchema, convertProformaSchema } from "../validations/sales.validation";
+import { createSaleSchema, cancelSaleSchema, refundSaleSchema, updateProformaSchema, convertProformaSchema } from "../validations/sales.validation";
 import {
   initiateMobileMoneyPayment,
   getMobileMoneyPaymentStatus,
@@ -83,6 +84,16 @@ router.get(
   getSales
 );
 
+// CIS §7.28 — last finalized receipt for power/paper recovery reprint
+router.get(
+  "/:organizationId/last-receipt",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  getLastReceipt
+);
+
 // Edit a proforma's line items / customer (only before it is converted)
 router.put(
   "/:organizationId/:saleId/proforma",
@@ -133,6 +144,7 @@ router.post(
   orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  validate(refundSaleSchema),
   refundSale
 );
 

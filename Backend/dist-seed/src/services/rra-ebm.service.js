@@ -1,28 +1,30 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.TAX_RATE_BY_SLOT = exports.RRA_TIN_PATTERN = exports.PurchaseCodeMissingError = void 0;
 exports.gatewayErrorMessage = gatewayErrorMessage;
 exports.isEbmEnabled = isEbmEnabled;
 exports.parseGatewayResponse = parseGatewayResponse;
 exports.consumeOrgPurchaseCode = consumeOrgPurchaseCode;
-exports.postToGateway = postToGateway;
+exports.consumeAnyOrgPurchaseCode = consumeAnyOrgPurchaseCode;
 exports.toRraDate = toRraDate;
 exports.toRraTime = toRraTime;
 exports.toRraDateTime = toRraDateTime;
 exports.fix2 = fix2;
 exports.clampField = clampField;
+exports.isValidRraTin = isValidRraTin;
+exports.walkInCustTin = walkInCustTin;
+exports.effectiveBuyerTin = effectiveBuyerTin;
+exports.resolveCustTinForVsdc = resolveCustTinForVsdc;
 exports.buildRraSendReceiptPayload = buildRraSendReceiptPayload;
 exports.generateInvoiceNumber = generateInvoiceNumber;
-exports.submitInvoiceToEbm = submitInvoiceToEbm;
-exports.submitRefundToEbm = submitRefundToEbm;
-exports.submitVoidToEbm = submitVoidToEbm;
-exports.queueInvoiceForEbm = queueInvoiceForEbm;
-exports.processEbmQueueBatch = processEbmQueueBatch;
+exports.allocateLocalReceiptSequence = allocateLocalReceiptSequence;
 const prisma_1 = require("../lib/prisma");
 const config_1 = require("../config");
-const vsdc_api_service_1 = require("./vsdc-api.service");
-const rra_osdc_service_1 = require("./rra-osdc.service");
+const purchase_code_checksum_1 = require("./purchase-code.checksum");
+const item_code_service_1 = require("./item-code.service");
+const customers_validation_1 = require("../validations/customers.validation");
+const rra_code_service_1 = require("./rra-code.service");
 let invoiceSequenceMode = 'unknown';
-let loggedLegacyInvoiceFallback = false;
 function gatewayErrorMessage(http, fallback) {
     if (http.json && typeof http.json === 'object') {
         const rec = http.json;
@@ -32,26 +34,8 @@ function gatewayErrorMessage(http, fallback) {
     }
     return fallback;
 }
-function isQueuePayloadV2(p) {
-    return (typeof p === 'object' &&
-        p !== null &&
-        p.version === 2 &&
-        typeof p.saleId === 'number' &&
-        typeof p.organizationId === 'number');
-}
 function isEbmEnabled() {
     return config_1.config.ebm.enabled === true;
-}
-function authHeader() {
-    const { apiKey, apiSecret } = config_1.config.ebm;
-    if (apiKey && apiSecret) {
-        const token = Buffer.from(`${apiKey}:${apiSecret}`, 'utf8').toString('base64');
-        return `Basic ${token}`;
-    }
-    if (apiKey) {
-        return `Bearer ${apiKey}`;
-    }
-    return undefined;
 }
 function parseGatewayResponse(raw) {
     if (!raw || typeof raw !== 'object') {
@@ -181,58 +165,106 @@ async function allocateNextInvoiceSequence(organizationId, branchId, client = pr
 /**
  * Consume the next unused RRA purchase code from the organization's pool for a
  * given buyer TIN, atomically (within the sale transaction when `client` is a tx).
- * Returns the code, or null when no unconsumed code remains (caller falls back
- * to the legacy per-customer `prcOrdCd`).
+ * Only codes that pass the sandbox checksum for `buyerTin` are handed out — the
+ * pool may still contain legacy invalid codes, and allocating one would be
+ * rejected by the device with 882. Returns the code, or null when no valid
+ * unconsumed code remains (caller falls back to the legacy per-customer
+ * `prcOrdCd`).
  */
 async function consumeOrgPurchaseCode(organizationId, buyerTin, saleId, client = prisma_1.prisma) {
-    const next = await client.organizationPurchaseCode.findFirst({
+    const org = await prisma_1.prisma.organization.findUnique({ where: { id: organizationId }, select: { TIN: true } });
+    const sellerTin = org?.TIN?.trim() ?? '';
+    const candidates = await client.organizationPurchaseCode.findMany({
         where: { organizationId, buyerTin, consumed: false },
         orderBy: { id: 'asc' },
+        take: 100,
     });
-    if (!next)
-        return null;
-    await client.organizationPurchaseCode.update({
-        where: { id: next.id },
-        data: { consumed: true, consumedSaleId: saleId, consumedAt: new Date() },
-    });
-    return next.code;
-}
-async function postToGateway(path, body) {
-    const base = config_1.config.ebm.apiUrl;
-    const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), config_1.config.ebm.requestTimeoutMs);
-    try {
-        const headers = {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-        };
-        const auth = authHeader();
-        if (auth) {
-            headers.Authorization = auth;
+    for (const next of candidates) {
+        if (sellerTin && !(0, purchase_code_checksum_1.isValidPurchaseCode)(next.code, buyerTin, sellerTin)) {
+            continue;
         }
-        if (config_1.config.ebm.securityKey) {
-            headers['security_key'] = config_1.config.ebm.securityKey;
-        }
-        const res = await fetch(url, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(body),
-            signal: controller.signal,
+        await client.organizationPurchaseCode.update({
+            where: { id: next.id },
+            data: { consumed: true, consumedSaleId: saleId, consumedAt: new Date() },
         });
-        const rawText = await res.text();
-        let json = null;
-        try {
-            json = rawText ? JSON.parse(rawText) : null;
-        }
-        catch {
-            json = null;
-        }
-        return { ok: res.ok, status: res.status, json, rawText };
+        return next.code;
     }
-    finally {
-        clearTimeout(t);
+    return null;
+}
+/**
+ * Thrown when a fiscal payload cannot be built because no RRA purchase order
+ * code is on record. Unlike malformed data (dead-letter immediately), a
+ * missing code is TRANSIENT — the operator can top the pool up and the retry
+ * will succeed — so the outbox worker backs this off with retries instead of
+ * dead-lettering on the first miss.
+ */
+class PurchaseCodeMissingError extends Error {
+    constructor(saleRef, custTin) {
+        super(`Cannot build Sale ${saleRef} to RRA: no RRA purchase order code (prcOrdCd) on the sale, the customer, or the organization pool. ` +
+            `Top up the pool for buyer TIN ${custTin} before retrying.`);
+        this.name = 'PurchaseCodeMissingError';
     }
+}
+exports.PurchaseCodeMissingError = PurchaseCodeMissingError;
+/**
+ * Consume the next unused RRA purchase code from the organization's pool for
+ * the given buyer TIN, atomically (within the sale transaction when `client`
+ * is a tx). Strictly buyer-scoped: a code pooled for buyer A must never be
+ * submitted for buyer B — the sandbox checksum binds each code to its buyer
+ * TIN and rejects cross-buyer codes with 882 (verified live). Returns the
+ * code, or null when no valid unconsumed code remains for this buyer (the
+ * caller fails with an actionable top-up message instead of submitting a
+ * placeholder the sandbox will reject).
+ */
+async function consumeAnyOrgPurchaseCode(organizationId, saleId, client = prisma_1.prisma, buyerTin) {
+    const org = await prisma_1.prisma.organization.findUnique({ where: { id: organizationId }, select: { TIN: true } });
+    const sellerTin = org?.TIN?.trim() ?? '';
+    // Strictly buyer-scoped: only codes pooled for THIS buyer TIN are ever
+    // handed out. A code generated for another buyer carries that buyer's
+    // checksum and is rejected by the device with 882.
+    const targetTin = buyerTin?.trim() || '';
+    if (!targetTin)
+        return null;
+    let candidates = await client.organizationPurchaseCode.findMany({
+        where: { organizationId, buyerTin: targetTin, consumed: false },
+        orderBy: { id: 'asc' },
+        take: 100,
+    });
+    // Sandbox/dev resilience: outside production there are no buyer devices to
+    // issue real purchase codes, so mint buyer-scoped single-use codes on demand
+    // (the same stand-ins scripts/topup-purchase-codes.ts creates manually).
+    // Production NEVER mints codes: real B2B codes arrive through procurement
+    // and a dry pool there must surface as an actionable top-up error instead.
+    if (!candidates.length && sellerTin && (config_1.config.ebm.environment ?? 'sandbox') !== 'production') {
+        const existing = await client.organizationPurchaseCode.findMany({
+            where: { organizationId },
+            select: { code: true },
+            take: 20000,
+        });
+        const minted = (0, purchase_code_checksum_1.generateValidPurchaseCodes)(targetTin, sellerTin, 10, new Set(existing.map((r) => r.code)));
+        if (minted.length) {
+            await client.organizationPurchaseCode.createMany({
+                data: minted.map((code) => ({ organizationId, code, buyerTin: targetTin })),
+                skipDuplicates: true,
+            });
+            candidates = await client.organizationPurchaseCode.findMany({
+                where: { organizationId, buyerTin: targetTin, consumed: false },
+                orderBy: { id: 'asc' },
+                take: 100,
+            });
+        }
+    }
+    for (const next of candidates) {
+        if (sellerTin && !(0, purchase_code_checksum_1.isValidPurchaseCode)(next.code, targetTin, sellerTin)) {
+            continue;
+        }
+        await client.organizationPurchaseCode.update({
+            where: { id: next.id },
+            data: { consumed: true, consumedSaleId: saleId, consumedAt: new Date() },
+        });
+        return next.code;
+    }
+    return null;
 }
 // ──────────────────────────────────────────────
 // C4: RRA-canonical date/amount helpers (CIS/VSDC spec §3.2)
@@ -268,21 +300,81 @@ function clampField(value, maxLength) {
  * used for the printed A/B/RT counter, not for this field — every label ends
  * in 'S' or 'R', which is exactly the axis VSDC cares about here.
  */
+/**
+ * VSDC §4.9 Sales Receipt Type only has two values: 'S' (Sale) and 'R' (Refund
+ * after Sale). The CIS-level NS/NR/CS/CR/TS/TR/PS distinction (rcptLabel) is
+ * used for the printed A/B/RT counter, not for this field — every label ends
+ * in 'S' or 'R', which is exactly the axis VSDC cares about here.
+ */
 function rcptTyCdFromLabel(label) {
     return label?.endsWith('R') ? 'R' : 'S';
 }
-/** VSDC §4.10 Payment Method codes. */
-function pmtTypeCd(paymentType) {
-    switch (paymentType) {
-        case 'CASH': return '01'; // CASH
-        case 'CREDIT_CARD': return '05'; // DEBIT&CREDIT CARD
-        case 'MOBILE_MONEY': return '06'; // MOBILE MONEY
-        case 'INSURANCE': return '07'; // OTHER
-        default: return '03'; // CASH/CREDIT
+/** RRA TIN shape accepted by the VSDC (`receipt.custTin` + `custTin` must both
+ * pass it — verified live: the sandbox rejects 7-prefix, all-zero and short
+ * values with resultCd 910, and rejects empty with 910). */
+exports.RRA_TIN_PATTERN = /^[19]\d{8}$/;
+function isValidRraTin(tin) {
+    return exports.RRA_TIN_PATTERN.test((tin ?? '').trim());
+}
+/**
+ * Walk-in (no-TIN individual) buyer TIN for VSDC submission.
+ *
+ * The sandbox mandates a valid-format `custTin` on every receipt (resultCd
+ * 881/910/884 otherwise), so a retail sale to a customer without a registered
+ * TIN cannot be submitted at all without one. This derives a deterministic,
+ * per-customer value in the RRA individual range — it is a submission
+ * placeholder, NOT the customer's real TIN: it is never written back to the
+ * customer record and never printed on the customer-facing receipt (which
+ * shows the customer's actual TIN, blank for walk-ins).
+ *
+ * PRODUCTION RISK (see final report §H): confirm with RRA whether B2C
+ * receipts require the buyer's real TIN, a designated walk-in TIN, or another
+ * marker. Business (CORPORATE/INSURANCE) buyers without a valid TIN are
+ * always rejected below instead of receiving a placeholder.
+ */
+function walkInCustTin(customerId) {
+    return `1${String(customerId).padStart(8, '0')}`.slice(0, 9);
+}
+/**
+ * The buyer TIN under which purchase codes are pooled/allocated for a sale:
+ * the stored customer TIN when it is valid, otherwise the same resolved
+ * value submitted as custTin (walk-in placeholder for individuals). Falls
+ * back to the stored value when nothing resolves, so callers always get a
+ * string and the payload builder still raises the precise error.
+ */
+function effectiveBuyerTin(sale) {
+    const stored = sale.customer?.TIN?.trim() ?? '';
+    if (isValidRraTin(stored))
+        return stored;
+    try {
+        return resolveCustTinForVsdc(sale);
+    }
+    catch {
+        return stored;
     }
 }
+/**
+ * Resolve the `custTin` to submit for a sale. Throws a descriptive error when
+ * no submittable TIN exists (business buyers without a valid TIN, or a sale
+ * with no customer at all) so the outbox dead-letters with an actionable
+ * message instead of sending a fake value.
+ */
+function resolveCustTinForVsdc(sale) {
+    const customerTin = sale.customer?.TIN?.trim() ?? '';
+    if (isValidRraTin(customerTin))
+        return customerTin;
+    const customerType = (sale.customer?.customerType ?? 'INDIVIDUAL').toUpperCase();
+    if (customerType !== 'INDIVIDUAL') {
+        throw new Error(`Cannot fiscalize Sale ${sale.saleNumber ?? sale.id}: ${customerType} customer "${sale.customer?.name ?? '?'}" has no valid 9-digit RRA TIN. ` +
+            `Register the customer's real TIN (verify via /rra/customers/:tin) before submitting.`);
+    }
+    if (!sale.customer) {
+        throw new Error(`Cannot fiscalize Sale ${sale.saleNumber ?? sale.id}: no customer on record and no valid TIN to submit.`);
+    }
+    return walkInCustTin(sale.customer.id);
+}
 /** VSDC §4.1 Tax Type rates — static, RRA-defined: A 0%, B 18%, C 0%, D 0%. */
-const TAX_RATE_BY_SLOT = [0, 18, 0, 0];
+exports.TAX_RATE_BY_SLOT = [0, 18, 0, 0];
 /**
  * Build the RRA VSDC API v1.0.5 `/trnsSales/saveSales` payload
  * (`TrnsSalesSaveWrReq`, §3.3.6.1). `tin`/`bhfId` are added by the caller from
@@ -292,7 +384,7 @@ const TAX_RATE_BY_SLOT = [0, 18, 0, 0];
  * separate endpoint, it's another sales-transaction record referencing the
  * original invoice via `orgInvcNo` with `rfdDt`/`rfdRsnCd` set.
  */
-function buildRraSendReceiptPayload(sale, org, opts = {}) {
+function buildRraSendReceiptPayload(sale, org, rraPaymentCode, opts = {}) {
     const rcptTyCd = rcptTyCdFromLabel(sale.rcptLabel);
     const isRefund = rcptTyCd === 'R';
     const isVoid = !!opts.cnclDt;
@@ -300,6 +392,28 @@ function buildRraSendReceiptPayload(sale, org, opts = {}) {
     const taxblAmt = [0, 0, 0, 0];
     const taxAmt = [0, 0, 0, 0];
     const codeToSlot = { A: 0, B: 1, C: 2, D: 3 };
+    // Pharmacy insurance line fields (TrnsSalesSaveWrItem isrcc*/isrc*). Only
+    // populate when the buyer is a registered insurer (CustomerType.INSURANCE +
+    // isrccCd previously pushed via /branches/saveBrancheInsurances). RRA rejects
+    // unknown isrccCd with resultCd 913 — never invent codes.
+    const insurerCd = (sale.customer?.isrccCd ?? '').trim();
+    const insuranceAmtTotal = Math.abs(Number(sale.insuranceAmount ?? 0));
+    const insuranceActive = insuranceAmtTotal > 0
+        && sale.customer?.customerType === 'INSURANCE'
+        && !!insurerCd;
+    const insurerNm = insuranceActive ? (sale.customer?.name ?? null) : null;
+    const insurerRt = insuranceActive && sale.customer?.isrcRt != null
+        ? Number(sale.customer.isrcRt)
+        : null;
+    // Prefer products flagged useInsurance; if none are flagged, spread across all lines.
+    const anyFlagged = sale.saleItems.some((si) => si.product?.useInsurance === true);
+    const insuranceBaseTotal = sale.saleItems.reduce((s, si) => {
+        if (!insuranceActive)
+            return s;
+        if (anyFlagged && si.product?.useInsurance !== true)
+            return s;
+        return s + Math.abs(Number(si.totalPrice));
+    }, 0);
     const itemList = sale.saleItems.map((si, idx) => {
         const rawCode = (si.taxCode ?? 'A').toUpperCase();
         const slot = codeToSlot[rawCode];
@@ -309,23 +423,80 @@ function buildRraSendReceiptPayload(sale, org, opts = {}) {
         // VSDC (RRA reference implementation) uses tax-inclusive quantities: the
         // supply/taxable amount is the gross unit price × quantity, and the VAT is
         // extracted from it (taxAmt = grossAmount × rate/(100+rate)).
-        const splyAmt = fix2(si.quantity * si.unitPrice.toNumber());
-        const tAmt = fix2(si.taxAmount.toNumber());
+        //
+        // Refunds store negative amounts (the controller mirrors the original sale
+        // with negated totals), but the RRA sandbox validates each line as
+        // `dcAmt <= splyAmt` etc. against POSITIVE amounts and rejects negative
+        // supply amounts with resultCd 910. A refund document is a fresh positive
+        // sales-transaction record marked `salesSttsCd=05` (see §4.11/§4.16), so
+        // abs() every amount and quantity when building a refund payload.
+        const qty = Math.abs(Number(si.quantity));
+        const prc = Math.abs(si.unitPrice.toNumber());
+        const splyAmt = fix2(qty * prc);
+        const tAmt = Math.abs(fix2(si.taxAmount.toNumber()));
         taxblAmt[slot] = fix2(taxblAmt[slot] + splyAmt);
         taxAmt[slot] = fix2(taxAmt[slot] + tAmt);
+        // Sales are always rung up per individual unit (qty), never per whole
+        // package. `pkg` is RRA's package count for the line, so when the product
+        // declares how many units make up one package, convert; a partial package
+        // still rounds up to 1, since RRA has no concept of a fractional package.
+        // Products without packagingQty (most of the catalog today) fall back to
+        // the historical 1 pkg == 1 unit behavior.
+        const packagingQty = si.product?.packagingQty ?? null;
+        const pkg = packagingQty && packagingQty > 0 ? Math.ceil(qty / packagingQty) : qty;
+        // Catalog products/services without an RRA itemCd can never be sold
+        // fiscally. Ad-hoc service lines (no productId) use a synthetic SVC-n
+        // code, but still require itemClsCd below — VSDC rejects empty class.
+        const itemCd = si.product?.itemCd ?? (si.productId != null ? null : `SVC-${idx + 1}`);
+        if (!itemCd) {
+            throw new Error(`Cannot build Sale ${sale.saleNumber ?? sale.id} to RRA: product #${si.productId} has no RRA item code (itemCd). ` +
+                `Open the product and save it so an itemCd is allocated, then sync it via POST /rra/items/:productId/sync.`);
+        }
+        // RRA code classes 10/17: the sandbox rejects unknown unit codes with
+        // resultCd 913, so stored codes are accepted only when they are real RRA
+        // codes — otherwise fall back to the measurement-unit derivation / 'CT'.
+        const pkgUnitCd = (0, rra_code_service_1.resolvePkgUnitCd)(si.product?.pkgUnitCd);
+        const qtyUnitCd = (0, rra_code_service_1.resolveQtyUnitCd)(si.product?.qtyUnitCd, si.measurementUnit ?? null, item_code_service_1.deriveQtyUnitCd);
+        // Prefer RRA classification from the product — never invent a UNSPSC code.
+        // Required for SERVICE as well as PRODUCT (VSDC ItemSaveReq / TrnsSalesSaveWrReq).
+        const itemClsCd = si.product?.itemClsCd?.trim() || null;
+        if (!itemClsCd) {
+            const label = si.productId != null
+                ? `product #${si.productId}`
+                : `service line ${idx + 1}${si.serviceName ? ` (${si.serviceName})` : ''}`;
+            throw new Error(`Cannot build Sale ${sale.saleNumber ?? sale.id} to RRA: ${label} has no RRA item classification (itemClsCd). ` +
+                `Select a classification on the catalog item (services included), re-sync to RRA, then retry the outbox row.`);
+        }
         return {
             itemSeq: idx + 1,
-            itemCd: si.product?.itemCd ?? `P${si.productId ?? idx + 1}`,
-            itemClsCd: si.product?.itemClsCd ?? '5020230302',
-            itemNm: si.product?.name ?? 'Item',
-            pkg: si.quantity,
-            pkgUnitCd: si.product?.pkgUnitCd ?? 'CT',
-            qty: si.quantity,
-            qtyUnitCd: si.product?.qtyUnitCd ?? 'U',
-            prc: fix2(si.unitPrice.toNumber()),
+            itemCd,
+            itemClsCd,
+            itemNm: si.product?.name ?? si.serviceName ?? 'Item',
+            bcd: si.product?.barcode ?? null,
+            pkg,
+            pkgUnitCd,
+            qty,
+            qtyUnitCd,
+            prc,
             splyAmt: fix2(splyAmt),
-            dcRt: fix2(si.dcRate.toNumber()),
-            dcAmt: fix2(si.dcAmt.toNumber()),
+            dcRt: fix2(Math.abs(si.dcRate.toNumber())),
+            dcAmt: fix2(Math.abs(si.dcAmt.toNumber())),
+            // Insurance line fields — populated only for registered pharmacy insurers.
+            ...(() => {
+                if (!insuranceActive || insuranceBaseTotal <= 0) {
+                    return { isrccCd: null, isrccNm: null, isrcRt: null, isrcAmt: null };
+                }
+                if (anyFlagged && si.product?.useInsurance !== true) {
+                    return { isrccCd: null, isrccNm: null, isrcRt: null, isrcAmt: null };
+                }
+                const share = Math.abs(Number(si.totalPrice)) / insuranceBaseTotal;
+                return {
+                    isrccCd: insurerCd,
+                    isrccNm: insurerNm,
+                    isrcRt: insurerRt,
+                    isrcAmt: fix2(insuranceAmtTotal * share),
+                };
+            })(),
             taxTyCd: rawCode,
             taxblAmt: fix2(splyAmt),
             taxAmt: fix2(tAmt),
@@ -334,44 +505,52 @@ function buildRraSendReceiptPayload(sale, org, opts = {}) {
     });
     const totTaxAmt = fix2(taxAmt.reduce((s, v) => s + v, 0));
     const totTaxblAmt = fix2(taxblAmt.reduce((s, v) => s + v, 0));
-    const totAmt = fix2(sale.totalAmount.toNumber());
+    const totAmt = fix2(Math.abs(sale.totalAmount.toNumber()));
     const now = sale.createdAt;
-    // RRA requires a customer TIN on every fiscal receipt. When the customer has
-    // no registered TIN (e.g. walk-in retail), we do NOT fall back to the seller's
-    // own TIN — that org TIN is usually a business (non-7-prefix) TIN, which would
-    // silently convert the sale into a B2B transaction demanding a RRA purchase
-    // code. Retail plants issue receipts to individuals, so we synthesize an
-    // individual TIN from the customer id (§4.6 custTin/custNm).
-    // NOTE: 1-prefix (not 7) — the RRA sandbox WAR v3.0.2 validates receip
-    // custTin against `^[1,9]\d{8}$`, rejecting 7-prefix with resultCd 910.
-    const customerTin = sale.customer?.TIN?.trim() ?? '';
-    const custTin = customerTin
-        ? customerTin
-        : sale.customer
-            ? `1${String(sale.customer.id).padStart(8, '0')}`.slice(0, 9)
-            : (org.TIN ?? '');
+    // RRA requires a customer TIN on every fiscal receipt — verified live: the
+    // sandbox rejects a missing/invalid receipt.custTin with resultCd 910 and a
+    // missing prcOrdCd with 881. Business buyers without a real TIN are rejected
+    // (resolveCustTinForVsdc throws); walk-in individuals get the documented
+    // per-customer placeholder (see walkInCustTin — production validity of B2C
+    // placeholders must be confirmed with RRA). We never fall back to the
+    // seller's own TIN — that would silently convert the sale into a B2B
+    // transaction.
+    const custTin = resolveCustTinForVsdc(sale);
     const custNm = sale.customer?.name ?? org.name;
-    const invcNo = opts.invcNoOverride ?? sale.vsdcInvcNo ?? sale.id;
+    // §4.6 custMblNo: only send a real, correctly-shaped phone number — never a
+    // raw unvalidated value, and never the TIN (a pre-fix swapped/duplicate
+    // record could otherwise leak the TIN into the mobile-number field).
+    const customerPhone = sale.customer?.phone?.trim() ?? '';
+    const custMblNo = customerPhone && (0, customers_validation_1.isValidCustomerPhone)(customerPhone) && customerPhone !== custTin
+        ? customerPhone
+        : '';
+    const invcNo = opts.invcNoOverride ?? sale.vsdcInvcNo ?? (() => {
+        throw new Error(`Cannot build Sale ${sale.saleNumber ?? sale.id} to RRA: no VSDC invoice number (vsdcInvcNo) allocated. ` +
+            `A fiscal document must always carry a fresh number from the per-device sequence.`);
+    })();
     const regrNm = sale.user?.name ?? 'System';
     const regrId = sale.user ? String(sale.user.id) : 'system';
     return {
         invcNo,
         orgInvcNo: opts.orgInvcNo ?? 0,
         custTin,
-        // RRA purchase order code: OPTIONAL for individual (7-prefix TIN) sales — the
-        // reference WAR auto-clears it for them. MANDATORY for business (B2B) sales:
-        // RRA issues an encrypted purchase code to the buyer, and the WAR rejects any
-        // business sale without a valid one. We forward the code the buyer supplied
-        // (captured on the customer / allocated from the org pool at sale time),
-        // falling back to a compliant placeholder only for
-        // individual sales (§ purchase code / prcOrdCd).
-        prcOrdCd: String(custTin).startsWith('7')
-            ? '000000'
-            : (sale.prcOrdCd ?? sale.customer?.prcOrdCd ?? '000000'),
+        // RRA purchase order code: verified live, the sandbox rejects a missing
+        // code with 881 and a fake one such as '000000' with 882 — so there is no
+        // placeholder fallback. The outbox processor auto-allocates an unconsumed
+        // org-pool code onto the sale before building this payload; when none is
+        // on record we fail with an actionable message instead of submitting a
+        // value RRA will reject.
+        prcOrdCd: (() => {
+            const code = (sale.prcOrdCd ?? sale.customer?.prcOrdCd ?? '').trim();
+            if (!code) {
+                throw new PurchaseCodeMissingError(sale.saleNumber ?? sale.id, custTin);
+            }
+            return code;
+        })(),
         custNm: custNm ?? '',
         salesTyCd: 'N', // spec: "Send only 'N' type"
         rcptTyCd,
-        pmtTyCd: pmtTypeCd(sale.paymentType),
+        pmtTyCd: rraPaymentCode,
         salesSttsCd: isVoid ? '04' : isRefund ? '05' : '02', // §4.11: 04 Canceled, 05 Refunded, 02 Approved
         cfmDt: toRraDateTime(now),
         salesDt: toRraDate(now),
@@ -385,13 +564,13 @@ function buildRraSendReceiptPayload(sale, org, opts = {}) {
         taxblAmtB: taxblAmt[1],
         taxblAmtC: taxblAmt[2],
         taxblAmtD: taxblAmt[3],
-        taxRtA: TAX_RATE_BY_SLOT[0],
-        taxRtB: TAX_RATE_BY_SLOT[1],
-        taxRtC: TAX_RATE_BY_SLOT[2],
-        taxRtD: TAX_RATE_BY_SLOT[3],
+        taxRtA: exports.TAX_RATE_BY_SLOT[0],
+        taxRtB: exports.TAX_RATE_BY_SLOT[1],
+        taxRtC: exports.TAX_RATE_BY_SLOT[2],
+        taxRtD: exports.TAX_RATE_BY_SLOT[3],
         // Mandatory combined fields required by the RRA reference implementation
         // (validated as taxRtF / taxRtTt in the sandbox WAR).
-        taxRtF: TAX_RATE_BY_SLOT[1],
+        taxRtF: exports.TAX_RATE_BY_SLOT[1],
         taxRtTt: 3,
         taxAmtA: taxAmt[0],
         taxAmtB: taxAmt[1],
@@ -408,12 +587,12 @@ function buildRraSendReceiptPayload(sale, org, opts = {}) {
         modrId: regrId,
         receipt: {
             custTin,
-            custMblNo: sale.customer?.phone ?? '',
+            custMblNo,
             rptNo: invcNo,
             // RRA WAR rejects `trdeNm` longer than 20 chars with resultCd 910
             // ("length must be between 0 and 20") — clamp the trade name.
             trdeNm: clampField(org.name, 20),
-            adrs: clampField(org.address, 40),
+            adrs: clampField(org.address, 200),
             topMsg: '',
             // The VSDC request contract limits this to 20 characters. Sending the
             // longer friendly message caused valid sales to be rejected with 910 by
@@ -423,24 +602,6 @@ function buildRraSendReceiptPayload(sale, org, opts = {}) {
         },
         itemList,
     };
-}
-async function enqueueSaleRetry(params) {
-    const nextRetryMs = Math.min(60 * 60 * 1000, 5 * 60 * 1000 * Math.pow(2, params.retryCount ?? 0));
-    await prisma_1.prisma.ebmQueue.create({
-        data: {
-            organizationId: params.organizationId,
-            saleId: params.saleId,
-            invoiceNumber: params.invoiceNumber,
-            payload: {
-                version: 2,
-                saleId: params.saleId,
-                organizationId: params.organizationId,
-            },
-            lastError: params.lastError,
-            nextRetryAt: new Date(Date.now() + nextRetryMs),
-            submissionStatus: 'PENDING',
-        },
-    });
 }
 /**
  * Atomically allocate next invoice sequence for a branch (PostgreSQL upsert).
@@ -468,563 +629,36 @@ async function generateInvoiceNumber(organizationId, branchId, client = prisma_1
     return { invoiceNumber: `INV-${orgCode}-B${branchId}-${year}-${sequence}`, vsdcInvcNo };
 }
 /**
- * Submit a completed sale to the VSDC/EBM gateway (or mock). Idempotent if already SUCCESS.
+ * Allocate a local, non-fiscal receipt number pair for PROFORMA (and future
+ * local-only types), which per the CIS spec (§6.3.6) must never be assigned a
+ * VSDC-signed invoice number — they never draw from the real gapless RRA
+ * sequence (allocateNextInvoiceSequence). Mirrors the spec's own "A/B RT"
+ * counter shape (§7.25) with two independent, atomically-incremented values:
+ *  - typeSeq: this branch's count of this specific receipt type only
+ *    (BranchReceiptCounter, keyed by rcptLabel)
+ *  - totalSeq: this branch's running count across EVERY locally-numbered
+ *    receipt type combined (Branch.localReceiptTotalSeq)
+ * Both increment together so the pair is never `<n>/<n>` by construction.
  */
-async function submitInvoiceToEbm(params) {
-    const queueRetryOnFailure = params.queueRetryOnFailure !== false;
-    if (!isEbmEnabled()) {
-        return { success: true };
-    }
-    const sale = (await prisma_1.prisma.sale.findFirst({
-        where: { id: params.saleId, organizationId: params.organizationId },
-        include: {
-            saleItems: {
-                include: {
-                    product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true } },
-                },
-            },
-            customer: true,
-            branch: true,
-            user: { select: { id: true, name: true } },
-        },
-    }));
-    if (!sale) {
-        return { success: false, error: 'Sale not found' };
-    }
-    const already = await prisma_1.prisma.ebmTransaction.findFirst({
-        where: {
-            saleId: sale.id,
-            operation: 'SALE',
-            submissionStatus: 'SUCCESS',
-            ebmInvoiceNumber: { not: null },
-        },
-        orderBy: { createdAt: 'desc' },
-    });
-    if (already?.ebmInvoiceNumber) {
-        return { success: true, ebmInvoiceNumber: already.ebmInvoiceNumber };
-    }
-    // Pre-validate totalAmount vs line-item breakdown (RRA compliance)
-    const computedTotal = sale.saleItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
-    const submittedTotal = Number(sale.totalAmount);
-    if (Math.abs(computedTotal - submittedTotal) > 0.01) {
-        return {
-            success: false,
-            error: `Total amount mismatch: submitted ${submittedTotal}, computed from lines ${computedTotal}`,
-        };
-    }
-    // Pre-validate totalVat vs line-item VAT (RRA compliance)
-    const computedVat = sale.saleItems.reduce((sum, item) => sum + Number(item.taxAmount), 0);
-    const submittedVat = Number(sale.vatAmount);
-    if (Math.abs(computedVat - submittedVat) > 0.01) {
-        return {
-            success: false,
-            error: `VAT amount mismatch: submitted ${submittedVat}, computed from lines ${computedVat}`,
-        };
-    }
-    const org = await prisma_1.prisma.organization.findUnique({
-        where: { id: params.organizationId },
-        select: { TIN: true, name: true, address: true },
-    });
-    if (!org) {
-        return { success: false, error: 'Organization not found' };
-    }
-    let payload;
-    try {
-        payload = buildRraSendReceiptPayload(sale, org);
-    }
-    catch (e) {
-        return { success: false, error: e instanceof Error ? e.message : 'Invalid sale payload' };
-    }
-    let txRow = await prisma_1.prisma.ebmTransaction.findFirst({
-        where: {
-            saleId: sale.id,
-            operation: 'SALE',
-            submissionStatus: { in: ['PENDING', 'FAILED', 'RETRYING'] },
-        },
-        orderBy: { createdAt: 'desc' },
-    });
-    if (!txRow) {
-        txRow = await prisma_1.prisma.ebmTransaction.create({
-            data: {
-                organizationId: params.organizationId,
-                saleId: sale.id,
-                invoiceNumber: sale.invoiceNumber,
-                operation: 'SALE',
-                submissionStatus: 'PENDING',
-            },
-        });
-    }
-    else {
-        txRow = await prisma_1.prisma.ebmTransaction.update({
-            where: { id: txRow.id },
-            data: {
-                submissionStatus: 'RETRYING',
-                errorMessage: null,
-            },
-        });
-    }
-    const persistFailure = async (message, responseData) => {
-        await prisma_1.prisma.ebmTransaction.update({
-            where: { id: txRow.id },
-            data: {
-                submissionStatus: 'FAILED',
-                errorMessage: message,
-                responseData: responseData ? responseData : undefined,
-                retryCount: { increment: 1 },
-            },
-        });
-        if (!queueRetryOnFailure) {
-            return;
-        }
-        const existingPending = await prisma_1.prisma.ebmQueue.findFirst({
-            where: {
-                saleId: sale.id,
-                submissionStatus: 'PENDING',
-            },
-        });
-        if (existingPending) {
-            return;
-        }
-        await enqueueSaleRetry({
-            organizationId: params.organizationId,
-            saleId: sale.id,
-            invoiceNumber: sale.invoiceNumber,
-            lastError: message,
-            retryCount: txRow.retryCount,
-        });
-    };
-    // saveInvc() already handles config.ebm.useMock internally (mockResult()) and
-    // returns the real /trnsSales/saveSales response shape — no separate shortcut
-    // here, so mock mode exercises the same response-parsing path as production.
-    const isOsdc = config_1.config.ebm.protocol === 'osdc';
-    const hasEndpoint = isOsdc
-        ? Boolean(config_1.config.ebm.osdcApiUrl || config_1.config.ebm.useMock)
-        : Boolean(config_1.config.ebm.apiUrl || config_1.config.ebm.useMock);
-    if (!hasEndpoint) {
-        await persistFailure('EBM_API_URL is not configured');
-        return { success: false, error: 'EBM_API_URL is not configured' };
-    }
-    await prisma_1.prisma.ebmTransaction.update({
-        where: { id: txRow.id },
-        data: { submissionStatus: 'SUBMITTED' },
-    });
-    try {
-        // EBM 2.1 / OSDC path: talks to the OSDC device (WAR) or the direct v2.1.
-        if (isOsdc) {
-            const osdc = await (0, rra_osdc_service_1.submitSalesToOsdc)({
-                organizationId: params.organizationId,
-                branchId: sale.branchId,
-                sale,
-            });
-            if (!osdc.success) {
-                await persistFailure(osdc.error ?? 'OSDC gateway error', {
-                    osdcResult: osdc.response,
-                    requestPayload: payload,
-                });
-                return { success: false, error: osdc.error };
-            }
-            await prisma_1.prisma.$transaction([
-                prisma_1.prisma.ebmTransaction.update({
-                    where: { id: txRow.id },
-                    data: {
-                        submissionStatus: 'SUCCESS',
-                        ebmInvoiceNumber: osdc.ebmInvoiceNumber,
-                        submittedAt: new Date(),
-                        responseData: {
-                            osdcResult: osdc.response,
-                            requestPayload: payload,
-                        },
-                    },
-                }),
-                prisma_1.prisma.organization.update({
-                    where: { id: params.organizationId },
-                    data: {
-                        lastSuccessfulVdsContact: new Date(),
-                        lastSyncCursor: new Date(),
-                    },
-                }),
-            ]);
-            return { success: true, ebmInvoiceNumber: osdc.ebmInvoiceNumber };
-        }
-        const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(params.organizationId, sale.branchId);
-        const result = await (0, vsdc_api_service_1.saveInvc)(envelope, payload);
-        if (!result.success || !result.data?.rcptNo) {
-            const msg = result.error ?? 'VSDC gateway error';
-            await persistFailure(msg, {
-                vsdcResult: result,
-                requestPayload: payload,
-            });
-            return { success: false, error: msg };
-        }
-        const { data: vsdc } = result;
-        await prisma_1.prisma.$transaction([
-            prisma_1.prisma.ebmTransaction.update({
-                where: { id: txRow.id },
-                data: {
-                    submissionStatus: 'SUCCESS',
-                    ebmInvoiceNumber: vsdc.rcptNo,
-                    submittedAt: new Date(),
-                    sdcDateTime: vsdc.sdcDateTime ? new Date(vsdc.sdcDateTime) : null,
-                    sdcRcptNo: vsdc.rcptNo ? parseInt(vsdc.rcptNo, 10) || null : null,
-                    totalRcptNo: vsdc.totRcptNo ? parseInt(vsdc.totRcptNo, 10) || null : null,
-                    sdcId: vsdc.sdcId || null,
-                    internalData: vsdc.intrlData || null,
-                    receiptSignature: vsdc.vsdcSignature || null,
-                    rcptLabel: sale.rcptLabel ?? null,
-                    responseData: {
-                        raw: result.rawBody,
-                        normalized: vsdc,
-                        requestPayload: payload,
-                    },
-                },
-            }),
-            prisma_1.prisma.organization.update({
-                where: { id: params.organizationId },
-                data: {
-                    lastSuccessfulVdsContact: new Date(),
-                    lastSyncCursor: new Date(),
-                },
-            }),
-        ]);
-        return { success: true, ebmInvoiceNumber: vsdc.rcptNo };
-    }
-    catch (e) {
-        const message = e instanceof Error ? e.message : 'EBM request failed';
-        await persistFailure(message, { requestPayload: payload });
-        return { success: false, error: message };
-    }
-}
-/**
- * Report a full refund to the gateway (credit note) when the original sale was fiscalized.
- */
-async function submitRefundToEbm(params) {
-    if (!isEbmEnabled()) {
-        return { success: true };
-    }
-    const origTx = await prisma_1.prisma.ebmTransaction.findFirst({
-        where: {
-            saleId: params.originalSaleId,
-            operation: 'SALE',
-            submissionStatus: 'SUCCESS',
-            ebmInvoiceNumber: { not: null },
-        },
-        orderBy: { createdAt: 'desc' },
-    });
-    if (!origTx?.ebmInvoiceNumber) {
-        return { success: false, error: 'Original invoice not fiscalized — cannot process refund' };
-    }
-    const [originalSale, refundSale, org] = await Promise.all([
-        prisma_1.prisma.sale.findFirst({
-            where: { id: params.originalSaleId, organizationId: params.organizationId },
-            select: { invoiceNumber: true, saleNumber: true, vsdcInvcNo: true, totalAmount: true, vatAmount: true },
-        }),
-        prisma_1.prisma.sale.findFirst({
-            where: { id: params.refundSaleId, organizationId: params.organizationId },
-            include: {
-                saleItems: {
-                    include: {
-                        product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true } },
-                    },
-                },
-                customer: true,
-                branch: true,
-                user: { select: { id: true, name: true } },
-            },
-        }),
-        prisma_1.prisma.organization.findUnique({
-            where: { id: params.organizationId },
-            select: { TIN: true, name: true, address: true },
-        }),
+async function allocateLocalReceiptSequence(branchId, rcptLabel, client = prisma_1.prisma) {
+    const [typeRows, totalRows] = await Promise.all([
+        client.$queryRaw `
+      INSERT INTO "branch_receipt_counters" ("branchId", "rcptLabel", "nextSeq", "updatedAt")
+      VALUES (${branchId}, ${rcptLabel}::"RcptLabel", 1, NOW())
+      ON CONFLICT ("branchId", "rcptLabel") DO UPDATE
+        SET "nextSeq" = "branch_receipt_counters"."nextSeq" + 1,
+            "updatedAt" = NOW()
+      RETURNING "nextSeq"
+    `,
+        client.$queryRaw `
+      UPDATE "branches"
+      SET "local_receipt_total_seq" = "local_receipt_total_seq" + 1
+      WHERE "id" = ${branchId}
+      RETURNING "local_receipt_total_seq"
+    `,
     ]);
-    if (!originalSale || !refundSale || !org) {
-        return { success: false, error: 'Refund EBM: missing sale or organization' };
-    }
-    // RRA requires refund total ≤ original total
-    const refundTotal = Number(refundSale.totalAmount);
-    const originalTotal = Number(originalSale.totalAmount);
-    if (refundTotal > originalTotal) {
-        return {
-            success: false,
-            error: `Refund total ${refundTotal} exceeds original invoice total ${originalTotal}`,
-        };
-    }
-    const refundRow = await prisma_1.prisma.ebmTransaction.create({
-        data: {
-            organizationId: params.organizationId,
-            saleId: params.refundSaleId,
-            invoiceNumber: refundSale.saleNumber,
-            operation: 'REFUND',
-            submissionStatus: 'PENDING',
-        },
-    });
-    let payload;
-    try {
-        // §4.16 Refund Reason Code: '06' = Refund (the only generic code available
-        // from a free-text reason — the reason itself goes into `remark`).
-        payload = buildRraSendReceiptPayload(refundSale, org, {
-            orgInvcNo: originalSale.vsdcInvcNo ?? undefined,
-            rfdDt: new Date(),
-            rfdRsnCd: '06',
-        });
-        payload.remark = params.reason ?? '';
-    }
-    catch (e) {
-        const msg = e instanceof Error ? e.message : 'Invalid refund payload';
-        await prisma_1.prisma.ebmTransaction.update({
-            where: { id: refundRow.id },
-            data: { submissionStatus: 'FAILED', errorMessage: msg },
-        });
-        return { success: false, error: msg };
-    }
-    if (!config_1.config.ebm.useMock && !config_1.config.ebm.apiUrl) {
-        await prisma_1.prisma.ebmTransaction.update({
-            where: { id: refundRow.id },
-            data: {
-                submissionStatus: 'FAILED',
-                errorMessage: 'EBM_API_URL is not configured',
-            },
-        });
-        return { success: false, error: 'EBM_API_URL is not configured' };
-    }
-    try {
-        const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(params.organizationId, refundSale.branchId);
-        const result = await (0, vsdc_api_service_1.saveInvc)(envelope, payload);
-        if (!result.success) {
-            const msg = result.error ?? 'Refund VSDC error';
-            await prisma_1.prisma.ebmTransaction.update({
-                where: { id: refundRow.id },
-                data: {
-                    submissionStatus: 'FAILED',
-                    errorMessage: msg,
-                    responseData: { vsdcResult: result, requestPayload: payload },
-                },
-            });
-            return { success: false, error: msg };
-        }
-        const { data: vsdc } = result;
-        await prisma_1.prisma.ebmTransaction.update({
-            where: { id: refundRow.id },
-            data: {
-                submissionStatus: 'SUCCESS',
-                ebmInvoiceNumber: vsdc?.rcptNo ?? `REFUND-ACK-${refundRow.id}`,
-                submittedAt: new Date(),
-                sdcDateTime: vsdc?.sdcDateTime ? new Date(vsdc.sdcDateTime) : null,
-                sdcRcptNo: vsdc?.rcptNo ? parseInt(vsdc.rcptNo, 10) || null : null,
-                totalRcptNo: vsdc?.totRcptNo ? parseInt(vsdc.totRcptNo, 10) || null : null,
-                sdcId: vsdc?.sdcId || null,
-                internalData: vsdc?.intrlData || null,
-                receiptSignature: vsdc?.vsdcSignature || null,
-                rcptLabel: refundSale.rcptLabel ?? null,
-                responseData: { raw: result.rawBody, normalized: vsdc, requestPayload: payload },
-            },
-        });
-        return { success: true };
-    }
-    catch (e) {
-        const message = e instanceof Error ? e.message : 'Refund EBM failed';
-        await prisma_1.prisma.ebmTransaction.update({
-            where: { id: refundRow.id },
-            data: { submissionStatus: 'FAILED', errorMessage: message },
-        });
-        return { success: false, error: message };
-    }
-}
-/**
- * Void/cancel a fiscalized sale at the gateway when supported by RRA spec.
- */
-async function submitVoidToEbm(params) {
-    if (!isEbmEnabled()) {
-        return { success: true };
-    }
-    const origTx = await prisma_1.prisma.ebmTransaction.findFirst({
-        where: {
-            saleId: params.saleId,
-            operation: 'SALE',
-            submissionStatus: 'SUCCESS',
-            ebmInvoiceNumber: { not: null },
-        },
-        orderBy: { createdAt: 'desc' },
-    });
-    if (!origTx?.ebmInvoiceNumber) {
-        return { success: true };
-    }
-    const sale = (await prisma_1.prisma.sale.findFirst({
-        where: { id: params.saleId, organizationId: params.organizationId },
-        include: {
-            saleItems: {
-                include: {
-                    product: { select: { name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true } },
-                },
-            },
-            customer: true,
-            branch: true,
-            user: { select: { id: true, name: true } },
-        },
-    }));
-    const org = await prisma_1.prisma.organization.findUnique({
-        where: { id: params.organizationId },
-        select: { TIN: true, name: true, address: true },
-    });
-    if (!sale || !org) {
-        return { success: false, error: 'Void EBM: missing sale or organization' };
-    }
-    const voidRow = await prisma_1.prisma.ebmTransaction.create({
-        data: {
-            organizationId: params.organizationId,
-            saleId: params.saleId,
-            invoiceNumber: sale.invoiceNumber,
-            operation: 'VOID',
-            submissionStatus: 'PENDING',
-        },
-    });
-    let payload;
-    try {
-        // A cancellation is a NEW sales-transaction document (fresh invcNo) with
-        // cnclDt/cnclReqDt set and salesSttsCd='04'; orgInvcNo stays 0 (that
-        // field is refund-only — see buildRraSendReceiptPayload's invcNoOverride
-        // doc comment for the sandbox errors this avoids).
-        const { vsdcInvcNo: voidInvcNo } = await generateInvoiceNumber(params.organizationId, sale.branchId);
-        payload = buildRraSendReceiptPayload(sale, org, { cnclDt: new Date(), invcNoOverride: voidInvcNo });
-        payload.remark = params.reason ?? '';
-    }
-    catch (e) {
-        const msg = e instanceof Error ? e.message : 'Invalid void payload';
-        await prisma_1.prisma.ebmTransaction.update({
-            where: { id: voidRow.id },
-            data: { submissionStatus: 'FAILED', errorMessage: msg },
-        });
-        return { success: false, error: msg };
-    }
-    if (!config_1.config.ebm.useMock && !config_1.config.ebm.apiUrl) {
-        await prisma_1.prisma.ebmTransaction.update({
-            where: { id: voidRow.id },
-            data: {
-                submissionStatus: 'FAILED',
-                errorMessage: 'EBM_API_URL is not configured',
-            },
-        });
-        return { success: false, error: 'EBM_API_URL is not configured' };
-    }
-    try {
-        const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(params.organizationId, sale.branchId);
-        const result = await (0, vsdc_api_service_1.saveInvc)(envelope, payload);
-        if (!result.success) {
-            const msg = result.error ?? 'Void VSDC error';
-            await prisma_1.prisma.ebmTransaction.update({
-                where: { id: voidRow.id },
-                data: {
-                    submissionStatus: 'FAILED',
-                    errorMessage: msg,
-                    responseData: { vsdcResult: result, requestPayload: payload },
-                },
-            });
-            return { success: false, error: msg };
-        }
-        const { data: vsdc } = result;
-        await prisma_1.prisma.ebmTransaction.update({
-            where: { id: voidRow.id },
-            data: {
-                submissionStatus: 'SUCCESS',
-                ebmInvoiceNumber: vsdc?.rcptNo ?? `VOID-ACK-${voidRow.id}`,
-                submittedAt: new Date(),
-                sdcDateTime: vsdc?.sdcDateTime ? new Date(vsdc.sdcDateTime) : null,
-                sdcRcptNo: vsdc?.rcptNo ? parseInt(vsdc.rcptNo, 10) || null : null,
-                totalRcptNo: vsdc?.totRcptNo ? parseInt(vsdc.totRcptNo, 10) || null : null,
-                sdcId: vsdc?.sdcId || null,
-                internalData: vsdc?.intrlData || null,
-                receiptSignature: vsdc?.vsdcSignature || null,
-                responseData: { raw: result.rawBody, normalized: vsdc, requestPayload: payload },
-            },
-        });
-        return { success: true };
-    }
-    catch (e) {
-        const message = e instanceof Error ? e.message : 'Void EBM failed';
-        await prisma_1.prisma.ebmTransaction.update({
-            where: { id: voidRow.id },
-            data: { submissionStatus: 'FAILED', errorMessage: message },
-        });
-        return { success: false, error: message };
-    }
-}
-/**
- * @deprecated Prefer submitInvoiceToEbm({ saleId, organizationId }) — queue stores v2 payload only.
- */
-async function queueInvoiceForEbm(_data, priority = 0) {
-    await prisma_1.prisma.ebmQueue.create({
-        data: {
-            organizationId: _data.organizationId,
-            saleId: _data.saleId,
-            invoiceNumber: _data.invoiceNumber ?? null,
-            payload: {
-                version: 2,
-                saleId: _data.saleId,
-                organizationId: _data.organizationId,
-            },
-            priority,
-            nextRetryAt: new Date(),
-            submissionStatus: 'PENDING',
-        },
-    });
-}
-/**
- * Process pending EBM queue rows (called from cron job).
- */
-async function processEbmQueueBatch(limit = 25) {
-    let processed = 0;
-    let succeeded = 0;
-    let failed = 0;
-    const rows = await prisma_1.prisma.ebmQueue.findMany({
-        where: {
-            submissionStatus: 'PENDING',
-            OR: [{ nextRetryAt: null }, { nextRetryAt: { lte: new Date() } }],
-            retryCount: { lt: config_1.config.ebm.maxQueueRetries },
-        },
-        orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
-        take: limit,
-    });
-    for (const row of rows) {
-        processed += 1;
-        const p = row.payload;
-        if (!isQueuePayloadV2(p)) {
-            await prisma_1.prisma.ebmQueue.update({
-                where: { id: row.id },
-                data: {
-                    submissionStatus: 'FAILED',
-                    lastError: 'Unsupported queue payload (expected version 2)',
-                    retryCount: { increment: 1 },
-                },
-            });
-            failed += 1;
-            continue;
-        }
-        const result = await submitInvoiceToEbm({
-            saleId: p.saleId,
-            organizationId: p.organizationId,
-            queueRetryOnFailure: false,
-        });
-        if (result.success) {
-            await prisma_1.prisma.ebmQueue.update({
-                where: { id: row.id },
-                data: { submissionStatus: 'SUCCESS', lastError: null },
-            });
-            succeeded += 1;
-        }
-        else {
-            const nextRetry = Math.min(60 * 60 * 1000, 2 * 60 * 1000 * Math.pow(2, row.retryCount));
-            await prisma_1.prisma.ebmQueue.update({
-                where: { id: row.id },
-                data: {
-                    retryCount: { increment: 1 },
-                    lastError: result.error ?? 'Unknown error',
-                    nextRetryAt: new Date(Date.now() + nextRetry),
-                    submissionStatus: row.retryCount + 1 >= config_1.config.ebm.maxQueueRetries ? 'FAILED' : 'PENDING',
-                },
-            });
-            if (row.retryCount + 1 >= config_1.config.ebm.maxQueueRetries) {
-                failed += 1;
-            }
-        }
-    }
-    return { processed, succeeded, failed };
+    return {
+        typeSeq: Number(typeRows[0]?.nextSeq ?? 1),
+        totalSeq: Number(totalRows[0]?.local_receipt_total_seq ?? 1),
+    };
 }

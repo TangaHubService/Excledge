@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { config } from '../config';
 import {
   buildRraSendReceiptPayload,
+  consumeAnyOrgPurchaseCode,
   generateInvoiceNumber,
   isEbmEnabled,
   toRraDateTime,
@@ -10,7 +11,7 @@ import {
 } from './rra-ebm.service';
 import { buildVsdcEnvelope, saveInvc } from './vsdc-api.service';
 import { submitSalesToOsdc } from './rra-osdc.service';
-import { DEFAULT_ITEM_CLASSIFICATION_CD } from './item-code.service';
+import { getRraPaymentCode } from './rra-code.service';
 
 /**
  * RRA EBM fiscalization for subscription (billing) receipts.
@@ -127,7 +128,7 @@ export async function buildPaymentSaleLikeObject(params: {
         product: {
           name: subscription?.plan?.name ?? 'Subscription',
           itemCd: null,
-          itemClsCd: DEFAULT_ITEM_CLASSIFICATION_CD,
+          itemClsCd: null,
           pkgUnitCd: null,
           qtyUnitCd: null,
           packagingQty: null,
@@ -219,7 +220,16 @@ export async function fiscalizeSubscriptionPayment(params: {
 
   let payload: Record<string, unknown>;
   try {
-    payload = buildRraSendReceiptPayload(sale, org);
+    // A subscription receipt is a fresh fiscal document for the org-as-buyer,
+    // so it needs its own unconsumed purchase code — the sandbox rejects the
+    // submission without one (resultCd 881/882).
+    const buyerTin = (org.TIN ?? '').trim();
+    const code = buyerTin
+      ? await consumeAnyOrgPurchaseCode(params.organizationId, payment.id, prisma, buyerTin)
+      : null;
+    if (code) sale.prcOrdCd = code;
+    const rraPaymentCode = await getRraPaymentCode(params.organizationId, sale.paymentType);
+    payload = buildRraSendReceiptPayload(sale, org, rraPaymentCode);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Invalid billing receipt payload';
     await markPaymentFailed(params.paymentId, msg);

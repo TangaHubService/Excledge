@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../../components/ui/select';
-import { RefreshCw, AlertTriangle, CheckCircle, Clock, XCircle, ExternalLink, Loader2, Save, ShieldCheck } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle, Clock, XCircle, ExternalLink, Loader2, Save, ShieldCheck, RotateCcw } from 'lucide-react';
 import { OUTBOX_STATUS_CONFIG, type EbmOutboxEntry, type EbmOutboxStatus } from '../../../types/ebm';
 import { apiClient } from '../../../lib/api-client';
 import type { Branch } from '../../../context/BranchContext';
@@ -104,15 +104,20 @@ function EbmCredentialsCard() {
       await apiClient.updateOrganization({ TIN: orgTin });
       if (branchId !== '') {
         await apiClient.updateBranch(branchId, {
-          bhfId: form.bhfId ?? '',
-          ebmDeviceId: form.ebmDeviceId ?? '',
-          ebmSerialNo: form.ebmSerialNo ?? '',
-          vsdcUrl: form.vsdcUrl ?? '',
+          bhfId: (form.bhfId ?? '').trim(),
+          ebmDeviceId: (form.ebmDeviceId ?? '').trim(),
+          ebmSerialNo: (form.ebmSerialNo ?? '').trim().toUpperCase(),
+          vsdcUrl: (form.vsdcUrl ?? '').trim(),
         });
       }
       setSavedMsg('EBM / VSDC credentials saved.');
     } catch (e: any) {
-      setErrorMsg(e?.message || e?.response?.data?.error || 'Failed to save EBM credentials.');
+      setErrorMsg(
+        e?.message ||
+          e?.response?.data?.error ||
+          e?.response?.data?.message ||
+          'Failed to save EBM credentials.',
+      );
     } finally {
       setSaving(false);
     }
@@ -123,11 +128,9 @@ function EbmCredentialsCard() {
     setInitInfo(null);
     setErrorMsg(null);
     try {
-      const orgId = localStorage.getItem('current_organization_id');
-      const res = await apiClient.request(`/organizations/${orgId}/ebm/initialize`, {
-        method: 'POST',
-        ...(branchId !== '' ? { body: JSON.stringify({ branchId }) } : {}),
-      });
+      const res = await apiClient.initializeEbmDevice(
+        branchId !== '' ? { branchId: Number(branchId) } : {},
+      );
       const info = (res as any)?.data ?? res;
       setInitInfo(info);
       setSavedMsg(`Device verified with RRA — SDC ${info?.sdcId ?? '?'} / MRC ${info?.mrcNo ?? '?'}.`);
@@ -374,6 +377,7 @@ export function EbmOutboxDashboard() {
   const [entries, setEntries] = useState<EbmOutboxEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkingId, setCheckingId] = useState<number | null>(null);
+  const [retryingId, setRetryingId] = useState<number | null>(null);
   const [reversalEntry, setReversalEntry] = useState<EbmOutboxEntry | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -424,6 +428,22 @@ export function EbmOutboxDashboard() {
       console.error('Status check failed');
     } finally {
       setCheckingId(null);
+    }
+  };
+
+  const handleRetry = async (entry: EbmOutboxEntry) => {
+    setRetryingId(entry.id);
+    try {
+      const orgId = apiClient.getOrganizationId();
+      await apiClient.request(`/organizations/${orgId}/ebm-outbox/${entry.id}/retry`, {
+        method: 'POST',
+      });
+      toast.success('Re-queued for fiscalization');
+      await fetchOutbox();
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to retry fiscalization');
+    } finally {
+      setRetryingId(null);
     }
   };
 
@@ -534,44 +554,66 @@ export function EbmOutboxDashboard() {
                       <TableCell className="text-xs whitespace-nowrap">
                         {entry.createdAt ? new Date(entry.createdAt).toLocaleString() : '—'}
                       </TableCell>
-                      <TableCell className="text-xs max-w-[200px] truncate" title={entry.lastError ?? ''}>
+                      <TableCell className="text-xs max-w-[240px]" title={entry.lastError ?? ''}>
                         {entry.status === 'DEAD_LETTER' ? (
-                          <span className="text-rose-600 font-semibold flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3" />
-                            UN-FISCALIZED — Manager intervention required
-                          </span>
+                          <div className="space-y-0.5">
+                            <span className="text-rose-600 font-semibold flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3 shrink-0" />
+                              UN-FISCALIZED
+                            </span>
+                            {entry.lastError && (
+                              <p className="text-muted-foreground truncate">{entry.lastError}</p>
+                            )}
+                          </div>
                         ) : entry.status === 'FAILED' || entry.status === 'PROCESSING' ? (
-                          entry.lastError ?? '—'
+                          <span className="truncate block">{entry.lastError ?? '—'}</span>
                         ) : entry.sdcDateTime ? (
                           <span className="text-green-600">SDC: {new Date(entry.sdcDateTime).toLocaleString()}</span>
                         ) : '—'}
                       </TableCell>
                       <TableCell className="text-right">
-                        {(entry.status === 'PENDING' || entry.status === 'PROCESSING' || entry.status === 'FAILED') && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleStatusCheck(entry)}
-                            disabled={checkingId === entry.id}
-                          >
-                            {checkingId === entry.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                            ) : (
-                              <ExternalLink className="h-3 w-3 mr-1" />
-                            )}
-                            Check VSDC
-                          </Button>
-                        )}
-                        {entry.status === 'DEAD_LETTER' && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="bg-rose-600 hover:bg-rose-700 text-white"
-                            onClick={() => setReversalEntry(entry)}
-                          >
-                            Request Reversal
-                          </Button>
-                        )}
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {(entry.status === 'PENDING' || entry.status === 'PROCESSING' || entry.status === 'FAILED') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleStatusCheck(entry)}
+                              disabled={checkingId === entry.id || retryingId === entry.id}
+                            >
+                              {checkingId === entry.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              ) : (
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                              )}
+                              Check VSDC
+                            </Button>
+                          )}
+                          {(entry.status === 'FAILED' || entry.status === 'DEAD_LETTER') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRetry(entry)}
+                              disabled={retryingId === entry.id || checkingId === entry.id}
+                            >
+                              {retryingId === entry.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              ) : (
+                                <RotateCcw className="h-3 w-3 mr-1" />
+                              )}
+                              Retry
+                            </Button>
+                          )}
+                          {entry.status === 'DEAD_LETTER' && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="bg-rose-600 hover:bg-rose-700 text-white"
+                              onClick={() => setReversalEntry(entry)}
+                            >
+                              Request Reversal
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

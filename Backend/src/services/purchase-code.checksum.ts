@@ -141,6 +141,9 @@ export function isValidPurchaseCode(code: string, buyerTin: string, sellerTin: s
  * Generate purchase codes the sandbox accepts for a (buyerTin, sellerTin).
  * Uses the reverseStringSuperNew fast path (c[2]='0', c[3]=candidate[0], valid
  * digit pairs). Each generated code is unique within the returned batch.
+ *
+ * Starts at a time-based offset into the candidate space so repeated DB resets
+ * don't keep minting the same early codes VSDC already burned (resultCd 883).
  */
 export function generateValidPurchaseCodes(
   buyerTin: string,
@@ -149,7 +152,7 @@ export function generateValidPurchaseCodes(
   existing: Set<string> = new Set(),
 ): string[] {
   const [v1, v2] = purchaseCodeChecksumCandidates(buyerTin, sellerTin);
-  const out: string[] = [];
+  const candidates: string[] = [];
   for (const num of [v1, v2]) {
     const target = num[0];
     for (const c0 of Object.keys(SECOND_NUMBER_NEW)) {
@@ -160,12 +163,15 @@ export function generateValidPurchaseCodes(
             if (existing.has(code)) continue;
             if (!isValidPurchaseCode(code, buyerTin, sellerTin)) continue;
             existing.add(code);
-            out.push(code);
-            if (out.length >= count) return out;
+            candidates.push(code);
           }
         }
       }
     }
   }
-  return out;
+  if (!candidates.length) return [];
+  // Rotate so each process/session prefers a different slice of the space.
+  const offset = Date.now() % candidates.length;
+  const rotated = candidates.slice(offset).concat(candidates.slice(0, offset));
+  return rotated.slice(0, count);
 }

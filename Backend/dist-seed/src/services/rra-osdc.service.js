@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getOsdcCreds = getOsdcCreds;
 exports.initOsdc = initOsdc;
@@ -6,7 +9,9 @@ exports.parseOsdcResponse = parseOsdcResponse;
 exports.submitSalesToOsdc = submitSalesToOsdc;
 const prisma_1 = require("../lib/prisma");
 const config_1 = require("../config");
+const logger_1 = __importDefault(require("../utils/logger"));
 const rra_ebm_service_1 = require("./rra-ebm.service");
+const rra_code_service_1 = require("./rra-code.service");
 const OSDC_ENDPOINTS = {
     init: '/selectInitOsdcInfo',
     saveSales: '/saveTrnsSalesOsdc',
@@ -17,7 +22,7 @@ async function getOsdcCreds(organizationId, branchId) {
         where: { id: organizationId },
         select: { TIN: true, ebmSerialNo: true },
     });
-    let bhfId = '00';
+    let bhfId = config_1.config.ebm.defaultBhfId;
     let dvcSrlNo = org?.ebmSerialNo ?? '';
     if (branchId != null) {
         const branch = await prisma_1.prisma.branch.findUnique({
@@ -54,6 +59,7 @@ function buildHeaders() {
 }
 async function osdcPost(path, body) {
     const url = `${baseUrl()}${path}`;
+    logger_1.default.info(`[RRA][OSDC][REQ] POST ${url} payload=${JSON.stringify(body)}`);
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), config_1.config.ebm.requestTimeoutMs);
     try {
@@ -71,7 +77,13 @@ async function osdcPost(path, body) {
         catch {
             json = null;
         }
+        logger_1.default.info(`[RRA][OSDC][RES] POST ${url} http=${res.status} body=${(rawText || JSON.stringify(json) || '').slice(0, 4000)}`);
         return { ok: res.ok, status: res.status, jsonBody: json, rawText };
+    }
+    catch (e) {
+        const message = e instanceof Error ? e.message : 'OSDC request failed';
+        logger_1.default.error(`[RRA][OSDC][ERR] POST ${url} error=${message} payload=${JSON.stringify(body)}`);
+        throw e;
     }
     finally {
         clearTimeout(t);
@@ -184,10 +196,23 @@ async function submitSalesToOsdc(params) {
     if (error && !cmcKey) {
         return { success: false, error };
     }
+    let rraPaymentCode;
+    try {
+        rraPaymentCode = await (0, rra_code_service_1.getRraPaymentCode)(params.organizationId, params.sale.paymentType);
+    }
+    catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Invalid payment method mapping' };
+    }
     // Reuse the VSDC payload builder (fields are largely shared) and adjust the
     // EBM 2.1 specifics: body carries device identity, receipt gets a publish
     // date, and each line carries its own tax total.
-    const payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(params.sale, org);
+    let payload;
+    try {
+        payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(params.sale, org, rraPaymentCode);
+    }
+    catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Invalid sales payload' };
+    }
     const creds = await getOsdcCreds(params.organizationId, params.branchId);
     payload.tin = creds.tin;
     payload.bhfId = creds.bhfId;

@@ -7,6 +7,7 @@ import Login from "./pages/auth/login";
 import Signup from "./pages/auth/SignUp";
 import CreateOrganization from "./pages/CreateOrganization";
 import { InventoryManagement } from "./pages/dashboard/InventoryManagement";
+import { ProductionPage } from "./pages/dashboard/inventory/ProductionPage";
 import { ThemeProvider } from "./context/ThemeContext";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { OrganizationProvider } from "./context/OrganizationContext";
@@ -168,6 +169,7 @@ function App() {
                       <Route path="supplier-invoices" element={<SupplierInvoicesPage />} />
                       <Route path="scan-invoice" element={<ScanInvoicePage />} />
                       <Route path="scan-invoice/:id" element={<ScanInvoicePage />} />
+                      <Route path="production" element={<ProductionPage />} />
 
                       <Route path="subscription" element={<SubscriptionManagementPage />} />
                       <Route path="history" element={<BillingHistoryPage />} />

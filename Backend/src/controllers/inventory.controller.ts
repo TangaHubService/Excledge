@@ -3,6 +3,8 @@ import { prisma } from "../lib/prisma"
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 import { buildBranchFilter, getBranchIdForOperation } from "../middleware/branchAuth.middleware"
 import { auditLogger } from "../utils/auditLogger"
+import { ItemType } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import {
   adjustStock as ledgerAdjustStock,
   removeStock as ledgerRemoveStock,
@@ -13,6 +15,7 @@ import { TaxService } from "../services/tax.service"
 import { allocateItemCd, allocateItemCdBlock, buildItemCd, deriveQtyUnitCd, isItemCdConflict } from "../services/item-code.service"
 import { success, error as apiError } from "../utils/apiResponse"
 import { getOrganizationSettings } from "../services/organization-settings.service"
+import { getOriginNationCode } from "../services/item-code.service"
 import { getOrderBy } from "../utils/sorting"
 
 export const getProducts = async (req: BranchAuthRequest, res: Response) => {
@@ -34,7 +37,7 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
 
     // Default: show all items. Optionally filter by type.
     const itemType = req.query.itemType as string | undefined
-    if (itemType === 'PRODUCT' || itemType === 'SERVICE') {
+    if (itemType === 'PRODUCT' || itemType === 'RAW_MATERIAL' || itemType === 'SERVICE') {
       where.itemType = itemType
     }
 
@@ -249,10 +252,49 @@ export const getProductById = async (req: BranchAuthRequest, res: Response) => {
 export const createProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId)
-    const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode, itemType, pkgUnitCd, qtyUnitCd, packagingQty, itemClsCd, itemStandardName, origin, useInsurance, additionalInfo, l1SalePrice, l2SalePrice, l3SalePrice, l4SalePrice, l5SalePrice } = req.body
+    const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode, itemType, pkgUnitCd, qtyUnitCd, packagingQty, itemClsCd, itemStandardName, origin, useInsurance, additionalInfo, l1SalePrice, l2SalePrice, l3SalePrice, l4SalePrice, l5SalePrice, bomComponents } = req.body
     const userId = parseInt((req as any).user?.userId as string)
     const branchId = getBranchIdForOperation(req)
     const isService = itemType === 'SERVICE'
+
+    const bomInputs: Array<{ componentProductId: number; quantity: number; unit: string }> = []
+    if (bomComponents !== undefined) {
+      if (!Array.isArray(bomComponents) || bomComponents.length > 50 ||
+          (bomComponents.length > 0 && (itemType || 'PRODUCT') !== 'PRODUCT')) {
+        return res.status(400).json(apiError('Bill of Materials must contain at most 50 raw materials for a finished product'))
+      }
+      if (bomComponents.length > 0) {
+        const effectiveRole = (req as any).organizationRole ?? (req as any).user?.role
+        const roles = Array.isArray(effectiveRole) ? effectiveRole : [effectiveRole]
+        if (!roles.some((role) => ['ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'].includes(role))) {
+          return res.status(403).json(apiError('You do not have permission to add Bill of Materials components'))
+        }
+      }
+      const componentIds = new Set<number>()
+      for (const component of bomComponents) {
+        const componentProductId = Number(component?.componentProductId)
+        const componentQuantity = Number(component?.quantity)
+        const unit = typeof component?.unit === 'string' ? component.unit.trim() : ''
+        if (!Number.isSafeInteger(componentProductId) || componentProductId <= 0 ||
+            !Number.isFinite(componentQuantity) || componentQuantity <= 0 ||
+            componentQuantity > 999999999999.999 ||
+            Math.abs(componentQuantity * 1000 - Math.round(componentQuantity * 1000)) > 1e-7 ||
+            !unit || unit.length > 20 ||
+            componentIds.has(componentProductId)) {
+          return res.status(400).json(apiError('Each raw material must be unique and have a positive quantity (up to 3 decimals) and a unit'))
+        }
+        componentIds.add(componentProductId)
+        bomInputs.push({ componentProductId, quantity: componentQuantity, unit })
+      }
+      if (componentIds.size > 0) {
+        const validCount = await prisma.product.count({
+          where: { id: { in: [...componentIds] }, organizationId, itemType: 'RAW_MATERIAL', isActive: true, deletedAt: null },
+        })
+        if (validCount !== componentIds.size) {
+          return res.status(400).json(apiError('One or more BOM components are not active raw materials in this organization'))
+        }
+      }
+    }
 
     if (expiryDate && new Date(expiryDate) < new Date() && !isService) {
       return res.status(400).json(apiError("Expiry date cannot be in the past"))
@@ -306,19 +348,22 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       ));
     }
 
-    // The RRA item code (itemCd) is derived, not user-entered — VSDC spec
-    // §4.17: RW + product-type digit + pkgUnitCd + qtyUnitCd + sequence.
-    // qtyUnitCd is likewise derived from measurementUnit rather than asked
-    // for separately, since the UI only ever collects measurementUnit/pkgUnitCd.
-    const resolvedItemType = (isService ? 'SERVICE' : (itemType || 'PRODUCT')) as 'PRODUCT' | 'SERVICE'
+// The RRA item code (itemCd) is derived, not user-entered — VSDC spec
+    // §4.17: <origin> + product-type digit + pkgUnitCd + qtyUnitCd + sequence.
+    // Use an explicit RRA quantity unit when supplied, otherwise derive it from the measurement unit.
+    const resolvedItemType = (isService ? 'SERVICE' : (itemType || 'PRODUCT')) as 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE'
     const resolvedQtyUnitCd = qtyUnitCd || deriveQtyUnitCd(measurementUnit)
 
     const createProductInTx = async (tx: any) => {
+      // Get origin from organization settings if not provided
+      const resolvedOrigin = origin || (await getOriginNationCode(organizationId!, tx))
+
       // Allocated from the same atomic per-organization counter table the
       // create() below runs against, inside this same transaction, so a
       // sequence number is only ever consumed if the product actually commits
       // — no gap is left behind if create() fails for an unrelated reason.
-      const itemCd = await allocateItemCd(organizationId!, resolvedItemType, pkgUnitCd, resolvedQtyUnitCd, tx)
+      const itemCd = await allocateItemCd(organizationId!, resolvedItemType, pkgUnitCd, resolvedQtyUnitCd, resolvedOrigin, tx)
+
       const product = await tx.product.create({
         data: {
           name,
@@ -330,21 +375,22 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
           category: category || (isService ? 'Services' : undefined),
           description,
           imageUrl,
-          minStock: isService ? 0 : (minStock || 10),
+          minStock: isService ? 0 : (minStock ?? 10),
           organizationId: organizationId!,
           sku,
           taxCategory: TaxService.getTaxCategory(normalizedTaxCode as any),
           taxCode: normalizedTaxCode as any,
-          measurementUnit: measurementUnit || 'OTHER',
+          measurementUnit: measurementUnit || (isService ? 'OTHER' : 'PCS'),
           itemType,
-          barcode,
-          pkgUnitCd: isService ? null : (pkgUnitCd || null),
+          barcode: isService ? (barcode || null) : barcode,
+          // VSDC ItemSaveReq requires pkgUnitCd for all types including SERVICE.
+          pkgUnitCd: pkgUnitCd || null,
           qtyUnitCd: resolvedQtyUnitCd,
           packagingQty: isService ? null : (packagingQty != null && packagingQty !== '' ? packagingQty : null),
           itemCd,
           itemClsCd: itemClsCd || null,
           itemStandardName: itemStandardName || null,
-          origin: origin || 'RW',
+          origin: resolvedOrigin,
           useInsurance: !!useInsurance,
           additionalInfo: additionalInfo || null,
           l1SalePrice: l1SalePrice != null && l1SalePrice !== '' ? l1SalePrice : null,
@@ -405,6 +451,16 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
           expiryDate: expiryDate ? new Date(expiryDate) : undefined,
           tx,
         });
+      }
+
+      if (bomInputs.length > 0) {
+        await tx.bomComponent.createMany({
+          data: bomInputs.map((component) => ({
+            ...component,
+            parentProductId: product.id,
+            organizationId,
+          })),
+        })
       }
 
       return product;
@@ -563,6 +619,7 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
     // retry of the transaction on conflict re-allocates a fresh block — same
     // conflict-retry pattern as createProduct/openShift.
     let result: any
+    const orgOrigin = await getOriginNationCode(organizationId!);
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         result = await prisma.$transaction(async (tx) => {
@@ -571,8 +628,9 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
           await tx.product.createMany({
             data: products.map((product: any, index: number) => {
               const isService = product.itemType === 'SERVICE';
-              const resolvedItemType = (isService ? 'SERVICE' : (product.itemType || 'PRODUCT')) as 'PRODUCT' | 'SERVICE'
+              const resolvedItemType = (isService ? 'SERVICE' : (product.itemType || 'PRODUCT')) as 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE'
               const resolvedQtyUnitCd = product.qtyUnitCd || deriveQtyUnitCd(product.measurementUnit)
+              const resolvedOrigin = product.origin || orgOrigin;
               return {
                 name: product.name,
                 batchNumber: isService ? null : product.batchNumber,
@@ -590,11 +648,13 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
                 taxCode: product.taxCode,
                 measurementUnit: product.measurementUnit || 'OTHER',
                 itemType: product.itemType || 'PRODUCT',
-                barcode: isService ? null : product.barcode,
-                pkgUnitCd: isService ? null : (product.pkgUnitCd || null),
+                barcode: isService ? (product.barcode || null) : product.barcode,
+                pkgUnitCd: product.pkgUnitCd || null,
                 qtyUnitCd: resolvedQtyUnitCd,
                 packagingQty: isService ? null : (product.packagingQty != null && product.packagingQty !== '' ? product.packagingQty : null),
-                itemCd: buildItemCd(resolvedItemType, product.pkgUnitCd, resolvedQtyUnitCd, itemCdBase + index + 1),
+                itemCd: buildItemCd(resolvedItemType, product.pkgUnitCd, resolvedQtyUnitCd, itemCdBase + index + 1, resolvedOrigin),
+                itemClsCd: product.itemClsCd || null,
+                origin: resolvedOrigin,
               };
             }),
           });
@@ -773,7 +833,13 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
     if (imageUrl !== undefined) data.imageUrl = imageUrl
     if (itemClsCd !== undefined) data.itemClsCd = itemClsCd === '' ? null : itemClsCd
     if (itemStandardName !== undefined) data.itemStandardName = itemStandardName === '' ? null : itemStandardName
-    if (origin !== undefined) data.origin = origin || 'RW'
+    if (origin !== undefined) {
+      if (origin === '' || origin === null) {
+        data.origin = await getOriginNationCode(organizationId);
+      } else {
+        data.origin = origin;
+      }
+    }
     if (useInsurance !== undefined) data.useInsurance = !!useInsurance
     if (additionalInfo !== undefined) data.additionalInfo = additionalInfo === '' ? null : additionalInfo
     if (l1SalePrice !== undefined) data.l1SalePrice = l1SalePrice === '' ? null : l1SalePrice
@@ -792,7 +858,7 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
       'name', 'itemClsCd', 'itemType', 'itemStandardName', 'origin',
       'pkgUnitCd', 'qtyUnitCd', 'taxCode', 'batchNumber', 'barcode', 'unitPrice',
       'l1SalePrice', 'l2SalePrice', 'l3SalePrice', 'l4SalePrice', 'l5SalePrice',
-      'additionalInfo', 'minStock', 'useInsurance',
+      'additionalInfo', 'minStock', 'useInsurance', 'isActive',
     ] as const
     const valueChanged = (next: unknown, prev: unknown) => {
       const n = next != null && typeof (next as any).toNumber === 'function' ? (next as any).toNumber() : next
@@ -814,15 +880,16 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
     // one; never regenerate an itemCd that's already registered.
     let product: any
     if (!existingProduct.itemCd) {
-      const resolvedItemType = (data.itemType ?? existingProduct.itemType) as 'PRODUCT' | 'SERVICE'
+      const resolvedItemType = (data.itemType ?? existingProduct.itemType) as 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE'
       const resolvedPkgUnitCd = data.pkgUnitCd !== undefined ? data.pkgUnitCd : existingProduct.pkgUnitCd
       const resolvedQtyUnitCd = data.qtyUnitCd ?? existingProduct.qtyUnitCd ?? deriveQtyUnitCd(existingProduct.measurementUnit)
+      const resolvedOrigin = data.origin ?? existingProduct.origin ?? (await getOriginNationCode(organizationId))
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
           product = await prisma.$transaction(async (tx) => {
             // Allocated inside the same transaction as the update so a
             // sequence number is only consumed if the update actually commits.
-            const itemCd = await allocateItemCd(organizationId, resolvedItemType, resolvedPkgUnitCd, resolvedQtyUnitCd, tx)
+            const itemCd = await allocateItemCd(organizationId, resolvedItemType, resolvedPkgUnitCd, resolvedQtyUnitCd, resolvedOrigin, tx)
             return tx.product.update({
               where: { id },
               data: { ...data, itemCd },
@@ -928,6 +995,7 @@ export const deleteProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
+    const userId = parseInt((req as any).user?.userId as string)
 
     const existingProduct = await prisma.product.findFirst({
       where: { id, organizationId, deletedAt: null },
@@ -937,10 +1005,23 @@ export const deleteProduct = async (req: BranchAuthRequest, res: Response) => {
       return res.status(404).json(apiError("Product not found"))
     }
 
+    // Soft-delete locally and push useYn=N to RRA when the item was registered.
+    const shouldResync =
+      !!existingProduct.itemCd &&
+      (existingProduct.ebmSyncStatus === 'SYNCED' || existingProduct.ebmSyncStatus === 'PENDING')
+
     await prisma.product.update({
       where: { id },
-      data: { isActive: false, deletedAt: new Date() }
+      data: {
+        isActive: false,
+        deletedAt: new Date(),
+        ...(shouldResync ? { ebmSyncStatus: 'PENDING' as const } : {}),
+      },
     })
+
+    if (shouldResync) {
+      syncProductToRraAsync(id, userId)
+    }
 
     await auditLogger.inventory(req, {
       type: 'PRODUCT_ARCHIVED',
@@ -965,10 +1046,10 @@ export const getExpiringProducts = async (req: BranchAuthRequest, res: Response)
     const { days = "30", limit = "10", page = "1" } = req.query
 
     const branchFilter = buildBranchFilter(req)
-    const where: any = {
+    const where: Prisma.ProductWhereInput = {
       organizationId,
       deletedAt: null,
-      itemType: 'PRODUCT',
+      itemType: { in: [ItemType.PRODUCT, ItemType.RAW_MATERIAL] },
       expiryDate: {
         not: null,
         gte: new Date(),
@@ -1026,14 +1107,14 @@ export const getExpiredProducts = async (req: BranchAuthRequest, res: Response) 
 
     const branchFilter = buildBranchFilter(req)
     const where: any = {
-      organizationId,
-      itemType: 'PRODUCT',
-      deletedAt: null,
-      expiryDate: {
-        not: null,
-        lt: new Date(),
-      },
-    }
+        organizationId,
+        deletedAt: null,
+        itemType: 'PRODUCT',
+        expiryDate: {
+          not: null,
+          lt: new Date(),
+        },
+      }
 
     if (branchFilter.branchId) {
       where.batches = {
@@ -1097,12 +1178,11 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
     const skip = (Number.parseInt(page as string) - 1) * Number.parseInt(limit as string)
     const take = Number.parseInt(limit as string)
 
-    // Build ORM where clause (avoids $queryRaw BigInt/Decimal serialization issues)
-    const where: any = {
+    const where: Prisma.ProductWhereInput = {
       organizationId,
       isActive: true,
       deletedAt: null,
-      itemType: { not: 'SERVICE' },
+      itemType: { in: [ItemType.PRODUCT, ItemType.RAW_MATERIAL] },
       // When an org-wide fallback threshold is configured, also consider
       // products that haven't set their own minStock (0/unset).
       ...(overrideThreshold && overrideThreshold > 0 ? {} : { minStock: { gt: 0 } }),

@@ -1,6 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderSalesInvoiceHtml = renderSalesInvoiceHtml;
+const invoice_format_service_1 = require("./invoice-format.service");
+const system_branding_service_1 = require("./system-branding.service");
+// invoice-pdf.service only imports RenderInvoicePayload/RenderInvoiceLineItem
+// as types (`import type`, erased at build time), so importing its runtime
+// helpers here does not create a circular module dependency at runtime.
+const invoice_pdf_service_1 = require("./invoice-pdf.service");
 function escapeHtml(value) {
     return String(value ?? "")
         .replace(/&/g, "&amp;")
@@ -17,13 +23,7 @@ function isPresent(value) {
     return safeText(value) !== "—";
 }
 function formatAmount(value) {
-    const n = Number(value ?? 0);
-    if (!Number.isFinite(n))
-        return "0.00";
-    return n.toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
+    return (0, invoice_format_service_1.formatInvoiceAmount)(value);
 }
 function formatInteger(value) {
     const n = Number(value ?? 0);
@@ -68,6 +68,17 @@ function row(label, value, opts = {}) {
       <div class="kv-label">${escapeHtml(label)}</div>
       <div class="kv-sep">:</div>
       <div class="kv-value ${opts.mono ? "mono" : ""}">${escapeHtml(value)}</div>
+    </div>
+  `;
+}
+/** Like `row`, but always prints the label — an empty value renders blank rather than dropping the whole line. */
+function rowAlways(label, value, opts = {}) {
+    const text = isPresent(value) ? escapeHtml(value) : "";
+    return `
+    <div class="kv-row">
+      <div class="kv-label">${escapeHtml(label)}</div>
+      <div class="kv-sep">:</div>
+      <div class="kv-value ${opts.mono ? "mono" : ""}">${text}</div>
     </div>
   `;
 }
@@ -187,7 +198,7 @@ function renderSalesInvoiceHtml(data) {
     const invoiceTime = formatTime(data.invoice.time);
     const paymentMethod = safeText(data.invoice.paymentMethod).toUpperCase();
     const cashier = safeText(data.invoice.cashier);
-    const poweredBy = safeText(data.branding.poweredBy, "EXCEL EDGE ERP");
+    const poweredBy = safeText(data.branding.poweredBy, system_branding_service_1.SYSTEM_POWERED_BY);
     const footerMessage = safeText(data.footer?.message, "THANK YOU FOR YOUR BUSINESS!");
     const qrCodeImage = data.verification.qrCodeImage ?? "";
     const supplyNote = (Number(data.totals.vat) > 0 || Number(data.totals.tax) > 0 || data.items.some((item) => Number(item.vatPct) > 0 || Number(item.taxAmount) > 0))
@@ -196,11 +207,12 @@ function renderSalesInvoiceHtml(data) {
     const logoHtml = data.company.logo
         ? `<img src="${escapeHtml(data.company.logo)}" alt="${companyName} logo" class="company-logo" />`
         : "";
+    const isEbmLinked = Boolean(data.company.ebmLinked);
     const customerRows = [
-        row("Client Name", customerName),
-        row("TIN", customerTin),
+        rowAlways("Client Name", customerName),
+        rowAlways("TIN", customerTin),
+        rowAlways("Phone", customerPhone),
         row("Address", customerAddress),
-        row("Phone", customerPhone),
     ].join("");
     const invoiceRows = [
         invoiceInfoRow("doc", "Invoice No", invoiceNo),
@@ -210,11 +222,18 @@ function renderSalesInvoiceHtml(data) {
         invoiceInfoRow("card", "Payment Method", paymentMethod),
         invoiceInfoRow("user", "Cashier", cashier),
     ].join("");
+    // RRA checklist §46: print the tax value under each A/B/C/D label actually
+    // in play (taxGroups already force-includes B at zero per §48), alongside
+    // — not instead of — the aggregate VAT/TAX rows above. Only the TAX rows
+    // print: per-band SALES totals ("TOTAL A …") duplicate the grand total and
+    // are not shown on the customer-facing invoice.
+    const taxBreakdownRows = (0, invoice_pdf_service_1.taxGroups)(data).map((group) => [`TOTAL TAX ${group.code}`, group.tax, false]);
     const summaryRows = [
         ["SUBTOTAL (VAT INCL.)", data.totals.grandTotal, true],
         ["DISCOUNT", data.totals.discount, false],
         ["VAT", data.totals.vat, false],
         ["TAX", data.totals.tax, false],
+        ...taxBreakdownRows,
         ["SHIPPING", data.totals.shipping, false],
         ["PAID", data.totals.paid, false],
         ["BALANCE", data.totals.balance, false],
@@ -228,6 +247,8 @@ function renderSalesInvoiceHtml(data) {
   `).join("");
     const itemsHtml = data.items.map(tableRow).join("");
     const sdc = data.sdcInformation;
+    const internalDataDisplay = sdc.internalData ? dashEvery4(sdc.internalData) : "—";
+    const receiptSignatureDisplay = sdc.receiptSignature ? dashEvery4(sdc.receiptSignature) : "—";
     return `
     <style>
       .rra-invoice {
@@ -353,6 +374,18 @@ function renderSalesInvoiceHtml(data) {
         border-radius: 16px;
         padding: 20px;
         background: #fff;
+      }
+      .rra-invoice .not-official-notice {
+        margin: 20px 0;
+        padding: 10px 0;
+        border-top: 1px dashed #94a3b8;
+        border-bottom: 1px dashed #94a3b8;
+        text-align: center;
+        font-weight: 800;
+        font-size: 12px;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: #0f172a;
       }
       .rra-invoice .panel-grid {
         display: grid;
@@ -778,7 +811,9 @@ function renderSalesInvoiceHtml(data) {
       <div class="sheet">
         <div class="top-grid">
           <div class="brand">
-            ${rraLogoSvg()}
+            ${data.branding?.rraLogo
+        ? `<img src="${escapeHtml(data.branding.rraLogo)}" alt="Rwanda Revenue Authority" width="120" height="48" style="object-fit:contain" />`
+        : rraLogoSvg()}
             <div class="brand-name">Rwanda Revenue Authority</div>
             <div class="brand-tag">Taxes for Growth and Development</div>
           </div>
@@ -797,16 +832,16 @@ function renderSalesInvoiceHtml(data) {
           </div>
 
           <div class="cert">
-            ${ebmSealSvg(Boolean(data.certification.isCertified))}
+            ${isEbmLinked ? `${ebmSealSvg(Boolean(data.certification.isCertified))}
             <div class="cert-label">RRA | EBM</div>
-            <div class="cert-label">CERTIFIED</div>
+            <div class="cert-label">CERTIFIED</div>` : ""}
           </div>
         </div>
 
         <div class="divider">
           <div class="divider-bar"><span class="b1"></span><span class="b2"></span><span class="b3"></span></div>
         </div>
-        <h2 class="title">INVOICE</h2>
+        <h2 class="title">${escapeHtml((0, invoice_pdf_service_1.documentIndicator)(data) || "INVOICE")}</h2>
 
         <div class="panel">
           <div class="panel-grid">
@@ -859,6 +894,14 @@ function renderSalesInvoiceHtml(data) {
           </div>
         </div>
 
+        ${data.invoice.notFiscalized
+        ? `<div class="not-official-notice">${escapeHtml(system_branding_service_1.NOT_FISCALIZED_TITLE)} — ${escapeHtml(system_branding_service_1.NOT_FISCALIZED_NOTICE)}</div>`
+        : ""}
+
+        ${(0, invoice_pdf_service_1.isFormalNoticeIndicator)((0, invoice_pdf_service_1.documentIndicator)(data)) || !data.certification.isCertified
+        ? `<div class="not-official-notice">${escapeHtml(system_branding_service_1.NOT_OFFICIAL_RECEIPT_NOTICE)}</div>`
+        : ""}
+
         <div class="verification">
           <div class="verification-grid">
             <div class="verification-left">
@@ -878,12 +921,13 @@ function renderSalesInvoiceHtml(data) {
                   <div class="cell"><span class="label">SDC ID</span><span class="sep">:</span><span class="value mono">${escapeHtml(safeText(sdc.sdcId))}</span></div>
                   <div class="cell"><span class="label">Receipt Number</span><span class="sep">:</span><span class="value mono">${escapeHtml(safeText(sdc.receiptNumber ?? data.invoice.receiptNumber))}</span></div>
                   <div class="cell"><span class="label">MRC</span><span class="sep">:</span><span class="value mono">${escapeHtml(safeText(sdc.mrcNo))}</span></div>
-                  <div class="cell"><span class="label">Internal Data</span><span class="sep">:</span><span class="value mono">${escapeHtml(safeText(sdc.internalData !== "—" ? dashEvery4(sdc.internalData) : "—"))}</span></div>
+                  <div class="cell"><span class="label">Internal Data</span><span class="sep">:</span><span class="value mono">${escapeHtml(internalDataDisplay)}</span></div>
                 </div>
                 <div class="sdc-col">
-                  <div class="cell"><span class="label">Receipt Signature</span><span class="sep">:</span><span class="value mono">${escapeHtml(safeText(sdc.receiptSignature !== "—" ? dashEvery4(sdc.receiptSignature) : "—"))}</span></div>
+                  <div class="cell"><span class="label">Receipt Signature</span><span class="sep">:</span><span class="value mono">${escapeHtml(receiptSignatureDisplay)}</span></div>
                   <div class="cell"><span class="label">Date</span><span class="sep">:</span><span class="value">${escapeHtml(formatDateShort(sdc.date ?? data.invoice.invoiceDate))}</span></div>
                   <div class="cell"><span class="label">Time</span><span class="sep">:</span><span class="value">${escapeHtml(safeText(sdc.time ?? data.invoice.time))}</span></div>
+                  <div class="cell"><span class="label">Software Version</span><span class="sep">:</span><span class="value">${escapeHtml(safeText(sdc.softwareVersion))}</span></div>
                 </div>
               </div>
               <div class="powered">Powered by <strong>${escapeHtml(poweredBy)}</strong></div>

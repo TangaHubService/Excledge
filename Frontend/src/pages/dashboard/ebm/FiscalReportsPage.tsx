@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Download, Loader2, ScrollText, ChevronRight, CheckCircle2, AlertTriangle, RefreshCw, Database, Bell, Boxes, Truck, X, Ship } from "lucide-react";
+import { FileText, Download, Loader2, ScrollText, ChevronRight, CheckCircle2, AlertTriangle, RefreshCw, Database, Bell, Boxes, Truck, X, Ship, Shield } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
 import { RraItemClassPicker } from "../../../components/inventory/RraItemClassPicker";
 import { toast } from "react-toastify";
@@ -82,6 +82,8 @@ interface DailyReport {
   summary: {
     normalSalesCount: number; normalRefundsCount: number; grossSalesAmt: number; grossRefundAmt: number;
     netSalesAmt: number; totalTaxAmt: number; trainingCount: number; trainingAmt: number; copyCount: number; copyAmt: number;
+    openingDeposit?: number; proformaCount?: number; proformaAmt?: number;
+    discountTotal?: number; otherReductionsAmt?: number; incompleteSalesCount?: number;
   };
   taxBands: Record<string, { taxableAmt: number; taxAmt: number; salesAmt: number }>;
   taxRates: Record<string, number>;
@@ -231,6 +233,11 @@ function DailyReportCard() {
               ))}
               <Row label={`Training receipts (${report.summary.trainingCount})`} value={money(report.summary.trainingAmt)} />
               <Row label={`Copy receipts (${report.summary.copyCount})`} value={money(report.summary.copyAmt)} />
+              <Row label="Opening deposit" value={money(report.summary.openingDeposit ?? 0)} />
+              <Row label={`Proforma receipts (${report.summary.proformaCount ?? 0})`} value={money(report.summary.proformaAmt ?? 0)} />
+              <Row label="All discounts" value={money(report.summary.discountTotal ?? 0)} />
+              <Row label="Other reductions (voids)" value={money(report.summary.otherReductionsAmt ?? 0)} />
+              <Row label="Incomplete sales" value={report.summary.incompleteSalesCount ?? 0} />
             </div>
             {report.reportType === "Z" && (
               <div className="md:col-span-2 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs">
@@ -614,6 +621,25 @@ function MasterDataCard() {
           <Button variant="outline" onClick={reconcile} disabled={reconciling}>
             {reconciling ? <Loader2 className="size-4 animate-spin" /> : <Database className="size-4" />} Reconcile items with RRA
           </Button>
+          <Button
+            variant="outline"
+            disabled={syncing}
+            onClick={async () => {
+              setSyncing(true);
+              try {
+                const res = await apiClient.syncRraBranches();
+                const out = (res as any)?.data ?? res;
+                toast.success(`Branches: ${out?.fetched ?? 0} from RRA, ${out?.matched ?? 0} matched locally`);
+                await load();
+              } catch (e: any) {
+                toast.error(e?.message ?? "Branch sync failed");
+              } finally {
+                setSyncing(false);
+              }
+            }}
+          >
+            Sync branches
+          </Button>
           {loading ? (
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
           ) : c ? (
@@ -754,7 +780,7 @@ const PMT_LABEL: Record<string, string> = {
 function StockAndPurchasesCard() {
   const [stock, setStock] = useState<{ counts: Record<string, number>; failures: any[] } | null>(null);
   const [purchases, setPurchases] = useState<RraPurchase[]>([]);
-  const [busy, setBusy] = useState<null | "stock" | "purchases">(null);
+  const [busy, setBusy] = useState<null | "stock" | "purchases" | "moves">(null);
   const [rowBusy, setRowBusy] = useState<number | null>(null);
   const [selected, setSelected] = useState<RraPurchase | null>(null);
   const [rejecting, setRejecting] = useState(false);
@@ -780,6 +806,17 @@ function StockAndPurchasesCard() {
       await load();
     } catch (e: any) {
       toast.error(e?.message ?? "Stock sync failed");
+    } finally { setBusy(null); }
+  };
+
+  const syncStockMoves = async () => {
+    setBusy("moves");
+    try {
+      const res = await apiClient.syncRraStockMoves();
+      const out = (res as any)?.data ?? res;
+      toast.success(`Pulled ${out?.fetched ?? 0} stock movement(s) from RRA`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Stock-move pull failed");
     } finally { setBusy(null); }
   };
 
@@ -827,6 +864,9 @@ function StockAndPurchasesCard() {
         <div className="flex flex-wrap items-center gap-3">
           <Button onClick={syncStock} disabled={busy === "stock"}>
             {busy === "stock" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Sync stock now
+          </Button>
+          <Button variant="outline" onClick={syncStockMoves} disabled={busy === "moves"}>
+            {busy === "moves" ? <Loader2 className="size-4 animate-spin" /> : <Truck className="size-4" />} Pull stock moves
           </Button>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span><b className="text-foreground tabular-nums">{sc.PENDING ?? 0}</b> pending</span>
@@ -1154,6 +1194,140 @@ function ImportDeclarationsCard() {
   );
 }
 
+function AuditorOverviewCard() {
+  const { selectedBranchId } = useBranch();
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.getRraAuditOverview(selectedBranchId ?? undefined);
+      setData((res as any)?.data ?? res);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to load auditor overview");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedBranchId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Shield className="size-4" /> Auditor overview
+        </CardTitle>
+        <CardDescription>
+          CIS §7.26 — software settings, device registration, sync cursors, and outbox health for competent auditors.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Button type="button" variant="outline" size="sm" onClick={load} disabled={loading}>
+          {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+          Refresh
+        </Button>
+        {data && (
+          <div className="grid gap-4 text-sm md:grid-cols-2">
+            <div className="space-y-1.5 rounded-lg border p-3">
+              <div className="text-overline uppercase tracking-wide text-muted-foreground">CIS software</div>
+              <Row label="App" value={data.cis?.appName ?? "—"} />
+              <Row label="EBM enabled" value={data.cis?.ebmEnabled ? "Yes" : "No"} />
+              <Row label="Protocol" value={data.cis?.ebmProtocol ?? "—"} />
+              <Row label="Environment" value={data.cis?.environment ?? "—"} />
+              <Row label="VSDC timeout (ms)" value={data.cis?.requestTimeoutMs ?? "—"} />
+            </div>
+            <div className="space-y-1.5 rounded-lg border p-3">
+              <div className="text-overline uppercase tracking-wide text-muted-foreground">Organization</div>
+              <Row label="Name" value={data.organization?.name ?? "—"} />
+              <Row label="TIN" value={data.organization?.TIN ?? "—"} />
+              <Row label="Training mode" value={data.organization?.trainingMode ? "On" : "Off"} />
+              <Row label="Last VSDC contact" value={data.organization?.lastSuccessfulVdsContact ? new Date(data.organization.lastSuccessfulVdsContact).toLocaleString() : "—"} />
+              <Row label="VAT registered" value={data.settings?.vatRegistered ? "Yes" : "No"} />
+            </div>
+            <div className="space-y-1.5 rounded-lg border p-3 md:col-span-2">
+              <div className="text-overline uppercase tracking-wide text-muted-foreground">Branches / devices</div>
+              {(data.branches ?? []).length === 0 ? (
+                <p className="text-muted-foreground">No active branches.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Branch</TableHead>
+                      <TableHead>bhfId</TableHead>
+                      <TableHead>SDC</TableHead>
+                      <TableHead>MRC</TableHead>
+                      <TableHead>Initialized</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(data.branches ?? []).map((b: any) => (
+                      <TableRow key={b.id}>
+                        <TableCell>{b.name}</TableCell>
+                        <TableCell>{b.bhfId ?? "—"}</TableCell>
+                        <TableCell>{b.ebmDeviceId ?? "—"}</TableCell>
+                        <TableCell>{b.ebmSerialNo ?? "—"}</TableCell>
+                        <TableCell>{b.ebmInitializedAt ? new Date(b.ebmInitializedAt).toLocaleString() : "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+            <div className="space-y-1.5 rounded-lg border p-3">
+              <div className="text-overline uppercase tracking-wide text-muted-foreground">Outbox</div>
+              {Object.entries(data.outboxByStatus ?? {}).map(([status, count]) => (
+                <Row key={status} label={status} value={String(count)} />
+              ))}
+            </div>
+            <div className="space-y-1.5 rounded-lg border p-3">
+              <div className="text-overline uppercase tracking-wide text-muted-foreground">Last fiscal sale</div>
+              {data.lastFiscalSale ? (
+                <>
+                  <Row label="Sale #" value={data.lastFiscalSale.saleNumber} />
+                  <Row label="Invoice" value={data.lastFiscalSale.invoiceNumber ?? "—"} />
+                  <Row label="Label" value={data.lastFiscalSale.rcptLabel ?? "—"} />
+                  <Row label="When" value={new Date(data.lastFiscalSale.createdAt).toLocaleString()} />
+                </>
+              ) : (
+                <p className="text-muted-foreground">No fiscal sales yet.</p>
+              )}
+            </div>
+            <div className="space-y-1.5 rounded-lg border p-3 md:col-span-2">
+              <div className="text-overline uppercase tracking-wide text-muted-foreground">Sync cursors</div>
+              {(data.syncCursors ?? []).length === 0 ? (
+                <p className="text-muted-foreground">No cursors recorded.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Resource</TableHead>
+                      <TableHead>lastReqDt</TableHead>
+                      <TableHead>Last run</TableHead>
+                      <TableHead>Result</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(data.syncCursors ?? []).map((c: any) => (
+                      <TableRow key={c.resource}>
+                        <TableCell>{c.resource}</TableCell>
+                        <TableCell>{c.lastReqDt}</TableCell>
+                        <TableCell>{c.lastRunAt ? new Date(c.lastRunAt).toLocaleString() : "—"}</TableCell>
+                        <TableCell className="max-w-[240px] truncate">{c.lastResult ?? "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 const TABS = [
   { value: "daily", label: "Daily X / Z", icon: FileText },
   { value: "plu", label: "PLU", icon: FileText },
@@ -1161,6 +1335,7 @@ const TABS = [
   { value: "masterdata", label: "Master data", icon: Database },
   { value: "stock", label: "Stock & purchases", icon: Boxes },
   { value: "imports", label: "Imports", icon: Ship },
+  { value: "audit", label: "Auditor", icon: Shield },
 ] as const;
 
 const TAB_STORAGE_KEY = "fiscal-reports-tab";
@@ -1233,6 +1408,7 @@ export function FiscalReportsPage() {
         <TabsContent value="masterdata" className="mt-4"><MasterDataCard /></TabsContent>
         <TabsContent value="stock" className="mt-4"><StockAndPurchasesCard /></TabsContent>
         <TabsContent value="imports" className="mt-4"><ImportDeclarationsCard /></TabsContent>
+        <TabsContent value="audit" className="mt-4"><AuditorOverviewCard /></TabsContent>
       </Tabs>
     </div>
   );

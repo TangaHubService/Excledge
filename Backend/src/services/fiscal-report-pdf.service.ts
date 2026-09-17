@@ -58,6 +58,17 @@ export interface DailyReportData {
     trainingAmt: number
     copyCount: number
     copyAmt: number
+    /** CIS §18.1.12 / §19.1.12 — opening till float for the day. */
+    openingDeposit: number
+    /** CIS §18.1.16 / §19.1.16 — proforma (PS) count and amount. */
+    proformaCount: number
+    proformaAmt: number
+    /** CIS §18.1.18 — total discounts granted on NS sales. */
+    discountTotal: number
+    /** CIS §18.1.19 — other reductions (voided sales totals). */
+    otherReductionsAmt: number
+    /** CIS §18.1.20 — held / incomplete carts not finalized. */
+    incompleteSalesCount: number
   }
   taxBands: Record<string, { taxableAmt: number; taxAmt: number; salesAmt: number }>
   taxRates: Record<string, number>
@@ -212,8 +223,13 @@ function drawDailyReport(doc: PDFKit.PDFDocument, data: DailyReportData, logo: B
   dashed(doc, y)
   y += 4
   y = centered(doc, "NON-FISCAL COUNTS", y, true)
+  y = pair(doc, "Opening deposit", formatInvoiceAmount(data.summary.openingDeposit), y)
   y = pair(doc, `Training receipts (${data.summary.trainingCount})`, formatInvoiceAmount(data.summary.trainingAmt), y)
   y = pair(doc, `Copy receipts (${data.summary.copyCount})`, formatInvoiceAmount(data.summary.copyAmt), y)
+  y = pair(doc, `Proforma receipts (${data.summary.proformaCount})`, formatInvoiceAmount(data.summary.proformaAmt), y)
+  y = pair(doc, "All discounts", formatInvoiceAmount(data.summary.discountTotal), y)
+  y = pair(doc, "Other reductions (voids)", formatInvoiceAmount(data.summary.otherReductionsAmt), y)
+  y = pair(doc, "Incomplete sales", String(data.summary.incompleteSalesCount), y)
 
   if (data.reportType === "Z") {
     y += 2

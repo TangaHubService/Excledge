@@ -74,6 +74,8 @@ model Organization {
   rraSyncCursors           RraSyncCursor[]
   rraPurchases             RraPurchase[]
   rraImportItems           RraImportItem[]
+  BomComponent             BomComponent[]
+  ProductionRun            ProductionRun[]
 
   @@map("organizations")
 }
@@ -293,6 +295,7 @@ model User {
   cashMovements            CashMovement[]
   heldSales                HeldSale[]
   devices                  Device[]
+  ProductionRun            ProductionRun[]
 
   @@index([deletedAt])
   @@index([passwordResetToken])
@@ -507,6 +510,9 @@ model Product {
   stockMovements       StockMovement[]
   supplierInvoiceItems SupplierInvoiceItem[]
   fuelDispensers       FuelDispenser[]
+  bomComponents        BomComponent[]        @relation("BomComponent")
+  bomParent            BomComponent[]        @relation("BomParent")
+  ProductionRun        ProductionRun[]
 
   // RRA itemCd must be unique per taxpayer (VSDC spec §4.17). NULLs (items
   // never synced to EBM) are exempt from a Postgres unique index, so this
@@ -523,6 +529,45 @@ model Product {
   @@map("products")
 }
 
+/// Raw Material → Finished Product composition (RRA spec: item composition is used
+/// to calculate the BOM of final processed items). Each row defines that one
+/// unit of the parent (finished) product requires `quantity` of the component
+/// (raw material).
+model BomComponent {
+  id                 Int          @id @default(autoincrement())
+  parentProductId    Int
+  componentProductId Int
+  quantity           Decimal      @db.Decimal(15, 3) // raw material units consumed per finished product unit
+  unit               String       @default("PCS") // unit of the component quantity
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  organizationId     Int
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parentProduct      Product      @relation("BomParent", fields: [parentProductId], references: [id], onDelete: Cascade)
+  componentProduct   Product      @relation("BomComponent", fields: [componentProductId], references: [id], onDelete: Cascade)
+
+  @@unique([parentProductId, componentProductId])
+  @@index([componentProductId])
+  @@map("bom_components")
+}
+
+/// Production run: converts Raw Materials into Finished Products.
+/// Each row consumes components and produces finished products.
+model ProductionRun {
+  id             Int          @id @default(autoincrement())
+  productId      Int // The finished product being produced
+  quantity       Decimal      @db.Decimal(15, 3) // Finished products produced
+  producedAt     DateTime     @default(now())
+  note           String?
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId         Int
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@map("production_runs")
+}
+
 model Customer {
   name            String
   email           String?
@@ -533,6 +578,16 @@ model Customer {
   isActive        Boolean       @default(true)
   TIN             String? // RRA Tax ID
   prcOrdCd        String? // RRA purchase order code (required for B2B / business customer TINs)
+  // Pharmacy insurance company registration (VSDC BhfInsuranceSaveReq §3.3.3.3).
+  // Populated on CustomerType.INSURANCE and pushed via /branches/saveBrancheInsurances.
+  isrccCd         String? // RRA insurance company code (CHAR 10)
+  isrcRt          Decimal? @db.Decimal(5, 2) // Premium / cover rate (%)
+  // Structured buyer address (RRA customer address block: province / district /
+  // sector / street-or-cell). `address` stays the free-text legacy field.
+  custPrvncNm     String? // RRA customer province name
+  custDstrtNm     String? // RRA customer district name
+  custSctrNm      String? // RRA customer sector name
+  custLocDesc     String? // RRA customer street / cell / location description
   // RRA Customer API (/customers/selectCustomer) verification result
   rraVerifiedName String? // taxprNm returned by RRA for this TIN
   rraTaxprSttsCd  String? // taxpayer status code returned by RRA
@@ -586,6 +641,9 @@ model Sale {
   status               SaleStatus       @default(COMPLETED)
   refundedAt           DateTime?        @map("refunded_at")
   refundReason         String?          @map("refund_reason")
+  // RRA refund reason code (VSDC code class 32, sent as rfdRsnCd on the fiscal
+  // refund document). Free-text `refundReason` stays the human note (remark).
+  rfdRsnCd             String?          @map("rfd_rsn_cd")
   cancelledAt          DateTime?        @map("cancelled_at")
   cancellationReason   String?          @map("cancellation_reason")
   createdAt            DateTime         @default(now())
@@ -1207,36 +1265,36 @@ enum RraPurchaseStatus {
 /// (/imports/updateImportItems, RRA checklist §68); an approval books the
 /// stock-in. §67: each pull's request date must be later than the previous one.
 model RraImportItem {
-  id             Int              @id @default(autoincrement())
-  organizationId Int
-  taskCd         String
-  dclNo          String?
-  dclDe          String // declaration date, yyyyMMdd
-  itemSeq        Int
-  hsCd           String?
-  itemNm         String?
-  orgnNatCd      String?
-  exptNatCd      String?
-  pkg            Decimal?         @db.Decimal(15, 3)
-  pkgUnitCd      String?
-  qty            Decimal?         @db.Decimal(15, 3)
-  qtyUnitCd      String?
-  totWt          Decimal?         @db.Decimal(15, 3)
-  netWt          Decimal?         @db.Decimal(15, 3)
-  spplrNm        String?
-  agntNm         String?
-  invcFcurAmt    Decimal?         @db.Decimal(18, 4)
-  invcFcurCd     String?
-  invcFcurExcrt  Decimal?         @db.Decimal(18, 6)
-  itemCd         String?
-  itemClsCd      String?
-  status         RraImportStatus  @default(PENDING)
-  remark         String?
-  actionedAt     DateTime?
+  id              Int             @id @default(autoincrement())
+  organizationId  Int
+  taskCd          String
+  dclNo           String?
+  dclDe           String // declaration date, yyyyMMdd
+  itemSeq         Int
+  hsCd            String?
+  itemNm          String?
+  orgnNatCd       String?
+  exptNatCd       String?
+  pkg             Decimal?        @db.Decimal(15, 3)
+  pkgUnitCd       String?
+  qty             Decimal?        @db.Decimal(15, 3)
+  qtyUnitCd       String?
+  totWt           Decimal?        @db.Decimal(15, 3)
+  netWt           Decimal?        @db.Decimal(15, 3)
+  spplrNm         String?
+  agntNm          String?
+  invcFcurAmt     Decimal?        @db.Decimal(18, 4)
+  invcFcurCd      String?
+  invcFcurExcrt   Decimal?        @db.Decimal(18, 6)
+  itemCd          String?
+  itemClsCd       String?
+  status          RraImportStatus @default(PENDING)
+  remark          String?
+  actionedAt      DateTime?
   linkedProductId Int?
-  rawResponse    Json?
-  pulledAt       DateTime         @default(now())
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rawResponse     Json?
+  pulledAt        DateTime        @default(now())
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, taskCd, dclDe, itemSeq])
   @@index([organizationId, status])
@@ -1769,6 +1827,8 @@ enum InventoryMovementType {
   ADJUSTMENT_OUT
   ADJUSTMENT
   CORRECTION
+  PRODUCTION_CONSUME
+  PRODUCTION_OUTPUT
 }
 
 enum InventoryDirection {
@@ -1860,6 +1920,7 @@ enum RcptLabel {
 
 enum ItemType {
   PRODUCT
+  RAW_MATERIAL
   SERVICE
 }
 

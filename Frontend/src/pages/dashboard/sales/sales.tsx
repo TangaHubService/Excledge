@@ -160,6 +160,8 @@ export default function SalesPage() {
   const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
   const [saleToRefund, setSaleToRefund] = useState<Sale | null>(null);
   const [refundReason, setRefundReason] = useState('');
+  const [refundRsnCd, setRefundRsnCd] = useState('06');
+  const [refundReasons, setRefundReasons] = useState<Array<{ code: string; name: string }>>([]);
   const [isRefunding, setIsRefunding] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [saleToCancel, setSaleToCancel] = useState<Sale | null>(null);
@@ -260,7 +262,16 @@ export default function SalesPage() {
   const handleOpenRefundModal = (sale: Sale) => {
     setSaleToRefund(sale);
     setRefundReason('');
+    setRefundRsnCd('06');
     setIsRefundModalOpen(true);
+    // RRA refund reason codes (code class 32) — same list the backend
+    // enforces, so the operator can never pick a code VSDC rejects.
+    apiClient.getRraRefundReasons()
+      .then((res: any) => {
+        const list = res?.data?.reasons ?? res?.reasons ?? [];
+        if (Array.isArray(list) && list.length) setRefundReasons(list);
+      })
+      .catch(() => { /* keep the fallback list below */ });
   };
 
   const handleRefundSubmit = async () => {
@@ -268,7 +279,7 @@ export default function SalesPage() {
     if (!refundReason.trim()) { toast.error(t('sales.reasonRequired') || 'Refund reason is required'); return; }
     try {
       setIsRefunding(true);
-      await apiClient.refundSale(saleToRefund.id, { reason: refundReason });
+      await apiClient.refundSale(saleToRefund.id, { reason: refundReason, rfdRsnCd: refundRsnCd });
       toast.success(t('sales.refundSuccess'));
       await fetchSales();
       setIsRefundModalOpen(false);
@@ -1004,6 +1015,33 @@ export default function SalesPage() {
           <div className="space-y-4 px-5 py-4">
             <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
               <p className="text-sm text-amber-800 font-medium">{t('sales.fullRefundOnlyNote')}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="refundRsnCd">{t('sales.refundReasonCode') || 'RRA refund reason'}</Label>
+              <select
+                id="refundRsnCd"
+                value={refundRsnCd}
+                onChange={e => setRefundRsnCd(e.target.value)}
+                className="w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                {(refundReasons.length ? refundReasons : [
+                  { code: '01', name: 'Missing Quantity' },
+                  { code: '02', name: 'Missing Waiting' },
+                  { code: '03', name: 'Damaged' },
+                  { code: '04', name: 'Wasted' },
+                  { code: '05', name: 'Raw Material Shortage' },
+                  { code: '06', name: 'Refund' },
+                  { code: '07', name: 'Wrong Customer TIN' },
+                  { code: '08', name: 'Wrong Customer name' },
+                  { code: '09', name: 'Wrong Amount/price' },
+                  { code: '10', name: 'Wrong Quantity' },
+                  { code: '11', name: 'Wrong Item(s)' },
+                  { code: '12', name: 'Wrong tax type' },
+                  { code: '13', name: 'Other reason' },
+                ]).map(r => (
+                  <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="refundReason">{t('sales.refundReason')}</Label>

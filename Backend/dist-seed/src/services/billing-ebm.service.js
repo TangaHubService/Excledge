@@ -11,6 +11,7 @@ const rra_ebm_service_1 = require("./rra-ebm.service");
 Object.defineProperty(exports, "toRraDateTime", { enumerable: true, get: function () { return rra_ebm_service_1.toRraDateTime; } });
 const vsdc_api_service_1 = require("./vsdc-api.service");
 const rra_osdc_service_1 = require("./rra-osdc.service");
+const rra_code_service_1 = require("./rra-code.service");
 /**
  * RRA EBM fiscalization for subscription (billing) receipts.
  *
@@ -105,9 +106,10 @@ async function buildPaymentSaleLikeObject(params) {
                 product: {
                     name: subscription?.plan?.name ?? 'Subscription',
                     itemCd: null,
-                    itemClsCd: '5020230302',
+                    itemClsCd: null,
                     pkgUnitCd: null,
                     qtyUnitCd: null,
+                    packagingQty: null,
                 },
             },
         ],
@@ -184,7 +186,17 @@ async function fiscalizeSubscriptionPayment(params) {
     }
     let payload;
     try {
-        payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org);
+        // A subscription receipt is a fresh fiscal document for the org-as-buyer,
+        // so it needs its own unconsumed purchase code — the sandbox rejects the
+        // submission without one (resultCd 881/882).
+        const buyerTin = (org.TIN ?? '').trim();
+        const code = buyerTin
+            ? await (0, rra_ebm_service_1.consumeAnyOrgPurchaseCode)(params.organizationId, payment.id, prisma_1.prisma, buyerTin)
+            : null;
+        if (code)
+            sale.prcOrdCd = code;
+        const rraPaymentCode = await (0, rra_code_service_1.getRraPaymentCode)(params.organizationId, sale.paymentType);
+        payload = (0, rra_ebm_service_1.buildRraSendReceiptPayload)(sale, org, rraPaymentCode);
     }
     catch (e) {
         const msg = e instanceof Error ? e.message : 'Invalid billing receipt payload';

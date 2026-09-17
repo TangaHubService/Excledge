@@ -7,6 +7,7 @@ import {
   consumeOrgPurchaseCode,
   isEbmEnabled,
   allocateLocalReceiptSequence,
+  isValidRraTin,
 } from "./rra-ebm.service"
 import { processEbmOutboxBatch } from "./ebm-outbox.service"
 import { selectBatchesForSale, updateBatchQuantity } from "./batch.service"
@@ -29,7 +30,7 @@ export type CommitSaleItemInput = {
   productId?: number | string | null
   quantity: number
   unitPrice: number
-  itemType?: "PRODUCT" | "SERVICE"
+  itemType?: "PRODUCT" | "RAW_MATERIAL" | "SERVICE"
   serviceName?: string | null
   serviceDescription?: string | null
   measurementUnit?: string | null
@@ -127,18 +128,35 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
   }
 
   // ── B2B purchase-code pre-check ──
-  // RRA rejects (resultCd 910) any business-TIN (non-7-prefix) sale submitted
-  // without a valid 6-character prcOrdCd — confirmed against the sandbox.
-  // Catching this before the sale commits avoids completing a checkout (payment
-  // taken, stock deducted) that can never be fiscalized. Skipped for proforma:
-  // it is never fiscalized, so RRA never sees it.
+  // RRA rejects (resultCd 881/882, verified against the sandbox) any
+  // business-buyer sale submitted without a valid 6-character prcOrdCd.
+  // Catching this before the sale commits avoids completing a checkout
+  // (payment taken, stock deducted) that can never be fiscalized. Skipped for
+  // proforma: it is never fiscalized, so RRA never sees it.
   if (!isProforma && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
     const customer = await prisma.customer.findUnique({
       where: { id: customerId },
-      select: { TIN: true, prcOrdCd: true },
+      select: { TIN: true, prcOrdCd: true, customerType: true, name: true },
     })
     const custTin = customer?.TIN?.trim() ?? ""
-    if (custTin && !custTin.startsWith("7")) {
+    const customerType = (customer?.customerType ?? "INDIVIDUAL").toUpperCase()
+    // Business buyers must present a real, valid RRA TIN: a fiscal receipt
+    // without one can never be accepted (910/884), so fail fast at checkout
+    // instead of completing a sale that can never be fiscalized. Walk-in
+    // individuals without a TIN are still served (see resolveCustTinForVsdc).
+    if (customerType !== "INDIVIDUAL" && !isValidRraTin(custTin)) {
+      throw new CommitSaleError(
+        400,
+        `This ${customerType.toLowerCase()} customer ("${customer?.name ?? customerId}") has no valid 9-digit RRA TIN. Register the customer's real TIN before completing a fiscal sale.`,
+      )
+    }
+    // B2B purchase-code pre-check: a business buyer needs a real 6-character
+    // prcOrdCd on record (pool or customer fallback), otherwise the receipt
+    // can never be accepted (881/882). Individuals skip this — their code is
+    // allocated at submission time (sandbox mints buyer-scoped codes outside
+    // production; production B2C requirements must be confirmed with RRA).
+    const needsCode = customerType === "CORPORATE" || customerType === "INSURANCE"
+    if (needsCode) {
       const poolCount = await prisma.organizationPurchaseCode.count({
         where: { organizationId, buyerTin: custTin, consumed: false },
       })
@@ -151,6 +169,25 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         )
       }
     }
+  }
+
+  // Resolve itemType from the product catalog when the client omits it
+  // (legacy POS payloads). Services must never go through stock checks.
+  const catalogIds = items
+    .map((i: any) => parseInt(String(i.productId)))
+    .filter((id: number) => !isNaN(id))
+  const catalogTypes = catalogIds.length > 0
+    ? await prisma.product.findMany({
+        where: { id: { in: catalogIds }, organizationId },
+        select: { id: true, itemType: true },
+      })
+    : []
+  const catalogTypeMap = new Map(catalogTypes.map((p) => [p.id, p.itemType]))
+  for (const item of items) {
+    if (item.itemType) continue
+    const pid = parseInt(String(item.productId))
+    const fromCatalog = catalogTypeMap.get(pid)
+    if (fromCatalog) item.itemType = fromCatalog
   }
 
   // Separate product items from service items
@@ -301,6 +338,13 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         const itemTax = taxSummary.items[i]
 
         if (isService) {
+          const serviceProductId =
+            item.productId != null && String(item.productId).trim() !== ""
+              ? parseInt(String(item.productId), 10)
+              : NaN
+          const hasCatalogService =
+            Number.isSafeInteger(serviceProductId) && serviceProductId > 0
+
           saleItemsData.push({
             quantity,
             unitPrice,
@@ -315,6 +359,11 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
             serviceDescription: item.serviceDescription || null,
             measurementUnit: item.measurementUnit || "PCS",
             exemptionReference: item.exemptionReference || null,
+            // Catalog services must keep productId so saveSales can send
+            // itemCd / itemClsCd from the registered RRA item (VSDC §3.3.4.1).
+            ...(hasCatalogService
+              ? { product: { connect: { id: serviceProductId } } }
+              : {}),
           })
           continue
         }
@@ -362,7 +411,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
           taxRate: itemTax.taxRate,
           taxAmount: itemTax.taxAmount,
           taxCode: itemTax.taxCode,
-          itemType: "PRODUCT",
+          itemType: item.itemType || "PRODUCT",
           measurementUnit: item.measurementUnit || "PCS",
           exemptionReference: item.exemptionReference || null,
           product: { connect: { id: productId } },

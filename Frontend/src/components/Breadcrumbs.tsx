@@ -15,6 +15,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   'inventory-summary': 'Inventory Summary',
   'stock-transfers': 'Stock Transfers',
   warehouses: 'Warehouses',
+  production: 'Production & BOM',
   orders: 'Purchase Orders',
   new: 'New Order',
   suppliers: 'Suppliers',

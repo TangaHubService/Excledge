@@ -16,52 +16,49 @@ const vsdc_api_service_1 = require("../services/vsdc-api.service");
 const VSDC_OFFLINE_BLOCK_MS = Number(process.env.VSDC_OFFLINE_BLOCK_MS ?? 2 * 60 * 60 * 1000);
 const HEARTBEAT_MINUTES = Math.max(5, Math.min(360, Math.floor(VSDC_OFFLINE_BLOCK_MS / 3 / 60000)));
 /**
- * VSDC heartbeat — issues a state-check handshake to the VSDC gateway for
- * every active organization. On success, updates `lastSuccessfulVdsContact`
- * to keep the offline guard accurate even during zero-sales intervals.
+ * VSDC heartbeat — issues a state-check handshake to every configured VSDC
+ * device (per branch, with an org-level fallback for legacy single-branch
+ * tenants — see listActiveVsdcDevices). On the first success for an
+ * organization, `lastSuccessfulVdsContact` is refreshed so the offline guard
+ * stays accurate even during zero-sales intervals. Training-mode orgs are
+ * included: their sales never hit the VSDC, so only the heartbeat can keep
+ * their guard from tripping.
  */
 exports.vsdcHeartbeatJob = node_cron_1.default.schedule(`*/${HEARTBEAT_MINUTES} * * * *`, async () => {
     if (!(0, rra_ebm_service_1.isEbmEnabled)()) {
         return;
     }
     try {
-        const organizations = await prisma_1.prisma.organization.findMany({
-            where: {
-                isActive: true,
-                trainingMode: false,
-                TIN: { not: null },
-                OR: [{ ebmDeviceId: { not: null } }, { ebmSerialNo: { not: null } }],
-            },
-            select: { id: true, TIN: true, ebmDeviceId: true, ebmSerialNo: true, name: true },
-        });
+        const devices = await (0, vsdc_api_service_1.listActiveVsdcDevices)({ includeTrainingMode: true });
+        const refreshed = new Set();
         let successCount = 0;
         let failCount = 0;
-        for (const org of organizations) {
+        for (const dev of devices) {
             try {
-                const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(org.id);
+                const envelope = await (0, vsdc_api_service_1.buildVsdcEnvelope)(dev.organizationId, dev.branchId);
                 const result = await (0, vsdc_api_service_1.vsdcHeartbeat)(envelope);
                 if (result.success) {
-                    await prisma_1.prisma.organization.update({
-                        where: { id: org.id },
-                        data: {
-                            lastSuccessfulVdsContact: new Date(),
-                            lastSyncCursor: new Date(),
-                        },
-                    });
                     successCount += 1;
+                    if (!refreshed.has(dev.organizationId)) {
+                        refreshed.add(dev.organizationId);
+                        await prisma_1.prisma.organization.update({
+                            where: { id: dev.organizationId },
+                            data: { lastSuccessfulVdsContact: new Date(), lastSyncCursor: new Date() },
+                        });
+                    }
                 }
                 else {
                     failCount += 1;
-                    console.warn(`[VSDC heartbeat] Org ${org.id} (${org.TIN}): ${result.error}`);
+                    console.warn(`[VSDC heartbeat] ${dev.label} (${dev.tin}): ${result.error}`);
                 }
             }
             catch (e) {
                 failCount += 1;
-                console.warn(`[VSDC heartbeat] Org ${org.id} error:`, e);
+                console.warn(`[VSDC heartbeat] ${dev.label} error:`, e);
             }
         }
         if (successCount > 0 || failCount > 0) {
-            console.log(`[VSDC heartbeat] succeeded=${successCount} failed=${failCount}`);
+            console.log(`[VSDC heartbeat] devices=${devices.length} succeeded=${successCount} failed=${failCount} orgs-refreshed=${refreshed.size}`);
         }
     }
     catch (e) {

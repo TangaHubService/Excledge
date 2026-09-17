@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getEbmOutbox,
   checkEbmOutboxStatus,
+  retryEbmOutbox,
   getEbmStatus,
   submitZReport,
   getZReportStatus,
@@ -28,6 +29,15 @@ import {
   syncImports,
   listRraImports,
   actionImport,
+  listRefundReasons,
+  listPaymentMappings,
+  syncBranches,
+  syncStockMoves,
+  pushCustomer,
+  pushUser,
+  pushBomComposition,
+  pushInsurance,
+  getAuditOverview,
 } from '../controllers/ebm-master-data.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireActiveSubscription } from '../middleware/feature-access.middleware';
@@ -37,6 +47,7 @@ const router = Router();
 router.get('/:organizationId/ebm-status', authenticate, requireActiveSubscription(), getEbmStatus);
 router.get('/:organizationId/ebm-outbox', authenticate, requireActiveSubscription(), getEbmOutbox);
 router.post('/:organizationId/ebm-outbox/:id/check-status', authenticate, requireActiveSubscription(), checkEbmOutboxStatus);
+router.post('/:organizationId/ebm-outbox/:id/retry', authenticate, requireActiveSubscription(), retryEbmOutbox);
 router.post('/:organizationId/z-report', authenticate, requireActiveSubscription(), submitZReport);
 router.get('/:organizationId/z-report', authenticate, requireActiveSubscription(), getZReportStatus);
 router.post('/:organizationId/ebm/initialize', authenticate, requireActiveSubscription(), initializeDevice);
@@ -71,5 +82,18 @@ router.post('/:organizationId/rra/purchases/:id/confirm', authenticate, requireA
 router.get('/:organizationId/rra/imports', authenticate, requireActiveSubscription(), listRraImports);
 router.post('/:organizationId/rra/imports/sync', authenticate, requireActiveSubscription(), syncImports);
 router.post('/:organizationId/rra/imports/:id/:action', authenticate, requireActiveSubscription(), actionImport);
+
+// ── Fiscal document lookups: refund reasons (code class 32) + payment mappings ──
+router.get('/:organizationId/rra/refund-reasons', authenticate, requireActiveSubscription(), listRefundReasons);
+router.get('/:organizationId/rra/payment-mappings', authenticate, requireActiveSubscription(), listPaymentMappings);
+
+// ── Branch / customer / user / composition / stock-move (VSDC §3.3.2–3.3.3, §3.3.8.1) ──
+router.post('/:organizationId/rra/branches/sync', authenticate, requireActiveSubscription(), syncBranches);
+router.post('/:organizationId/rra/stock-moves/sync', authenticate, requireActiveSubscription(), syncStockMoves);
+router.post('/:organizationId/rra/customers/:customerId/sync', authenticate, requireActiveSubscription(), pushCustomer);
+router.post('/:organizationId/rra/customers/:customerId/insurance/sync', authenticate, requireActiveSubscription(), pushInsurance);
+router.post('/:organizationId/rra/users/:userId/sync', authenticate, requireActiveSubscription(), pushUser);
+router.post('/:organizationId/rra/items/:productId/composition/:componentId/sync', authenticate, requireActiveSubscription(), pushBomComposition);
+router.get('/:organizationId/rra/audit-overview', authenticate, requireActiveSubscription(), getAuditOverview);
 
 export default router;

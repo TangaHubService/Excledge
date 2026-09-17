@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { yupResolver } from '@hookform/resolvers/yup'
 import * as yup from 'yup'
 import {
-    Package, Wrench, Upload, X,
+    Package, Wrench, Boxes, Upload, X, Trash2, Plus,
     Save, Check, ChevronsUpDown, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { cn } from '../../../lib/utils'
@@ -26,9 +26,26 @@ import { apiClient } from '../../../lib/api-client'
 import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response'
 import { useBranch } from '../../../context/BranchContext'
 import { BranchRequiredNotice } from '../../../components/BranchRequiredNotice'
-import { MEASUREMENT_UNIT_OPTIONS, PACKAGING_UNIT_OPTIONS, ORIGIN_COUNTRY_OPTIONS } from '../../../types/ebm'
+import { MEASUREMENT_UNIT_OPTIONS, PACKAGING_UNIT_OPTIONS, ORIGIN_COUNTRY_OPTIONS, ORIGIN_COUNTRY_LABELS, QUANTITY_UNIT_OPTIONS } from '../../../types/ebm'
 import { RraItemClassPicker } from '../../../components/inventory/RraItemClassPicker'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table'
 import type { Product } from '../../../types'
+
+interface RawMaterialOption {
+    id: number
+    name: string
+    sku?: string | null
+    measurementUnit?: string | null
+    quantity: number
+    purchasePrice?: number | null
+    unitPrice: number
+}
+
+interface DraftBomComponent {
+    componentProductId: number
+    quantity: string
+    unit: string
+}
 
 function toRwf(value: number): number {
     return Math.round(value * 100) / 100
@@ -51,63 +68,70 @@ const priceTierSchema = yup
     .nullable()
 
 const addProductSchema = yup.object({
-    itemType: yup.string().oneOf(['PRODUCT', 'SERVICE']).required(),
-    name: yup.string().required('Product name is required').min(2).max(200),
-    category: yup.string().required('Category is required'),
-    description: yup.string().max(1000),
-    unitPrice: yup
-        .number()
-        .typeError('Must be a number')
-        .required('Unit price is required')
-        .positive('Must be positive'),
-    purchasePrice: yup
-        .number()
-        .typeError('Must be a number')
-        .min(0, 'Cannot be negative')
-        .transform((v) => (isNaN(v) ? undefined : v))
-        .nullable(),
-    taxCode: yup
-        .string()
-        .required('Tax category is required')
-        .oneOf(['A', 'B', 'C', 'D'], 'Must be A, B, C, or D'),
-    batchNumber: yup.string().max(50),
-    expiryDate: yup
-        .date()
-        .nullable()
-        .transform((value, originalValue) => (originalValue === '' || originalValue == null ? null : value))
-        .min(new Date(), 'Expiry must be in the future'),
-    quantity: yup
-        .number()
-        .typeError('Must be a number')
-        .transform((v) => (isNaN(v) ? undefined : v))
-        .min(0, 'Cannot be negative'),
-    minStock: yup
-        .number()
-        .typeError('Must be a number')
-        .transform((v) => (isNaN(v) ? undefined : v))
-        .min(0, 'Cannot be negative'),
-    measurementUnit: yup.string(),
-    barcode: yup
-        .string()
-        .matches(/^\d{0,13}$/, 'Barcode must be up to 13 digits'),
-    pkgUnitCd: yup.string(),
-    packagingQty: yup
-        .number()
-        .typeError('Must be a number')
-        .transform((v) => (isNaN(v) ? undefined : v))
-        .min(1, 'Must be at least 1')
-        .nullable(),
-    itemClsCd: yup.string().matches(/^\d{0,10}$/, 'Class code must be up to 10 digits'),
-    itemStandardName: yup.string().max(200),
-    origin: yup.string(),
-    useInsurance: yup.boolean(),
-    additionalInfo: yup.string().max(7, 'Up to 7 characters'),
-    l1SalePrice: priceTierSchema,
-    l2SalePrice: priceTierSchema,
-    l3SalePrice: priceTierSchema,
-    l4SalePrice: priceTierSchema,
-    l5SalePrice: priceTierSchema,
-})
+        itemType: yup.string().oneOf(['PRODUCT', 'RAW_MATERIAL', 'SERVICE']).required(),
+        name: yup.string().required('Product name is required').min(2).max(200),
+        category: yup.string().required('Category is required'),
+        description: yup.string().max(1000),
+        unitPrice: yup
+            .number()
+            .typeError('Must be a number')
+            .required('Unit price is required')
+            .positive('Must be positive'),
+        purchasePrice: yup
+            .number()
+            .typeError('Must be a number')
+            .min(0, 'Cannot be negative')
+            .transform((v) => (isNaN(v) ? undefined : v))
+            .nullable(),
+        taxCode: yup
+            .string()
+            .required('Tax category is required')
+            .oneOf(['A', 'B', 'C', 'D'], 'Must be A, B, C, or D'),
+        batchNumber: yup.string().max(50),
+        expiryDate: yup
+            .date()
+            .nullable()
+            .transform((value, originalValue) => (originalValue === '' || originalValue == null ? null : value))
+            .min(new Date(), 'Expiry must be in the future'),
+        minStock: yup
+            .number()
+            .typeError('Must be a number')
+            .transform((v) => (isNaN(v) ? undefined : v))
+            .min(0, 'Cannot be negative'),
+        measurementUnit: yup.string().when('itemType', {
+            is: (val: string) => val === 'PRODUCT' || val === 'RAW_MATERIAL',
+            then: (schema) => schema.required('Measurement unit is required'),
+            otherwise: (schema) => schema.notRequired(),
+        }),
+        barcode: yup
+            .string()
+            .matches(/^\d{0,13}$/, 'Barcode must be up to 13 digits'),
+        pkgUnitCd: yup.string().required('Packaging unit is required'),
+        qtyUnitCd: yup.string().when('itemType', {
+            is: 'SERVICE',
+            then: (schema) => schema.required('RRA quantity unit is required'),
+            otherwise: (schema) => schema.notRequired(),
+        }),
+        packagingQty: yup
+            .number()
+            .typeError('Must be a number')
+            .transform((v) => (isNaN(v) ? undefined : v))
+            .min(1, 'Must be at least 1')
+            .nullable(),
+        itemClsCd: yup
+            .string()
+            .required('RRA item classification is required')
+            .matches(/^\d{1,10}$/, 'Class code must be 1–10 digits'),
+        itemStandardName: yup.string().max(200),
+        origin: yup.string().oneOf(Object.keys(ORIGIN_COUNTRY_LABELS), 'Invalid country code - must be a valid RRA-supported country').required('Origin country is required'),
+        useInsurance: yup.boolean(),
+        additionalInfo: yup.string().max(7, 'Up to 7 characters'),
+        l1SalePrice: priceTierSchema,
+        l2SalePrice: priceTierSchema,
+        l3SalePrice: priceTierSchema,
+        l4SalePrice: priceTierSchema,
+        l5SalePrice: priceTierSchema,
+    })
 
 // RRA ItemSaveReq grpPrcL1..grpPrcL5 — five optional group/tier prices.
 const PRICE_TIER_FIELDS = [
@@ -128,6 +152,7 @@ interface TaxCodeOption {
 interface AddProductProps {
     onSuccess?: () => void
     product?: Product | null
+    initialItemType?: 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE'
 }
 
 const STEPS = [
@@ -135,17 +160,18 @@ const STEPS = [
     { id: 'pricing', label: 'Pricing' },
     { id: 'inventory', label: 'Inventory' },
     { id: 'details', label: 'RRA Details' },
+    { id: 'bom', label: 'Bill of Materials' },
     { id: 'review', label: 'Review' },
 ] as const
 
 type StepId = (typeof STEPS)[number]['id']
 
-export default function AddProduct({ onSuccess, product }: AddProductProps) {
+export default function AddProduct({ onSuccess, product, initialItemType = 'PRODUCT' }: AddProductProps) {
     const navigate = useNavigate()
     const { selectedBranchId } = useBranch()
     const [currentStep, setCurrentStep] = useState<StepId>('basic')
 
-    const [itemType, setItemType] = useState<'PRODUCT' | 'SERVICE'>('PRODUCT')
+    const [itemType, setItemType] = useState<'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE'>(initialItemType)
     const [imageFile, setImageFile] = useState<File | null>(null)
     const [imagePreview, setImagePreview] = useState<string>('')
     const [isUploadingImage, setIsUploadingImage] = useState(false)
@@ -154,6 +180,10 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
     const [uploadedImageUrl, setUploadedImageUrl] = useState<string>('')
     const [existingCategories, setExistingCategories] = useState<string[]>([])
     const [existingNames, setExistingNames] = useState<string[]>([])
+    const [rawMaterials, setRawMaterials] = useState<RawMaterialOption[]>([])
+    const [rawMaterialsLoading, setRawMaterialsLoading] = useState(false)
+    const [selectedRawMaterialId, setSelectedRawMaterialId] = useState('')
+    const [bomComponents, setBomComponents] = useState<DraftBomComponent[]>([])
     const [categoryPopoverOpen, setCategoryPopoverOpen] = useState(false)
     const [namePopoverOpen, setNamePopoverOpen] = useState(false)
 
@@ -194,7 +224,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
     } = useForm({
         resolver: yupResolver(addProductSchema) as any,
         defaultValues: {
-            itemType: 'PRODUCT',
+            itemType: initialItemType,
             name: '',
             category: '',
             description: '',
@@ -203,11 +233,11 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
             taxCode: '',
             batchNumber: '',
             expiryDate: null,
-            quantity: undefined as number | undefined,
             minStock: undefined as number | undefined,
-            measurementUnit: '',
+            measurementUnit: 'PCS',
             barcode: '',
-            pkgUnitCd: '',
+            pkgUnitCd: 'CT',
+            qtyUnitCd: 'U',
             packagingQty: undefined as number | undefined,
             itemClsCd: '',
             itemStandardName: '',
@@ -229,7 +259,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
     const taxOptions = taxCodes.filter((t) => t.code !== 'D' || watchTaxCode === 'D')
 
     useEffect(() => {
-        setItemType(watchItemType as 'PRODUCT' | 'SERVICE')
+        setItemType(watchItemType as 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE')
     }, [watchItemType])
 
     const taxPreview = (() => {
@@ -241,15 +271,37 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
         return { price: toRwf(price), taxable, vat, ratePct, label: rateInfo?.label ?? '' }
     })()
 
-    const INVENTORY_FIELDS = ['batchNumber', 'expiryDate', 'quantity', 'minStock', 'measurementUnit'] as const
+    // Item code preview - computes the expected RRA itemCd based on current form values
+    // Note: This is a preview only; the actual sequence number is allocated by the backend
+    const itemCdPreview = (() => {
+        const origin = watch('origin') || 'RW';
+        const pkgUnitCd = watch('pkgUnitCd') || 'CT';
+        const qtyUnitCd = watch('qtyUnitCd') ||
+            ({ PCS: 'U', KG: 'KG', LTR: 'LTR', MTR: 'MTR', BOX: 'BX', PAIR: 'PR', DOZEN: 'DZ', GRAM: 'GRM', ML: 'U', OTHER: 'U' } as Record<string, string>)[watch('measurementUnit') || 'PCS'] || 'U';
+        const typeDigit = watchItemType === 'RAW_MATERIAL' ? '1' : watchItemType === 'SERVICE' ? '3' : '2';
+
+        // Preview with placeholder sequence (actual sequence assigned by backend)
+        return `${origin}${typeDigit}${pkgUnitCd}${qtyUnitCd}XXXXXXX`;
+    })()
+
+    const INVENTORY_FIELDS = ['batchNumber', 'expiryDate', 'minStock'] as const
 
     useEffect(() => {
         if (watchItemType === 'SERVICE') {
             for (const field of INVENTORY_FIELDS) {
-                resetField(field, { defaultValue: field === 'measurementUnit' ? 'OTHER' : field === 'expiryDate' ? null : '' })
+                resetField(field, { defaultValue: field === 'expiryDate' ? null : '' })
             }
-            setValue('quantity', 0, { shouldDirty: false, shouldTouch: false, shouldValidate: false })
             setValue('minStock', 0, { shouldDirty: false, shouldTouch: false, shouldValidate: false })
+            // Services still need RRA packaging/qty units for itemCd + saveItems.
+            if (!watch('measurementUnit')) {
+                setValue('measurementUnit', 'OTHER', { shouldDirty: false })
+            }
+            if (!watch('pkgUnitCd')) {
+                setValue('pkgUnitCd', 'CT', { shouldDirty: false })
+            }
+            if (!watch('qtyUnitCd')) {
+                setValue('qtyUnitCd', 'U', { shouldDirty: false })
+            }
         }
     }, [watchItemType, resetField, setValue])
 
@@ -282,6 +334,21 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
     }, [selectedBranchId])
 
     useEffect(() => {
+        if (itemType !== 'PRODUCT' || !selectedBranchId) return
+        let active = true
+        setRawMaterialsLoading(true)
+        apiClient.getProducts({ itemType: 'RAW_MATERIAL', page: 1, limit: 500, branchId: selectedBranchId })
+            .then((res) => {
+                if (!active) return
+                const items = parseInventoryGetProductsResponse(res).items as Array<RawMaterialOption & { itemType?: string }>
+                setRawMaterials(items.filter((item) => item.itemType === 'RAW_MATERIAL'))
+            })
+            .catch(() => { if (active) toast.error('Failed to load raw materials') })
+            .finally(() => { if (active) setRawMaterialsLoading(false) })
+        return () => { active = false }
+    }, [itemType, selectedBranchId])
+
+    useEffect(() => {
         if (product) {
             setValue('name', product.name)
             setValue('category', product.category || '')
@@ -289,13 +356,13 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
             setValue('unitPrice', product.unitPrice)
             setValue('purchasePrice', product.purchasePrice ?? undefined)
             setValue('taxCode', product.taxCode || '')
-            setValue('itemType', (product.itemType as 'PRODUCT' | 'SERVICE') || 'PRODUCT')
+            setValue('itemType', (product.itemType as 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE') || 'PRODUCT')
             setValue('barcode', product.barcode || '')
             setValue('batchNumber', product.batchNumber || '')
-            setValue('quantity', product.quantity)
             setValue('minStock', product.minStock)
             setValue('measurementUnit', product.measurementUnit || '')
             setValue('pkgUnitCd', product.pkgUnitCd || '')
+            setValue('qtyUnitCd', product.qtyUnitCd || '')
             setValue('packagingQty', product.packagingQty ?? undefined)
             setValue('itemClsCd', product.itemClsCd || '')
             setValue('itemStandardName', product.itemStandardName || '')
@@ -314,7 +381,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                 setUploadedImageUrl(product.imageUrl)
                 setImagePreview(product.imageUrl)
             }
-            setItemType((product.itemType as 'PRODUCT' | 'SERVICE') || 'PRODUCT')
+            setItemType((product.itemType as 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE') || 'PRODUCT')
         }
     }, [product, setValue])
 
@@ -358,6 +425,26 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
         setCurrentStep(step)
     }
 
+    const addBomMaterial = () => {
+        const rawMaterial = rawMaterials.find((material) => material.id === Number(selectedRawMaterialId))
+        if (!rawMaterial || bomComponents.some((component) => component.componentProductId === rawMaterial.id)) return
+        setBomComponents((components) => [
+            ...components,
+            { componentProductId: rawMaterial.id, quantity: '1', unit: rawMaterial.measurementUnit || 'PCS' },
+        ])
+        setSelectedRawMaterialId('')
+    }
+
+    const hasValidBom = () => {
+        const invalid = bomComponents.some((component) => {
+            const quantity = Number(component.quantity)
+            return !Number.isFinite(quantity) || quantity <= 0 ||
+                Math.abs(quantity * 1000 - Math.round(quantity * 1000)) > 1e-7 || !component.unit.trim()
+        })
+        if (invalid) toast.error('Each raw material needs a quantity greater than zero (up to 3 decimals) and a unit')
+        return !invalid
+    }
+
     const handleNext = async () => {
         if (currentStep === 'basic') {
             const fields = ['itemType', 'name', 'category']
@@ -376,14 +463,26 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
             }
             goToStep('inventory')
         } else if (currentStep === 'inventory') {
-            const fields = itemType === 'PRODUCT' ? ['quantity', 'minStock', 'measurementUnit'] : []
+            const fields = itemType !== 'SERVICE'
+                ? ['minStock', 'measurementUnit', 'pkgUnitCd', 'origin']
+                : ['pkgUnitCd', 'qtyUnitCd', 'origin']
             const valid = await trigger(fields as any)
             if (!valid) {
-                toast.error('Please fill in inventory fields')
+                toast.error(itemType === 'SERVICE'
+                    ? 'Please fill in RRA packaging and origin fields'
+                    : 'Please fill in inventory fields')
                 return
             }
             goToStep('details')
         } else if (currentStep === 'details') {
+            const valid = await trigger(['itemClsCd'] as any)
+            if (!valid) {
+                toast.error('RRA item classification is required')
+                return
+            }
+            goToStep(itemType === 'PRODUCT' && !product ? 'bom' : 'review')
+        } else if (currentStep === 'bom') {
+            if (!hasValidBom()) return
             goToStep('review')
         }
     }
@@ -392,7 +491,8 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
         if (currentStep === 'pricing') goToStep('basic')
         else if (currentStep === 'inventory') goToStep('pricing')
         else if (currentStep === 'details') goToStep('inventory')
-        else if (currentStep === 'review') goToStep('details')
+        else if (currentStep === 'bom') goToStep('details')
+        else if (currentStep === 'review') goToStep(itemType === 'PRODUCT' && !product ? 'bom' : 'details')
     }
 
     const onSubmit = async (data: Record<string, any>) => {
@@ -401,6 +501,8 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
             toast.error('Please fix the highlighted fields before saving')
             return
         }
+
+        if (data.itemType === 'PRODUCT' && !product && !hasValidBom()) return
 
         if (!selectedBranchId) {
             toast.error('Please select a branch before adding a product')
@@ -422,38 +524,48 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                 imageUrl: imageUrl || undefined,
                 origin: data.origin || 'RW',
                 useInsurance: !!data.useInsurance,
+                // Required by VSDC ItemSaveReq for all types including SERVICE
+                pkgUnitCd: data.pkgUnitCd,
+                qtyUnitCd: data.qtyUnitCd || undefined,
+                itemClsCd: data.itemClsCd,
+                itemStandardName: data.itemStandardName || undefined,
+                additionalInfo: data.additionalInfo || undefined,
+                barcode: data.barcode || undefined,
+                l1SalePrice: data.l1SalePrice ?? undefined,
+                l2SalePrice: data.l2SalePrice ?? undefined,
+                l3SalePrice: data.l3SalePrice ?? undefined,
+                l4SalePrice: data.l4SalePrice ?? undefined,
+                l5SalePrice: data.l5SalePrice ?? undefined,
             }
 
-            if (data.itemType === 'PRODUCT') {
+            if (data.itemType !== 'SERVICE') {
                 payload.purchasePrice = data.purchasePrice ?? undefined
                 payload.batchNumber = data.batchNumber || undefined
-                payload.quantity = data.quantity || 0
+                // Opening stock is not collected on create — start at 0; add stock via inventory later.
+                if (!product) payload.quantity = 0
                 payload.expiryDate = data.expiryDate || undefined
                 payload.minStock = data.minStock || 0
                 payload.measurementUnit = data.measurementUnit || 'PCS'
-                payload.barcode = data.barcode || undefined
-                payload.pkgUnitCd = data.pkgUnitCd || undefined
                 payload.packagingQty = data.packagingQty ?? undefined
-                payload.itemClsCd = data.itemClsCd || undefined
-                payload.itemStandardName = data.itemStandardName || undefined
-                payload.additionalInfo = data.additionalInfo || undefined
-                payload.l1SalePrice = data.l1SalePrice ?? undefined
-                payload.l2SalePrice = data.l2SalePrice ?? undefined
-                payload.l3SalePrice = data.l3SalePrice ?? undefined
-                payload.l4SalePrice = data.l4SalePrice ?? undefined
-                payload.l5SalePrice = data.l5SalePrice ?? undefined
             } else {
                 payload.quantity = 0
                 payload.minStock = 0
-                payload.measurementUnit = 'OTHER'
+                payload.measurementUnit = data.measurementUnit || 'OTHER'
             }
 
             if (product) {
                 await apiClient.updateProduct(String(product.id), payload)
                 toast.success('Product updated successfully')
             } else {
+                if (data.itemType === 'PRODUCT') {
+                    payload.bomComponents = bomComponents.map((component) => ({
+                        componentProductId: component.componentProductId,
+                        quantity: Number(component.quantity),
+                        unit: component.unit.trim(),
+                    }))
+                }
                 await apiClient.createProduct(payload)
-                toast.success(data.itemType === 'SERVICE' ? 'Service added successfully' : 'Product added successfully')
+                toast.success(data.itemType === 'SERVICE' ? 'Service added successfully' : data.itemType === 'RAW_MATERIAL' ? 'Raw material added successfully' : 'Product added successfully')
             }
             if (onSuccess) onSuccess()
             else navigate('/dashboard/inventory-all')
@@ -464,9 +576,10 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
         }
     }
 
-    const stepIndex = STEPS.findIndex(s => s.id === currentStep)
+    const visibleSteps = itemType === 'PRODUCT' && !product ? STEPS : STEPS.filter(s => s.id !== 'bom')
+    const stepIndex = visibleSteps.findIndex(s => s.id === currentStep)
     const isFirstStep = stepIndex === 0
-    const isLastStep = stepIndex === STEPS.length - 1
+    const isLastStep = stepIndex === visibleSteps.length - 1
 
     return (
         <div className="mx-auto max-w-xl">
@@ -477,7 +590,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
 
                 {/* Step Indicator */}
                 <div className="flex items-center gap-1">
-                    {STEPS.map((step, idx) => (
+                    {visibleSteps.map((step, idx) => (
                         <div key={step.id} className="flex items-center gap-1 flex-1 min-w-0">
                             <button
                                 type="button"
@@ -503,7 +616,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                 </span>
                                 <span className="hidden sm:inline truncate">{step.label}</span>
                             </button>
-                            {idx < STEPS.length - 1 && (
+                            {idx < visibleSteps.length - 1 && (
                                 <div className={cn(
                                     'h-px flex-1 min-w-[8px] mx-1',
                                     idx < stepIndex ? 'bg-emerald-300 dark:bg-emerald-700' : 'bg-gray-200 dark:bg-gray-700',
@@ -535,6 +648,18 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                     >
                                         <Package className="h-4 w-4" />
                                         Product
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setValue('itemType', 'RAW_MATERIAL'); setItemType('RAW_MATERIAL') }}
+                                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                                            itemType === 'RAW_MATERIAL'
+                                                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                        }`}
+                                    >
+                                        <Boxes className="h-4 w-4" />
+                                        Raw Material
                                     </button>
                                     <button
                                         type="button"
@@ -581,7 +706,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="space-y-1.5 md:col-span-2">
                                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            {itemType === 'SERVICE' ? 'Service Name' : 'Product Name'} <span className="text-red-500">*</span>
+                                            {itemType === 'SERVICE' ? 'Service Name' : itemType === 'RAW_MATERIAL' ? 'Raw Material Name' : 'Product Name'} <span className="text-red-500">*</span>
                                         </label>
                                         <Popover open={namePopoverOpen} onOpenChange={setNamePopoverOpen}>
                                             <PopoverTrigger asChild>
@@ -594,7 +719,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                                     }`}
                                                 >
                                                     <span className={watch('name') ? 'truncate' : 'text-gray-400 truncate'}>
-                                                        {watch('name') || (itemType === 'SERVICE' ? 'Select or type service name...' : 'Select or type product name...')}
+                                                        {watch('name') || (itemType === 'SERVICE' ? 'Select or type service name...' : itemType === 'RAW_MATERIAL' ? 'Select or type raw material name...' : 'Select or type product name...')}
                                                     </span>
                                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                 </button>
@@ -760,7 +885,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                         </div>
                                         {errors.unitPrice && <p className="text-xs text-red-500 mt-1">{errors.unitPrice.message}</p>}
                                     </div>
-                                    {itemType === 'PRODUCT' && (
+                                    {itemType !== 'SERVICE' && (
                                         <div className="space-y-1.5">
                                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                                 Purchase Price
@@ -786,7 +911,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                 </div>
                             </div>
 
-                            {itemType === 'PRODUCT' && (
+                            {itemType !== 'SERVICE' && (
                                 <div>
                                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
                                         Additional Price Tiers
@@ -840,9 +965,17 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                     {/* ══════ STEP: INVENTORY ══════ */}
                     {currentStep === 'inventory' && (
                         <div className="space-y-6">
-                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Inventory & Stock</h2>
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                                {itemType === 'SERVICE' ? 'RRA Registration' : 'Inventory & Stock'}
+                            </h2>
 
-                            {itemType === 'PRODUCT' && (
+                            {itemType === 'SERVICE' && (
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Services are not stock-tracked, but RRA still requires packaging, quantity unit, and origin to register the item.
+                                </p>
+                            )}
+
+                            {itemType !== 'SERVICE' && (
                                 <div ref={setSectionRef('inventory-details')}>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                         <div className="space-y-1.5">
@@ -856,26 +989,10 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                         <div className="space-y-1.5">
                                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Expiry Date</label>
                                             <input
-                                                {...bindField('expiryDate', 'quantity')}
+                                                {...bindField('expiryDate', 'minStock')}
                                                 type="date"
                                                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
                                             />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                Quantity <span className="text-red-500">*</span>
-                                            </label>
-                                            <input
-                                                {...bindField('quantity', 'minStock')}
-                                                type="number"
-                                                inputMode="numeric"
-                                                min="0"
-                                                placeholder="0"
-                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                    errors.quantity ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
-                                                }`}
-                                            />
-                                            {errors.quantity && <p className="text-xs text-red-500 mt-1">{errors.quantity.message}</p>}
                                         </div>
                                         <div className="space-y-1.5">
                                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -911,20 +1028,38 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                             {errors.measurementUnit && <p className="text-xs text-red-500 mt-1">{errors.measurementUnit.message}</p>}
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                Packaging Unit
-                                            </label>
-                                            <select
-                                                {...bindField('pkgUnitCd', 'packagingQty')}
-                                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
-                                            >
-                                                <option value="">Select packaging (e.g. Box, Carton)</option>
-                                                {PACKAGING_UNIT_OPTIONS.map(u => (
-                                                    <option key={u.value} value={u.value}>{u.label}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div className="space-y-1.5">
+                                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                 Packaging Unit <span className="text-red-500">*</span>
+                                             </label>
+                                             <select
+                                                 {...bindField('pkgUnitCd', 'qtyUnitCd')}
+                                                 className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                     errors.pkgUnitCd ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                 }`}
+                                             >
+                                                 <option value="">Select packaging (e.g. Box, Carton)</option>
+                                                 {PACKAGING_UNIT_OPTIONS.map(u => (
+                                                     <option key={u.value} value={u.value}>{u.label}</option>
+                                                 ))}
+                                             </select>
+                                             {errors.pkgUnitCd && <p className="text-xs text-red-500 mt-1">{errors.pkgUnitCd.message}</p>}
+                                         </div>
+                                         <div className="space-y-1.5">
+                                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                 RRA Quantity Unit
+                                             </label>
+                                             <select
+                                                 {...bindField('qtyUnitCd', 'packagingQty')}
+                                                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                             >
+                                                 <option value="">Auto-detect from measurement unit</option>
+                                                 {QUANTITY_UNIT_OPTIONS.map(u => (
+                                                     <option key={u.value} value={u.value}>{u.label}</option>
+                                                 ))}
+                                             </select>
+                                             <p className="text-xs text-gray-400">Override the automatically derived RRA quantity unit code if needed.</p>
+                                         </div>
+                                         <div className="space-y-1.5">
                                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                                 Qty per Package
                                             </label>
@@ -941,17 +1076,83 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                             {errors.packagingQty && <p className="text-xs text-red-500 mt-1">{errors.packagingQty.message}</p>}
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Origin</label>
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                Origin <span className="text-red-500">*</span>
+                                            </label>
                                             <select
                                                 {...bindField('origin', 'barcode')}
-                                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                    errors.origin ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                }`}
                                             >
                                                 {ORIGIN_COUNTRY_OPTIONS.map(c => (
                                                     <option key={c.value} value={c.value}>{c.label}</option>
                                                 ))}
                                             </select>
+                                            {errors.origin && <p className="text-xs text-red-500 mt-1">{errors.origin.message}</p>}
                                         </div>
                                     </div>
+                                </div>
+                            )}
+
+                            {itemType === 'SERVICE' && (
+                                <div ref={setSectionRef('service-rra-units')} className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Packaging Unit <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            {...bindField('pkgUnitCd', 'qtyUnitCd')}
+                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                errors.pkgUnitCd ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                            }`}
+                                        >
+                                            <option value="">Select packaging</option>
+                                            {PACKAGING_UNIT_OPTIONS.map(u => (
+                                                <option key={u.value} value={u.value}>{u.label}</option>
+                                            ))}
+                                        </select>
+                                        {errors.pkgUnitCd && <p className="text-xs text-red-500 mt-1">{errors.pkgUnitCd.message}</p>}
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            RRA Quantity Unit <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            {...bindField('qtyUnitCd', 'origin')}
+                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                errors.qtyUnitCd ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                            }`}
+                                        >
+                                            <option value="">Select quantity unit</option>
+                                            {QUANTITY_UNIT_OPTIONS.map(u => (
+                                                <option key={u.value} value={u.value}>{u.label}</option>
+                                            ))}
+                                        </select>
+                                        {errors.qtyUnitCd && <p className="text-xs text-red-500 mt-1">{errors.qtyUnitCd.message}</p>}
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Origin <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            {...bindField('origin', 'itemClsCd')}
+                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                                errors.origin ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                            }`}
+                                        >
+                                            {ORIGIN_COUNTRY_OPTIONS.map(c => (
+                                                <option key={c.value} value={c.value}>{c.label}</option>
+                                            ))}
+                                        </select>
+                                        {errors.origin && <p className="text-xs text-red-500 mt-1">{errors.origin.message}</p>}
+                                    </div>
+                                    {itemCdPreview && (
+                                        <div className="md:col-span-3 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 px-4 py-3">
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">Item code preview</p>
+                                            <p className="text-sm font-mono text-gray-800 dark:text-gray-200">{itemCdPreview}</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -974,16 +1175,15 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                             className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
                                         />
                                     </div>
-                                    {itemType === 'PRODUCT' && (
-                                        <div>
-                                            <RraItemClassPicker
-                                                value={watch('itemClsCd') || ''}
-                                                onChange={(code) => setValue('itemClsCd', code, { shouldValidate: true, shouldDirty: true })}
-                                                invalid={!!errors.itemClsCd}
-                                            />
-                                            {errors.itemClsCd && <p className="text-xs text-red-500 mt-1">{errors.itemClsCd.message}</p>}
-                                        </div>
-                                    )}
+                                    <div>
+                                        <RraItemClassPicker
+                                            value={watch('itemClsCd') || ''}
+                                            onChange={(code) => setValue('itemClsCd', code, { shouldValidate: true, shouldDirty: true })}
+                                            invalid={!!errors.itemClsCd}
+                                            required
+                                        />
+                                        {errors.itemClsCd && <p className="text-xs text-red-500 mt-1">{errors.itemClsCd.message}</p>}
+                                    </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Standard Name</label>
                                         <input
@@ -1027,7 +1227,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                         <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Basic Information</h3>
                                     </div>
                                     <div className="px-4 py-3 space-y-2.5">
-                                        <ReviewRow label="Item Type" value={itemType === 'PRODUCT' ? 'Product' : 'Service'} />
+                                        <ReviewRow label="Item Type" value={itemType === 'PRODUCT' ? 'Product' : itemType === 'RAW_MATERIAL' ? 'Raw Material' : 'Service'} />
                                         <ReviewRow label="Name" value={watch('name') || '-'} />
                                         <ReviewRow label="Category" value={watch('category') || '-'} />
                                         {watch('description') && <ReviewRow label="Description" value={watch('description')} />}
@@ -1065,7 +1265,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                     </div>
                                 </div>
 
-                                {itemType === 'PRODUCT' && (
+                                {itemType !== 'SERVICE' && (
                                     <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                                         <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                                             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Inventory Details</h3>
@@ -1073,7 +1273,6 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                         <div className="px-4 py-3 space-y-2.5">
                                             {watch('batchNumber') && <ReviewRow label="Batch Number" value={watch('batchNumber')} />}
                                             {watch('expiryDate') && <ReviewRow label="Expiry Date" value={new Date(watch('expiryDate')!).toLocaleDateString()} />}
-                                            <ReviewRow label="Quantity" value={String(watch('quantity') ?? 0)} />
                                             <ReviewRow label="Min Stock" value={String(watch('minStock') ?? 0)} />
                                             <ReviewRow label="Measurement Unit" value={watch('measurementUnit') || 'PCS'} />
                                             {watch('pkgUnitCd') && (
@@ -1082,26 +1281,165 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                                     value={`${PACKAGING_UNIT_OPTIONS.find(u => u.value === watch('pkgUnitCd'))?.label || watch('pkgUnitCd')}${watch('packagingQty') ? ` × ${watch('packagingQty')}` : ''}`}
                                                 />
                                             )}
+                                            {itemCdPreview && (
+                                                <ReviewRow
+                                                    label="Item Code (Preview)"
+                                                    value={`${itemCdPreview} (sequence assigned on save)`}
+                                                />
+                                            )}
                                             <ReviewRow label="Origin" value={ORIGIN_COUNTRY_OPTIONS.find(c => c.value === watch('origin'))?.label || watch('origin') || 'Rwanda (RW)'} />
                                         </div>
                                     </div>
                                 )}
 
-                                {(watch('barcode') || watch('itemClsCd') || watch('itemStandardName') || watch('additionalInfo') || watch('useInsurance')) && (
+                                {itemType === 'SERVICE' && (
                                     <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                                         <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-                                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Additional Info</h3>
+                                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">RRA Registration</h3>
                                         </div>
                                         <div className="px-4 py-3 space-y-2.5">
-                                            {watch('barcode') && <ReviewRow label="Barcode" value={watch('barcode')} />}
-                                            {watch('itemClsCd') && <ReviewRow label="Class Code" value={watch('itemClsCd')} />}
-                                            {watch('itemStandardName') && <ReviewRow label="Standard Name" value={watch('itemStandardName')} />}
-                                            {watch('additionalInfo') && <ReviewRow label="Additional Info" value={watch('additionalInfo')} />}
-                                            {watch('useInsurance') && <ReviewRow label="Insurance" value="Billable" />}
+                                            <ReviewRow
+                                                label="Packaging"
+                                                value={PACKAGING_UNIT_OPTIONS.find(u => u.value === watch('pkgUnitCd'))?.label || watch('pkgUnitCd') || '-'}
+                                            />
+                                            <ReviewRow
+                                                label="Quantity Unit"
+                                                value={QUANTITY_UNIT_OPTIONS.find(u => u.value === watch('qtyUnitCd'))?.label || watch('qtyUnitCd') || '-'}
+                                            />
+                                            <ReviewRow label="Origin" value={ORIGIN_COUNTRY_OPTIONS.find(c => c.value === watch('origin'))?.label || watch('origin') || 'Rwanda (RW)'} />
+                                            {itemCdPreview && (
+                                                <ReviewRow
+                                                    label="Item Code (Preview)"
+                                                    value={`${itemCdPreview} (sequence assigned on save)`}
+                                                />
+                                            )}
                                         </div>
                                     </div>
                                 )}
+
+                                {itemType === 'PRODUCT' && !product && bomComponents.length > 0 && (
+                                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                        <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Bill of Materials</h3>
+                                        </div>
+                                        <div className="px-4 py-3 space-y-2.5">
+                                            {bomComponents.map((component) => {
+                                                const material = rawMaterials.find((item) => item.id === component.componentProductId)
+                                                return <ReviewRow key={component.componentProductId} label={material?.name || `Item #${component.componentProductId}`} value={`${component.quantity} ${component.unit} per product`} />
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                    <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Additional Info</h3>
+                                    </div>
+                                    <div className="px-4 py-3 space-y-2.5">
+                                        {watch('barcode') && <ReviewRow label="Barcode" value={watch('barcode')} />}
+                                        <ReviewRow label="Class Code" value={watch('itemClsCd') || '-'} />
+                                        {watch('itemStandardName') && <ReviewRow label="Standard Name" value={watch('itemStandardName')} />}
+                                        {watch('additionalInfo') && <ReviewRow label="Additional Info" value={watch('additionalInfo')} />}
+                                        {watch('useInsurance') && <ReviewRow label="Insurance" value="Billable" />}
+                                    </div>
+                                </div>
                             </div>
+                        </div>
+                    )}
+
+                    {/* ══════ STEP: BILL OF MATERIALS ══════ */}
+                    {currentStep === 'bom' && itemType === 'PRODUCT' && (
+                        <div className="space-y-6">
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Bill of Materials</h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                Add the raw materials needed to produce one unit of this product. They will be saved with the product.
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <select
+                                    aria-label="Select raw material"
+                                    value={selectedRawMaterialId}
+                                    onChange={(event) => setSelectedRawMaterialId(event.target.value)}
+                                    disabled={rawMaterialsLoading}
+                                    className="flex-1 min-w-0 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-800 dark:text-white"
+                                >
+                                    <option value="">{rawMaterialsLoading ? 'Loading raw materials...' : 'Select a raw material'}</option>
+                                    {rawMaterials.filter((material) => !bomComponents.some((component) => component.componentProductId === material.id)).map((material) => (
+                                        <option key={material.id} value={material.id}>
+                                            {material.name} — Stock: {material.quantity} {material.measurementUnit || 'PCS'}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={addBomMaterial}
+                                    disabled={!selectedRawMaterialId || rawMaterialsLoading}
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                    <Plus className="h-4 w-4" /> Add Material
+                                </button>
+                            </div>
+                            {!rawMaterialsLoading && rawMaterials.length === 0 && (
+                                <p className="text-sm text-amber-700 dark:text-amber-300">
+                                    No raw materials are available in this branch. Add an item with type Raw Material first.
+                                </p>
+                            )}
+                            <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                                <Table>
+                                    <TableHeader className="bg-gray-50 dark:bg-gray-800">
+                                        <TableRow>
+                                            <TableHead>Raw Material</TableHead>
+                                            <TableHead>Qty per Unit</TableHead>
+                                            <TableHead>Unit</TableHead>
+                                            <TableHead className="text-right">Cost per Product</TableHead>
+                                            <TableHead className="w-12"><span className="sr-only">Remove</span></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {bomComponents.length === 0 ? (
+                                            <TableRow><TableCell colSpan={5} className="py-8 text-center text-sm text-gray-500">No raw materials added yet</TableCell></TableRow>
+                                        ) : bomComponents.map((component) => {
+                                            const material = rawMaterials.find((item) => item.id === component.componentProductId)
+                                            const unitCost = Number(material?.purchasePrice ?? material?.unitPrice ?? 0)
+                                            return (
+                                                <TableRow key={component.componentProductId}>
+                                                    <TableCell className="min-w-36 font-medium">{material?.name || `Item #${component.componentProductId}`}</TableCell>
+                                                    <TableCell>
+                                                        <input
+                                                            aria-label={`Quantity per unit for ${material?.name || 'raw material'}`}
+                                                            type="number"
+                                                            min="0.001"
+                                                            step="0.001"
+                                                            value={component.quantity}
+                                                            onChange={(event) => setBomComponents((components) => components.map((entry) => entry.componentProductId === component.componentProductId ? { ...entry, quantity: event.target.value } : entry))}
+                                                            className="w-24 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="text-sm">{component.unit}</TableCell>
+                                                    <TableCell className="whitespace-nowrap text-right text-sm">
+                                                        {(unitCost * (Number(component.quantity) || 0)).toLocaleString()} Frw
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <button
+                                                            type="button"
+                                                            aria-label={`Remove ${material?.name || 'raw material'}`}
+                                                            onClick={() => setBomComponents((components) => components.filter((entry) => entry.componentProductId !== component.componentProductId))}
+                                                            className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+                                                        ><Trash2 className="h-4 w-4" /></button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                            {bomComponents.length > 0 && (
+                                <p className="text-right text-sm font-semibold text-gray-900 dark:text-white">
+                                    Estimated material cost per product: {bomComponents.reduce((total, component) => {
+                                        const material = rawMaterials.find((item) => item.id === component.componentProductId)
+                                        return total + Number(material?.purchasePrice ?? material?.unitPrice ?? 0) * (Number(component.quantity) || 0)
+                                    }, 0).toLocaleString()} Frw
+                                </p>
+                            )}
                         </div>
                     )}
 
@@ -1148,7 +1486,7 @@ export default function AddProduct({ onSuccess, product }: AddProductProps) {
                                     ) : (
                                         <Save className="h-4 w-4" />
                                     )}
-                                    Save {itemType === 'SERVICE' ? 'Service' : 'Product'}
+                                    Save {itemType === 'SERVICE' ? 'Service' : itemType === 'RAW_MATERIAL' ? 'Raw Material' : 'Product'}
                                 </button>
                             )}
                         </div>
@@ -1167,5 +1505,3 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
         </div>
     )
 }
-
-

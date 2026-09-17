@@ -268,7 +268,12 @@ export function OrganizationConfig() {
             fetchData();
             refreshBranches();
         } catch (error: any) {
-            toast.error(error.message || 'Failed to save branch');
+            toast.error(
+              error?.response?.data?.error ||
+                error?.response?.data?.message ||
+                error.message ||
+                'Failed to save branch',
+            );
         }
     };
 
@@ -276,12 +281,17 @@ export function OrganizationConfig() {
         const newStatus = branch.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
         setTogglingBranchId(branch.id);
         try {
-            await apiClient.updateBranch(branch.id, { ...branch, status: newStatus });
+            await apiClient.updateBranch(branch.id, { status: newStatus });
             toast.success(`Branch ${newStatus === 'ACTIVE' ? 'activated' : 'deactivated'} successfully`);
             await fetchData();
             refreshBranches();
         } catch (error: any) {
-            toast.error(error.message || 'Failed to update branch status');
+            toast.error(
+              error?.response?.data?.error ||
+                error?.response?.data?.message ||
+                error.message ||
+                'Failed to update branch status',
+            );
         } finally {
             setTogglingBranchId(null);
         }

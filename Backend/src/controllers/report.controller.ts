@@ -1612,7 +1612,7 @@ async function buildDailyReport(
     if (Object.keys(bFilter).length) Object.assign(branchFilter, bFilter);
   }
 
-  const [org, branch, sales] = await Promise.all([
+  const [org, branch, sales, shiftAgg, heldCount, voidedSales] = await Promise.all([
     prisma.organization.findUnique({
       where: { id: organizationId },
       select: { name: true, TIN: true, address: true, ebmSerialNo: true, ebmDeviceId: true },
@@ -1628,10 +1628,10 @@ async function buildDailyReport(
         organizationId,
         ...branchFilter,
         createdAt: { gte: dayStart, lte: dayEnd },
-        status: { in: ['COMPLETED', 'REFUNDED'] },
+        status: { in: ['COMPLETED', 'REFUNDED', 'CANCELLED', 'DRAFT', 'PENDING', 'CONVERTED'] },
       },
       include: {
-        saleItems: { select: { taxCode: true, taxAmount: true, totalPrice: true, quantity: true } },
+        saleItems: { select: { taxCode: true, taxAmount: true, totalPrice: true, quantity: true, dcAmt: true } },
         ebmTransactions: {
           where: { submissionStatus: 'SUCCESS' },
           orderBy: { createdAt: 'desc' },
@@ -1639,6 +1639,31 @@ async function buildDailyReport(
         },
       },
       orderBy: { createdAt: 'asc' },
+    }),
+    prisma.shift.aggregate({
+      where: {
+        organizationId,
+        ...(targetBranchId != null ? { branchId: targetBranchId } : branchFilter),
+        openedAt: { gte: dayStart, lte: dayEnd },
+      },
+      _sum: { openingFloat: true },
+    }),
+    prisma.heldSale.count({
+      where: {
+        organizationId,
+        ...(targetBranchId != null ? { branchId: targetBranchId } : branchFilter),
+        createdAt: { gte: dayStart, lte: dayEnd },
+        resultingSale: { is: null },
+      },
+    }),
+    prisma.sale.findMany({
+      where: {
+        organizationId,
+        ...branchFilter,
+        createdAt: { gte: dayStart, lte: dayEnd },
+        status: 'CANCELLED',
+      },
+      select: { totalAmount: true },
     }),
   ]);
 
@@ -1655,14 +1680,18 @@ async function buildDailyReport(
   // Split into NS/NR buckets — TS/TR (training mode) receipts are excluded
   // entirely from the legal sales/refund totals below and reported separately
   // (spec §18.1.15/§19.1.15), since they never happened as real business
-  // transactions.
-  const normalSales   = sales.filter(s => s.status === 'COMPLETED' && s.rcptLabel !== 'TR' && s.rcptLabel !== 'TS');
-  const normalRefunds = sales.filter(s => s.status === 'REFUNDED'  && s.rcptLabel !== 'TR' && s.rcptLabel !== 'TS');
-  const trainingSales = sales.filter(s => s.rcptLabel === 'TS' || s.rcptLabel === 'TR');
+  // transactions. Proforma (PS) and incomplete (DRAFT/PENDING/held) are also
+  // reported separately (§18.1.16 / §18.1.20).
+  const fiscalSales = sales.filter((s) => s.status === 'COMPLETED' || s.status === 'REFUNDED');
+  const normalSales   = fiscalSales.filter(s => s.status === 'COMPLETED' && !s.isProforma && s.rcptLabel !== 'TR' && s.rcptLabel !== 'TS' && s.rcptLabel !== 'PS');
+  const normalRefunds = fiscalSales.filter(s => s.status === 'REFUNDED'  && s.rcptLabel !== 'TR' && s.rcptLabel !== 'TS');
+  const trainingSales = fiscalSales.filter(s => s.rcptLabel === 'TS' || s.rcptLabel === 'TR');
+  const proformaSales = sales.filter(s => s.isProforma || s.rcptLabel === 'PS');
   // Reprints (CS/CR receipts, spec §18.1.14/§19.1.14) aren't a separate fiscal
   // record here — a copy is just a re-print of its original NS/NR/TS/TR sale,
   // tracked via `reprintCount`.
-  const copiedSales = sales.filter(s => (s.reprintCount ?? 0) > 0);
+  const copiedSales = fiscalSales.filter(s => (s.reprintCount ?? 0) > 0);
+  const incompleteDrafts = sales.filter(s => s.status === 'DRAFT' || s.status === 'PENDING').length;
 
   // Per-tax-band totals
   const taxBands: Record<string, { taxableAmt: number; taxAmt: number; salesAmt: number }> = {};
@@ -1696,6 +1725,14 @@ async function buildDailyReport(
   const grossRefundAmt = fix2(normalRefunds.reduce((s, sale) => s + Math.abs(Number(sale.totalAmount)), 0));
   const netSalesAmt    = fix2(grossSalesAmt - grossRefundAmt);
   const totalTaxAmt    = fix2(Object.values(taxBands).reduce((s, b) => s + b.taxAmt, 0));
+  const openingDeposit = fix2(Number(shiftAgg._sum.openingFloat ?? 0));
+  const proformaAmt = fix2(proformaSales.reduce((s, sale) => s + Math.abs(Number(sale.totalAmount)), 0));
+  const discountTotal = fix2(normalSales.reduce(
+    (s, sale) => s + sale.saleItems.reduce((a, si) => a + Math.abs(Number((si as any).dcAmt ?? 0)), 0),
+    0,
+  ));
+  const otherReductionsAmt = fix2(voidedSales.reduce((s, sale) => s + Math.abs(Number(sale.totalAmount)), 0));
+  const incompleteSalesCount = heldCount + incompleteDrafts;
 
   // Receipt counters — the "A"/"B" halves of the RRA A/B RT counter, taken from
   // the VSDC-signed transactions for the day (§7.24.4/§7.25).
@@ -1756,6 +1793,12 @@ async function buildDailyReport(
       trainingAmt: fix2(trainingSales.reduce((s, sale) => s + Number(sale.totalAmount), 0)),
       copyCount: copiedSales.length,
       copyAmt: fix2(copiedSales.reduce((s, sale) => s + Number(sale.totalAmount), 0)),
+      openingDeposit,
+      proformaCount: proformaSales.length,
+      proformaAmt,
+      discountTotal,
+      otherReductionsAmt,
+      incompleteSalesCount,
     },
     taxBands,
     taxRates,

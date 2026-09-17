@@ -146,8 +146,8 @@ export const updateBranchController = async (req: AuthRequest, res: Response) =>
     const { name, location, address, addressLine2, phone, status, metadata, bhfId, ebmDeviceId, ebmSerialNo, vsdcUrl } = req.body;
 
     // C10: MRC number format validation (RRA spec §2.1: BBBCCNNNNNN, 11 chars).
-    // Relaxed in sandbox/mock: RRA test-issued device serials (e.g. "excelwartest")
-    // do not follow the BBBCCNNNNNN pattern. Strict validation stays in production.
+    // Relaxed in sandbox/mock: RRA test-issued device serials
+    // can be configured via Organization Settings (EBM credentials section).
     if (ebmSerialNo !== undefined && ebmSerialNo !== null && ebmSerialNo !== '') {
       const isSandboxOrMock = config.ebm.environment === 'sandbox' || config.ebm.useMock;
       const MRC_PATTERN = /^[A-Z0-9]{3}[A-Z0-9]{2}[0-9]{6}$/;
@@ -166,10 +166,10 @@ export const updateBranchController = async (req: AuthRequest, res: Response) =>
       phone,
       status,
       metadata,
-      bhfId,
-      ebmDeviceId,
-      ebmSerialNo: ebmSerialNo ? String(ebmSerialNo).toUpperCase() : undefined,
-      vsdcUrl,
+      bhfId: bhfId === undefined ? undefined : bhfId,
+      ebmDeviceId: ebmDeviceId === undefined ? undefined : ebmDeviceId,
+      ebmSerialNo: ebmSerialNo === undefined ? undefined : ebmSerialNo,
+      vsdcUrl: vsdcUrl === undefined ? undefined : vsdcUrl,
     });
 
     await auditLogger.system(req, {
@@ -184,8 +184,18 @@ export const updateBranchController = async (req: AuthRequest, res: Response) =>
 
     res.json(branch);
   } catch (error: any) {
-    console.error('[Update Branch Error]:', error);
-    res.status(500).json({ error: error.message || 'Failed to update branch' });
+    const status =
+      error?.statusCode === 409 || error?.code === 'P2002' ? 409 : 500;
+    const message =
+      error?.statusCode === 409
+        ? error.message
+        : error?.code === 'P2002'
+          ? 'Branch code (bhfId) is already used by another branch in this organization. Each branch needs a unique RRA branch id (e.g. MAIN=00, East=01).'
+          : error.message || 'Failed to update branch';
+    if (status >= 500) {
+      console.error('[Update Branch Error]:', error);
+    }
+    res.status(status).json({ error: message, message });
   }
 };
 
