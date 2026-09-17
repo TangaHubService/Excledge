@@ -385,7 +385,7 @@ function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePaylo
   // Start below the "not official" notice block when present so we don't
   // stack a second divider on top of the notice's closing line.
   const hasNotice = isFormalNoticeIndicator(indicator) || !data.certification.isCertified
-  let sdcTop = hasNotice ? 658 : 650
+  let sdcTop = hasNotice ? 648 : 650
 
   // RRA sample heading — single divider under it (no COPY reprint above).
   doc.font(FONT_BOLD).fontSize(5.4).text("SDC INFORMATION", LEFT, sdcTop, {
@@ -432,13 +432,13 @@ function drawFinalFooter(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): v
       characterSpacing: 0.3,
     })
     if (data.invoice.notFiscalized) {
-      doc.font(FONT_BOLD).fontSize(6).text(NOT_FISCALIZED_NOTICE, LEFT, 644, {
+      doc.font(FONT_BOLD).fontSize(6).text(NOT_FISCALIZED_NOTICE, LEFT, 638, {
         width: RIGHT - LEFT,
         align: "center",
         characterSpacing: 0.2,
       })
     }
-    doc.moveTo(LEFT, 652).lineTo(RIGHT, 652).dash(2, { space: 1.5 }).stroke().undash()
+    doc.moveTo(LEFT, 642).lineTo(RIGHT, 642).dash(2, { space: 1.5 }).stroke().undash()
   }
 
   drawFiscalInformation(doc, data)
@@ -457,8 +457,9 @@ function drawFinalFooter(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): v
 }
 
 /**
- * Big translucent diagonal stamp — kept as a thin wrapper for callers/tests
- * that still reference the older name.
+ * Big translucent diagonal "NOT FISCALISED" stamp — thin wrapper for callers
+ * that still reference the older name. Drawn in A4 coordinate space (the
+ * caller applies the A5 scale transform when needed).
  */
 function drawNotFiscalizedWatermark(doc: PDFKit.PDFDocument): void {
   drawDiagonalWatermark(doc, NOT_FISCALIZED_TITLE, PAGE_WIDTH, PAGE_HEIGHT, "#D32F2F")
