@@ -13,6 +13,15 @@ exports.recalculateProductStock = recalculateProductStock;
 exports.getInventoryHistory = getInventoryHistory;
 const prisma_1 = require("../lib/prisma");
 /**
+ * RRA Stock In/Out reporting (RRA checklist §72/§73): every non-sale inventory
+ * movement is queued for the VSDC by marking its ledger row PENDING; a cron
+ * batch (stock-sync.job) submits them. SALE rows are never queued — RRA derives
+ * stock-out from /trnsSales/saveSales, so `null` here means "not applicable".
+ */
+function ebmSyncStatusFor(movementType) {
+    return movementType === 'SALE' ? null : 'PENDING';
+}
+/**
  * Inventory Ledger Service
  *
  * This service implements an append-only ledger pattern for inventory tracking.
@@ -116,7 +125,7 @@ async function getStockAtDate(organizationId, productId, atDate, branchId) {
  * This is the primary function for adding inventory
  */
 async function addStock(params) {
-    const { organizationId, productId, userId, quantity, movementType, branchId = null, warehouseId = null, unitCost, reference, referenceType, batchNumber, expiryDate, note, metadata, tx: providedTx, } = params;
+    const { organizationId, productId, userId, quantity, movementType, branchId = null, warehouseId = null, unitCost, reference, referenceType, batchNumber, expiryDate, note, metadata, skipEbmSync = false, tx: providedTx, } = params;
     // Validate quantity
     if (quantity < 0) {
         throw new Error('Quantity must be non-negative for stock IN operations');
@@ -159,6 +168,7 @@ async function addStock(params) {
                 expiryDate: expiryDate ? new Date(expiryDate) : null,
                 note,
                 metadata: metadata ? metadata : null,
+                ebmSyncStatus: skipEbmSync ? null : ebmSyncStatusFor(movementType),
             },
         });
         // Update product quantity cache (global aggregate across all branches)
@@ -252,6 +262,7 @@ async function removeStock(params) {
                 referenceType,
                 note,
                 metadata: metadata ? metadata : null,
+                ebmSyncStatus: ebmSyncStatusFor(movementType),
             },
         });
         // Update product quantity cache (global aggregate across all branches)
@@ -377,6 +388,7 @@ async function adjustStock(params) {
                 referenceType,
                 note: note || `Stock adjustment: ${quantity > 0 ? '+' : ''}${quantity}`,
                 metadata: metadata ? metadata : undefined,
+                ebmSyncStatus: ebmSyncStatusFor(movementType),
             },
         });
         // Update product quantity cache (global aggregate across all branches)

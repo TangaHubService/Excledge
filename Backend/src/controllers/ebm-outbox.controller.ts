@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { isEbmEnabled } from '../services/rra-ebm.service';
 import { buildVsdcEnvelope, saveAndVerifyZReport, checkZReport } from '../services/vsdc-api.service';
 import { initializeVsdcDevice } from '../services/vsdc-init.service';
+import { retryEbmOutboxEntry } from '../services/ebm-outbox.service';
 import { success, error as apiError } from '../utils/apiResponse';
 
 const OFFLINE_BLOCK_MS = Number(process.env.VSDC_OFFLINE_BLOCK_MS ?? 2 * 60 * 60 * 1000);
@@ -116,6 +117,32 @@ export async function checkEbmOutboxStatus(req: BranchAuthRequest, res: Response
 }
 
 /**
+ * POST /:organizationId/ebm-outbox/:id/retry — re-queue FAILED / DEAD_LETTER
+ * (unfiscalized) entries after the underlying issue is fixed.
+ */
+export async function retryEbmOutbox(req: BranchAuthRequest, res: Response) {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const id = parseInt(req.params.id);
+    if (!Number.isFinite(organizationId) || !Number.isFinite(id)) {
+      return res.status(400).json(apiError('Invalid organization or outbox id'));
+    }
+
+    const result = await retryEbmOutboxEntry(organizationId, id);
+    if (!result.success) {
+      return res.status(400).json(apiError(result.error ?? 'Retry failed'));
+    }
+    res.json(success({
+      message: 'Outbox entry re-queued for fiscalization',
+      entry: result.entry,
+    }));
+  } catch (error) {
+    console.error('[EbmOutbox] Retry failed:', error);
+    res.status(500).json(apiError('Failed to retry outbox entry'));
+  }
+}
+
+/**
  * POST /:organizationId/ebm/initialize — one-time RRA VSDC device initialization
  * (RRA checklist §58). Body: { branchId? }.
  */
@@ -150,12 +177,9 @@ export async function initializeDevice(req: BranchAuthRequest, res: Response) {
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 /**
- * `yyyyMMdd` — the report-date `checkZReport` expects. Live-tested against
- * the RRA sandbox 2026-08-29: a full 14-digit timestamp was rejected with
- * "length must be between 8 and 8", confirming 8 digits is correct despite
- * that same sandbox also (inconsistently, likely due to a concurrent
- * disk-pressure incident — see resultCd 899 on saveSales that day) rejecting
- * an 8-digit value with a contradictory "must be yyyyMMddHH24MISS" message.
+ * `yyyyMMdd` report date — expanded to a 14-digit `yyyyMMddHH24MISS`
+ * timestamp (`yyyyMMdd000000`) inside `checkZReport`, which is what the VSDC
+ * validates against (error 910 rejects a bare 8-digit `rptDe`).
  */
 function toRptDeDate(d: Date): string {
   return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
@@ -196,8 +220,10 @@ export async function submitZReport(req: BranchAuthRequest, res: Response) {
 }
 
 /**
- * GET /:organizationId/z-report?branchId=&date=yyyyMMdd — look up a
- * previously saved Z report for a given day (defaults to today).
+ * GET /:organizationId/z-report?branchId=&date=yyyyMMdd[HHmmss] — look up a
+ * previously saved Z report for a given day (defaults to today). A bare
+ * 8-digit date is expanded to `yyyyMMdd000000` inside `checkZReport` because
+ * the VSDC requires `yyyyMMddHH24MISS` (error 910 otherwise).
  */
 export async function getZReportStatus(req: BranchAuthRequest, res: Response) {
   try {
@@ -206,7 +232,11 @@ export async function getZReportStatus(req: BranchAuthRequest, res: Response) {
     }
     const organizationId = parseInt(req.params.organizationId);
     const branchId = req.query.branchId != null ? parseInt(req.query.branchId as string) : undefined;
-    const rptDe = (req.query.date as string) || toRptDeDate(new Date());
+    const rawDate = (req.query.date as string) || toRptDeDate(new Date());
+    const rptDe = rawDate.replace(/\D/g, '');
+    if (!/^(\d{8}|\d{14})$/.test(rptDe)) {
+      return res.status(400).json(apiError('date must be yyyyMMdd or yyyyMMddHHmmss'));
+    }
 
     const envelope = await buildVsdcEnvelope(organizationId, branchId);
     const result = await checkZReport(envelope, rptDe);

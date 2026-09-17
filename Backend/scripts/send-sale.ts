@@ -11,7 +11,7 @@ async function main() {
   });
   const org = await prisma.organization.findUnique({ where: { id: 2 }, select: { TIN: true, name: true, address: true } });
   if (!sale || !org) { console.log('missing'); return; }
-  const p = buildRraSendReceiptPayload(sale as any, org as any);
+  const p = buildRraSendReceiptPayload(sale as any, org as any, '01');
   p.custTin = prcOrdOverride ? p.custTin : '100000001';
   p.prcOrdCd = prcOrdOverride ?? '010301';
   (p.receipt as any).custTin = p.custTin;

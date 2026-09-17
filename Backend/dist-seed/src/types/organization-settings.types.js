@@ -14,6 +14,7 @@ exports.DEFAULT_SETTINGS = {
         dashboard: true,
         pos: true,
         sales: true,
+        invoices: true,
         customers: true,
         debtManagement: true,
         inventoryAll: true,
@@ -32,6 +33,7 @@ exports.DEFAULT_SETTINGS = {
         users: true,
         activityLogs: true,
         ebmOutbox: true,
+        production: true,
         subscription: true,
         billingHistory: true,
         salesReports: true,
@@ -57,5 +59,22 @@ exports.DEFAULT_SETTINGS = {
         dateFormat: "DD/MM/YYYY",
         defaultLandingPage: "dashboard",
         lowStockThresholdOverride: null,
+        originCountryCode: null,
+        enabledPaymentMethods: ["CASH", "MOBILE_MONEY", "CARD", "BANK_TRANSFER", "DEBT"],
+        shiftConfig: {
+            approvalRequired: false,
+            denominationsEnabled: false,
+            varianceThreshold: 0,
+        },
+    },
+    // Defaults to true: matches the existing behavior where VAT-registered
+    // products charge 18%, so organizations that never touch this setting keep
+    // their current tax treatment.
+    vatRegistered: true,
+    ebmConfig: {
+        tin: "",
+        bhfId: "",
+        dvcSrlNo: "",
+        ebmDeviceId: "",
     },
 };

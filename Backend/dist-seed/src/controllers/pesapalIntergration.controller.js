@@ -112,6 +112,9 @@ const pesapalOrderRequest = async (req, res) => {
             amountInRwf = await (0, currencyConverter_1.convertUsdToRwf)(totalAmount);
         }
         const ipnId = process.env.PESAPAL_IPN_ID;
+        const lastTenPhoneDigits = user.phoneNumber
+            ? String(user.phoneNumber).replace(/\D/g, "").slice(-10)
+            : undefined;
         const orderData = {
             id: pesapalUniqueRef,
             currency: "RWF",
@@ -120,7 +123,7 @@ const pesapalOrderRequest = async (req, res) => {
             callback_url: `${config_1.config.primaryFrontendUrl}/subscription/callback?planId=${planId}`,
             billing_address: {
                 email_address: user.email,
-                phone_number: user.phoneNumber.slice(-10),
+                ...(lastTenPhoneDigits ? { phone_number: lastTenPhoneDigits } : {}),
                 first_name: user.firstName,
             }
         };

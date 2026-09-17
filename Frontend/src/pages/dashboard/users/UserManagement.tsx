@@ -460,6 +460,22 @@ export const UserManagement = () => {
                               </div>
                             )}
                           </div>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!user.id) return;
+                              try {
+                                await apiClient.syncUserToRra(user.id);
+                                toast.success(`Synced ${user.name || user.email} to RRA`);
+                              } catch (e: unknown) {
+                                toast.error(e instanceof Error ? e.message : 'RRA user sync failed');
+                              }
+                            }}
+                            className="px-3 py-1 text-sm rounded-lg transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            title="Push this user account to VSDC"
+                          >
+                            Sync RRA
+                          </button>
 
                           <div className="relative group flex items-center gap-2 px-1">
                             <AppToggle

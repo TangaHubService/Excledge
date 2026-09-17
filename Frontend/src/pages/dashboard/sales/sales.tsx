@@ -18,6 +18,9 @@ import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice';
 import { downloadInvoicePdf, type InvoicePdfFormat } from '../../../lib/invoice-pdf';
 import type { SaleEbmTransaction } from '../../../utils/invoiceFiscal';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
+import ProformaConvertDialog from '../../../components/sales/ProformaConvertDialog';
+import SaleSuccessModal, { type SaleSuccessData } from '../../../components/pos/SaleSuccessModal';
+import { useBranch } from '../../../context/BranchContext';
 import { useNavigate } from 'react-router-dom';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -61,7 +64,10 @@ type Sale = {
   saleNumber: string;
   invoiceNumber?: string;
   rcptLabel?: string | null;
-  customer: { name: string; email?: string; phone?: string };
+  isProforma?: boolean;
+  proformaSourceId?: number | null;
+  convertedSale?: { id: string | number; invoiceNumber?: string | null; saleNumber?: string | null } | null;
+  customer: { id?: string | number; name: string; email?: string; phone?: string };
   user: { name: string };
   paymentType: string;
   cashAmount: string;
@@ -154,6 +160,8 @@ export default function SalesPage() {
   const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
   const [saleToRefund, setSaleToRefund] = useState<Sale | null>(null);
   const [refundReason, setRefundReason] = useState('');
+  const [refundRsnCd, setRefundRsnCd] = useState('06');
+  const [refundReasons, setRefundReasons] = useState<Array<{ code: string; name: string }>>([]);
   const [isRefunding, setIsRefunding] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [saleToCancel, setSaleToCancel] = useState<Sale | null>(null);
@@ -164,7 +172,11 @@ export default function SalesPage() {
   // Named distinctly from date-fns's `format` (imported above) to avoid shadowing it.
   const [invoiceFormat, setInvoiceFormat] = useState<InvoicePdfFormat>('A4');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [proformaToConvert, setProformaToConvert] = useState<Sale | null>(null);
+  const [convertSuccess, setConvertSuccess] = useState<SaleSuccessData | null>(null);
+  const [convertedSaleRaw, setConvertedSaleRaw] = useState<Sale | null>(null);
   const [openRowMenu, setOpenRowMenu] = useState<string | null>(null);
+  const { selectedBranchId } = useBranch();
   const fetchSales = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -250,7 +262,16 @@ export default function SalesPage() {
   const handleOpenRefundModal = (sale: Sale) => {
     setSaleToRefund(sale);
     setRefundReason('');
+    setRefundRsnCd('06');
     setIsRefundModalOpen(true);
+    // RRA refund reason codes (code class 32) — same list the backend
+    // enforces, so the operator can never pick a code VSDC rejects.
+    apiClient.getRraRefundReasons()
+      .then((res: any) => {
+        const list = res?.data?.reasons ?? res?.reasons ?? [];
+        if (Array.isArray(list) && list.length) setRefundReasons(list);
+      })
+      .catch(() => { /* keep the fallback list below */ });
   };
 
   const handleRefundSubmit = async () => {
@@ -258,7 +279,7 @@ export default function SalesPage() {
     if (!refundReason.trim()) { toast.error(t('sales.reasonRequired') || 'Refund reason is required'); return; }
     try {
       setIsRefunding(true);
-      await apiClient.refundSale(saleToRefund.id, { reason: refundReason });
+      await apiClient.refundSale(saleToRefund.id, { reason: refundReason, rfdRsnCd: refundRsnCd });
       toast.success(t('sales.refundSuccess'));
       await fetchSales();
       setIsRefundModalOpen(false);
@@ -324,6 +345,49 @@ export default function SalesPage() {
     setPaymentFilter(''); setRcptLabelFilter('');
     setSearchTerm(''); setCurrentPage(1);
   };
+
+  // Poll GET /invoices/:saleId until VSDC confirms (200) or the wait gives up —
+  // the endpoint returns 425 while fiscalization is still in flight. Flips the
+  // success modal's indicator in place. Mirrors the POS checkout behaviour.
+  const pollFiscalization = useCallback(async (saleId: string | number) => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await new Promise((r) => setTimeout(r, 1500));
+      try {
+        await apiClient.getInvoice(saleId);
+        setConvertSuccess(prev => (prev && String(prev.id) === String(saleId) ? { ...prev, fiscalizationStatus: 'success' } : prev));
+        return;
+      } catch (e: any) {
+        if (e?.response?.status === 425) continue;
+        break;
+      }
+    }
+    setConvertSuccess(prev => (prev && String(prev.id) === String(saleId) ? { ...prev, fiscalizationStatus: 'failed' } : prev));
+  }, []);
+
+  const handleProformaConverted = useCallback((newSale: any) => {
+    setProformaToConvert(null);
+    fetchSales();
+    if (!newSale?.id) return;
+    const fiscalizationStatus: 'success' | 'pending' | 'failed' =
+      newSale?.fiscalization?.status ?? 'success';
+    setConvertedSaleRaw(newSale as Sale);
+    setConvertSuccess({
+      id: newSale.id,
+      invoiceNumber: newSale.invoiceNumber,
+      receiptNumber: newSale?.fiscalization?.sdcRcptNo != null ? String(newSale.fiscalization.sdcRcptNo) : undefined,
+      customerName: newSale?.customer?.name,
+      totalAmount: Number(newSale.totalAmount ?? 0),
+      totalItems: Array.isArray(newSale.saleItems)
+        ? newSale.saleItems.reduce((s: number, i: any) => s + Number(i.quantity ?? 0), 0)
+        : undefined,
+      paymentLabel: getPaymentMethodLabel(newSale.paymentType ?? ''),
+      amountPaid: Number(newSale.cashAmount ?? 0) + Number(newSale.insuranceAmount ?? 0),
+      changeReturned: 0,
+      date: newSale.createdAt ? new Date(newSale.createdAt) : new Date(),
+      fiscalizationStatus,
+    });
+    if (fiscalizationStatus === 'pending') pollFiscalization(newSale.id);
+  }, [fetchSales, pollFiscalization]);
 
   const pageWindowStart = Math.max(1, Math.min(currentPage - 2, Math.max(1, totalPages - 4)));
   const visiblePages = Array.from(
@@ -634,6 +698,15 @@ export default function SalesPage() {
                       ) : (
                         <span className="text-gray-300 text-sm">—</span>
                       )}
+                      {(sale.status === 'CONVERTED' || sale.convertedSale) && (
+                        <button
+                          onClick={e => { e.stopPropagation(); if (sale.convertedSale) handleViewSale(String(sale.convertedSale.id)); }}
+                          className="ml-1 inline-flex items-center px-1.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                          title={sale.convertedSale?.invoiceNumber ? `Converted → ${sale.convertedSale.invoiceNumber}` : 'Converted'}
+                        >
+                          Converted
+                        </button>
+                      )}
                     </TableCell>
 
                     {/* Total */}
@@ -680,7 +753,16 @@ export default function SalesPage() {
                                   : <Download className="h-3.5 w-3.5" />}
                                 Download 80mm
                               </button>
-                              {sale.status === 'COMPLETED' && (
+                              {sale.rcptLabel === 'PS' && sale.status !== 'CONVERTED' && !sale.convertedSale && (
+                                <button
+                                  onClick={() => { setProformaToConvert(sale); setOpenRowMenu(null); }}
+                                  className="w-full text-left px-3 py-2 flex items-center gap-2 text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                >
+                                  <ArrowUpRight className="h-3.5 w-3.5" />
+                                  Convert to sale
+                                </button>
+                              )}
+                              {sale.status === 'COMPLETED' && sale.rcptLabel !== 'PS' && (
                                 <button
                                   onClick={() => { handleOpenRefundModal(sale); setOpenRowMenu(null); }}
                                   className="w-full text-left px-3 py-2 flex items-center gap-2 text-amber-600 hover:bg-amber-50 transition-colors"
@@ -689,7 +771,7 @@ export default function SalesPage() {
                                   Refund Sale
                                 </button>
                               )}
-                              {sale.status === 'COMPLETED' && (
+                              {sale.status === 'COMPLETED' && sale.rcptLabel !== 'PS' && (
                                 <button
                                   onClick={() => { handleOpenCancelModal(sale); setOpenRowMenu(null); }}
                                   className="w-full text-left px-3 py-2 flex items-center gap-2 text-red-600 hover:bg-red-50 transition-colors"
@@ -899,6 +981,30 @@ export default function SalesPage() {
         </DrawerContent>
       </Drawer>
 
+      {/* ── Proforma → sale conversion ───────────────────────────────────── */}
+      <ProformaConvertDialog
+        sale={proformaToConvert as any}
+        branchId={selectedBranchId as any}
+        open={!!proformaToConvert}
+        onClose={() => setProformaToConvert(null)}
+        onConverted={handleProformaConverted}
+      />
+
+      <SaleSuccessModal
+        isOpen={!!convertSuccess}
+        saleData={convertSuccess}
+        onPrint={() => convertedSaleRaw && handleDownloadInvoice(convertedSaleRaw, '80mm')}
+        onDownload={() => convertedSaleRaw && handleDownloadInvoice(convertedSaleRaw, invoiceFormat)}
+        onShare={() => convertedSaleRaw && handleDownloadInvoice(convertedSaleRaw, invoiceFormat)}
+        onNewSale={() => { setConvertSuccess(null); setConvertedSaleRaw(null); }}
+        onViewInvoice={() => {
+          const id = convertSuccess?.id;
+          setConvertSuccess(null);
+          setConvertedSaleRaw(null);
+          if (id != null) handleViewSale(String(id));
+        }}
+      />
+
       {/* ── Refund drawer ────────────────────────────────────────────────── */}
       <Drawer open={isRefundModalOpen} onOpenChange={setIsRefundModalOpen}>
         <DrawerContent className="sm:max-w-lg bg-white">
@@ -909,6 +1015,33 @@ export default function SalesPage() {
           <div className="space-y-4 px-5 py-4">
             <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
               <p className="text-sm text-amber-800 font-medium">{t('sales.fullRefundOnlyNote')}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="refundRsnCd">{t('sales.refundReasonCode') || 'RRA refund reason'}</Label>
+              <select
+                id="refundRsnCd"
+                value={refundRsnCd}
+                onChange={e => setRefundRsnCd(e.target.value)}
+                className="w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                {(refundReasons.length ? refundReasons : [
+                  { code: '01', name: 'Missing Quantity' },
+                  { code: '02', name: 'Missing Waiting' },
+                  { code: '03', name: 'Damaged' },
+                  { code: '04', name: 'Wasted' },
+                  { code: '05', name: 'Raw Material Shortage' },
+                  { code: '06', name: 'Refund' },
+                  { code: '07', name: 'Wrong Customer TIN' },
+                  { code: '08', name: 'Wrong Customer name' },
+                  { code: '09', name: 'Wrong Amount/price' },
+                  { code: '10', name: 'Wrong Quantity' },
+                  { code: '11', name: 'Wrong Item(s)' },
+                  { code: '12', name: 'Wrong tax type' },
+                  { code: '13', name: 'Other reason' },
+                ]).map(r => (
+                  <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="refundReason">{t('sales.refundReason')}</Label>

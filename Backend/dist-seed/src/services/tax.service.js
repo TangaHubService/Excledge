@@ -19,6 +19,44 @@ class TaxService {
                 return client_1.RraTaxCode.A;
         }
     }
+    /** Inverse of getTaxCode — used when persisting a product's A/B/C/D tax
+     *  category so the legacy TaxCategory enum stays consistent with it. */
+    static getTaxCategory(code) {
+        switch (code) {
+            case client_1.RraTaxCode.B:
+                return 'STANDARD';
+            case client_1.RraTaxCode.C:
+                return 'ZERO_RATED';
+            case client_1.RraTaxCode.A:
+                return 'EXEMPT';
+            case client_1.RraTaxCode.D:
+                return 'NON_TAXABLE';
+            default:
+                return 'STANDARD';
+        }
+    }
+    /**
+     * Determine the effective RRA tax code for a product on a sale.
+     *
+     * The business's tax configuration and the product's own tax category are
+     * independent concepts, applied in this order of precedence:
+     *  - When the taxpayer/entity is legally tax-exempt (e.g. NGO, diplomatic
+     *    mission), every line uses code A ("VAT exempt") regardless of the
+     *    product's own category or VAT-registration status.
+     *  - Otherwise, when the taxpayer is NOT VAT registered, every line uses
+     *    code D ("Taxpayer not registered for VAT") regardless of category.
+     *  - Otherwise (VAT registered, not exempt), the product's configured tax
+     *    category (A = VAT exempt, B = 18% standard, C = export/zero-rated)
+     *    applies. A product is never silently downgraded to D just because it
+     *    has no tax-registration number of its own.
+     */
+    static resolveProductTaxCode(productTaxCode, category, vatRegistered, isTaxExempt = false) {
+        if (isTaxExempt)
+            return client_1.RraTaxCode.A;
+        if (!vatRegistered)
+            return client_1.RraTaxCode.D;
+        return productTaxCode ?? this.getTaxCode(category);
+    }
     /** RRA spec: TAX_A=0% (exempt), TAX_B=18% (standard VAT), TAX_C=0% (zero-rated), TAX_D=0% (non-taxable), TAX_E=0% (tourism/export) */
     static getExpectedTaxRate(taxCode) {
         switch (taxCode) {
@@ -74,7 +112,7 @@ class TaxService {
             taxCode: code,
         };
     }
-    static async calculateSaleTax(organizationId, items) {
+    static async calculateSaleTax(organizationId, items, vatRegistered = true, isTaxExempt = false) {
         const standardRate = await this.getVatRate(organizationId);
         const productIds = items.map(i => i.productId);
         const products = await prisma_1.prisma.product.findMany({
@@ -88,7 +126,10 @@ class TaxService {
         for (const item of items) {
             const product = productMap.get(item.productId);
             const category = product?.taxCategory || 'STANDARD';
-            const result = this.calculateItemTax(item.unitPrice, item.quantity, category, standardRate, product?.taxCode);
+            // Effective code: forced to A when the entity is tax-exempt, else D
+            // when the taxpayer is not VAT registered, else the product category.
+            const effectiveCode = this.resolveProductTaxCode(product?.taxCode ?? null, category, vatRegistered, isTaxExempt);
+            const result = this.calculateItemTax(item.unitPrice, item.quantity, category, standardRate, effectiveCode);
             totalTaxable = totalTaxable.plus(result.taxableAmount);
             totalVat = totalVat.plus(result.taxAmount);
             itemSummaries.push({

@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { isEbmEnabled } from './rra-ebm.service';
+import { itemTypeCodeDigit } from './item-code.service';
 import {
   buildVsdcEnvelope,
   toRraReqDt,
@@ -283,7 +284,7 @@ export async function pullRraItems(
   const rraItems = res.data?.itemList ?? [];
   const localProducts = await prisma.product.findMany({
     where: { organizationId },
-    select: { id: true, name: true, itemCd: true, itemClsCd: true, taxCode: true, unitPrice: true, ebmSyncStatus: true },
+    select: { id: true, name: true, itemCd: true, itemClsCd: true, itemType: true, taxCode: true, unitPrice: true, ebmSyncStatus: true, origin: true, pkgUnitCd: true, qtyUnitCd: true },
   });
   const localByCd = new Map(localProducts.filter((p) => p.itemCd).map((p) => [p.itemCd as string, p]));
   const rraByCd = new Map(rraItems.map((i) => [i.itemCd, i]));
@@ -297,6 +298,18 @@ export async function pullRraItems(
     }
     if (item.itemClsCd && local.itemClsCd && item.itemClsCd !== local.itemClsCd) {
       diff.mismatched.push({ productId: local.id, productName: local.name, itemCd: item.itemCd, field: 'itemClsCd', rra: item.itemClsCd, local: local.itemClsCd });
+    }
+    if (item.itemTyCd && item.itemTyCd !== itemTypeCodeDigit(local.itemType)) {
+      diff.mismatched.push({ productId: local.id, productName: local.name, itemCd: item.itemCd, field: 'itemTyCd', rra: item.itemTyCd, local: itemTypeCodeDigit(local.itemType) });
+    }
+    if (item.orgnNatCd && local.origin && item.orgnNatCd !== local.origin) {
+      diff.mismatched.push({ productId: local.id, productName: local.name, itemCd: item.itemCd, field: 'orgnNatCd', rra: item.orgnNatCd, local: local.origin });
+    }
+    if (item.pkgUnitCd && local.pkgUnitCd && item.pkgUnitCd !== local.pkgUnitCd) {
+      diff.mismatched.push({ productId: local.id, productName: local.name, itemCd: item.itemCd, field: 'pkgUnitCd', rra: item.pkgUnitCd, local: local.pkgUnitCd });
+    }
+    if (item.qtyUnitCd && local.qtyUnitCd && item.qtyUnitCd !== local.qtyUnitCd) {
+      diff.mismatched.push({ productId: local.id, productName: local.name, itemCd: item.itemCd, field: 'qtyUnitCd', rra: item.qtyUnitCd, local: local.qtyUnitCd });
     }
     if (item.taxTyCd && local.taxCode && item.taxTyCd !== local.taxCode) {
       diff.mismatched.push({ productId: local.id, productName: local.name, itemCd: item.itemCd, field: 'taxTyCd', rra: item.taxTyCd, local: local.taxCode });

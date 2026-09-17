@@ -68,6 +68,8 @@ import { SYSTEM_NAME, SYSTEM_VERSION, CIS_VERSION_LABEL } from "./services/syste
 import uploadRoutes from "./routes/upload.route";
 import supplierInvoiceRoutes from "./routes/supplier-invoice.routes";
 import supplierPortalRoutes from "./routes/supplier-portal.routes";
+import bomProductionRoutes from "./routes/bom-production.routes";
+import { mountApiDocs } from "./docs/swagger";
 
 const app = express();
 const httpServer = createServer(app);
@@ -164,9 +166,13 @@ app.use("/api/stock-transfers", stockTransferRoutes);
 app.use("/api/organizations", ebmOutboxRoutes);
 app.use("/api/supplier-invoices", supplierInvoiceRoutes);
 app.use("/api/supplier-portal", supplierPortalRoutes);
+app.use("/api/inventory", bomProductionRoutes);
 app.use("/api/shifts", shiftRoutes);
 app.use("/api/held-sales", heldSaleRoutes);
 app.use("/api/devices", deviceRoutes);
+
+// Interactive OpenAPI docs (full API + RRA-focused)
+mountApiDocs(app);
 
 // Serve uploaded files statically
 app.use('/uploads', express.static('uploads'));
@@ -225,6 +231,9 @@ if (process.env.RUN_JOBS !== "false") {
 httpServer.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`API docs:     http://localhost:${PORT}/api/docs`);
+  console.log(`Full Swagger: http://localhost:${PORT}/api/docs/full`);
+  console.log(`RRA Swagger:  http://localhost:${PORT}/api/docs/rra`);
 });
 
 // Handle graceful shutdown

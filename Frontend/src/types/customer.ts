@@ -7,6 +7,17 @@ export interface Customer {
   balance: number;
   insuranceProvider?: string;
   countryCode?: string;
+  tin?: string | null;
+  TIN?: string | null;
+  prcOrdCd?: string | null;
+  isrccCd?: string | null;
+  isrcRt?: number | null;
+  address?: string | null;
+  custPrvncNm?: string | null;
+  custDstrtNm?: string | null;
+  custSctrNm?: string | null;
+  custLocDesc?: string | null;
+  isActive?: boolean;
 }
 
 export interface CustomerFormData {
@@ -17,7 +28,14 @@ export interface CustomerFormData {
   countryCode?: string;
   type: string;
   tin?: string | null;
+  address?: string | null;
+  custPrvncNm?: string | null;
+  custDstrtNm?: string | null;
+  custSctrNm?: string | null;
+  custLocDesc?: string | null;
   balance: number;
+  isrccCd?: string | null;
+  isrcRt?: number | null;
 }
 
 export interface CustomerFilters {

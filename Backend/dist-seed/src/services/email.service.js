@@ -561,17 +561,49 @@ class EmailService {
         });
     }
     async sendPasswordResetEmail(email, name, token) {
-        const resetLink = `${config_1.config.primaryFrontendUrl}/reset-password?token=${token}`;
+        const resetLink = `${config_1.config.primaryFrontendUrl}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
         const expiryTime = (0, date_fns_1.format)(new Date(Date.now() + 60 * 60 * 1000), 'MMMM d, yyyy h:mm a');
         await this.sendMail({
             from: config_1.config.email.from,
             to: email,
             subject: 'Reset Your Password',
+            // Always include a plain-text alternative. Some mobile email clients and
+            // privacy modes suppress styled HTML, but the OTP must remain visible.
+            text: [
+                `Hello ${name},`,
+                '',
+                `Your ${config_1.config.appName} password reset code is: ${token}`,
+                '',
+                'The code expires in one hour.',
+                `You can also reset your password here: ${resetLink}`,
+                '',
+                "If you didn't request this reset, you can ignore this email.",
+            ].join('\n'),
             html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Password Reset Request</h2>
           <p>Hello ${name},</p>
-          <p>We received a request to reset your password. Click the button below to proceed:</p>
+          <p>We received a request to reset your password.</p>
+
+          <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
+            Enter this 6-digit code in the Excel Edge POS mobile app:
+          </p>
+          <div style="background-color: #f1f5f9;
+                      border: 1px solid #e2e8f0;
+                      border-left: 4px solid #3b82f6;
+                      padding: 16px 22px;
+                      margin: 12px auto 24px;
+                      width: fit-content;
+                      font-size: 28px;
+                      font-weight: 700;
+                      color: #1e40af;
+                      letter-spacing: 0.35em;
+                      text-indent: 0.35em;
+                      border-radius: 6px;">
+            ${token}
+          </div>
+
+          <p>Or use the secure browser link:</p>
           
           <div style="text-align: center; margin: 25px 0;">
             <a href="${resetLink}" 

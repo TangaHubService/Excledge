@@ -568,7 +568,8 @@
         "insuranceAmount": "Montant de l'assurance",
         "status": "Statut",
         "fetchError": "Échec du chargement des détails de la vente",
-        "saleNotFound": "Vente introuvable"
+        "saleNotFound": "Vente introuvable",
+        "refundReasonCode": "Motif de remboursement RRA"
     },
     "customers": {
         "customers": "Clients",
@@ -611,7 +612,13 @@
             "type": "Type",
             "balance": "Solde",
             "actions": "Actions"
-        }
+        },
+        "address": "Adresse",
+        "addressPlaceholder": "p. ex. KG 7 Ave, Kigali",
+        "province": "Province",
+        "district": "District",
+        "sector": "Secteur",
+        "streetCell": "Rue / Cellule"
     },
     "suppliers": {
         "suppliers": "Fournisseurs",
@@ -906,7 +913,10 @@
         },
         "offlineMode": "Vous êtes actuellement hors ligne. Les ventes seront mises en file d'attente et synchronisées lorsque la connexion sera rétablie.",
         "offlineQueued": "Hors ligne : la vente a été mise en file d'attente et sera synchronisée une fois en ligne.",
-        "syncComplete": "Ventes hors ligne synchronisées."
+        "syncComplete": "Ventes hors ligne synchronisées.",
+        "fiscalPending": "Confirmation du reçu auprès de l'administration fiscale…",
+        "fiscalFailed": "Vente enregistrée, mais l'administration fiscale n'a pas encore validé ce reçu. Vous pouvez quand même imprimer ou partager une copie — elle sera marquée comme non approuvée. Retrouvez la vente dans Ventes et réessayez quand la connexion fonctionne.",
+        "saleCompleted": "Merci ! La vente a été réalisée avec succès et le stock a été mis à jour."
     },
     "companySettings": {
         "title": "Paramètres de l'Entreprise",

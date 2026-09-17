@@ -43,8 +43,11 @@ export interface Customer {
   email: string;
   phone: string;
   type: "INDIVIDUAL" | "CORPORATE" | "INSURANCE";
+  customerType?: "INDIVIDUAL" | "CORPORATE" | "INSURANCE";
   balance: string;
   TIN?: string;
+  isrccCd?: string | null;
+  isrcRt?: number | null;
   totalPurchases?: number;
   address?: string;
   createdAt?: string;
@@ -103,7 +106,13 @@ export function CustomerManagement() {
         sortBy,
         sortOrder,
       });
-      setCustomers(data.customers || []);
+      setCustomers((data.customers || []).map((c: any) => ({
+        ...c,
+        type: (c.customerType || c.type || "INDIVIDUAL") as Customer["type"],
+        TIN: c.TIN || c.tin || undefined,
+        isrccCd: c.isrccCd ?? null,
+        isrcRt: c.isrcRt != null ? Number(c.isrcRt) : null,
+      })));
       setTotalCustomersCount(data.pagination?.total ?? data.count ?? 0);
     } catch (error) {
       console.error("Failed to fetch customers:", error);
@@ -197,6 +206,9 @@ export function CustomerManagement() {
         const updatedCustomer = await apiClient.updateCustomer(editingCustomer.id, formDataWithNumberBalance);
         setCustomers(customers.map((c) => (String(c.id) === String(updatedCustomer.id) ? updatedCustomer : c)));
         successMessage = t("messages.customerUpdated");
+        if ((updatedCustomer as any)?.TIN || (updatedCustomer as any)?.tin) {
+          apiClient.syncCustomerToRra(updatedCustomer.id).catch(() => undefined);
+        }
       } else {
         const newCustomer = await apiClient.createCustomer({
           ...formDataWithNumberBalance,
@@ -204,6 +216,10 @@ export function CustomerManagement() {
         });
         setCustomers([newCustomer, ...customers]);
         successMessage = t("messages.customerCreated");
+        // Backend also pushes on create; FE call covers cases where TIN was set in this form.
+        if ((newCustomer as any)?.TIN || (newCustomer as any)?.tin || formDataWithNumberBalance.tin) {
+          apiClient.syncCustomerToRra(newCustomer.id).catch(() => undefined);
+        }
       }
 
       setIsDialogOpen(false);
@@ -628,10 +644,13 @@ export function CustomerManagement() {
             editingCustomer
               ? {
                   ...editingCustomer,
+                  type: editingCustomer.type || editingCustomer.customerType || "INDIVIDUAL",
                   tin: editingCustomer.TIN || "",
+                  isrccCd: editingCustomer.isrccCd || "",
+                  isrcRt: editingCustomer.isrcRt ?? undefined,
                   balance: typeof editingCustomer.balance === "string" ? parseFloat(editingCustomer.balance) : editingCustomer.balance,
                 }
-              : { name: "", email: "", phone: "", tin: "", type: "INDIVIDUAL", balance: 0 }
+              : { name: "", email: "", phone: "", tin: "", type: "INDIVIDUAL", balance: 0, isrccCd: "", isrcRt: undefined }
           }
           onSubmit={handleSubmit}
           onClose={() => setIsDialogOpen(false)}

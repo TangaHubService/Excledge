@@ -37,10 +37,14 @@ exports.getTaxCodes = exports.processExpiredStock = exports.markAsDamage = expor
 const prisma_1 = require("../lib/prisma");
 const branchAuth_middleware_1 = require("../middleware/branchAuth.middleware");
 const auditLogger_1 = require("../utils/auditLogger");
+const client_1 = require("@prisma/client");
 const inventory_ledger_service_1 = require("../services/inventory-ledger.service");
 const product_sync_service_1 = require("../services/product-sync.service");
+const tax_service_1 = require("../services/tax.service");
+const item_code_service_1 = require("../services/item-code.service");
 const apiResponse_1 = require("../utils/apiResponse");
 const organization_settings_service_1 = require("../services/organization-settings.service");
+const item_code_service_2 = require("../services/item-code.service");
 const sorting_1 = require("../utils/sorting");
 const getProducts = async (req, res) => {
     try {
@@ -58,16 +62,19 @@ const getProducts = async (req, res) => {
         };
         // Default: show all items. Optionally filter by type.
         const itemType = req.query.itemType;
-        if (itemType === 'PRODUCT' || itemType === 'SERVICE') {
+        if (itemType === 'PRODUCT' || itemType === 'RAW_MATERIAL' || itemType === 'SERVICE') {
             where.itemType = itemType;
         }
-        if (branchFilter.branchId) {
-            where.batches = {
-                some: {
-                    branchId: branchFilter.branchId
-                }
-            };
-        }
+        // SERVICE items carry no batch rows (not stock-tracked), so the branch
+        // scoping must not exclude them — only PRODUCT rows need a matching batch.
+        const branchCondition = branchFilter.branchId
+            ? {
+                OR: [
+                    { itemType: 'SERVICE' },
+                    { batches: { some: { branchId: branchFilter.branchId } } },
+                ],
+            }
+            : null;
         if (search) {
             where.OR = [
                 { name: { contains: search, mode: "insensitive" } },
@@ -103,6 +110,9 @@ const getProducts = async (req, res) => {
                 ? [expiryFilter, { OR: where.OR }]
                 : [expiryFilter];
             delete where.OR;
+        }
+        if (branchCondition) {
+            where.AND = where.AND ? [...where.AND, branchCondition] : [branchCondition];
         }
         const [products, totalCount] = await Promise.all([
             prisma_1.prisma.product.findMany({
@@ -252,10 +262,48 @@ exports.getProductById = getProductById;
 const createProduct = async (req, res) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
-        const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode, itemType } = req.body;
+        const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode, itemType, pkgUnitCd, qtyUnitCd, packagingQty, itemClsCd, itemStandardName, origin, useInsurance, additionalInfo, l1SalePrice, l2SalePrice, l3SalePrice, l4SalePrice, l5SalePrice, bomComponents } = req.body;
         const userId = parseInt(req.user?.userId);
         const branchId = (0, branchAuth_middleware_1.getBranchIdForOperation)(req);
         const isService = itemType === 'SERVICE';
+        const bomInputs = [];
+        if (bomComponents !== undefined) {
+            if (!Array.isArray(bomComponents) || bomComponents.length > 50 ||
+                (bomComponents.length > 0 && (itemType || 'PRODUCT') !== 'PRODUCT')) {
+                return res.status(400).json((0, apiResponse_1.error)('Bill of Materials must contain at most 50 raw materials for a finished product'));
+            }
+            if (bomComponents.length > 0) {
+                const effectiveRole = req.organizationRole ?? req.user?.role;
+                const roles = Array.isArray(effectiveRole) ? effectiveRole : [effectiveRole];
+                if (!roles.some((role) => ['ADMIN', 'ACCOUNTANT', 'BRANCH_MANAGER'].includes(role))) {
+                    return res.status(403).json((0, apiResponse_1.error)('You do not have permission to add Bill of Materials components'));
+                }
+            }
+            const componentIds = new Set();
+            for (const component of bomComponents) {
+                const componentProductId = Number(component?.componentProductId);
+                const componentQuantity = Number(component?.quantity);
+                const unit = typeof component?.unit === 'string' ? component.unit.trim() : '';
+                if (!Number.isSafeInteger(componentProductId) || componentProductId <= 0 ||
+                    !Number.isFinite(componentQuantity) || componentQuantity <= 0 ||
+                    componentQuantity > 999999999999.999 ||
+                    Math.abs(componentQuantity * 1000 - Math.round(componentQuantity * 1000)) > 1e-7 ||
+                    !unit || unit.length > 20 ||
+                    componentIds.has(componentProductId)) {
+                    return res.status(400).json((0, apiResponse_1.error)('Each raw material must be unique and have a positive quantity (up to 3 decimals) and a unit'));
+                }
+                componentIds.add(componentProductId);
+                bomInputs.push({ componentProductId, quantity: componentQuantity, unit });
+            }
+            if (componentIds.size > 0) {
+                const validCount = await prisma_1.prisma.product.count({
+                    where: { id: { in: [...componentIds] }, organizationId, itemType: 'RAW_MATERIAL', isActive: true, deletedAt: null },
+                });
+                if (validCount !== componentIds.size) {
+                    return res.status(400).json((0, apiResponse_1.error)('One or more BOM components are not active raw materials in this organization'));
+                }
+            }
+        }
         if (expiryDate && new Date(expiryDate) < new Date() && !isService) {
             return res.status(400).json((0, apiResponse_1.error)("Expiry date cannot be in the past"));
         }
@@ -273,32 +321,86 @@ const createProduct = async (req, res) => {
                 return res.status(400).json((0, apiResponse_1.error)(`Product with batch number "${batchNumber}" already exists (${existingProduct.name})`));
             }
         }
-        // Use transaction to ensure product creation, batch, and ledger are atomic
-        const result = await prisma_1.prisma.$transaction(async (tx) => {
+        // Duplicate barcode check — a barcode identifies a specific physical item,
+        // so two active products in the same org must never share one.
+        if (barcode) {
+            const existingBarcode = await prisma_1.prisma.product.findFirst({
+                where: {
+                    organizationId,
+                    barcode,
+                    deletedAt: null,
+                },
+                select: { id: true, name: true },
+            });
+            if (existingBarcode) {
+                return res.status(400).json((0, apiResponse_1.error)(`Product with barcode "${barcode}" already exists (${existingBarcode.name})`));
+            }
+        }
+        // Tax category is the RRA code A/B/C/D. Validate it, then keep the legacy
+        // TaxCategory enum in sync (A=EXEMPT, B=STANDARD, C=ZERO_RATED, D=NON_TAXABLE).
+        const normalizedTaxCode = taxCode
+            ? String(taxCode).toUpperCase()
+            : (taxCategory ? tax_service_1.TaxService.getTaxCode(taxCategory) : 'B');
+        if (!tax_service_1.TaxService.ALLOWED_TAX_CODES.has(normalizedTaxCode)) {
+            return res.status(400).json((0, apiResponse_1.error)(`Invalid tax category "${taxCode}". Must be one of A, B, C or D.`));
+        }
+        // The RRA item code (itemCd) is derived, not user-entered — VSDC spec
+        // §4.17: <origin> + product-type digit + pkgUnitCd + qtyUnitCd + sequence.
+        // Use an explicit RRA quantity unit when supplied, otherwise derive it from the measurement unit.
+        const resolvedItemType = (isService ? 'SERVICE' : (itemType || 'PRODUCT'));
+        const resolvedQtyUnitCd = qtyUnitCd || (0, item_code_service_1.deriveQtyUnitCd)(measurementUnit);
+        const createProductInTx = async (tx) => {
+            // Get origin from organization settings if not provided
+            const resolvedOrigin = origin || (await (0, item_code_service_2.getOriginNationCode)(organizationId, tx));
+            // Allocated from the same atomic per-organization counter table the
+            // create() below runs against, inside this same transaction, so a
+            // sequence number is only ever consumed if the product actually commits
+            // — no gap is left behind if create() fails for an unrelated reason.
+            const itemCd = await (0, item_code_service_1.allocateItemCd)(organizationId, resolvedItemType, pkgUnitCd, resolvedQtyUnitCd, resolvedOrigin, tx);
             const product = await tx.product.create({
                 data: {
                     name,
                     batchNumber: isService ? null : batchNumber,
                     quantity: isService ? 0 : (quantity || 0),
                     unitPrice,
+                    purchasePrice: isService ? null : (purchasePrice != null && purchasePrice !== '' ? purchasePrice : null),
                     expiryDate: isService ? null : (expiryDate ? new Date(expiryDate) : null),
                     category: category || (isService ? 'Services' : undefined),
                     description,
                     imageUrl,
-                    minStock: isService ? 0 : (minStock || 10),
+                    minStock: isService ? 0 : (minStock ?? 10),
                     organizationId: organizationId,
                     sku,
-                    taxCategory: taxCategory || 'STANDARD',
-                    taxCode,
-                    measurementUnit: measurementUnit || 'OTHER',
+                    taxCategory: tax_service_1.TaxService.getTaxCategory(normalizedTaxCode),
+                    taxCode: normalizedTaxCode,
+                    measurementUnit: measurementUnit || (isService ? 'OTHER' : 'PCS'),
                     itemType,
-                    barcode,
+                    barcode: isService ? (barcode || null) : barcode,
+                    // VSDC ItemSaveReq requires pkgUnitCd for all types including SERVICE.
+                    pkgUnitCd: pkgUnitCd || null,
+                    qtyUnitCd: resolvedQtyUnitCd,
+                    packagingQty: isService ? null : (packagingQty != null && packagingQty !== '' ? packagingQty : null),
+                    itemCd,
+                    itemClsCd: itemClsCd || null,
+                    itemStandardName: itemStandardName || null,
+                    origin: resolvedOrigin,
+                    useInsurance: !!useInsurance,
+                    additionalInfo: additionalInfo || null,
+                    l1SalePrice: l1SalePrice != null && l1SalePrice !== '' ? l1SalePrice : null,
+                    l2SalePrice: l2SalePrice != null && l2SalePrice !== '' ? l2SalePrice : null,
+                    l3SalePrice: l3SalePrice != null && l3SalePrice !== '' ? l3SalePrice : null,
+                    l4SalePrice: l4SalePrice != null && l4SalePrice !== '' ? l4SalePrice : null,
+                    l5SalePrice: l5SalePrice != null && l5SalePrice !== '' ? l5SalePrice : null,
                 },
             });
             // Skip batch and ledger for SERVICE items — no inventory tracking
             if (!isService) {
-                // Create batch record to link product to branch
-                const batchUnitCost = unitPrice ? Number(unitPrice) : 0;
+                // Create batch record to link product to branch. Cost basis is the
+                // purchase price (what was actually paid for stock) — falling back to
+                // the sales price only when no purchase price was provided.
+                const batchUnitCost = purchasePrice != null && purchasePrice !== ''
+                    ? Number(purchasePrice)
+                    : (unitPrice ? Number(unitPrice) : 0);
                 const batchName = batchNumber || `DEFAULT-${product.id}`;
                 await tx.batch.upsert({
                     where: {
@@ -341,8 +443,34 @@ const createProduct = async (req, res) => {
                     tx,
                 });
             }
+            if (bomInputs.length > 0) {
+                await tx.bomComponent.createMany({
+                    data: bomInputs.map((component) => ({
+                        ...component,
+                        parentProductId: product.id,
+                        organizationId,
+                    })),
+                });
+            }
             return product;
-        });
+        };
+        // itemCd is allocated from an atomic per-organization counter (see
+        // createProductInTx above), so a genuine collision shouldn't happen —
+        // this retry is a defensive fallback for the same transient-error class
+        // openShift() in shift.service.ts retries on.
+        let result;
+        for (let attempt = 0; attempt < 5; attempt++) {
+            try {
+                result = await prisma_1.prisma.$transaction((tx) => createProductInTx(tx));
+                break;
+            }
+            catch (err) {
+                if (!(0, item_code_service_1.isItemCdConflict)(err) || attempt === 4) {
+                    throw err;
+                }
+                // Conflict on itemCd — loop again to allocate the next sequence number.
+            }
+        }
         await auditLogger_1.auditLogger.inventory(req, {
             type: 'PRODUCT_CREATE',
             description: `Product "${result.name}" created successfully`,
@@ -352,7 +480,7 @@ const createProduct = async (req, res) => {
                 product: result,
             }
         });
-        (0, product_sync_service_1.syncProductToRraAsync)(result.id);
+        (0, product_sync_service_1.syncProductToRraAsync)(result.id, userId);
         res.status(201).json((0, apiResponse_1.success)(result));
     }
     catch (error) {
@@ -424,91 +552,150 @@ const createProducts = async (req, res) => {
                 return res.status(400).json((0, apiResponse_1.error)(`Batch records already exist for: ${conflictBatchNumbers}`));
             }
         }
-        // Use transaction to ensure all products, batches, and ledger entries are atomic
-        const result = await prisma_1.prisma.$transaction(async (tx) => {
-            await tx.product.createMany({
-                data: products.map((product) => {
-                    const isService = product.itemType === 'SERVICE';
-                    return {
-                        name: product.name,
-                        batchNumber: isService ? null : product.batchNumber,
-                        quantity: isService ? 0 : (product.quantity || 0),
-                        unitPrice: product.unitPrice,
-                        category: product.category || (isService ? 'Services' : undefined),
-                        description: product.description,
-                        imageUrl: product.imageUrl,
-                        minStock: isService ? 0 : (product.minStock || 10),
-                        organizationId: organizationId,
-                        expiryDate: isService ? null : (product.expiryDate ? new Date(product.expiryDate) : null),
-                        sku: product.sku,
-                        taxCategory: product.taxCategory || 'STANDARD',
-                        taxCode: product.taxCode,
-                        measurementUnit: product.measurementUnit || 'OTHER',
-                        itemType: product.itemType || 'PRODUCT',
-                        barcode: isService ? null : product.barcode,
-                    };
-                }),
-            });
-            // Fetch created products to get their IDs
-            const createdProducts = await tx.product.findMany({
-                where: {
-                    organizationId: organizationId,
-                    batchNumber: {
-                        in: products.map((p) => p.batchNumber),
-                    },
-                },
-            });
-            // Create batch records and initial ledger entries for each product
-            // Skip batch/ledger for SERVICE items — no inventory tracking
-            for (const product of createdProducts) {
-                if (product.itemType === 'SERVICE')
-                    continue;
-                const batchUnitCost = product.unitPrice ? Number(product.unitPrice) : 0;
-                const batchName = product.batchNumber || `DEFAULT-${product.id}`;
-                await tx.batch.upsert({
-                    where: {
-                        productId_batchNumber_branchId: {
-                            productId: product.id,
-                            batchNumber: batchName,
-                            branchId,
-                        }
-                    },
-                    update: {
-                        quantity: { increment: product.quantity || 0 },
-                        unitCost: batchUnitCost,
-                        expiryDate: product.expiryDate || null,
-                        isActive: true,
-                    },
-                    create: {
-                        productId: product.id,
-                        organizationId: organizationId,
-                        branchId,
-                        batchNumber: batchName,
-                        quantity: product.quantity || 0,
-                        unitCost: batchUnitCost,
-                        expiryDate: product.expiryDate || null,
-                        isActive: true,
-                    },
-                });
-                if (product.quantity > 0) {
-                    await (0, inventory_ledger_service_1.addStock)({
-                        organizationId: organizationId,
-                        productId: product.id,
-                        userId,
-                        quantity: product.quantity,
-                        movementType: 'INITIAL_STOCK',
-                        branchId,
-                        reference: `INIT-${product.id}`,
-                        referenceType: 'INITIAL_STOCK',
-                        note: 'Initial stock from bulk import',
-                        batchNumber: product.batchNumber || undefined,
-                        expiryDate: product.expiryDate || undefined,
-                        tx,
-                    });
-                }
+        // Duplicate barcode check — both against existing products and within
+        // the incoming batch itself (two rows in the same upload sharing one code).
+        const incomingBarcodes = products
+            .map((p) => p.barcode)
+            .filter((b) => typeof b === 'string' && b.trim() !== '');
+        if (incomingBarcodes.length > 0) {
+            const seen = new Set();
+            const withinBatchDupes = new Set();
+            for (const b of incomingBarcodes) {
+                if (seen.has(b))
+                    withinBatchDupes.add(b);
+                seen.add(b);
             }
-            return createdProducts;
-        });
+            if (withinBatchDupes.size > 0) {
+                return res.status(400).json((0, apiResponse_1.error)(`Duplicate barcode(s) within the upload: ${[...withinBatchDupes].join(', ')}`));
+            }
+            const existingBarcodeProducts = await prisma_1.prisma.product.findMany({
+                where: {
+                    organizationId,
+                    barcode: { in: incomingBarcodes },
+                    deletedAt: null,
+                },
+                select: { barcode: true, name: true },
+            });
+            if (existingBarcodeProducts.length > 0) {
+                const duplicates = existingBarcodeProducts.map(p => `${p.barcode} (${p.name})`).join(', ');
+                return res.status(400).json((0, apiResponse_1.error)(`Barcode(s) already in use: ${duplicates}`));
+            }
+        }
+        // Use transaction to ensure all products, batches, and ledger entries are atomic.
+        // itemCd sequence numbers are allocated as one contiguous block (base count
+        // + row index) inside the same transaction as the createMany, so a whole
+        // retry of the transaction on conflict re-allocates a fresh block — same
+        // conflict-retry pattern as createProduct/openShift.
+        let result;
+        const orgOrigin = await (0, item_code_service_2.getOriginNationCode)(organizationId);
+        for (let attempt = 0; attempt < 5; attempt++) {
+            try {
+                result = await prisma_1.prisma.$transaction(async (tx) => {
+                    const itemCdBase = await (0, item_code_service_1.allocateItemCdBlock)(organizationId, products.length, tx);
+                    await tx.product.createMany({
+                        data: products.map((product, index) => {
+                            const isService = product.itemType === 'SERVICE';
+                            const resolvedItemType = (isService ? 'SERVICE' : (product.itemType || 'PRODUCT'));
+                            const resolvedQtyUnitCd = product.qtyUnitCd || (0, item_code_service_1.deriveQtyUnitCd)(product.measurementUnit);
+                            const resolvedOrigin = product.origin || orgOrigin;
+                            return {
+                                name: product.name,
+                                batchNumber: isService ? null : product.batchNumber,
+                                quantity: isService ? 0 : (product.quantity || 0),
+                                unitPrice: product.unitPrice,
+                                purchasePrice: isService ? null : (product.purchasePrice != null && product.purchasePrice !== '' ? product.purchasePrice : null),
+                                category: product.category || (isService ? 'Services' : undefined),
+                                description: product.description,
+                                imageUrl: product.imageUrl,
+                                minStock: isService ? 0 : (product.minStock || 10),
+                                organizationId: organizationId,
+                                expiryDate: isService ? null : (product.expiryDate ? new Date(product.expiryDate) : null),
+                                sku: product.sku,
+                                taxCategory: product.taxCategory || 'STANDARD',
+                                taxCode: product.taxCode,
+                                measurementUnit: product.measurementUnit || 'OTHER',
+                                itemType: product.itemType || 'PRODUCT',
+                                barcode: isService ? (product.barcode || null) : product.barcode,
+                                pkgUnitCd: product.pkgUnitCd || null,
+                                qtyUnitCd: resolvedQtyUnitCd,
+                                packagingQty: isService ? null : (product.packagingQty != null && product.packagingQty !== '' ? product.packagingQty : null),
+                                itemCd: (0, item_code_service_1.buildItemCd)(resolvedItemType, product.pkgUnitCd, resolvedQtyUnitCd, itemCdBase + index + 1, resolvedOrigin),
+                                itemClsCd: product.itemClsCd || null,
+                                origin: resolvedOrigin,
+                            };
+                        }),
+                    });
+                    // Fetch created products to get their IDs
+                    const createdProducts = await tx.product.findMany({
+                        where: {
+                            organizationId: organizationId,
+                            batchNumber: {
+                                in: products.map((p) => p.batchNumber),
+                            },
+                        },
+                    });
+                    // Create batch records and initial ledger entries for each product
+                    // Skip batch/ledger for SERVICE items — no inventory tracking
+                    for (const product of createdProducts) {
+                        if (product.itemType === 'SERVICE')
+                            continue;
+                        const batchUnitCost = product.purchasePrice != null
+                            ? Number(product.purchasePrice)
+                            : (product.unitPrice ? Number(product.unitPrice) : 0);
+                        const batchName = product.batchNumber || `DEFAULT-${product.id}`;
+                        await tx.batch.upsert({
+                            where: {
+                                productId_batchNumber_branchId: {
+                                    productId: product.id,
+                                    batchNumber: batchName,
+                                    branchId,
+                                }
+                            },
+                            update: {
+                                quantity: { increment: product.quantity || 0 },
+                                unitCost: batchUnitCost,
+                                expiryDate: product.expiryDate || null,
+                                isActive: true,
+                            },
+                            create: {
+                                productId: product.id,
+                                organizationId: organizationId,
+                                branchId,
+                                batchNumber: batchName,
+                                quantity: product.quantity || 0,
+                                unitCost: batchUnitCost,
+                                expiryDate: product.expiryDate || null,
+                                isActive: true,
+                            },
+                        });
+                        if (product.quantity > 0) {
+                            await (0, inventory_ledger_service_1.addStock)({
+                                organizationId: organizationId,
+                                productId: product.id,
+                                userId,
+                                quantity: product.quantity,
+                                movementType: 'INITIAL_STOCK',
+                                branchId,
+                                reference: `INIT-${product.id}`,
+                                referenceType: 'INITIAL_STOCK',
+                                note: 'Initial stock from bulk import',
+                                batchNumber: product.batchNumber || undefined,
+                                expiryDate: product.expiryDate || undefined,
+                                tx,
+                            });
+                        }
+                    }
+                    return createdProducts;
+                });
+                break;
+            }
+            catch (err) {
+                if (!(0, item_code_service_1.isItemCdConflict)(err) || attempt === 4) {
+                    throw err;
+                }
+                // Conflict on itemCd — loop again to re-allocate the sequence block.
+            }
+        }
         await auditLogger_1.auditLogger.inventory(req, {
             type: 'PRODUCT_CREATE',
             description: 'Products created successfully (Bulk)',
@@ -519,6 +706,9 @@ const createProducts = async (req, res) => {
                 products: result,
             }
         });
+        for (const created of result) {
+            (0, product_sync_service_1.syncProductToRraAsync)(created.id, userId);
+        }
         res.status(201).json((0, apiResponse_1.success)(result));
     }
     catch (error) {
@@ -535,7 +725,8 @@ const updateProduct = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const organizationId = parseInt(req.params.organizationId);
-        const { name, batchNumber, quantity, unitPrice, imageUrl, expiryDate, category, description, minStock, taxCode, measurementUnit, exemptionReference, itemType } = req.body;
+        const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, barcode, taxCode, measurementUnit, itemType, pkgUnitCd, qtyUnitCd, packagingQty, itemClsCd, itemStandardName, origin, useInsurance, additionalInfo, l1SalePrice, l2SalePrice, l3SalePrice, l4SalePrice, l5SalePrice } = req.body;
+        const userId = parseInt(req.user?.userId);
         const existingProduct = await prisma_1.prisma.product.findFirst({
             where: { id, organizationId, deletedAt: null },
         });
@@ -544,6 +735,21 @@ const updateProduct = async (req, res) => {
         }
         if (expiryDate && new Date(expiryDate) < new Date()) {
             return res.status(400).json((0, apiResponse_1.error)("Expiry date cannot be in the past"));
+        }
+        // Duplicate barcode check — exclude this product itself.
+        if (barcode) {
+            const existingBarcode = await prisma_1.prisma.product.findFirst({
+                where: {
+                    organizationId,
+                    barcode,
+                    deletedAt: null,
+                    id: { not: id },
+                },
+                select: { id: true, name: true },
+            });
+            if (existingBarcode) {
+                return res.status(400).json((0, apiResponse_1.error)(`Product with barcode "${barcode}" already exists (${existingBarcode.name})`));
+            }
         }
         const data = {};
         if (name !== undefined)
@@ -554,27 +760,131 @@ const updateProduct = async (req, res) => {
             data.quantity = quantity;
         if (unitPrice !== undefined)
             data.unitPrice = unitPrice;
+        if (purchasePrice !== undefined)
+            data.purchasePrice = purchasePrice === '' ? null : purchasePrice;
         if (category !== undefined)
             data.category = category;
         if (description !== undefined)
             data.description = description;
         if (minStock !== undefined)
             data.minStock = minStock;
-        if (taxCode !== undefined)
-            data.taxCode = taxCode;
+        if (sku !== undefined)
+            data.sku = sku;
+        if (barcode !== undefined)
+            data.barcode = barcode === '' ? null : barcode;
+        if (taxCode !== undefined) {
+            const normalizedTaxCode = String(taxCode).toUpperCase();
+            if (!tax_service_1.TaxService.ALLOWED_TAX_CODES.has(normalizedTaxCode)) {
+                return res.status(400).json((0, apiResponse_1.error)(`Invalid tax category "${taxCode}". Must be one of A, B, C or D.`));
+            }
+            data.taxCode = normalizedTaxCode;
+            data.taxCategory = tax_service_1.TaxService.getTaxCategory(normalizedTaxCode);
+        }
         if (measurementUnit !== undefined)
             data.measurementUnit = measurementUnit;
-        if (exemptionReference !== undefined)
-            data.exemptionReference = exemptionReference;
+        if (pkgUnitCd !== undefined)
+            data.pkgUnitCd = pkgUnitCd === '' ? null : pkgUnitCd;
+        // qtyUnitCd isn't collected directly by the UI — keep it derived from
+        // measurementUnit unless a caller explicitly overrides it.
+        if (qtyUnitCd !== undefined) {
+            data.qtyUnitCd = qtyUnitCd === '' ? null : qtyUnitCd;
+        }
+        else if (measurementUnit !== undefined) {
+            data.qtyUnitCd = (0, item_code_service_1.deriveQtyUnitCd)(measurementUnit);
+        }
+        if (packagingQty !== undefined)
+            data.packagingQty = packagingQty === '' ? null : packagingQty;
         if (itemType !== undefined)
             data.itemType = itemType;
         data.expiryDate = expiryDate ? new Date(expiryDate) : null;
         if (imageUrl !== undefined)
             data.imageUrl = imageUrl;
-        const product = await prisma_1.prisma.product.update({
-            where: { id },
-            data,
-        });
+        if (itemClsCd !== undefined)
+            data.itemClsCd = itemClsCd === '' ? null : itemClsCd;
+        if (itemStandardName !== undefined)
+            data.itemStandardName = itemStandardName === '' ? null : itemStandardName;
+        if (origin !== undefined) {
+            if (origin === '' || origin === null) {
+                data.origin = await (0, item_code_service_2.getOriginNationCode)(organizationId);
+            }
+            else {
+                data.origin = origin;
+            }
+        }
+        if (useInsurance !== undefined)
+            data.useInsurance = !!useInsurance;
+        if (additionalInfo !== undefined)
+            data.additionalInfo = additionalInfo === '' ? null : additionalInfo;
+        if (l1SalePrice !== undefined)
+            data.l1SalePrice = l1SalePrice === '' ? null : l1SalePrice;
+        if (l2SalePrice !== undefined)
+            data.l2SalePrice = l2SalePrice === '' ? null : l2SalePrice;
+        if (l3SalePrice !== undefined)
+            data.l3SalePrice = l3SalePrice === '' ? null : l3SalePrice;
+        if (l4SalePrice !== undefined)
+            data.l4SalePrice = l4SalePrice === '' ? null : l4SalePrice;
+        if (l5SalePrice !== undefined)
+            data.l5SalePrice = l5SalePrice === '' ? null : l5SalePrice;
+        // Auto-propagate edits back to RRA. syncProductToRra() skips an item whose
+        // ebmSyncStatus is already SYNCED, so a rename (or any other field that
+        // appears in the /items/saveItems payload) would never reach the VSDC.
+        // When one of those fields actually changes on a registered item, clear the
+        // skip-guard so the async sync below re-registers it. /items/saveItems is an
+        // upsert on itemCd, so this updates the existing RRA record in place.
+        const RRA_SYNCED_FIELDS = [
+            'name', 'itemClsCd', 'itemType', 'itemStandardName', 'origin',
+            'pkgUnitCd', 'qtyUnitCd', 'taxCode', 'batchNumber', 'barcode', 'unitPrice',
+            'l1SalePrice', 'l2SalePrice', 'l3SalePrice', 'l4SalePrice', 'l5SalePrice',
+            'additionalInfo', 'minStock', 'useInsurance', 'isActive',
+        ];
+        const valueChanged = (next, prev) => {
+            const n = next != null && typeof next.toNumber === 'function' ? next.toNumber() : next;
+            const p = prev != null && typeof prev.toNumber === 'function' ? prev.toNumber() : prev;
+            const nf = typeof n === 'number' || typeof n === 'string' ? Number(n) : NaN;
+            const pf = typeof p === 'number' || typeof p === 'string' ? Number(p) : NaN;
+            if (!Number.isNaN(nf) && !Number.isNaN(pf))
+                return nf !== pf;
+            return (n ?? null) !== (p ?? null);
+        };
+        const rraFieldChanged = RRA_SYNCED_FIELDS.some((f) => f in data && valueChanged(data[f], existingProduct[f]));
+        if (rraFieldChanged && existingProduct.itemCd && existingProduct.ebmSyncStatus === 'SYNCED') {
+            data.ebmSyncStatus = 'PENDING';
+        }
+        // itemCd is generated once and then permanent (it's the identifier RRA
+        // knows the item by) — only backfill it for legacy rows that never got
+        // one; never regenerate an itemCd that's already registered.
+        let product;
+        if (!existingProduct.itemCd) {
+            const resolvedItemType = (data.itemType ?? existingProduct.itemType);
+            const resolvedPkgUnitCd = data.pkgUnitCd !== undefined ? data.pkgUnitCd : existingProduct.pkgUnitCd;
+            const resolvedQtyUnitCd = data.qtyUnitCd ?? existingProduct.qtyUnitCd ?? (0, item_code_service_1.deriveQtyUnitCd)(existingProduct.measurementUnit);
+            const resolvedOrigin = data.origin ?? existingProduct.origin ?? (await (0, item_code_service_2.getOriginNationCode)(organizationId));
+            for (let attempt = 0; attempt < 5; attempt++) {
+                try {
+                    product = await prisma_1.prisma.$transaction(async (tx) => {
+                        // Allocated inside the same transaction as the update so a
+                        // sequence number is only consumed if the update actually commits.
+                        const itemCd = await (0, item_code_service_1.allocateItemCd)(organizationId, resolvedItemType, resolvedPkgUnitCd, resolvedQtyUnitCd, resolvedOrigin, tx);
+                        return tx.product.update({
+                            where: { id },
+                            data: { ...data, itemCd },
+                        });
+                    });
+                    break;
+                }
+                catch (err) {
+                    if (!(0, item_code_service_1.isItemCdConflict)(err) || attempt === 4) {
+                        throw err;
+                    }
+                }
+            }
+        }
+        else {
+            product = await prisma_1.prisma.product.update({
+                where: { id },
+                data,
+            });
+        }
         await auditLogger_1.auditLogger.inventory(req, {
             type: 'PRODUCT_UPDATE',
             description: `Product "${product.name}" updated successfully`,
@@ -585,7 +895,7 @@ const updateProduct = async (req, res) => {
                 updatedData: product,
             }
         });
-        (0, product_sync_service_1.syncProductToRraAsync)(product.id);
+        (0, product_sync_service_1.syncProductToRraAsync)(product.id, userId);
         res.json((0, apiResponse_1.success)(product));
     }
     catch (error) {
@@ -654,16 +964,27 @@ const deleteProduct = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const organizationId = parseInt(req.params.organizationId);
+        const userId = parseInt(req.user?.userId);
         const existingProduct = await prisma_1.prisma.product.findFirst({
             where: { id, organizationId, deletedAt: null },
         });
         if (!existingProduct) {
             return res.status(404).json((0, apiResponse_1.error)("Product not found"));
         }
+        // Soft-delete locally and push useYn=N to RRA when the item was registered.
+        const shouldResync = !!existingProduct.itemCd &&
+            (existingProduct.ebmSyncStatus === 'SYNCED' || existingProduct.ebmSyncStatus === 'PENDING');
         await prisma_1.prisma.product.update({
             where: { id },
-            data: { isActive: false, deletedAt: new Date() }
+            data: {
+                isActive: false,
+                deletedAt: new Date(),
+                ...(shouldResync ? { ebmSyncStatus: 'PENDING' } : {}),
+            },
         });
+        if (shouldResync) {
+            (0, product_sync_service_1.syncProductToRraAsync)(id, userId);
+        }
         await auditLogger_1.auditLogger.inventory(req, {
             type: 'PRODUCT_ARCHIVED',
             description: `Product "${existingProduct.name}" archived successfully`,
@@ -689,7 +1010,7 @@ const getExpiringProducts = async (req, res) => {
         const where = {
             organizationId,
             deletedAt: null,
-            itemType: 'PRODUCT',
+            itemType: { in: [client_1.ItemType.PRODUCT, client_1.ItemType.RAW_MATERIAL] },
             expiryDate: {
                 not: null,
                 gte: new Date(),
@@ -744,8 +1065,8 @@ const getExpiredProducts = async (req, res) => {
         const branchFilter = (0, branchAuth_middleware_1.buildBranchFilter)(req);
         const where = {
             organizationId,
-            itemType: 'PRODUCT',
             deletedAt: null,
+            itemType: 'PRODUCT',
             expiryDate: {
                 not: null,
                 lt: new Date(),
@@ -806,12 +1127,11 @@ const getLowStockProducts = async (req, res) => {
         const statusVal = status && typeof status === 'string' ? status.toLowerCase() : '';
         const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit);
         const take = Number.parseInt(limit);
-        // Build ORM where clause (avoids $queryRaw BigInt/Decimal serialization issues)
         const where = {
             organizationId,
             isActive: true,
             deletedAt: null,
-            itemType: { not: 'SERVICE' },
+            itemType: { in: [client_1.ItemType.PRODUCT, client_1.ItemType.RAW_MATERIAL] },
             // When an org-wide fallback threshold is configured, also consider
             // products that haven't set their own minStock (0/unset).
             ...(overrideThreshold && overrideThreshold > 0 ? {} : { minStock: { gt: 0 } }),
@@ -1035,10 +1355,10 @@ const processExpiredStock = async (req, res) => {
 exports.processExpiredStock = processExpiredStock;
 const getTaxCodes = async (_req, res) => {
     const codes = [
-        { code: 'A', label: 'Exempted (0%)', rate: 0, category: 'EXEMPT' },
-        { code: 'B', label: 'Standard (18%)', rate: 18, category: 'STANDARD' },
-        { code: 'C', label: 'Zero-rated (0%)', rate: 0, category: 'ZERO_RATED' },
-        { code: 'D', label: 'Exempted Entity (0%)', rate: 0, category: 'EXEMPT' },
+        { code: 'A', label: 'A — VAT Exempt (0%)', rate: 0, category: 'EXEMPT' },
+        { code: 'B', label: 'B — Standard VAT (18%)', rate: 18, category: 'STANDARD' },
+        { code: 'C', label: 'C — Export / Zero-rated (0%)', rate: 0, category: 'ZERO_RATED' },
+        { code: 'D', label: 'D — Not VAT Registered (0%)', rate: 0, category: 'NON_TAXABLE' },
     ];
     res.json(codes);
 };

@@ -18,5 +18,6 @@ router.post("/switch-organization", auth_middleware_1.authenticate, auth_control
 router.post("/verify-account", verification_controller_1.verifyAccount);
 router.post("/resend-verification", verification_controller_1.resendVerification);
 router.post("/request-password-reset", verification_controller_1.requestPasswordReset);
+router.post("/verify-password-reset-code", verification_controller_1.verifyPasswordResetCode);
 router.post("/reset-password", verification_controller_1.resetPassword);
 exports.default = router;

@@ -571,7 +571,8 @@
         "fetchError": "Gushaka amakuru y'igurisha ntibyagenze neza",
         "saleNotFound": "Nta gurisha ryabonetse",
         "insuranceAmount": "Amafaranga y'ubwishingizi",
-        "status": "Uko bimeze"
+        "status": "Uko bimeze",
+        "refundReasonCode": "Impamvu RRA yo gusubiza"
     },
     "customers": {
         "customers": "Abakiriya",
@@ -614,7 +615,13 @@
             "type": "Ubwoko",
             "balance": "Umwenda",
             "actions": "Ibikorwa"
-        }
+        },
+        "address": "Aderesi",
+        "addressPlaceholder": "urug. KG 7 Ave, Kigali",
+        "province": "Intara",
+        "district": "Akarere",
+        "sector": "Umurenge",
+        "streetCell": "Umuhanda / Akagari"
     },
     "suppliers": {
         "suppliers": "Abatanga",
@@ -883,7 +890,10 @@
         },
         "offlineMode": "Kuri ubu ntabwo uri kuri interineti. Igurisha rizabikwa mu murongo kandi rihuzwe iyo interineti isubiye.",
         "offlineQueued": "Nta interineti: Igurisha ryabitswe mu murongo kandi rizahuzwa iyo interineti isubiye.",
-        "syncComplete": "Igurisha ryakozwe nta interineti ryahujwe."
+        "syncComplete": "Igurisha ryakozwe nta interineti ryahujwe.",
+        "fiscalPending": "Turimo kwemeza iyi reçipiti ku buyobozi bw'imisoro…",
+        "fiscalFailed": "Igurisha ryabitswe, ariko ubuyobozi bw'imisoro ntabwo bwemeje iyi reçipiti. Urashobora gukomeza gucapa cyangwa gusangiza kopi — izagaragazwa ko itemewe. Fungura Igurisha hanyuma ugerageze nanone iyo interineti ikora.",
+        "saleCompleted": "Murakoze! Igurisha ryarangiye neza kandi ububiko bwavuguruwe."
     },
     "companySettings": {
         "title": "Igenamiterere rya Sosiyete",

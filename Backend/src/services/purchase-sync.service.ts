@@ -2,7 +2,6 @@ import { prisma } from '../lib/prisma';
 import type { Prisma } from '@prisma/client';
 import { isEbmEnabled, fix2, toRraDate, toRraDateTime } from './rra-ebm.service';
 import { buildVsdcEnvelope, selectPurchases, savePurchase, validateVsdcEnvelope, toRraReqDt } from './vsdc-api.service';
-import { DEFAULT_ITEM_CLASSIFICATION_CD } from './item-code.service';
 import { addStock } from './inventory-ledger.service';
 import logger from '../utils/logger';
 
@@ -155,17 +154,21 @@ export async function confirmRraPurchase(
     const slot = A_D.includes(band as any) ? band : 'B';
     const qty = Math.abs(it.qty.toNumber());
     const prc = Math.abs(it.prc.toNumber());
-    const splyAmt = fix2(qty * prc);
+    const splyAmt = fix2(it.splyAmt != null ? Math.abs(it.splyAmt.toNumber()) : qty * prc);
     const taxAmt = it.taxAmt != null ? Math.abs(it.taxAmt.toNumber()) : 0;
-    const taxblAmt = it.taxblAmt != null ? Math.abs(it.taxblAmt.toNumber()) : fix2(splyAmt - taxAmt);
+    // RRA TrnsPurchaseSaveReq sample (§3.3.7.2): tax-inclusive — taxblAmt == splyAmt == totAmt
+    // with taxAmt extracted inside the gross (e.g. totTaxblAmt=10500, totTaxAmt=1890, totAmt=10500).
+    const lineTot = it.totAmt != null ? Math.abs(it.totAmt.toNumber()) : splyAmt;
+    const taxblAmt = fix2(lineTot);
     taxblByBand[slot] = fix2(taxblByBand[slot] + taxblAmt);
     taxByBand[slot] = fix2(taxByBand[slot] + taxAmt);
     return {
       itemSeq: it.itemSeq ?? idx + 1,
       itemCd: it.itemCd ?? undefined,
-      itemClsCd: it.itemClsCd ?? DEFAULT_ITEM_CLASSIFICATION_CD,
+      itemClsCd: it.itemClsCd ?? undefined,
       itemNm: it.itemNm ?? 'Item',
       bcd: it.bcd ?? undefined,
+      spplrItemClsCd: it.itemClsCd ?? undefined,
       spplrItemCd: it.itemCd ?? undefined,
       spplrItemNm: it.itemNm ?? undefined,
       pkgUnitCd: it.pkgUnitCd ?? 'CT',
@@ -173,19 +176,21 @@ export async function confirmRraPurchase(
       qtyUnitCd: it.qtyUnitCd ?? 'U',
       qty,
       prc,
-      splyAmt,
+      splyAmt: taxblAmt,
       dcRt: it.dcRt != null ? it.dcRt.toNumber() : 0,
       dcAmt: it.dcAmt != null ? it.dcAmt.toNumber() : 0,
       taxblAmt,
       taxTyCd: slot,
       taxAmt,
-      totAmt: splyAmt,
+      totAmt: taxblAmt,
+      itemExprDt: null,
     };
   });
 
   const totTaxblAmt = fix2(A_D.reduce((s, b) => s + taxblByBand[b], 0));
   const totTaxAmt = fix2(A_D.reduce((s, b) => s + taxByBand[b], 0));
-  const totAmt = fix2(totTaxblAmt + totTaxAmt);
+  // Spec sample: totAmt equals totTaxblAmt (do NOT add totTaxAmt).
+  const totAmt = totTaxblAmt;
   const now = new Date();
 
   // The pull side (syncRraPurchases above) caches rcptTyCd straight from RRA's

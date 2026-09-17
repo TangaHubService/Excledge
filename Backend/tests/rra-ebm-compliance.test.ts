@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { TaxService } from '../src/services/tax.service';
 import { parseVsdcResponse, parseVsdcStatusCode } from '../src/services/vsdc-api.service';
-import { parseGatewayResponse, gatewayErrorMessage, buildRraSendReceiptPayload, type SaleWithRelations } from '../src/services/rra-ebm.service';
+import { parseGatewayResponse, gatewayErrorMessage, buildRraSendReceiptPayload, isValidRraTin, resolveCustTinForVsdc, walkInCustTin, PurchaseCodeMissingError, type SaleWithRelations } from '../src/services/rra-ebm.service';
+import { validateRefundReasonCode, getRefundReasonCodes, DEFAULT_RFD_RSN_CD, resolvePkgUnitCd, resolveQtyUnitCd } from '../src/services/rra-code.service';
+import { deriveQtyUnitCd } from '../src/services/item-code.service';
 import { validateVsdcEnvelope } from '../src/services/vsdc-api.service';
 import { taxGroups, documentIndicator, isFormalNoticeIndicator } from '../src/services/invoice-pdf.service';
 import type { RenderInvoicePayload, RenderInvoiceLineItem } from '../src/services/invoice-render.service';
@@ -142,6 +144,7 @@ describe('INVOICE — parseVsdcResponse (/trnsSales/saveSales response)', () => 
     expect(result.totRcptNo).toBe('32');
     expect(result.sdcId).toBe('SDC010000005');
     expect(result.sdcDateTime).toBe('2021-10-27T16:21:14');
+    expect(result.mrcNo).toBe('WIS01006230');
   });
 
   it('returns empty fallback when response is null', () => {
@@ -152,6 +155,7 @@ describe('INVOICE — parseVsdcResponse (/trnsSales/saveSales response)', () => 
     expect(result.totRcptNo).toBe('');
     expect(result.sdcId).toBe('');
     expect(result.sdcDateTime).toBe('');
+    expect(result.mrcNo).toBe('');
   });
 
   it('returns empty fallback when response is not an object', () => {
@@ -416,6 +420,7 @@ function makeRefundSale(): SaleWithRelations {
     saleNumber: 'REFUND-SALE-1-123',
     invoiceNumber: 'INV-1000-B1-2026-000002',
     vsdcInvcNo: 2,
+    prcOrdCd: 'ABC123',
     rcptLabel: 'NR',
     createdAt: new Date('2026-08-30T09:00:00.000Z'),
     status: 'REFUNDED',
@@ -441,7 +446,7 @@ function makeRefundSale(): SaleWithRelations {
         taxCode: 'B',
         dcRate: new Decimal(0),
         dcAmt: new Decimal(0),
-        product: { name: 'Widget', itemCd: 'RW2CTU0000001', itemClsCd: null, pkgUnitCd: 'CT', qtyUnitCd: 'U', packagingQty: null },
+        product: { name: 'Widget', itemCd: 'RW2CTU0000001', itemClsCd: '5059690800', pkgUnitCd: 'CT', qtyUnitCd: 'U', packagingQty: null },
       },
     ],
   };
@@ -452,6 +457,7 @@ describe('buildRraSendReceiptPayload — refund tax mirroring (§9/§56)', () =>
     const payload = buildRraSendReceiptPayload(
       makeRefundSale(),
       { TIN: '100000000', name: 'Seller', address: 'Kigali' },
+      '01',
       { orgInvcNo: 1, rfdDt: new Date('2026-08-30T09:00:00.000Z'), rfdRsnCd: '06' },
     ) as any;
 
@@ -502,5 +508,210 @@ describe('documentIndicator / isFormalNoticeIndicator — RRA checklist §55', (
     const data = makePayload({ certification: { isCertified: false } });
     expect(documentIndicator(data)).toBe('');
     expect(isFormalNoticeIndicator(documentIndicator(data)) || !data.certification.isCertified).toBe(true);
+  });
+});
+
+// ============================================================================
+// RRA code class 32 — refund reasons are the RRA-controlled list, nothing else
+// ============================================================================
+describe('RRA refund reason codes (code class 32)', () => {
+  it('exposes exactly the 13 RRA codes with RRA names', () => {
+    const codes = getRefundReasonCodes();
+    expect(codes.map((c) => c.code)).toEqual(
+      ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13'],
+    );
+    expect(codes.find((c) => c.code === '13')!.name).toBe('Other reason');
+    expect(codes.find((c) => c.code === '06')!.name).toBe('Refund');
+    expect(DEFAULT_RFD_RSN_CD).toBe('06');
+  });
+
+  it('accepts every RRA code 01–13', () => {
+    for (const c of getRefundReasonCodes()) {
+      expect(validateRefundReasonCode(c.code)).toBe(c.code);
+    }
+  });
+
+  it('rejects invented/out-of-list codes instead of submitting them', () => {
+    expect(() => validateRefundReasonCode('99')).toThrow(/Invalid RRA refund reason/);
+    expect(() => validateRefundReasonCode('')).toThrow(/Invalid RRA refund reason/);
+    expect(() => validateRefundReasonCode('0A')).toThrow(/Invalid RRA refund reason/);
+  });
+});
+
+// ============================================================================
+// Customer TIN — valid TINs pass through, business buyers without one block,
+// walk-in individuals get the documented placeholder (never the seller TIN)
+// ============================================================================
+describe('resolveCustTinForVsdc — safe customer TIN handling', () => {
+  const base = { id: 9, saleNumber: 'SALE-1' };
+
+  it('accepts 1- and 9-prefix 9-digit TINs', () => {
+    expect(isValidRraTin('100000001')).toBe(true);
+    expect(isValidRraTin('999945560')).toBe(true);
+  });
+
+  it('rejects 7-prefix, short, empty and all-zero values', () => {
+    expect(isValidRraTin('700000001')).toBe(false);
+    expect(isValidRraTin('123')).toBe(false);
+    expect(isValidRraTin('')).toBe(false);
+    expect(isValidRraTin('000000000')).toBe(false);
+  });
+
+  it('uses the customer real TIN when valid', () => {
+    expect(resolveCustTinForVsdc({
+      ...base,
+      customer: { id: 1, name: 'Real Ltd', phone: '', TIN: '100000001', customerType: 'CORPORATE', email: null },
+    })).toBe('100000001');
+  });
+
+  it('blocks CORPORATE/INSURANCE buyers without a valid TIN', () => {
+    for (const t of ['CORPORATE', 'INSURANCE']) {
+      expect(() => resolveCustTinForVsdc({
+        ...base,
+        customer: { id: 1, name: 'No Tin Ltd', phone: '', TIN: null, customerType: t, email: null },
+      })).toThrow(/no valid 9-digit RRA TIN/);
+    }
+  });
+
+  it('gives walk-in individuals the deterministic placeholder, never the seller TIN', () => {
+    const tin = resolveCustTinForVsdc({
+      ...base,
+      customer: { id: 42, name: 'Walk-in Customer', phone: '', TIN: null, customerType: 'INDIVIDUAL', email: null },
+    });
+    expect(tin).toBe(walkInCustTin(42));
+    expect(tin).toBe('100000042');
+    expect(isValidRraTin(tin)).toBe(true);
+  });
+});
+
+// ============================================================================
+// Payload guards — no fake prcOrdCd, no synthetic itemCd, sanitized unit codes
+// ============================================================================
+describe('buildRraSendReceiptPayload — submission guards', () => {
+  function makeSale(over: Partial<SaleWithRelations> = {}): SaleWithRelations {
+    return {
+      id: 1,
+      saleNumber: 'SALE-1',
+      invoiceNumber: 'INV-1',
+      vsdcInvcNo: 11,
+      prcOrdCd: 'ABC123',
+      rcptLabel: 'NS',
+      createdAt: new Date('2026-09-01T10:00:00.000Z'),
+      status: 'COMPLETED',
+      paymentType: 'CASH',
+      cashAmount: new Decimal(1180),
+      debtAmount: new Decimal(0),
+      insuranceAmount: new Decimal(0),
+      totalAmount: new Decimal(1180),
+      taxableAmount: new Decimal(1000),
+      vatAmount: new Decimal(180),
+      branchId: 1,
+      branch: { id: 1, name: 'Main', code: 'M', bhfId: '00', ebmDeviceId: null, ebmSerialNo: null },
+      customer: { id: 5, name: 'Client', phone: '+250788000001', TIN: '100000000', customerType: 'INDIVIDUAL', email: null },
+      user: { id: 1, name: 'Cashier' },
+      saleItems: [
+        {
+          productId: 10,
+          quantity: 1,
+          unitPrice: new Decimal(1180),
+          totalPrice: new Decimal(1180),
+          taxRate: new Decimal(18),
+          taxAmount: new Decimal(180),
+          taxCode: 'B',
+          dcRate: new Decimal(0),
+          dcAmt: new Decimal(0),
+          measurementUnit: 'PCS',
+          product: { name: 'Widget', itemCd: 'RW2CTU0000001', itemClsCd: '5059690800', pkgUnitCd: 'CT', qtyUnitCd: 'U', packagingQty: null },
+        },
+      ],
+      ...over,
+    };
+  }
+  const org = { TIN: '100000000', name: 'Seller', address: 'Kigali' };
+
+  it('throws instead of sending a fake prcOrdCd when no code is on record', () => {
+    const sale = makeSale({ prcOrdCd: null });
+    (sale.customer as any).prcOrdCd = null;
+    expect(() => buildRraSendReceiptPayload(sale, org, '01')).toThrowError(PurchaseCodeMissingError);
+  });
+
+  it('forwards the sale purchase code when present', () => {
+    const payload = buildRraSendReceiptPayload(makeSale(), org, '01') as any;
+    expect(payload.prcOrdCd).toBe('ABC123');
+  });
+
+  it('throws for a catalog product without an RRA itemCd', () => {
+    const sale = makeSale();
+    sale.saleItems[0].product = { ...(sale.saleItems[0].product as any), itemCd: null };
+    expect(() => buildRraSendReceiptPayload(sale, org, '01')).toThrow(/no RRA item code/);
+  });
+
+  it('sanitizes unknown unit codes to RRA-accepted values instead of 913', () => {
+    const sale = makeSale();
+    sale.saleItems[0].product = { ...(sale.saleItems[0].product as any), pkgUnitCd: 'XX', qtyUnitCd: 'XX' };
+    const payload = buildRraSendReceiptPayload(sale, org, '01') as any;
+    expect(payload.itemList[0].pkgUnitCd).toBe('CT');
+    expect(payload.itemList[0].qtyUnitCd).toBe('U');
+  });
+
+  it('derives the quantity unit from the measurement unit when the product has none', () => {
+    const sale = makeSale();
+    sale.saleItems[0].product = { ...(sale.saleItems[0].product as any), qtyUnitCd: null };
+    sale.saleItems[0].measurementUnit = 'KG';
+    const payload = buildRraSendReceiptPayload(sale, org, '01') as any;
+    expect(payload.itemList[0].qtyUnitCd).toBe('KG');
+  });
+
+  it('accepts the RRA refund reason on a refund payload', () => {
+    const payload = buildRraSendReceiptPayload(
+      makeRefundSale(),
+      org,
+      '01',
+      { orgInvcNo: 1, rfdDt: new Date('2026-08-30T09:00:00.000Z'), rfdRsnCd: '13' },
+    ) as any;
+    expect(payload.rfdRsnCd).toBe('13');
+    expect(payload.salesSttsCd).toBe('05');
+  });
+
+  it('includes TrnsSalesSaveWrItem insurance keys and bcd per VSDC JSON sample', () => {
+    const sale = makeSale();
+    sale.saleItems[0].product = { ...(sale.saleItems[0].product as any), barcode: '8901234567890' };
+    const payload = buildRraSendReceiptPayload(sale, org, '01') as any;
+    expect(payload.itemList[0].bcd).toBe('8901234567890');
+    expect(payload.itemList[0]).toMatchObject({
+      isrccCd: null,
+      isrccNm: null,
+      isrcRt: null,
+      isrcAmt: null,
+    });
+    expect(payload.receipt.adrs.length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe('vsdcRequestBody — payload envelope parity', () => {
+  it('sends only tin+bhfId from the device envelope (no sdcId/mrcNo/env pollution)', async () => {
+    const { vsdcRequestBody } = await import('../src/services/vsdc-api.service');
+    const body = vsdcRequestBody(
+      { tin: '999945560', bhfId: '00', sdcId: 'SDC1', mrcNo: 'MRC1', dvcSrlNo: 'MRC1', env: 'sandbox' },
+      { invcNo: 1, salesTyCd: 'N' },
+    );
+    expect(body).toEqual({ tin: '999945560', bhfId: '00', invcNo: 1, salesTyCd: 'N' });
+    expect(body).not.toHaveProperty('sdcId');
+    expect(body).not.toHaveProperty('mrcNo');
+    expect(body).not.toHaveProperty('dvcSrlNo');
+    expect(body).not.toHaveProperty('env');
+  });
+});
+
+describe('RRA unit-code resolvers (classes 10/17)', () => {
+  it('keeps real RRA codes, normalizes case', () => {
+    expect(resolvePkgUnitCd('ct')).toBe('CT');
+    expect(resolveQtyUnitCd('kg', 'PCS', deriveQtyUnitCd)).toBe('KG');
+  });
+
+  it('falls back for unknown codes', () => {
+    expect(resolvePkgUnitCd('XX')).toBe('CT');
+    expect(resolveQtyUnitCd('XX', 'KG', deriveQtyUnitCd)).toBe('KG');
+    expect(resolveQtyUnitCd(null, null, deriveQtyUnitCd)).toBe('U');
   });
 });

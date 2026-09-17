@@ -91,6 +91,14 @@ export const getCustomers = async (req: BranchAuthRequest, res: Response) => {
         email: true,
         customerType: true,
         TIN: true,
+        prcOrdCd: true,
+        isrccCd: true,
+        isrcRt: true,
+        address: true,
+        custPrvncNm: true,
+        custDstrtNm: true,
+        custSctrNm: true,
+        custLocDesc: true,
         balance: true,
         isActive: true,
         _count: {
@@ -153,7 +161,14 @@ export const getCustomerById = async (req: BranchAuthRequest, res: Response) => 
         email: true,
         customerType: true,
         TIN: true,
+        prcOrdCd: true,
+        isrccCd: true,
+        isrcRt: true,
         address: true,
+        custPrvncNm: true,
+        custDstrtNm: true,
+        custSctrNm: true,
+        custLocDesc: true,
         balance: true,
         isActive: true,
         sales: {
@@ -189,13 +204,7 @@ export const getCustomerById = async (req: BranchAuthRequest, res: Response) => 
 export const createCustomer = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params?.organizationId)
-    const { name, phone, email, type, tin, TIN, prcOrdCd, balance } = req.body
-    const resolvedTin = TIN || tin || null
-
-    const contactError = validateCustomerContactFields(phone, resolvedTin)
-    if (contactError) {
-      return res.status(400).json({ error: contactError })
-    }
+    const { name, phone, email, address, custPrvncNm, custDstrtNm, custSctrNm, custLocDesc, type, tin, TIN, prcOrdCd, balance, isrccCd, isrcRt } = req.body
 
     // Validate and map customerType
     let customerType: 'INDIVIDUAL' | 'INSURANCE' | 'CORPORATE' = 'INDIVIDUAL'
@@ -203,13 +212,33 @@ export const createCustomer = async (req: BranchAuthRequest, res: Response) => {
       customerType = type
     }
 
+    // Walk-in / individual customers do not store a TIN.
+    const resolvedTin =
+      customerType === 'INDIVIDUAL' ? null : (TIN || tin || null)
+
+    const contactError = validateCustomerContactFields(phone, resolvedTin)
+    if (contactError) {
+      return res.status(400).json({ error: contactError })
+    }
+
+    if (customerType === 'INSURANCE' && !(isrccCd || '').trim()) {
+      return res.status(400).json({ error: 'Insurance customers require an RRA insurance code (isrccCd)' })
+    }
+
     const customer = await prisma.customer.create({
       data: {
         name,
         phone: phone || null,
         email: email || null,
+        address: address || null,
+        custPrvncNm: custPrvncNm || null,
+        custDstrtNm: custDstrtNm || null,
+        custSctrNm: custSctrNm || null,
+        custLocDesc: custLocDesc || null,
         TIN: resolvedTin,
         prcOrdCd: prcOrdCd || null,
+        isrccCd: customerType === 'INSURANCE' ? (isrccCd || null) : null,
+        isrcRt: customerType === 'INSURANCE' && isrcRt != null ? isrcRt : null,
         customerType,
         balance: balance || 0,
         organizationId,
@@ -223,6 +252,13 @@ export const createCustomer = async (req: BranchAuthRequest, res: Response) => {
       entityId: customer.id,
       metadata: { customer }
     });
+
+    // VSDC §3.3.3.1 — push customer master when a real TIN is present.
+    const { syncCustomerToRraAsync } = await import('../services/rra-branch-sync.service')
+    syncCustomerToRraAsync(organizationId, customer.id, {
+      branchId: req.selectedBranchId ?? null,
+      userId: req.user?.userId ? Number(req.user.userId) : undefined,
+    })
 
     res.status(201).json(customer)
   } catch (error) {
@@ -242,6 +278,15 @@ export const updateCustomer = async (req: BranchAuthRequest, res: Response) => {
     if (TIN !== undefined) updateData.TIN = TIN
     else if (tin !== undefined) updateData.TIN = tin
     if (prcOrdCd !== undefined) updateData.prcOrdCd = prcOrdCd
+    // Clear insurance codes when demoting away from INSURANCE.
+    if (type && type !== 'INSURANCE') {
+      updateData.isrccCd = null
+      updateData.isrcRt = null
+    }
+    // Walk-in / individual customers never keep a TIN on file.
+    if (type === 'INDIVIDUAL') {
+      updateData.TIN = null
+    }
 
     const existingCustomer = await prisma.customer.findFirst({
       where: { id, organizationId, deletedAt: null },
@@ -276,6 +321,12 @@ export const updateCustomer = async (req: BranchAuthRequest, res: Response) => {
         updatedData: customer,
       }
     });
+
+    const { syncCustomerToRraAsync } = await import('../services/rra-branch-sync.service')
+    syncCustomerToRraAsync(organizationId, customer.id, {
+      branchId: req.selectedBranchId ?? null,
+      userId: req.user?.userId ? Number(req.user.userId) : undefined,
+    })
 
     res.json(customer)
   } catch (error) {

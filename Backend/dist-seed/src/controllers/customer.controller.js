@@ -41,6 +41,27 @@ const import_validation_service_1 = require("../services/import-validation.servi
 const preview_session_service_1 = require("../services/preview-session.service");
 const prisma_1 = require("../lib/prisma");
 const sorting_1 = require("../utils/sorting");
+const customers_validation_1 = require("../validations/customers.validation");
+/**
+ * Rejects a phone/TIN pair that's malformed or swapped before it ever reaches
+ * the database — this is what ultimately becomes custTin/custMblNo on the
+ * RRA VSDC sale payload (rra-ebm.service.ts), so garbage or crossed values
+ * here would otherwise surface as a VSDC 910-class rejection at sale time.
+ */
+function validateCustomerContactFields(phone, tin) {
+    const phoneValue = typeof phone === "string" ? phone.trim() : "";
+    const tinValue = typeof tin === "string" ? tin.trim() : "";
+    if (phoneValue && !(0, customers_validation_1.isValidCustomerPhone)(phoneValue)) {
+        return "Invalid phone number — expected +<country code><digits> or 0XXXXXXXXX";
+    }
+    if (tinValue && !(0, customers_validation_1.isValidCustomerTin)(tinValue)) {
+        return "TIN must be exactly 9 digits";
+    }
+    if (phoneValue && tinValue && phoneValue === tinValue) {
+        return "Phone number and TIN cannot be the same value";
+    }
+    return null;
+}
 /** Treat browser query-string placeholders as absent values, never as filters. */
 const optionalQueryValue = (value) => {
     if (typeof value !== "string")
@@ -95,6 +116,14 @@ const getCustomers = async (req, res) => {
                 email: true,
                 customerType: true,
                 TIN: true,
+                prcOrdCd: true,
+                isrccCd: true,
+                isrcRt: true,
+                address: true,
+                custPrvncNm: true,
+                custDstrtNm: true,
+                custSctrNm: true,
+                custLocDesc: true,
                 balance: true,
                 isActive: true,
                 _count: {
@@ -153,7 +182,14 @@ const getCustomerById = async (req, res) => {
                 email: true,
                 customerType: true,
                 TIN: true,
+                prcOrdCd: true,
+                isrccCd: true,
+                isrcRt: true,
                 address: true,
+                custPrvncNm: true,
+                custDstrtNm: true,
+                custSctrNm: true,
+                custLocDesc: true,
                 balance: true,
                 isActive: true,
                 sales: {
@@ -188,19 +224,34 @@ exports.getCustomerById = getCustomerById;
 const createCustomer = async (req, res) => {
     try {
         const organizationId = parseInt(req.params?.organizationId);
-        const { name, phone, email, type, tin, TIN, prcOrdCd, balance } = req.body;
+        const { name, phone, email, address, custPrvncNm, custDstrtNm, custSctrNm, custLocDesc, type, tin, TIN, prcOrdCd, balance, isrccCd, isrcRt } = req.body;
+        const resolvedTin = TIN || tin || null;
+        const contactError = validateCustomerContactFields(phone, resolvedTin);
+        if (contactError) {
+            return res.status(400).json({ error: contactError });
+        }
         // Validate and map customerType
         let customerType = 'INDIVIDUAL';
         if (type === 'INSURANCE' || type === 'CORPORATE') {
             customerType = type;
+        }
+        if (customerType === 'INSURANCE' && !(isrccCd || '').trim()) {
+            return res.status(400).json({ error: 'Insurance customers require an RRA insurance code (isrccCd)' });
         }
         const customer = await prisma_1.prisma.customer.create({
             data: {
                 name,
                 phone: phone || null,
                 email: email || null,
-                TIN: TIN || tin || null,
+                address: address || null,
+                custPrvncNm: custPrvncNm || null,
+                custDstrtNm: custDstrtNm || null,
+                custSctrNm: custSctrNm || null,
+                custLocDesc: custLocDesc || null,
+                TIN: resolvedTin,
                 prcOrdCd: prcOrdCd || null,
+                isrccCd: customerType === 'INSURANCE' ? (isrccCd || null) : null,
+                isrcRt: customerType === 'INSURANCE' && isrcRt != null ? isrcRt : null,
                 customerType,
                 balance: balance || 0,
                 organizationId,
@@ -212,6 +263,12 @@ const createCustomer = async (req, res) => {
             entityType: 'Customer',
             entityId: customer.id,
             metadata: { customer }
+        });
+        // VSDC §3.3.3.1 — push customer master when a real TIN is present.
+        const { syncCustomerToRraAsync } = await Promise.resolve().then(() => __importStar(require('../services/rra-branch-sync.service')));
+        syncCustomerToRraAsync(organizationId, customer.id, {
+            branchId: req.selectedBranchId ?? null,
+            userId: req.user?.userId ? Number(req.user.userId) : undefined,
         });
         res.status(201).json(customer);
     }
@@ -235,11 +292,25 @@ const updateCustomer = async (req, res) => {
             updateData.TIN = tin;
         if (prcOrdCd !== undefined)
             updateData.prcOrdCd = prcOrdCd;
+        // Clear insurance codes when demoting away from INSURANCE.
+        if (type && type !== 'INSURANCE') {
+            updateData.isrccCd = null;
+            updateData.isrcRt = null;
+        }
         const existingCustomer = await prisma_1.prisma.customer.findFirst({
             where: { id, organizationId, deletedAt: null },
         });
         if (!existingCustomer) {
             return res.status(404).json({ error: "Customer not found" });
+        }
+        // Validate against the *resulting* phone/TIN, not just whichever field
+        // this particular request happens to touch — a request that only changes
+        // one of the pair must still be checked against the other's existing value.
+        const resolvedPhone = updateData.phone !== undefined ? updateData.phone : existingCustomer.phone;
+        const resolvedTin = updateData.TIN !== undefined ? updateData.TIN : existingCustomer.TIN;
+        const contactError = validateCustomerContactFields(resolvedPhone, resolvedTin);
+        if (contactError) {
+            return res.status(400).json({ error: contactError });
         }
         const customer = await prisma_1.prisma.customer.update({
             where: { id: existingCustomer.id },
@@ -254,6 +325,11 @@ const updateCustomer = async (req, res) => {
                 previousData: existingCustomer,
                 updatedData: customer,
             }
+        });
+        const { syncCustomerToRraAsync } = await Promise.resolve().then(() => __importStar(require('../services/rra-branch-sync.service')));
+        syncCustomerToRraAsync(organizationId, customer.id, {
+            branchId: req.selectedBranchId ?? null,
+            userId: req.user?.userId ? Number(req.user.userId) : undefined,
         });
         res.json(customer);
     }

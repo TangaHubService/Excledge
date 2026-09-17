@@ -11,7 +11,7 @@ Use this as a working checklist alongside RRA’s official forms. Requirements c
 - [ ] Software support SLA: supplier ↔ RRA (template from RRA)
 - [ ] Software support SLA: supplier ↔ end users (template from RRA)
 - [ ] Software documentation (architecture, deployment, security contacts)
-- [ ] Test cases document (happy path, offline/retry, refund, void, invalid TIN, etc.)
+- [x] Test cases document (happy path, offline/retry, refund, void, invalid TIN, etc.) — see [TEST-CASES-TEMPLATE.md](./TEST-CASES-TEMPLATE.md)
 - [ ] Certification monitoring form (Excel) completed and maintained
 
 ## Templates in this folder
@@ -24,20 +24,32 @@ Use this as a working checklist alongside RRA’s official forms. Requirements c
 
 - [ ] Sandbox credentials received; all test cases executed in sandbox
 - [ ] Evidence logs: sample requests/responses (redact secrets) for sale, refund, void
-- [ ] Description of retry and dead-letter behavior (`ebm_queue`, max retries)
-- [ ] Data retention and audit trail (`ebm_transactions`, activity logs)
-- [ ] Per-tenant TIN and device id/serial configuration process documented
-- [ ] Receipt/PDF shows RRA-mandated fields returned by the gateway (after mapping is finalized)
+- [x] Description of retry and dead-letter behavior (`ebm_outbox`, max retries)
+- [x] Data retention and audit trail (`ebm_transactions`, activity logs, auditor overview API)
+- [x] Per-tenant TIN and device id/serial configuration process documented
+- [x] Receipt/PDF shows RRA-mandated fields + official RRA logo (CIS §7.29)
+
+## Implemented CIS / VSDC gaps (code complete)
+
+- [x] All VSDC §3.2.1 API paths (including pharmacy `saveBrancheInsurances`)
+- [x] Receipt labels NS/NR/CS/CR/TS/TR/PS
+- [x] X/Z daily report fields: opening deposit, proforma, discounts, voids, incomplete sales
+- [x] Auditor overview (CIS §7.26) — Fiscal Reports → Auditor tab
+- [x] Last-receipt recovery reprint (CIS §7.28)
+- [x] Official RRA logo on invoice HTML/JSON payload
+- [x] Production & BOM sidebar entry
 
 ## Excledge-specific test ideas
 
 1. Sale with standard VAT lines; verify `EbmTransaction` = `SUCCESS` and PDF shows fiscal block.
 2. Sale with zero-rated / exempt product mix; verify tax codes on lines.
 3. B2B sale with customer TIN populated.
-4. Network failure during submit; verify queue entry and eventual success after retry job.
+4. Network failure during submit; verify outbox entry and eventual success after retry job.
 5. Full refund after successful EBM sale; verify refund API called with original EBM reference.
 6. Cancel sale after successful EBM sale; verify void API called.
 7. `EBM_USE_MOCK=true` local smoke test without RRA connectivity.
+8. Pharmacy: create INSURANCE customer with `isrccCd`, sync, sell with insurance tender — verify line `isrccCd`/`isrcAmt`.
+9. Generate X and Z PDFs — confirm opening deposit / proforma / discount / incomplete rows.
 
 ## Contacts
 
