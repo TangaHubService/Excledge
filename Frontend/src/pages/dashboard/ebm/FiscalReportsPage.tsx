@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { FileText, Download, Loader2, ScrollText, ChevronRight, CheckCircle2, AlertTriangle, RefreshCw, Database, Bell, Boxes, Truck, X, Ship, Shield } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
 import { RraItemClassPicker } from "../../../components/inventory/RraItemClassPicker";
+import { SearchableSelect } from "../../../components/ui/SearchableSelect";
+import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
 import { toast } from "react-toastify";
 import { apiClient } from "../../../lib/api-client";
 import { useBranch } from "../../../context/BranchContext";
@@ -777,6 +779,17 @@ const PMT_LABEL: Record<string, string> = {
   "01": "Cash", "02": "Cheque", "03": "Credit", "04": "Bank transfer", "05": "Card", "06": "Mobile money", "07": "Other",
 };
 
+interface CatalogProduct {
+  id: number;
+  name: string;
+  itemCd?: string | null;
+  sku?: string | null;
+}
+interface LineEdit {
+  localNm: string;
+  linkProductId: string;
+}
+
 function StockAndPurchasesCard() {
   const [stock, setStock] = useState<{ counts: Record<string, number>; failures: any[] } | null>(null);
   const [purchases, setPurchases] = useState<RraPurchase[]>([]);
@@ -785,6 +798,8 @@ function StockAndPurchasesCard() {
   const [selected, setSelected] = useState<RraPurchase | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
+  const [lineEdits, setLineEdits] = useState<Record<number, LineEdit>>({});
 
   const load = useCallback(async () => {
     try {
@@ -836,12 +851,57 @@ function StockAndPurchasesCard() {
     setSelected(p);
     setRejecting(false);
     setRejectReason("");
+                setLineEdits(Object.fromEntries(
+      p.items.map((it) => [it.id, { localNm: it.itemNm ?? "", linkProductId: "__new__" }]),
+    ));
+    if (p.status === "PENDING") {
+      apiClient.getProducts({ page: 1, limit: 500 })
+        .then((res) => {
+          const items = parseInventoryGetProductsResponse(res).items as CatalogProduct[];
+          setCatalog(items);
+          setLineEdits((prev) => {
+            const next = { ...prev };
+            for (const it of p.items) {
+              const cur = next[it.id];
+              if (!cur || (cur.linkProductId && cur.linkProductId !== "__new__")) continue;
+              const supplierNm = (it.itemNm ?? "").trim().toLowerCase();
+              const match = items.find((prod) =>
+                (it.itemCd && prod.itemCd === it.itemCd) ||
+                (!!supplierNm && prod.name.trim().toLowerCase() === supplierNm),
+              );
+              if (match) {
+                next[it.id] = { localNm: cur.localNm || match.name, linkProductId: String(match.id) };
+              }
+            }
+            return next;
+          });
+        })
+        .catch(() => setCatalog([]));
+    }
+  };
+
+  const setLine = (itemId: number, patch: Partial<LineEdit>) => {
+    setLineEdits((prev) => ({ ...prev, [itemId]: { ...prev[itemId], ...patch } }));
   };
 
   const action = async (id: number, reject: boolean) => {
     setRowBusy(id);
     try {
-      await apiClient.confirmRraPurchase(id, reject);
+      const items = !reject && selected
+        ? selected.items.map((it) => {
+            const edit = lineEdits[it.id];
+            const linkId = edit?.linkProductId && edit.linkProductId !== "__new__"
+              ? Number(edit.linkProductId)
+              : undefined;
+            return {
+              itemId: it.id,
+              itemSeq: it.itemSeq,
+              itemNm: edit?.localNm?.trim() || it.itemNm || undefined,
+              linkProductId: linkId && Number.isFinite(linkId) ? linkId : undefined,
+            };
+          })
+        : undefined;
+      await apiClient.confirmRraPurchase(id, reject, { items });
       toast.success(reject ? "Purchase rejected" : "Purchase confirmed with RRA");
       setPurchases((prev) => prev.map((x) => (x.id === id ? { ...x, status: reject ? "REJECTED" : "CONFIRMED" } : x)));
       setSelected(null);
@@ -934,7 +994,7 @@ function StockAndPurchasesCard() {
       </CardContent>
 
       <Drawer open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null); }}>
-        <DrawerContent className="sm:max-w-xl">
+        <DrawerContent className="sm:max-w-2xl">
           <DrawerHeader className="px-0 pt-0">
             <DrawerTitle>Purchase invoice {selected ? String(selected.spplrInvcNo) : ""}</DrawerTitle>
           </DrawerHeader>
@@ -950,36 +1010,70 @@ function StockAndPurchasesCard() {
                 {selected.remark && <div className="col-span-2"><span className="text-muted-foreground">Remark</span><div>{selected.remark}</div></div>}
               </div>
 
-              <div className="max-h-72 overflow-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-8">#</TableHead>
-                      <TableHead>Item</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                      <TableHead className="text-right">Unit price</TableHead>
-                      <TableHead className="text-center">Tax</TableHead>
-                      <TableHead className="text-right">Tax amt</TableHead>
-                      <TableHead className="text-right">Line total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selected.items.map((it) => (
-                      <TableRow key={it.id}>
-                        <TableCell className="text-muted-foreground">{it.itemSeq}</TableCell>
-                        <TableCell>
-                          {it.itemNm ?? "Item"}
+              {selected.status === "PENDING" && (
+                <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  You can rename each item to how it should appear in your inventory. The supplier&apos;s name is kept for RRA. Leave unmatched to create a new product, or link an existing one.
+                </p>
+              )}
+
+              <div className="max-h-[28rem] space-y-3 overflow-auto">
+                {selected.items.map((it) => {
+                  const edit = lineEdits[it.id] ?? { localNm: it.itemNm ?? "", linkProductId: "__new__" };
+                  return (
+                    <div key={it.id} className="rounded-lg border p-3">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                        <div>
+                          <span className="mr-2 text-muted-foreground">#{it.itemSeq}</span>
+                          <span className="font-medium">{it.itemNm ?? "Item"}</span>
                           {it.itemCd && <span className="ml-1 font-mono text-xs text-muted-foreground">{it.itemCd}</span>}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{formatInt(Number(it.qty))} {it.qtyUnitCd ?? ""}</TableCell>
-                        <TableCell className="text-right tabular-nums">{money(Number(it.prc))}</TableCell>
-                        <TableCell className="text-center">{it.taxTyCd ?? "—"}</TableCell>
-                        <TableCell className="text-right tabular-nums">{money(Number(it.taxAmt))}</TableCell>
-                        <TableCell className="text-right tabular-nums">{money(Number(it.totAmt))}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 text-xs text-muted-foreground">
+                          <span>Qty {formatInt(Number(it.qty))} {it.qtyUnitCd ?? ""}</span>
+                          <span>Unit {money(Number(it.prc))}</span>
+                          <span>Tax {it.taxTyCd ?? "—"} {money(Number(it.taxAmt))}</span>
+                          <span className="font-medium text-foreground">Total {money(Number(it.totAmt))}</span>
+                        </div>
+                      </div>
+                      {selected.status === "PENDING" && (
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label htmlFor={`local-nm-${it.id}`}>Name in your inventory</Label>
+                            <Input
+                              id={`local-nm-${it.id}`}
+                              value={edit.localNm}
+                              onChange={(e) => setLine(it.id, { localNm: e.target.value })}
+                              placeholder={it.itemNm ?? "Item name"}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label>Match existing product</Label>
+                            <SearchableSelect
+                              value={edit.linkProductId}
+                              onChange={(value) => {
+                                const prod = catalog.find((p) => String(p.id) === value);
+                                setLine(it.id, {
+                                  linkProductId: value,
+                                  localNm: value !== "__new__" && prod ? prod.name : edit.localNm,
+                                });
+                              }}
+                              placeholder="Create as a new product"
+                              searchPlaceholder="Search your products..."
+                              emptyText="No matching products."
+                              options={[
+                                { value: "__new__", label: "Create as a new product", emphasized: true },
+                                ...catalog.map((p) => ({
+                                  value: String(p.id),
+                                  label: p.name,
+                                  sublabel: p.itemCd ?? p.sku ?? undefined,
+                                })),
+                              ]}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="flex flex-col items-end gap-0.5 text-sm">

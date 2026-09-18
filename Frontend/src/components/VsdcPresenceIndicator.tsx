@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../lib/api-client';
 
-type PresenceState = 'checking' | 'online' | 'offline' | 'disabled';
+type PresenceState = 'checking' | 'online' | 'offline' | 'disabled' | 'training';
 
 interface EbmStatusPayload {
   enabled: boolean;
   online: boolean;
+  trainingMode?: boolean;
   lastContact: string | null;
   offlineLimitMs: number;
 }
@@ -35,6 +36,13 @@ function stateStyles(state: PresenceState): { dot: string; text: string; pill: s
         pill: 'border-amber-400/40 bg-amber-500/10',
         label: 'VSDC …',
       };
+    case 'training':
+      return {
+        dot: 'bg-orange-400',
+        text: 'text-orange-300',
+        pill: 'border-orange-400/40 bg-orange-500/10',
+        label: 'TRAINING',
+      };
     default:
       return {
         dot: 'bg-slate-400',
@@ -59,11 +67,11 @@ export function VsdcPresenceIndicator() {
         const payload = res?.data;
         if (cancelled) return;
         if (!payload?.enabled) {
-          setState('disabled');
+          setState(payload?.trainingMode ? 'training' : 'disabled');
           setLastContact(null);
           return;
         }
-        setState(payload.online ? 'online' : 'offline');
+        setState(payload.trainingMode ? 'training' : payload.online ? 'online' : 'offline');
         setLastContact(payload.lastContact ? new Date(payload.lastContact) : null);
       } catch {
         if (cancelled) return;

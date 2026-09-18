@@ -49,7 +49,7 @@ export async function getEbmStatus(req: BranchAuthRequest, res: Response) {
     const organizationId = parseInt(req.params.organizationId);
     const org = await prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { lastSuccessfulVdsContact: true },
+      select: { lastSuccessfulVdsContact: true, trainingMode: true },
     });
     if (!org) {
       return res.status(404).json(apiError('Organization not found'));
@@ -63,6 +63,7 @@ export async function getEbmStatus(req: BranchAuthRequest, res: Response) {
     res.json(success({
       enabled,
       online,
+      trainingMode: !!org.trainingMode,
       lastContact: lastContact ? lastContact.toISOString() : null,
       offlineLimitMs: OFFLINE_BLOCK_MS,
     }));

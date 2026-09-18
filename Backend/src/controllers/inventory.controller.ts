@@ -17,6 +17,7 @@ import { success, error as apiError } from "../utils/apiResponse"
 import { getOrganizationSettings } from "../services/organization-settings.service"
 import { getOriginNationCode } from "../services/item-code.service"
 import { getOrderBy } from "../utils/sorting"
+import { getTaxationTypes, isCachedTaxCode, isCachedCountryCode } from "../services/rra-code.service"
 
 export const getProducts = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -41,9 +42,16 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
       where.itemType = itemType
     }
 
+    const trainingMode = (await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { trainingMode: true },
+    }))?.trainingMode === true
+
     // SERVICE items carry no batch rows (not stock-tracked), so the branch
     // scoping must not exclude them — only PRODUCT rows need a matching batch.
-    const branchCondition = branchFilter.branchId
+    // Training mode also includes zero-stock catalog items that have never
+    // been received at this branch, so cashiers can practice selling them.
+    const branchCondition = branchFilter.branchId && !trainingMode
       ? {
           OR: [
             { itemType: 'SERVICE' },
@@ -337,14 +345,16 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       }
     }
 
-    // Tax category is the RRA code A/B/C/D. Validate it, then keep the legacy
-    // TaxCategory enum in sync (A=EXEMPT, B=STANDARD, C=ZERO_RATED, D=NON_TAXABLE).
+    // Tax code must be a live VSDC taxation type (class 04). Do not invent B.
     const normalizedTaxCode = taxCode
       ? String(taxCode).toUpperCase()
-      : (taxCategory ? TaxService.getTaxCode(taxCategory) : 'B');
-    if (!TaxService.ALLOWED_TAX_CODES.has(normalizedTaxCode as any)) {
+      : (taxCategory ? TaxService.getTaxCode(taxCategory) : '');
+    if (!normalizedTaxCode) {
+      return res.status(400).json(apiError('Tax code is required'));
+    }
+    if (!(await isCachedTaxCode(organizationId!, normalizedTaxCode))) {
       return res.status(400).json(apiError(
-        `Invalid tax category "${taxCode}". Must be one of A, B, C or D.`
+        `Invalid tax category "${normalizedTaxCode}". Sync RRA codes (class 04 Taxation Type) and pick a cached code.`
       ));
     }
 
@@ -355,8 +365,15 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
     const resolvedQtyUnitCd = qtyUnitCd || deriveQtyUnitCd(measurementUnit)
 
     const createProductInTx = async (tx: any) => {
-      // Get origin from organization settings if not provided
-      const resolvedOrigin = origin || (await getOriginNationCode(organizationId!, tx))
+      const resolvedOrigin = (typeof origin === 'string' && origin.trim())
+        ? origin.trim().toUpperCase()
+        : await getOriginNationCode(organizationId!, tx);
+      if (!resolvedOrigin) {
+        throw new Error('Origin country is required — pick a country from the RRA code list (class 05)');
+      }
+      if (!(await isCachedCountryCode(organizationId!, resolvedOrigin))) {
+        throw new Error(`Origin country "${resolvedOrigin}" is not in the RRA country list (class 05). Sync RRA codes first.`);
+      }
 
       // Allocated from the same atomic per-organization counter table the
       // create() below runs against, inside this same transaction, so a
@@ -500,6 +517,9 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
     if (error.message && error.message.includes('already exists')) {
       return res.status(400).json(apiError(error.message))
     }
+    if (error.message && /Origin country/i.test(error.message)) {
+      return res.status(400).json(apiError(error.message))
+    }
     if (error.code === 'P2002') {
       const field = error.meta?.target?.[0] || 'field'
       return res.status(409).json(apiError(`A product with this ${field} already exists`))
@@ -630,7 +650,10 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
               const isService = product.itemType === 'SERVICE';
               const resolvedItemType = (isService ? 'SERVICE' : (product.itemType || 'PRODUCT')) as 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE'
               const resolvedQtyUnitCd = product.qtyUnitCd || deriveQtyUnitCd(product.measurementUnit)
-              const resolvedOrigin = product.origin || orgOrigin;
+              const resolvedOrigin = (product.origin && String(product.origin).trim().toUpperCase()) || orgOrigin;
+              if (!resolvedOrigin) {
+                throw new Error(`Origin country is required for "${product.name}" — pick a country from the RRA code list (class 05)`);
+              }
               return {
                 name: product.name,
                 batchNumber: isService ? null : product.batchNumber,
@@ -810,9 +833,9 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
     if (barcode !== undefined) data.barcode = barcode === '' ? null : barcode
     if (taxCode !== undefined) {
       const normalizedTaxCode = String(taxCode).toUpperCase();
-      if (!TaxService.ALLOWED_TAX_CODES.has(normalizedTaxCode as any)) {
+      if (!(await isCachedTaxCode(organizationId, normalizedTaxCode))) {
         return res.status(400).json(apiError(
-          `Invalid tax category "${taxCode}". Must be one of A, B, C or D.`
+          `Invalid tax category "${taxCode}". Sync RRA codes (class 04 Taxation Type) and pick a cached code.`
         ));
       }
       data.taxCode = normalizedTaxCode;
@@ -835,9 +858,17 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
     if (itemStandardName !== undefined) data.itemStandardName = itemStandardName === '' ? null : itemStandardName
     if (origin !== undefined) {
       if (origin === '' || origin === null) {
-        data.origin = await getOriginNationCode(organizationId);
+        const fromOrg = await getOriginNationCode(organizationId);
+        if (!fromOrg) {
+          return res.status(400).json(apiError('Origin country is required — pick a country from the RRA code list (class 05)'));
+        }
+        data.origin = fromOrg;
       } else {
-        data.origin = origin;
+        const nextOrigin = String(origin).trim().toUpperCase();
+        if (!(await isCachedCountryCode(organizationId, nextOrigin))) {
+          return res.status(400).json(apiError(`Origin country "${nextOrigin}" is not in the RRA country list (class 05)`));
+        }
+        data.origin = nextOrigin;
       }
     }
     if (useInsurance !== undefined) data.useInsurance = !!useInsurance
@@ -884,6 +915,9 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
       const resolvedPkgUnitCd = data.pkgUnitCd !== undefined ? data.pkgUnitCd : existingProduct.pkgUnitCd
       const resolvedQtyUnitCd = data.qtyUnitCd ?? existingProduct.qtyUnitCd ?? deriveQtyUnitCd(existingProduct.measurementUnit)
       const resolvedOrigin = data.origin ?? existingProduct.origin ?? (await getOriginNationCode(organizationId))
+      if (!resolvedOrigin) {
+        return res.status(400).json(apiError('Origin country is required — pick a country from the RRA code list (class 05)'));
+      }
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
           product = await prisma.$transaction(async (tx) => {
@@ -1426,12 +1460,31 @@ export const processExpiredStock = async (req: BranchAuthRequest, res: Response)
   }
 };
 
-export const getTaxCodes = async (_req: Request, res: Response) => {
-  const codes = [
-    { code: 'A', label: 'A — VAT Exempt (0%)', rate: 0, category: 'EXEMPT' },
-    { code: 'B', label: 'B — Standard VAT (18%)', rate: 18, category: 'STANDARD' },
-    { code: 'C', label: 'C — Export / Zero-rated (0%)', rate: 0, category: 'ZERO_RATED' },
-    { code: 'D', label: 'D — Not VAT Registered (0%)', rate: 0, category: 'NON_TAXABLE' },
-  ];
-  res.json(codes);
+export const getTaxCodes = async (req: Request, res: Response) => {
+  try {
+    const organizationId = parseInt(String(
+      req.query.organizationId || req.params.organizationId || (req as any).user?.organizationId || '',
+    ), 10);
+    if (Number.isFinite(organizationId)) {
+      const cached = await getTaxationTypes(organizationId);
+      if (cached.length > 0) {
+        return res.json(cached.map((t) => ({
+          code: t.code,
+          label: t.label.includes('%') || t.label.includes(t.code) ? t.label : `${t.code} — ${t.label} (${t.rate}%)`,
+          rate: t.rate,
+          category: t.category,
+        })));
+      }
+    }
+    // Last-resort when class 04 has not been synced yet so product create still works.
+    res.json([
+      { code: 'A', label: 'A — VAT Exempt (0%)', rate: 0, category: 'EXEMPT' },
+      { code: 'B', label: 'B — Standard VAT (18%)', rate: 18, category: 'STANDARD' },
+      { code: 'C', label: 'C — Export / Zero-rated (0%)', rate: 0, category: 'ZERO_RATED' },
+      { code: 'D', label: 'D — Not VAT Registered (0%)', rate: 0, category: 'NON_TAXABLE' },
+    ]);
+  } catch (error: any) {
+    console.error("[Get Tax Codes Error]:", error);
+    res.status(500).json(apiError("Failed to get tax codes"));
+  }
 };

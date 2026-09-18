@@ -23,7 +23,7 @@ import { renderSalesInvoiceHtml, type RenderInvoicePayload } from "../services/i
 import { generateEbmInvoicePdf, getEbmInvoiceFilename, type InvoicePdfFormat } from "../services/invoice-pdf.service"
 import { generateEbmReceiptPdf80mm } from "../services/invoice-receipt-pdf.service"
 import { commitSale, CommitSaleError } from "../services/sale-commit.service"
-import { validateRefundReasonCode, DEFAULT_RFD_RSN_CD } from "../services/rra-code.service"
+import { validateRefundReasonCodeForOrg, DEFAULT_RFD_RSN_CD } from "../services/rra-code.service"
 import { SYSTEM_FOOTER, SYSTEM_POWERED_BY, CIS_VERSION_LABEL } from "../services/system-branding.service"
 import { getOrganizationLogo } from "../services/invoice-logo.service"
 import QRCode from "qrcode"
@@ -556,7 +556,8 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
         // as rfdRsnCd; the free-text `reason` stays the human note (remark).
         let rfdRsnCd: string;
         try {
-          rfdRsnCd = validateRefundReasonCode(
+          rfdRsnCd = await validateRefundReasonCodeForOrg(
+            organizationId,
             typeof rfdRsnCdRaw === 'string' && rfdRsnCdRaw.trim() ? rfdRsnCdRaw.trim() : DEFAULT_RFD_RSN_CD,
           );
         } catch (e: unknown) {

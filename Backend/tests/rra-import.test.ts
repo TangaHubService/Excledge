@@ -34,6 +34,8 @@ vi.mock("../src/services/rra-ebm.service", async () => {
 
 vi.mock("../src/services/inventory-ledger.service", () => ({
   addStock: vi.fn(async (a: any) => { addStockArgs = a; return { id: 5 } }),
+  resolveActiveBranchId: vi.fn(async (_org: number, preferred?: number | null) => preferred ?? 9),
+  receiveStockOnBranch: vi.fn(async (a: any) => { addStockArgs = a; return { id: 5 } }),
 }))
 
 vi.mock("../src/services/vsdc-api.service", async () => {
@@ -101,6 +103,15 @@ describe("actionRraImport — approve/reject (§68)", () => {
     expect(addStockArgs.productId).toBe(77)
     expect(addStockArgs.quantity).toBe(40)
     expect(addStockArgs.referenceType).toBe("RRA_IMPORT")
+    expect(addStockArgs.branchId).toBe(3)
+  })
+
+  it("books local stock on the default branch when none is supplied", async () => {
+    const r = await actionRraImport(1, 1, "approve", { userId: 2, itemClsCd: "5059690800", linkProductId: 77 })
+    expect(r.success).toBe(true)
+    expect(addStockArgs.productId).toBe(77)
+    expect(addStockArgs.quantity).toBe(40)
+    expect(addStockArgs.branchId).toBe(9)
   })
 
   it("rejects with imptItemSttsCd 3 and does not touch stock", async () => {

@@ -6,7 +6,8 @@ import { logManualActivity } from "../middleware/activity-log.middleware"
 import { getProfitReport } from "../services/profit.service"
 import { success, error as apiError } from "../utils/apiResponse"
 import { buildVsdcEnvelope, checkZReport } from "../services/vsdc-api.service"
-import { isEbmEnabled, TAX_RATE_BY_SLOT } from "../services/rra-ebm.service"
+import { isEbmEnabled } from "../services/rra-ebm.service"
+import { getTaxRatesBySlot } from "../services/rra-code.service"
 import {
   renderDailyReportPdf,
   renderPluReportPdf,
@@ -1710,8 +1711,9 @@ async function buildDailyReport(
     }
   }
 
+  const [rateA, rateB, rateC, rateD] = await getTaxRatesBySlot(organizationId);
   const taxRates: Record<string, number> = {
-    A: TAX_RATE_BY_SLOT[0], B: TAX_RATE_BY_SLOT[1], C: TAX_RATE_BY_SLOT[2], D: TAX_RATE_BY_SLOT[3], E: 0,
+    A: rateA, B: rateB, C: rateC, D: rateD, E: 0,
   };
 
   // Payment breakdown

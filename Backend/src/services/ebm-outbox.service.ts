@@ -10,7 +10,7 @@ import {
   gatewayErrorMessage,
   PurchaseCodeMissingError,
 } from './rra-ebm.service';
-import { getRraPaymentCode, validateRefundReasonCode, DEFAULT_RFD_RSN_CD } from './rra-code.service';
+import { getRraPaymentCode, validateRefundReasonCodeForOrg, DEFAULT_RFD_RSN_CD, getTaxRatesBySlot, getTourismTaxRate } from './rra-code.service';
 import {
   buildVsdcEnvelope,
   saveInvc,
@@ -94,7 +94,7 @@ export async function createSaleWithOutbox(input: SaleOutboxInput) {
 
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { vatRegistered: true, isTaxExempt: true },
+    select: { vatRegistered: true, isTaxExempt: true, trainingMode: true },
   });
   const vatRegistered = org?.vatRegistered ?? false;
   const isTaxExempt = org?.isTaxExempt ?? false;
@@ -114,7 +114,7 @@ export async function createSaleWithOutbox(input: SaleOutboxInput) {
       }
 
       const stock = await getCurrentStockInTransaction(tx, organizationId, item.productId, branchId);
-      if (stock < item.quantity) {
+      if (stock < item.quantity && !org?.trainingMode) {
         const prod = await tx.product.findUnique({ where: { id: item.productId }, select: { name: true } });
         throw new Error(`Insufficient stock for ${prod?.name ?? `#${item.productId}`}. Available: ${stock}, requested: ${item.quantity}`);
       }
@@ -434,6 +434,12 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       continue;
     }
 
+    const [taxRates, tourismTaxRate] = await Promise.all([
+      getTaxRatesBySlot(row.organizationId),
+      getTourismTaxRate(row.organizationId),
+    ]);
+    const rateOpts = { taxRates, tourismTaxRate };
+
     // ── Auto-allocate an RRA purchase code when the sale has none on record ──
     // The sandbox rejects every sale without a real single-use code (881/882).
     // Allocation is strictly buyer-scoped (consumeAnyOrgPurchaseCode): a code
@@ -481,7 +487,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         continue;
       }
       try {
-        payload = buildRraSendReceiptPayload(sale, org, rraPaymentCode);
+        payload = buildRraSendReceiptPayload(sale, org, rraPaymentCode, rateOpts);
       } catch (e: unknown) {
         // A structurally bad sale dead-letters alone without blocking the
         // batch; a missing purchase code backs off for retry (transient).
@@ -541,7 +547,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
           ?? DEFAULT_RFD_RSN_CD;
         let rfdRsnCd: string;
         try {
-          rfdRsnCd = validateRefundReasonCode(rawRsn);
+          rfdRsnCd = await validateRefundReasonCodeForOrg(row.organizationId, rawRsn);
         } catch (e: unknown) {
           await prisma.ebmOutbox.update({
             where: { id: row.id },
@@ -569,6 +575,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
           orgInvcNo: originalSale?.vsdcInvcNo ?? undefined,
           rfdDt: new Date(),
           rfdRsnCd,
+          ...rateOpts,
         });
         payload.remark = (row.payload as { reason?: string })?.reason ?? '';
         payload.idempotencyKey = row.idempotencyKey;
@@ -625,7 +632,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
           (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd = voidCode;
         }
         const { vsdcInvcNo: voidInvcNo } = await generateInvoiceNumber(row.organizationId, sale.branchId);
-        payload = buildRraSendReceiptPayload(sale, org, rraPaymentCode, { cnclDt: new Date(), invcNoOverride: voidInvcNo });
+        payload = buildRraSendReceiptPayload(sale, org, rraPaymentCode, { cnclDt: new Date(), invcNoOverride: voidInvcNo, ...rateOpts });
         payload.remark = (row.payload as { reason?: string })?.reason ?? '';
         payload.idempotencyKey = row.idempotencyKey;
       } catch (e: unknown) {

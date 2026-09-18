@@ -512,7 +512,7 @@ export function resolveCustTinForVsdc(sale: Pick<SaleWithRelations, 'id' | 'sale
   return walkInCustTin(sale.customer.id);
 }
 
-/** VSDC §4.1 Tax Type rates — static, RRA-defined: A 0%, B 18%, C 0%, D 0%. */
+/** Last-resort A/B/C/D rates when `/code/selectCodes` class 04 is not cached. */
 export const TAX_RATE_BY_SLOT: [number, number, number, number] = [0, 18, 0, 0];
 
 /**
@@ -543,6 +543,8 @@ export function buildRraSendReceiptPayload(
      * of letting this function fall back to the original sale's `vsdcInvcNo`.
      */
     invcNoOverride?: number;
+    taxRates?: [number, number, number, number];
+    tourismTaxRate?: number;
   } = {},
 ): Record<string, unknown> {
   const rcptTyCd = rcptTyCdFromLabel(sale.rcptLabel);
@@ -746,14 +748,14 @@ export function buildRraSendReceiptPayload(
     taxblAmtB: taxblAmt[1],
     taxblAmtC: taxblAmt[2],
     taxblAmtD: taxblAmt[3],
-    taxRtA: TAX_RATE_BY_SLOT[0],
-    taxRtB: TAX_RATE_BY_SLOT[1],
-    taxRtC: TAX_RATE_BY_SLOT[2],
-    taxRtD: TAX_RATE_BY_SLOT[3],
+    taxRtA: (opts.taxRates ?? TAX_RATE_BY_SLOT)[0],
+    taxRtB: (opts.taxRates ?? TAX_RATE_BY_SLOT)[1],
+    taxRtC: (opts.taxRates ?? TAX_RATE_BY_SLOT)[2],
+    taxRtD: (opts.taxRates ?? TAX_RATE_BY_SLOT)[3],
     // Mandatory combined fields required by the RRA reference implementation
     // (validated as taxRtF / taxRtTt in the sandbox WAR).
-    taxRtF: TAX_RATE_BY_SLOT[1],
-    taxRtTt: 3,
+    taxRtF: (opts.taxRates ?? TAX_RATE_BY_SLOT)[1],
+    taxRtTt: opts.tourismTaxRate ?? 3,
     taxAmtA: taxAmt[0],
     taxAmtB: taxAmt[1],
     taxAmtC: taxAmt[2],

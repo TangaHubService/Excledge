@@ -31,6 +31,7 @@ import { useBranch } from '../../../context/BranchContext'
 import { useOrganizationSettings } from '../../../context/OrganizationSettingsContext'
 import { cn } from '../../../lib/utils'
 import { PACKAGING_UNIT_LABELS } from '../../../types/ebm'
+import { useRraCodeCatalog } from '../../../lib/useRraCodeCatalog'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,7 +54,8 @@ interface Product {
   packagingQty?: number
 }
 
-const isSellable = (p: Product) => p.itemType === 'SERVICE' || p.quantity > 0
+const isSellable = (p: Product, trainingMode = false) =>
+  p.itemType === 'SERVICE' || p.quantity > 0 || trainingMode
 
 interface Customer {
   id: string
@@ -76,16 +78,18 @@ function productsFromInventoryResponse(res: unknown): Product[] {
 // ── ProductCard ───────────────────────────────────────────────────────────────
 
 const ProductCard = memo(({
-  product, onAddToCart, isFavorite, onToggleFavorite,
+  product, onAddToCart, isFavorite, onToggleFavorite, allowZeroStock = false,
 }: {
   product: Product
   onAddToCart: (p: Product) => void
   isFavorite: boolean
   onToggleFavorite: (id: string) => void
+  allowZeroStock?: boolean
 }) => {
   const isService = product.itemType === 'SERVICE'
   const isLowStock = !isService && product.quantity > 0 && product.quantity <= 5
   const isOutOfStock = !isService && product.quantity <= 0
+  const canAdd = !isOutOfStock || allowZeroStock
 
   return (
     <div className="relative flex flex-col rounded-2xl border border-gray-100 bg-white overflow-hidden group transition-all duration-200 hover:shadow-md hover:border-blue-200">
@@ -101,8 +105,8 @@ const ProductCard = memo(({
       {/* Image / Initial */}
       <button
         type="button"
-        onClick={() => !isOutOfStock && onAddToCart(product)}
-        disabled={isOutOfStock}
+        onClick={() => canAdd && onAddToCart(product)}
+        disabled={!canAdd}
         className="w-full h-24 flex items-center justify-center bg-blue-50 overflow-hidden flex-shrink-0 disabled:cursor-not-allowed"
       >
         {product.imageUrl ? (
@@ -117,8 +121,8 @@ const ProductCard = memo(({
       {/* Content */}
       <button
         type="button"
-        onClick={() => !isOutOfStock && onAddToCart(product)}
-        disabled={isOutOfStock}
+        onClick={() => canAdd && onAddToCart(product)}
+        disabled={!canAdd}
         className="flex flex-col flex-1 p-3 text-left disabled:cursor-not-allowed"
       >
         <p className="text-xs font-semibold text-gray-800 line-clamp-2 leading-snug mb-2 flex-1">
@@ -135,9 +139,9 @@ const ProductCard = memo(({
         </p>
         <p className={cn(
           'text-[10px] mt-1 font-medium',
-          isOutOfStock ? 'text-red-500' : isLowStock ? 'text-amber-500' : 'text-emerald-500',
+          isOutOfStock ? (allowZeroStock ? 'text-amber-500' : 'text-red-500') : isLowStock ? 'text-amber-500' : 'text-emerald-500',
         )}>
-          {isService ? 'Service' : isOutOfStock ? 'Out of stock' : isLowStock ? `Low: ${product.quantity} left` : `${product.quantity} in stock`}
+          {isService ? 'Service' : isOutOfStock ? (allowZeroStock ? `${product.quantity} in stock` : 'Out of stock') : isLowStock ? `Low: ${product.quantity} left` : `${product.quantity} in stock`}
         </p>
       </button>
     </div>
@@ -167,7 +171,7 @@ const CartItemRow = memo(({
   }
 
   const lineTotal = (item.unitPrice * item.quantity).toLocaleString()
-  const effectiveTaxCode = vatRegistered ? (item.product.taxCode ?? 'B') : 'D'
+  const effectiveTaxCode = vatRegistered ? (item.product.taxCode || '—') : 'D'
 
   return (
     <div className="flex items-center gap-3 py-3.5 border-b border-gray-50 last:border-b-0">
@@ -398,7 +402,8 @@ export default function SalesForm() {
   const navigate = useNavigate()
   const { selectedBranchId } = useBranch()
   const { settings: orgSettings } = useOrganizationSettings()
-  useVsdcOnlineStatus()
+  const { catalog } = useRraCodeCatalog()
+  const { trainingMode } = useVsdcOnlineStatus()
 
   const [cart, setCart] = useState<CartItem[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -500,7 +505,7 @@ export default function SalesForm() {
         apiClient.getProducts({ page: 1, limit: 10000, search: '', branchId: selectedBranchId }),
         apiClient.getCustomers({ page: 1, limit: 100, search: '' }),
       ])
-      const all = productsFromInventoryResponse(productsData).filter(isSellable)
+      const all = productsFromInventoryResponse(productsData).filter(p => isSellable(p, trainingMode))
       setProducts(all)
       setDisplayedCount(30)
       const allCustomers = customersData.customers || []
@@ -523,7 +528,7 @@ export default function SalesForm() {
     } finally {
       setIsLoading(false)
     }
-  }, [isOnline, selectedBranchId, t])
+  }, [isOnline, selectedBranchId, t, trainingMode])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -564,19 +569,19 @@ export default function SalesForm() {
           return
         }
         const res = await apiClient.getProducts({ page: 1, limit: 10000, search: searchTerm, branchId: selectedBranchId })
-        setProducts(productsFromInventoryResponse(res).filter(isSellable))
+        setProducts(productsFromInventoryResponse(res).filter(p => isSellable(p, trainingMode)))
         setDisplayedCount(30)
       } catch { toast.error(t('pos.searchError')) }
       finally { setIsLoading(false) }
     }, 400)
     return () => clearTimeout(id)
-  }, [searchTerm, selectedBranchId, isOnline])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchTerm, selectedBranchId, isOnline, trainingMode])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Infinite scroll
   useEffect(() => {
     const el = productsRef.current
     if (!el) return
-    const inStock = products.filter(isSellable)
+    const inStock = products.filter(p => isSellable(p, trainingMode))
     const onScroll = () => {
       if (isLoadingMoreRef.current || displayedCount >= inStock.length) return
       const { scrollTop, scrollHeight, clientHeight } = el
@@ -596,12 +601,12 @@ export default function SalesForm() {
     el.addEventListener('scroll', throttled, { passive: true })
     const check = setTimeout(onScroll, 100)
     return () => { clearTimeout(check); el.removeEventListener('scroll', throttled) }
-  }, [products, displayedCount])
+  }, [products, displayedCount, trainingMode])
 
   // Cart helpers
   const addToCart = useCallback((product: Product) => {
     const isService = product.itemType === 'SERVICE'
-    const allowNegativeStock = isService || orgSettings.featureFlags.allowNegativeStock
+    const allowNegativeStock = isService || trainingMode || orgSettings.featureFlags.allowNegativeStock
     if (!allowNegativeStock && (!product.quantity || product.quantity < 1)) { toast.error(t('pos.outOfStock')); return }
     setCart(prev => {
       const ex = prev.find(i => i.product.id === product.id)
@@ -613,7 +618,7 @@ export default function SalesForm() {
       return [...prev, { product, quantity: 1, unitPrice: product.unitPrice ?? product.price ?? 0 }]
     })
     toast.success(t('messages.productAdded'))
-  }, [t, orgSettings.featureFlags.allowNegativeStock])
+  }, [t, orgSettings.featureFlags.allowNegativeStock, trainingMode])
 
   const removeFromCart = useCallback((id: string) => {
     setCart(prev => prev.filter(i => i.product.id !== id))
@@ -624,12 +629,12 @@ export default function SalesForm() {
     setCart(prev => prev.map(i => {
       if (i.product.id !== id) return i
       const isService = i.product.itemType === 'SERVICE'
-      if (!isService && !orgSettings.featureFlags.allowNegativeStock && qty > i.product.quantity) {
+      if (!isService && !trainingMode && !orgSettings.featureFlags.allowNegativeStock && qty > i.product.quantity) {
         toast.error(t('pos.lowStockWarning', { count: i.product.quantity })); return i
       }
       return { ...i, quantity: qty }
     }))
-  }, [t, orgSettings.featureFlags.allowNegativeStock])
+  }, [t, orgSettings.featureFlags.allowNegativeStock, trainingMode])
 
   const updatePrice = useCallback((id: string, price: number | string) => {
     if (!orgSettings.featureFlags.allowManualDiscounts) return
@@ -655,12 +660,20 @@ export default function SalesForm() {
   // not VAT registered every line is tax code D (0%). When VAT registered, only
   // code B items carry 18% VAT (tax-inclusive: VAT = gross − gross/1.18).
   const vatRegistered = orgSettings.vatRegistered
+  const taxRateByCode = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const t of catalog.taxTypes) map.set(t.code.toUpperCase(), t.rate)
+    return map
+  }, [catalog.taxTypes])
   const taxAmount = useMemo(() => cart.reduce((s, i) => {
-    const code = vatRegistered ? (i.product.taxCode ?? 'B') : 'D'
-    if (code !== 'B') return s
+    const code = vatRegistered ? (i.product.taxCode ?? '').toUpperCase() : 'D'
+    const cached = taxRateByCode.get(code)
+    const rate = cached ?? (taxRateByCode.size === 0 && code === 'B' ? 18 : 0)
+    if (!rate) return s
     const gross = i.unitPrice * i.quantity
-    return s + Math.round(gross - gross / 1.18)
-  }, 0), [cart, vatRegistered])
+    return s + Math.round(gross - gross / (1 + rate / 100))
+  }, 0), [cart, vatRegistered, taxRateByCode])
+  const vatLabelRate = taxRateByCode.get('B') ?? (taxRateByCode.size === 0 ? 18 : 0)
   const total = useMemo(() => subtotal, [subtotal])
 
   const selectedCustomerObj = useMemo(
@@ -679,13 +692,13 @@ export default function SalesForm() {
   )
 
   const inStockProducts = useMemo(() => {
-    const base = products.filter(isSellable)
+    const base = products.filter(p => isSellable(p, trainingMode))
     const typed = productTypeFilter === 'ALL'
       ? base
       : base.filter(p => (p.itemType ?? 'PRODUCT') === productTypeFilter)
     if (activeCategory === 'All') return typed
     return typed.filter(p => p.category?.toLowerCase() === activeCategory.toLowerCase())
-  }, [products, activeCategory, productTypeFilter])
+  }, [products, activeCategory, productTypeFilter, trainingMode])
 
   // A USB/Bluetooth barcode scanner behaves like a keyboard: it types the
   // barcode digits into whichever input is focused, then sends Enter. Since
@@ -833,20 +846,20 @@ export default function SalesForm() {
       setIsPaymentModalOpen(false)
 
       const res = await apiClient.getProducts({ page: 1, limit: 10000, search: '', branchId: selectedBranchId })
-      setProducts(productsFromInventoryResponse(res).filter(isSellable))
+      setProducts(productsFromInventoryResponse(res).filter(p => isSellable(p, trainingMode)))
     } catch (error: any) {
       const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || t('pos.paymentError')
       toast.error(msg)
       if (msg.includes('stock')) {
         try {
           const res = await apiClient.getProducts({ page: 1, limit: 10000, search: '', branchId: selectedBranchId })
-          setProducts(productsFromInventoryResponse(res).filter(isSellable))
+          setProducts(productsFromInventoryResponse(res).filter(p => isSellable(p, trainingMode)))
         } catch { /* silent */ }
       }
     } finally {
       setIsSubmitting(false)
     }
-  }, [cart, selectedCustomer, total, t, isOnline, selectedBranchId, pollFiscalization])
+  }, [cart, selectedCustomer, total, t, isOnline, selectedBranchId, pollFiscalization, trainingMode])
 
   // A proforma is a quote, not a sale: no payment is collected, no stock moves,
   // and it is never sent to RRA (see createSale on the backend — isProforma
@@ -1009,6 +1022,11 @@ export default function SalesForm() {
           {t('pos.offlineMode') || 'You are offline. Sales will be queued and synced when connection is restored.'}
         </div>
       )}
+      {isOnline && trainingMode && (
+        <div className="fixed top-14 inset-x-0 z-40 flex items-center justify-center gap-2 bg-orange-500 px-4 py-2 text-sm font-medium text-white">
+          Training mode — zero-stock products are included. Receipts are not sent to RRA.
+        </div>
+      )}
 
       {/* POS Shell */}
       <div className="flex h-[calc(100vh-8.5rem)] -mx-4 sm:-mx-6 lg:-mx-8 overflow-hidden bg-[#F8F9FC]">
@@ -1100,6 +1118,7 @@ export default function SalesForm() {
                       onAddToCart={addToCart}
                       isFavorite={favorites.has(p.id)}
                       onToggleFavorite={toggleFavorite}
+                      allowZeroStock={trainingMode}
                     />
                   ))}
                 </div>
@@ -1260,7 +1279,7 @@ export default function SalesForm() {
 
             {/* Tax */}
             <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>{vatRegistered ? (taxAmount > 0 ? 'VAT (18%)' : 'VAT (0%)') : 'VAT (Not registered — D)'}</span>
+              <span>{vatRegistered ? (taxAmount > 0 ? `VAT (${vatLabelRate}%)` : 'VAT (0%)') : 'VAT (Not registered — D)'}</span>
               <span className="font-semibold text-gray-800 tabular-nums">{taxAmount.toLocaleString()} RWF</span>
             </div>
 

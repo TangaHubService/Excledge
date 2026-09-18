@@ -15,7 +15,7 @@ import { syncRraPurchases, confirmRraPurchase } from '../services/purchase-sync.
 import { syncRraImports, actionRraImport } from '../services/rra-import.service';
 import { syncProductToRra } from '../services/product-sync.service';
 import { RraTaxCode } from '@prisma/client';
-import { getRefundReasonCodes, getPaymentMethodMappings, DEFAULT_RFD_RSN_CD } from '../services/rra-code.service';
+import { getRefundReasonCodesForOrg, getPaymentMethodMappings, DEFAULT_RFD_RSN_CD, getRraCodeCatalog } from '../services/rra-code.service';
 import {
   syncRraBranches,
   syncCustomerToRra,
@@ -301,11 +301,21 @@ export async function confirmPurchase(req: BranchAuthRequest, res: Response) {
     const organizationId = parseInt(req.params.organizationId);
     const id = parseInt(req.params.id);
     const reject = req.query.reject === 'true' || req.body?.reject === true;
+    const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+    const items = rawItems
+      .map((it: any) => ({
+        itemId: it?.itemId != null ? parseInt(String(it.itemId), 10) : undefined,
+        itemSeq: it?.itemSeq != null ? parseInt(String(it.itemSeq), 10) : undefined,
+        itemNm: typeof it?.itemNm === 'string' ? it.itemNm : undefined,
+        linkProductId: it?.linkProductId != null ? parseInt(String(it.linkProductId), 10) : undefined,
+      }))
+      .filter((it: { itemId?: number; itemSeq?: number }) => it.itemId != null || it.itemSeq != null);
     const result = await confirmRraPurchase(organizationId, id, {
       branchId: branchOf(req),
       userId: (req as any).user?.userId,
       reject,
       prcOrdCd: req.body?.prcOrdCd,
+      items: items.length ? items : undefined,
     });
     return result.success ? res.json(success(result)) : res.status(502).json(apiError(result.error ?? 'Purchase confirmation failed'));
   } catch (e: any) {
@@ -398,10 +408,23 @@ export async function masterDataStatus(req: BranchAuthRequest, res: Response) {
  */
 export async function listRefundReasons(req: BranchAuthRequest, res: Response) {
   try {
-    res.json(success({ reasons: getRefundReasonCodes(), default: DEFAULT_RFD_RSN_CD }));
+    const organizationId = parseInt(req.params.organizationId);
+    const reasons = await getRefundReasonCodesForOrg(organizationId);
+    res.json(success({ reasons, default: DEFAULT_RFD_RSN_CD }));
   } catch (e: any) {
     console.error('[RRA refund reasons]', e);
     res.status(500).json(apiError('Failed to list RRA refund reasons'));
+  }
+}
+
+export async function getCodeCatalog(req: BranchAuthRequest, res: Response) {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const catalog = await getRraCodeCatalog(organizationId);
+    res.json(success(catalog));
+  } catch (e: any) {
+    console.error('[RRA code catalog]', e);
+    res.status(500).json(apiError('Failed to load RRA code catalog'));
   }
 }
 

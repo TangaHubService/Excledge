@@ -1131,6 +1131,9 @@ class ApiClient {
     const q = cdCls ? `?cdCls=${encodeURIComponent(cdCls)}` : "";
     return this.request(`${this.rraBase()}/codes${q}`);
   }
+  async getRraCodeCatalog() {
+    return this.request(`${this.rraBase()}/code-catalog`);
+  }
   async syncRraCodes() {
     return this.request(`${this.rraBase()}/codes/sync`, { method: "POST" });
   }
@@ -1177,8 +1180,18 @@ class ApiClient {
   async syncRraPurchases() {
     return this.request(`${this.rraBase()}/purchases/sync`, { method: "POST" });
   }
-  async confirmRraPurchase(id: number, reject = false) {
-    return this.request(`${this.rraBase()}/purchases/${id}/confirm${reject ? "?reject=true" : ""}`, { method: "POST" });
+  async confirmRraPurchase(
+    id: number,
+    reject = false,
+    body: {
+      prcOrdCd?: string;
+      items?: Array<{ itemId?: number; itemSeq?: number; itemNm?: string; linkProductId?: number }>;
+    } = {},
+  ) {
+    return this.request(`${this.rraBase()}/purchases/${id}/confirm${reject ? "?reject=true" : ""}`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, reject }),
+    });
   }
   // Import declarations §66/§67/§68
   async listRraImports(status?: "PENDING" | "APPROVED" | "REJECTED") {
@@ -2205,7 +2218,11 @@ class ApiClient {
   // ==================== Tax Codes ====================
 
   async getTaxCodes(): Promise<Array<{ code: string; label: string; rate: number; category: string }>> {
-    return this.request('/inventory/tax-codes');
+    try {
+      return await this.request(`/inventory/tax-codes?organizationId=${this.getOrganizationId()}`);
+    } catch {
+      return this.request('/inventory/tax-codes');
+    }
   }
 
   // ==================== Image Upload ====================

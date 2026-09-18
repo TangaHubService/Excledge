@@ -20,7 +20,7 @@ vi.mock("../src/lib/prisma", () => {
     remark: null,
     status: "PENDING",
     items: [
-      { itemSeq: 1, itemCd: "RW2CTU0000001", itemClsCd: "5059690800", itemNm: "Widget", bcd: null,
+      { id: 11, itemSeq: 1, itemCd: "RW2CTU0000001", itemClsCd: "5059690800", itemNm: "Widget", bcd: null,
         pkgUnitCd: "CT", pkg: { toNumber: () => 10 }, qtyUnitCd: "U",
         qty: { toNumber: () => 10 }, prc: { toNumber: () => 118 }, splyAmt: { toNumber: () => 1180 },
         dcRt: null, dcAmt: null, taxTyCd: "B", taxblAmt: { toNumber: () => 1000 }, taxAmt: { toNumber: () => 180 }, totAmt: { toNumber: () => 1180 } },
@@ -50,8 +50,24 @@ vi.mock("../src/lib/prisma", () => {
         groupBy: vi.fn(async () => []),
       },
       organization: { update: vi.fn(async () => ({})) },
+      rraCode: {
+        findMany: vi.fn(async ({ where }: any) => {
+          if (where?.cdCls === '04') {
+            return [
+              { cd: 'A', cdNm: 'A-EX', userDfnCd1: '0', srtOrd: 1 },
+              { cd: 'B', cdNm: 'B-18.00%', userDfnCd1: '18', srtOrd: 2 },
+            ]
+          }
+          return []
+        }),
+        findUnique: vi.fn(async () => null),
+        count: vi.fn(async () => 2),
+      },
       product: {
         findMany: vi.fn(async () => [{ id: 5, itemCd: "RW2CTU0000001" }]),
+        findFirst: vi.fn(async () => ({ id: 5, name: "Widget", itemCd: "RW2CTU0000001" })),
+        create: vi.fn(async (a: any) => ({ id: 99, name: a.data.name, itemCd: a.data.itemCd })),
+        update: vi.fn(async (a: any) => ({ id: a.where.id, name: a.data.name ?? "Widget", itemCd: "RW2CTU0000001" })),
       },
       $transaction: vi.fn(async (ops: any[]) => Promise.all(ops)),
     },
@@ -66,6 +82,21 @@ vi.mock("../src/services/rra-ebm.service", async () => {
 vi.mock("../src/services/inventory-ledger.service", () => ({
   getCurrentStock: vi.fn(async () => 250),
   addStock: vi.fn(async (p: any) => { addStockCalls.push(p); return { id: 1000 + addStockCalls.length } }),
+  resolveActiveBranchId: vi.fn(async (_org: number, preferred?: number | null) => preferred ?? 9),
+  receiveStockOnBranch: vi.fn(async (p: any) => { addStockCalls.push(p); return { id: 1000 + addStockCalls.length } }),
+}))
+
+vi.mock("../src/services/item-code.service", async () => {
+  const actual = await vi.importActual<any>("../src/services/item-code.service")
+  return {
+    ...actual,
+    allocateItemCd: vi.fn(async () => "RW2CTU0000099"),
+    getOriginNationCode: vi.fn(async () => "RW"),
+  }
+})
+
+vi.mock("../src/services/product-sync.service", () => ({
+  syncProductToRra: vi.fn(async () => ({ success: true })),
 }))
 
 vi.mock("../src/services/vsdc-api.service", async () => {
@@ -165,9 +196,32 @@ describe("confirmRraPurchase (§71)", () => {
     expect(booked.skipEbmSync).toBe(true)
   })
 
-  it("skips stock booking when no branch is supplied", async () => {
+  it("falls back to the default branch when none is supplied so local stock still increments", async () => {
     const r = await confirmRraPurchase(1, 7, { userId: 3 })
     expect(r.success).toBe(true)
-    expect(addStockCalls).toHaveLength(0)
+    expect(addStockCalls).toHaveLength(1)
+    expect(addStockCalls[0].branchId).toBe(9)
+    expect(addStockCalls[0].quantity).toBe(10)
+  })
+
+  it("sends the operator's local name as itemNm and keeps the supplier name on spplrItemNm", async () => {
+    const r = await confirmRraPurchase(1, 7, {
+      userId: 3,
+      items: [{ itemId: 11, itemNm: "House Blend Coffee" }],
+    })
+    expect(r.success).toBe(true)
+    expect(savePurchasePayload.itemList[0].itemNm).toBe("House Blend Coffee")
+    expect(savePurchasePayload.itemList[0].spplrItemNm).toBe("Widget")
+    expect(savePurchasePayload.itemList[0].spplrItemCd).toBe("RW2CTU0000001")
+  })
+
+  it("books stock against a linked local product", async () => {
+    const r = await confirmRraPurchase(1, 7, {
+      userId: 3,
+      branchId: 4,
+      items: [{ itemSeq: 1, linkProductId: 5, itemNm: "Widget" }],
+    })
+    expect(r.success).toBe(true)
+    expect(addStockCalls[0].productId).toBe(5)
   })
 })

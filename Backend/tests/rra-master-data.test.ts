@@ -37,7 +37,7 @@ vi.mock("../src/services/vsdc-api.service", async () => {
           { cd: "01", cdNm: "CASH", srtOrd: 1 },
           { cd: "06", cdNm: "MOBILE MONEY", srtOrd: 2 },
         ] },
-        { cdCls: "24", cdClsNm: "Tax Type", dtlList: [{ cd: "B", cdNm: "B-18%" }] },
+        { cdCls: "04", cdClsNm: "Taxation Type", dtlList: [{ cd: "B", cdNm: "B-18%" }] },
       ] },
     })),
     selectItemsClass: vi.fn(async () => ({
