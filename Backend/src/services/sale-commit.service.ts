@@ -639,6 +639,38 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
     },
   })
 
+  // Thin Accounting integration — enqueue only; Accounting owns journal posting.
+  try {
+    const { enqueueSaleCompletedAccountingEvent } = await import("./accounting-outbox.service")
+    const saleItemsForCogs = await prisma.saleItem.findMany({
+      where: { saleId: sale.id },
+      select: { quantity: true, costPrice: true },
+    })
+    const cogs = saleItemsForCogs.reduce(
+      (sum, item) => sum + Number(item.costPrice || 0) * Number(item.quantity || 0),
+      0,
+    )
+    await enqueueSaleCompletedAccountingEvent({
+      organizationId,
+      branchId,
+      saleId: sale.id,
+      saleNumber: sale.saleNumber,
+      invoiceNumber: sale.invoiceNumber,
+      customerId: sale.customerId,
+      totalAmount: Number(sale.totalAmount),
+      taxableAmount: Number(sale.taxableAmount),
+      vatAmount: Number(sale.vatAmount),
+      paymentType: sale.paymentType,
+      splitPayments: splitPayments?.map((p) => ({
+        paymentMethod: p.paymentMethod,
+        amount: Number(p.amount) || 0,
+      })),
+      cogs,
+    })
+  } catch (e) {
+    console.error("[Accounting outbox] enqueue failed:", e)
+  }
+
   const completeSale = await prisma.sale.findUnique({
     where: { id: sale.id },
     include: {
