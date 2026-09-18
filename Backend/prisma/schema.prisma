@@ -34,6 +34,7 @@ model Organization {
   customers                Customer[]
   debtPayments             DebtPayment[]
   ebmOutbox                EbmOutbox[]
+  accountingOutbox         ErpAccountingOutbox[]
   ebmQueue                 EbmQueue[]
   ebmTransactions          EbmTransaction[]
   expenses                 Expense[]
@@ -682,6 +683,7 @@ model Sale {
   ebmQueueItems        EbmQueue[]       @relation("SaleEbmQueue")
   ebmTransactions      EbmTransaction[] @relation("SaleEbmTransactions")
   ebmOutboxItems       EbmOutbox[]
+  accountingOutboxItems ErpAccountingOutbox[]
   prcOrdCd             String?          @map("prc_ord_cd") // RRA purchase order code used for this sale (single-use)
   saleItems            SaleItem[]
   customer             Customer         @relation(fields: [customerId], references: [id])
@@ -1131,6 +1133,38 @@ model EbmOutbox {
   @@index([status, nextAttemptAt])
   @@index([idempotencyKey])
   @@map("ebm_outbox")
+}
+
+enum AccountingOutboxStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  DEAD_LETTER
+}
+
+/// Thin durable outbox: ERP operational events → Accounting microservice ingest.
+/// No journal math lives here — Accounting owns posting.
+model ErpAccountingOutbox {
+  id             Int                    @id @default(autoincrement())
+  organizationId Int
+  saleId         Int?
+  eventType      String
+  idempotencyKey String                 @unique
+  payload        Json
+  status         AccountingOutboxStatus @default(PENDING)
+  retryCount     Int                    @default(0)
+  lastError      String?
+  nextAttemptAt  DateTime               @default(now())
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sale         Sale?        @relation(fields: [saleId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([status, nextAttemptAt])
+  @@map("erp_accounting_outbox")
 }
 
 /// Local cache of the RRA VSDC "Codes" master list (/code/selectCodes,

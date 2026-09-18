@@ -59,6 +59,7 @@ import {
   dailyReportJob,
 } from "./jobs/product-expiry.job";
 import { ebmOutboxJob } from "./jobs/ebm-outbox.job";
+import { accountingOutboxJob } from "./jobs/accounting-outbox.job";
 import { vsdcHeartbeatJob } from "./jobs/vsdc-heartbeat.job";
 import { zReportJob } from "./jobs/z-report.job";
 import { rraMasterDataJob } from "./jobs/rra-master-data.job";
@@ -210,6 +211,7 @@ if (process.env.RUN_JOBS !== "false") {
   productExpiryAlertJob.start();
   dailyReportJob.start();
   ebmOutboxJob.start();
+  accountingOutboxJob.start();
   vsdcHeartbeatJob.start();
   zReportJob.start();
   rraMasterDataJob.start();
