@@ -492,7 +492,7 @@ model Product {
   pkgUnitCd            String? // Packaging unit code (e.g. "CT", "BT")
   qtyUnitCd            String? // Quantity unit code (e.g. "U", "KG")
   packagingQty         Int? // Quantity per packaging unit (e.g. 24 pieces per carton)
-  origin               String?               @default("RW") // RRA origin country code (ItemSaveReq orgnNatCd, e.g. "RW", "UG")
+  origin               String? // RRA origin country code from `/code/selectCodes` class 05 (ItemSaveReq orgnNatCd)
   useInsurance         Boolean               @default(false) // RRA ItemSaveReq isrcAplcbYn — can this item be billed against a customer's insurance
   itemStandardName     String? // RRA ItemSaveReq itemStdNm — optional standardized item name
   additionalInfo       String? // RRA ItemSaveReq addInfo (max 7 chars)
@@ -1173,7 +1173,7 @@ model ErpAccountingOutbox {
 model RraCode {
   id             Int          @id @default(autoincrement())
   organizationId Int
-  cdCls          String // code class, e.g. "04" (payment type), "24" (tax type)
+    cdCls          String // VSDC code class, e.g. "04" taxation type, "05" country, "07" payment type
   cdClsNm        String?
   cd             String // the code value
   cdNm           String?

@@ -295,7 +295,11 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         const outQty = stockAggregates.find((a) => a.direction === "OUT")?._sum.quantity || 0
         const currentStock = inQty - outQty
 
-        if (currentStock < item.quantity && !orgSettings.featureFlags.allowNegativeStock) {
+        if (
+          currentStock < item.quantity
+          && !orgSettings.featureFlags.allowNegativeStock
+          && !org?.trainingMode
+        ) {
           throw new Error(
             `Insufficient stock for product ${product.name}. Available: ${currentStock}, Requested: ${item.quantity}`,
           )

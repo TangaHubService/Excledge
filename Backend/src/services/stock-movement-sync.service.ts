@@ -3,6 +3,7 @@ import type { InventoryMovementType, InventoryDirection } from '@prisma/client';
 import { isEbmEnabled, fix2, toRraDate } from './rra-ebm.service';
 import { buildVsdcEnvelope, saveStockItems, saveStockMaster, validateVsdcEnvelope } from './vsdc-api.service';
 import { getCurrentStock } from './inventory-ledger.service';
+import { getTaxRateForCode } from './rra-code.service';
 import logger from '../utils/logger';
 
 /**
@@ -118,9 +119,15 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
   const qty = Math.abs(entry.quantity);
   const prc = entry.unitCost != null ? Math.abs(entry.unitCost.toNumber()) : Math.abs(product.unitPrice.toNumber());
   const splyAmt = fix2(qty * prc);
-  const taxTyCd = (product.taxCode ?? 'B').toUpperCase();
-  // §4.19: incoming purchases carry input VAT; other adjustments net to zero tax.
-  const rate = taxTyCd === 'B' ? 18 : 0;
+  const taxTyCd = product.taxCode?.trim().toUpperCase() || '';
+  if (!taxTyCd) {
+    await prisma.inventoryLedger.update({
+      where: { id: ledgerId },
+      data: { ebmSyncStatus: 'FAILED', ebmError: 'Product has no taxCode — pick a taxation type from RRA codes (class 04)' },
+    });
+    return { success: false, error: 'Product has no taxCode' };
+  }
+  const rate = await getTaxRateForCode(entry.organizationId, taxTyCd);
   const taxAmt = sarTyCd === '02' && rate > 0 ? fix2(splyAmt - splyAmt / (1 + rate / 100)) : 0;
   const taxblAmt = fix2(splyAmt - taxAmt);
 

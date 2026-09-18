@@ -7,11 +7,13 @@ interface VsdcStatusResult {
   status: VsdcStatus;
   hoursSinceSync: number;
   message: string | null;
+  trainingMode: boolean;
 }
 
 interface EbmStatusPayload {
   enabled: boolean;
   online: boolean;
+  trainingMode?: boolean;
   lastContact: string | null;
   offlineLimitMs: number;
 }
@@ -45,7 +47,7 @@ export function useVsdcOnlineStatus(): VsdcStatusResult {
   }, []);
 
   if (!payload || !payload.enabled) {
-    return { status: 'healthy', hoursSinceSync: 0, message: null };
+    return { status: 'healthy', hoursSinceSync: 0, message: null, trainingMode: !!payload?.trainingMode };
   }
 
   const lastContact = payload.lastContact ? new Date(payload.lastContact) : null;
@@ -59,11 +61,12 @@ export function useVsdcOnlineStatus(): VsdcStatusResult {
     return {
       status: 'blocked',
       hoursSinceSync,
+      trainingMode: !!payload.trainingMode,
       message:
         `CRITICAL: EBM System Locked. No successful VSDC contact for ${hoursSinceSync}h (limit ${limitHours}h). ` +
         `Receipt generation is blocked until the gateway acknowledges a transaction. Contact administration.`,
     };
   }
 
-  return { status: 'healthy', hoursSinceSync, message: null };
+  return { status: 'healthy', hoursSinceSync, message: null, trainingMode: !!payload.trainingMode };
 }

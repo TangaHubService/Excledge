@@ -187,6 +187,7 @@ See also \`docs/ebm-vsdc/INTEGRATION.md\` and \`docs/ebm-vsdc/CERTIFICATION-CHEC
         properties: {
           enabled: { type: 'boolean' },
           online: { type: 'boolean' },
+          trainingMode: { type: 'boolean' },
           lastContact: { type: 'string', format: 'date-time', nullable: true },
           offlineLimitMs: { type: 'integer' },
         },
@@ -495,6 +496,15 @@ See also \`docs/ebm-vsdc/INTEGRATION.md\` and \`docs/ebm-vsdc/CERTIFICATION-CHEC
         responses: { '200': { description: 'Codes grouped by class' } },
       },
     },
+    '/api/organizations/{organizationId}/rra/code-catalog': {
+      get: {
+        tags: ['RRA Master Data'],
+        summary: 'Typed catalog of cached `/code/selectCodes` lists',
+        description: 'Tax types (04), tourism tax (03/08), countries (05), property types (02), units (10/17), refund reasons (32), etc.',
+        parameters: [{ $ref: '#/components/parameters/organizationId' }],
+        responses: { '200': { description: 'Code catalog for ERP dropdowns' } },
+      },
+    },
     '/api/organizations/{organizationId}/rra/codes/sync': {
       post: {
         tags: ['RRA Master Data'],
@@ -684,6 +694,19 @@ See also \`docs/ebm-vsdc/INTEGRATION.md\` and \`docs/ebm-vsdc/CERTIFICATION-CHEC
                   reject: { type: 'boolean' },
                   prcOrdCd: { type: 'string' },
                   branchId: { type: 'integer' },
+                  items: {
+                    type: 'array',
+                    description: 'Optional per-line buyer names / product links. `itemNm` is stored as the local catalog name (VSDC `itemNm`); the supplier name stays on `spplrItemNm`.',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        itemId: { type: 'integer' },
+                        itemSeq: { type: 'integer' },
+                        itemNm: { type: 'string' },
+                        linkProductId: { type: 'integer' },
+                      },
+                    },
+                  },
                 },
               },
             },

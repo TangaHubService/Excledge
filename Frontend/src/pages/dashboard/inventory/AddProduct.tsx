@@ -26,8 +26,9 @@ import { apiClient } from '../../../lib/api-client'
 import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response'
 import { useBranch } from '../../../context/BranchContext'
 import { BranchRequiredNotice } from '../../../components/BranchRequiredNotice'
-import { MEASUREMENT_UNIT_OPTIONS, PACKAGING_UNIT_OPTIONS, ORIGIN_COUNTRY_OPTIONS, ORIGIN_COUNTRY_LABELS, QUANTITY_UNIT_OPTIONS } from '../../../types/ebm'
+import { MEASUREMENT_UNIT_OPTIONS, PACKAGING_UNIT_OPTIONS, QUANTITY_UNIT_OPTIONS } from '../../../types/ebm'
 import { RraItemClassPicker } from '../../../components/inventory/RraItemClassPicker'
+import { useRraCodeCatalog } from '../../../lib/useRraCodeCatalog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table'
 import type { Product } from '../../../types'
 
@@ -123,7 +124,7 @@ const addProductSchema = yup.object({
             .required('RRA item classification is required')
             .matches(/^\d{1,10}$/, 'Class code must be 1–10 digits'),
         itemStandardName: yup.string().max(200),
-        origin: yup.string().oneOf(Object.keys(ORIGIN_COUNTRY_LABELS), 'Invalid country code - must be a valid RRA-supported country').required('Origin country is required'),
+        origin: yup.string().matches(/^[A-Za-z]{2}$/, 'Origin must be a 2-letter RRA country code').required('Origin country is required'),
         useInsurance: yup.boolean(),
         additionalInfo: yup.string().max(7, 'Up to 7 characters'),
         l1SalePrice: priceTierSchema,
@@ -169,6 +170,16 @@ type StepId = (typeof STEPS)[number]['id']
 export default function AddProduct({ onSuccess, product, initialItemType = 'PRODUCT' }: AddProductProps) {
     const navigate = useNavigate()
     const { selectedBranchId } = useBranch()
+    const { catalog } = useRraCodeCatalog()
+    const countryOptions = catalog.countries.length
+        ? catalog.countries.map((c) => ({ value: c.code, label: `${c.label} (${c.code})` }))
+        : []
+    const pkgOptions = catalog.pkgUnits.length
+        ? catalog.pkgUnits.map((u) => ({ value: u.code, label: `${u.label} (${u.code})` }))
+        : PACKAGING_UNIT_OPTIONS
+    const qtyOptions = catalog.qtyUnits.length
+        ? catalog.qtyUnits.map((u) => ({ value: u.code, label: `${u.label} (${u.code})` }))
+        : QUANTITY_UNIT_OPTIONS
     const [currentStep, setCurrentStep] = useState<StepId>('basic')
 
     const [itemType, setItemType] = useState<'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE'>(initialItemType)
@@ -241,7 +252,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
             packagingQty: undefined as number | undefined,
             itemClsCd: '',
             itemStandardName: '',
-            origin: 'RW',
+            origin: '',
             useInsurance: false,
             additionalInfo: '',
             l1SalePrice: undefined as number | undefined,
@@ -274,10 +285,11 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
     // Item code preview - computes the expected RRA itemCd based on current form values
     // Note: This is a preview only; the actual sequence number is allocated by the backend
     const itemCdPreview = (() => {
-        const origin = watch('origin') || 'RW';
-        const pkgUnitCd = watch('pkgUnitCd') || 'CT';
+        const origin = watch('origin') || '';
+        const pkgUnitCd = watch('pkgUnitCd') || pkgOptions.find((u) => u.value === 'CT')?.value || pkgOptions[0]?.value || '';
         const qtyUnitCd = watch('qtyUnitCd') ||
-            ({ PCS: 'U', KG: 'KG', LTR: 'LTR', MTR: 'MTR', BOX: 'BX', PAIR: 'PR', DOZEN: 'DZ', GRAM: 'GRM', ML: 'U', OTHER: 'U' } as Record<string, string>)[watch('measurementUnit') || 'PCS'] || 'U';
+            ({ PCS: 'U', KG: 'KG', LTR: 'LTR', MTR: 'MTR', BOX: 'BX', PAIR: 'PR', DOZEN: 'DZ', GRAM: 'GRM', ML: 'U', OTHER: 'U' } as Record<string, string>)[watch('measurementUnit') || 'PCS'] || '';
+        if (!origin || !pkgUnitCd || !qtyUnitCd) return '';
         const typeDigit = watchItemType === 'RAW_MATERIAL' ? '1' : watchItemType === 'SERVICE' ? '3' : '2';
 
         // Preview with placeholder sequence (actual sequence assigned by backend)
@@ -306,15 +318,28 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
     }, [watchItemType, resetField, setValue])
 
     useEffect(() => {
-        apiClient.getTaxCodes().then(setTaxCodes).catch(() => {
-            setTaxCodes([
-                { code: 'A', label: 'A — VAT Exempt (0%)', rate: 0, category: 'EXEMPT' },
-                { code: 'B', label: 'B — Standard VAT (18%)', rate: 18, category: 'STANDARD' },
-                { code: 'C', label: 'C — Export / Zero-rated (0%)', rate: 0, category: 'ZERO_RATED' },
-                { code: 'D', label: 'D — Not VAT Registered (0%)', rate: 0, category: 'NON_TAXABLE' },
-            ])
-        })
-    }, [])
+            apiClient.getTaxCodes().then((codes) => {
+                if (catalog.taxTypes.length) {
+                    setTaxCodes(catalog.taxTypes.map((t) => ({
+                        code: t.code,
+                        label: t.label,
+                        rate: t.rate,
+                        category: t.category,
+                    })))
+                } else {
+                    setTaxCodes(codes)
+                }
+            }).catch(() => {
+                if (catalog.taxTypes.length) {
+                    setTaxCodes(catalog.taxTypes.map((t) => ({
+                        code: t.code,
+                        label: t.label,
+                        rate: t.rate,
+                        category: t.category,
+                    })))
+                }
+            })
+    }, [catalog.taxTypes])
 
     useEffect(() => {
         if (!selectedBranchId) return
@@ -366,7 +391,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
             setValue('packagingQty', product.packagingQty ?? undefined)
             setValue('itemClsCd', product.itemClsCd || '')
             setValue('itemStandardName', product.itemStandardName || '')
-            setValue('origin', product.origin || 'RW')
+            setValue('origin', product.origin || '')
             setValue('useInsurance', !!product.useInsurance)
             setValue('additionalInfo', product.additionalInfo || '')
             setValue('l1SalePrice', product.l1SalePrice ?? undefined)
@@ -522,7 +547,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                 itemType: data.itemType,
                 branchId: selectedBranchId,
                 imageUrl: imageUrl || undefined,
-                origin: data.origin || 'RW',
+                origin: data.origin?.trim().toUpperCase(),
                 useInsurance: !!data.useInsurance,
                 // Required by VSDC ItemSaveReq for all types including SERVICE
                 pkgUnitCd: data.pkgUnitCd,
@@ -1038,7 +1063,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                  }`}
                                              >
                                                  <option value="">Select packaging (e.g. Box, Carton)</option>
-                                                 {PACKAGING_UNIT_OPTIONS.map(u => (
+                                                 {pkgOptions.map(u => (
                                                      <option key={u.value} value={u.value}>{u.label}</option>
                                                  ))}
                                              </select>
@@ -1053,7 +1078,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
                                              >
                                                  <option value="">Auto-detect from measurement unit</option>
-                                                 {QUANTITY_UNIT_OPTIONS.map(u => (
+                                                 {qtyOptions.map(u => (
                                                      <option key={u.value} value={u.value}>{u.label}</option>
                                                  ))}
                                              </select>
@@ -1085,7 +1110,8 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                     errors.origin ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
                                                 }`}
                                             >
-                                                {ORIGIN_COUNTRY_OPTIONS.map(c => (
+                                                <option value="">{countryOptions.length ? 'Select origin country' : 'Sync RRA codes to load countries'}</option>
+                                                {countryOptions.map(c => (
                                                     <option key={c.value} value={c.value}>{c.label}</option>
                                                 ))}
                                             </select>
@@ -1108,7 +1134,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                             }`}
                                         >
                                             <option value="">Select packaging</option>
-                                            {PACKAGING_UNIT_OPTIONS.map(u => (
+                                            {pkgOptions.map(u => (
                                                 <option key={u.value} value={u.value}>{u.label}</option>
                                             ))}
                                         </select>
@@ -1125,7 +1151,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                             }`}
                                         >
                                             <option value="">Select quantity unit</option>
-                                            {QUANTITY_UNIT_OPTIONS.map(u => (
+                                            {qtyOptions.map(u => (
                                                 <option key={u.value} value={u.value}>{u.label}</option>
                                             ))}
                                         </select>
@@ -1141,7 +1167,8 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                 errors.origin ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
                                             }`}
                                         >
-                                            {ORIGIN_COUNTRY_OPTIONS.map(c => (
+                                            <option value="">{countryOptions.length ? 'Select origin country' : 'Sync RRA codes to load countries'}</option>
+                                            {countryOptions.map(c => (
                                                 <option key={c.value} value={c.value}>{c.label}</option>
                                             ))}
                                         </select>
@@ -1278,7 +1305,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                             {watch('pkgUnitCd') && (
                                                 <ReviewRow
                                                     label="Packaging"
-                                                    value={`${PACKAGING_UNIT_OPTIONS.find(u => u.value === watch('pkgUnitCd'))?.label || watch('pkgUnitCd')}${watch('packagingQty') ? ` × ${watch('packagingQty')}` : ''}`}
+                                                    value={`${pkgOptions.find(u => u.value === watch('pkgUnitCd'))?.label || watch('pkgUnitCd')}${watch('packagingQty') ? ` × ${watch('packagingQty')}` : ''}`}
                                                 />
                                             )}
                                             {itemCdPreview && (
@@ -1287,7 +1314,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                     value={`${itemCdPreview} (sequence assigned on save)`}
                                                 />
                                             )}
-                                            <ReviewRow label="Origin" value={ORIGIN_COUNTRY_OPTIONS.find(c => c.value === watch('origin'))?.label || watch('origin') || 'Rwanda (RW)'} />
+                                            <ReviewRow label="Origin" value={countryOptions.find(c => c.value === watch('origin'))?.label || watch('origin') || '—'} />
                                         </div>
                                     </div>
                                 )}
@@ -1300,13 +1327,13 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                         <div className="px-4 py-3 space-y-2.5">
                                             <ReviewRow
                                                 label="Packaging"
-                                                value={PACKAGING_UNIT_OPTIONS.find(u => u.value === watch('pkgUnitCd'))?.label || watch('pkgUnitCd') || '-'}
+                                                value={pkgOptions.find(u => u.value === watch('pkgUnitCd'))?.label || watch('pkgUnitCd') || '-'}
                                             />
                                             <ReviewRow
                                                 label="Quantity Unit"
-                                                value={QUANTITY_UNIT_OPTIONS.find(u => u.value === watch('qtyUnitCd'))?.label || watch('qtyUnitCd') || '-'}
+                                                value={qtyOptions.find(u => u.value === watch('qtyUnitCd'))?.label || watch('qtyUnitCd') || '-'}
                                             />
-                                            <ReviewRow label="Origin" value={ORIGIN_COUNTRY_OPTIONS.find(c => c.value === watch('origin'))?.label || watch('origin') || 'Rwanda (RW)'} />
+                                            <ReviewRow label="Origin" value={countryOptions.find(c => c.value === watch('origin'))?.label || watch('origin') || '—'} />
                                             {itemCdPreview && (
                                                 <ReviewRow
                                                     label="Item Code (Preview)"

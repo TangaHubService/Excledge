@@ -31,6 +31,7 @@ import {
   actionImport,
   listRefundReasons,
   listPaymentMappings,
+  getCodeCatalog,
   syncBranches,
   syncStockMoves,
   pushCustomer,
@@ -57,6 +58,7 @@ router.get('/:organizationId/rra/status', authenticate, requireActiveSubscriptio
 router.post('/:organizationId/rra/sync-all', authenticate, requireActiveSubscription(), syncAll);
 
 router.get('/:organizationId/rra/codes', authenticate, requireActiveSubscription(), listCodes);
+router.get('/:organizationId/rra/code-catalog', authenticate, requireActiveSubscription(), getCodeCatalog);
 router.post('/:organizationId/rra/codes/sync', authenticate, requireActiveSubscription(), syncCodes);
 
 router.get('/:organizationId/rra/item-classes', authenticate, requireActiveSubscription(), searchItemClasses);

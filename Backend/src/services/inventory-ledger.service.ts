@@ -346,6 +346,69 @@ export async function addStock(params: AddStockParams) {
 }
 
 /**
+ * Active branch to book stock against: an explicit id, otherwise the org default.
+ */
+export async function resolveActiveBranchId(
+  organizationId: number,
+  preferred?: number | null,
+): Promise<number | null> {
+  if (preferred != null) return preferred;
+  const b = await prisma.branch.findFirst({
+    where: { organizationId, status: 'ACTIVE' },
+    orderBy: [{ isDefault: 'desc' }, { id: 'asc' }],
+    select: { id: true },
+  });
+  return b?.id ?? null;
+}
+
+/**
+ * Book a received quantity into both the ledger and the branch batch that POS
+ * / inventory listings use as on-hand stock. `addStock` alone only updates the
+ * ledger + Product.quantity cache, so EBM receipts would raise VSDC stock
+ * without changing what cashiers see locally.
+ */
+export async function receiveStockOnBranch(params: AddStockParams) {
+  const branchId = await resolveActiveBranchId(params.organizationId, params.branchId);
+  if (branchId == null) {
+    throw new Error('No active branch available to book received stock');
+  }
+  if (params.quantity <= 0) return null;
+
+  const batchNumber = params.batchNumber || params.reference || `RCV-${params.productId}`;
+  const unitCost = params.unitCost ?? 0;
+
+  const run = async (tx: any) => {
+    await tx.batch.upsert({
+      where: {
+        productId_batchNumber_branchId: {
+          productId: params.productId,
+          batchNumber,
+          branchId,
+        },
+      },
+      update: {
+        quantity: { increment: params.quantity },
+        unitCost,
+        isActive: true,
+      },
+      create: {
+        productId: params.productId,
+        organizationId: params.organizationId,
+        branchId,
+        batchNumber,
+        quantity: params.quantity,
+        unitCost,
+        isActive: true,
+      },
+    });
+    return addStock({ ...params, branchId, batchNumber, unitCost, tx });
+  };
+
+  if (params.tx) return run(params.tx);
+  return prisma.$transaction((tx) => run(tx));
+}
+
+/**
  * Remove stock from inventory (Stock OUT)
  * This is the primary function for removing inventory
  */

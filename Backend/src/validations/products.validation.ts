@@ -1,7 +1,4 @@
 import { z } from 'zod';
-import { VALID_RRA_COUNTRY_CODES } from '../constants/rra-country-codes';
-
-const rraCountryCodeEnum = z.enum(VALID_RRA_COUNTRY_CODES as [string, ...string[]]);
 
 export const createProductSchema = z.object({
   body: z.object({
@@ -14,22 +11,17 @@ export const createProductSchema = z.object({
     description: z.string().optional(),
     minStock: z.coerce.number().nonnegative('Minimum stock cannot be negative').default(10),
     taxCategory: z.enum(['STANDARD', 'ZERO_RATED', 'EXEMPT']).default('STANDARD'),
-    // E is reserved for RRA internal use only and must never be assignable to a product.
-    taxCode: z.enum(['A', 'B', 'C', 'D'], {
-      message: 'Tax code must be one of A, B, C, or D',
-    }),
+    taxCode: z.string().min(1, 'Tax code is required').max(5),
     measurementUnit: z.enum(['PCS', 'KG', 'LTR', 'MTR', 'BOX', 'PAIR', 'DOZEN', 'GRAM', 'ML', 'OTHER']).default('PCS'),
     itemType: z.enum(['PRODUCT', 'RAW_MATERIAL', 'SERVICE']).default('PRODUCT'),
     expiryDate: z.string().datetime().optional(),
     barcode: z.string().optional(),
-    // VSDC ItemSaveReq requires pkgUnitCd — do not invent a silent default at sync time.
     pkgUnitCd: z.string().min(1, 'Packaging unit code (pkgUnitCd) is required').max(5),
     qtyUnitCd: z.string().min(1).max(5).optional(),
     packagingQty: z.coerce.number().int().positive('Packaging quantity must be positive').optional(),
-    // Required for all item types including SERVICE (VSDC §3.3.4.1).
     itemClsCd: z.string().min(1, 'RRA item classification (itemClsCd) is required').max(10),
     itemStandardName: z.string().max(200, 'Item standard name too long').optional(),
-    origin: rraCountryCodeEnum.optional(),
+    origin: z.string().regex(/^[A-Za-z]{2}$/, 'Origin must be a 2-letter RRA country code').optional(),
     useInsurance: z.coerce.boolean().default(false),
     additionalInfo: z.string().max(7, 'Additional info must be 7 characters or fewer').optional(),
     l1SalePrice: z.coerce.number().nonnegative('Price tier 1 cannot be negative').optional(),
@@ -68,7 +60,7 @@ export const updateProductSchema = z.object({
     minStock: z.coerce.number().nonnegative('Minimum stock cannot be negative').optional(),
     taxCategory: z.enum(['STANDARD', 'ZERO_RATED', 'EXEMPT']).optional(),
     // E is reserved for RRA internal use only and must never be assignable to a product.
-    taxCode: z.enum(['A', 'B', 'C', 'D']).optional(),
+    taxCode: z.string().min(1).max(5).optional(),
     measurementUnit: z.enum(['PCS', 'KG', 'LTR', 'MTR', 'BOX', 'PAIR', 'DOZEN', 'GRAM', 'ML', 'OTHER']).optional(),
     itemType: z.enum(['PRODUCT', 'RAW_MATERIAL', 'SERVICE']).optional(),
     expiryDate: z.string().datetime().optional().nullable(),
@@ -78,7 +70,7 @@ export const updateProductSchema = z.object({
     packagingQty: z.coerce.number().int().positive('Packaging quantity must be positive').optional().nullable(),
     itemClsCd: z.string().optional().nullable(),
     itemStandardName: z.string().max(200, 'Item standard name too long').optional().nullable(),
-    origin: rraCountryCodeEnum.optional().nullable(),
+    origin: z.string().regex(/^[A-Za-z]{2}$/, 'Origin must be a 2-letter RRA country code').optional().nullable(),
     useInsurance: z.coerce.boolean().optional(),
     additionalInfo: z.string().max(7, 'Additional info must be 7 characters or fewer').optional().nullable(),
     l1SalePrice: z.coerce.number().nonnegative('Price tier 1 cannot be negative').optional().nullable(),

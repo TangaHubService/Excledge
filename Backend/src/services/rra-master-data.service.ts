@@ -111,6 +111,15 @@ export async function syncRraCodes(organizationId: number, branchId?: number | n
     }
   }
 
+  const byClass = new Map<string, number>();
+  for (const cls of classes) {
+    byClass.set(cls.cdCls, (cls.dtlList ?? []).length);
+  }
+  logger.info(
+    `[RRA][CODES] synced org=${organizationId} fetched=${fetched} upserted=${upserted} ` +
+    `classes=${[...byClass.entries()].map(([id, n]) => `${id}:${n}`).join(',')}`,
+  );
+
   await saveCursor(organizationId, resource, runAt, `OK: ${upserted} codes`);
   return { resource, ok: true, fetched, upserted, lastReqDt: runAt };
 }

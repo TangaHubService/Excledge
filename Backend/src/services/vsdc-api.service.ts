@@ -542,7 +542,34 @@ export function selectCodes(envelope: VsdcEnvelope, lastReqDt: string) {
   if (config.ebm.useMock) {
     return Promise.resolve<VsdcLookupResult<{ clsList: RraCodeClass[] }>>({
       success: true, resultCd: '000', resultMsg: 'It is succeeded', raw: null,
-      data: { clsList: [{ cdCls: '07', cdClsNm: 'Payment Type', dtlList: [{ cd: '01', cdNm: 'CASH' }, { cd: '06', cdNm: 'MOBILE MONEY' }] }] },
+      data: { clsList: [
+        { cdCls: '02', cdClsNm: 'Property Type', dtlList: [{ cd: '01', cdNm: 'Hotel', useYn: 'Y', srtOrd: 1 }] },
+        { cdCls: '03', cdClsNm: 'Tourism Tax', dtlList: [{ cd: 'TT', cdNm: 'TT-3%', userDfnCd1: '3', useYn: 'Y', srtOrd: 1 }] },
+        { cdCls: '04', cdClsNm: 'Taxation Type', dtlList: [
+          { cd: 'A', cdNm: 'A-EX', userDfnCd1: '0', useYn: 'Y', srtOrd: 1 },
+          { cd: 'B', cdNm: 'B-18.00%', userDfnCd1: '18', useYn: 'Y', srtOrd: 2 },
+          { cd: 'C', cdNm: 'C', userDfnCd1: '0', useYn: 'Y', srtOrd: 3 },
+          { cd: 'D', cdNm: 'D', userDfnCd1: '0', useYn: 'Y', srtOrd: 4 },
+        ] },
+        { cdCls: '05', cdClsNm: 'Country', dtlList: [
+          { cd: 'KE', cdNm: 'KENYA', useYn: 'Y', srtOrd: 80 },
+          { cd: 'RW', cdNm: 'RWANDA', useYn: 'Y', srtOrd: 193 },
+        ] },
+        { cdCls: '07', cdClsNm: 'Payment Type', dtlList: [
+          { cd: '01', cdNm: 'CASH', useYn: 'Y', srtOrd: 1 },
+          { cd: '06', cdNm: 'MOBILE MONEY', useYn: 'Y', srtOrd: 6 },
+        ] },
+        { cdCls: '08', cdClsNm: 'Tourism Tax Type', dtlList: [{ cd: '1', cdNm: 'TT', useYn: 'Y', srtOrd: 1 }] },
+        { cdCls: '10', cdClsNm: 'Quantity Unit', dtlList: [
+          { cd: 'U', cdNm: 'Pieces / Item', useYn: 'Y' },
+          { cd: 'KG', cdNm: 'Kilogram', useYn: 'Y' },
+        ] },
+        { cdCls: '17', cdClsNm: 'Packing Unit', dtlList: [{ cd: 'CT', cdNm: 'Carton', useYn: 'Y' }] },
+        { cdCls: '32', cdClsNm: 'Refund Reason', dtlList: [
+          { cd: '06', cdNm: 'Refund', useYn: 'Y', srtOrd: 6 },
+          { cd: '13', cdNm: 'Other reason', useYn: 'Y', srtOrd: 13 },
+        ] },
+      ] },
     })
   }
   return postLookup<{ clsList: RraCodeClass[] }>('/code/selectCodes', envelope, { tin: envelope.tin, bhfId: envelope.bhfId, lastReqDt })

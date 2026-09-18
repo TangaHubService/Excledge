@@ -160,7 +160,7 @@ export default function SalesPage() {
   const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
   const [saleToRefund, setSaleToRefund] = useState<Sale | null>(null);
   const [refundReason, setRefundReason] = useState('');
-  const [refundRsnCd, setRefundRsnCd] = useState('06');
+  const [refundRsnCd, setRefundRsnCd] = useState('');
   const [refundReasons, setRefundReasons] = useState<Array<{ code: string; name: string }>>([]);
   const [isRefunding, setIsRefunding] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
@@ -262,7 +262,7 @@ export default function SalesPage() {
   const handleOpenRefundModal = (sale: Sale) => {
     setSaleToRefund(sale);
     setRefundReason('');
-    setRefundRsnCd('06');
+    setRefundRsnCd('');
     setIsRefundModalOpen(true);
     // RRA refund reason codes (code class 32) — same list the backend
     // enforces, so the operator can never pick a code VSDC rejects.
@@ -270,8 +270,11 @@ export default function SalesPage() {
       .then((res: any) => {
         const list = res?.data?.reasons ?? res?.reasons ?? [];
         if (Array.isArray(list) && list.length) setRefundReasons(list);
+        const def = res?.data?.default ?? res?.default;
+        if (typeof def === 'string' && def) setRefundRsnCd(def);
+        else if (Array.isArray(list) && list[0]?.code) setRefundRsnCd(list[0].code);
       })
-      .catch(() => { /* keep the fallback list below */ });
+      .catch(() => { /* keep the last-resort list below */ });
   };
 
   const handleRefundSubmit = async () => {

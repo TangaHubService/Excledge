@@ -14,19 +14,21 @@ type PrismaClientOrTx = typeof prisma | Prisma.TransactionClient;
 
 /**
  * Gets the origin nation code for an organization's product registration.
- * Falls back to 'RW' (Rwanda) if not configured.
- * Stored in OrganizationSetting.preferences.originCountryCode
+ * Reads OrganizationSetting.preferences.originCountryCode — never invents
+ * a country (including RW). Callers must require origin on the product
+ * when this returns null.
  */
 export async function getOriginNationCode(
   organizationId: number,
   client: PrismaClientOrTx = prisma,
-): Promise<string> {
+): Promise<string | null> {
   const settings = await client.organizationSetting.findUnique({
     where: { organizationId },
     select: { preferences: true },
   });
   const prefs = (settings?.preferences as Record<string, any>) ?? {};
-  return prefs.originCountryCode ?? 'RW';
+  const configured = typeof prefs.originCountryCode === 'string' ? prefs.originCountryCode.trim().toUpperCase() : '';
+  return configured || null;
 }
 
 /**

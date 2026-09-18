@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { apiClient } from '../lib/api-client';
 import { RraTaxCode, RRA_TAX_CODE_OPTIONS } from '../types/ebm';
 import {
   Select,
@@ -8,7 +10,7 @@ import {
 } from './ui/select';
 
 interface RraTaxCodeSelectProps {
-  value: RraTaxCode | null | undefined;
+  value: RraTaxCode | string | null | undefined;
   onChange: (value: RraTaxCode) => void;
   error?: string;
   disabled?: boolean;
@@ -16,6 +18,20 @@ interface RraTaxCodeSelectProps {
 }
 
 export function RraTaxCodeSelect({ value, onChange, error, disabled, className }: RraTaxCodeSelectProps) {
+  const [options, setOptions] = useState(RRA_TAX_CODE_OPTIONS);
+
+  useEffect(() => {
+    apiClient.getRraCodeCatalog()
+      .then((res: any) => {
+        const data = res?.data ?? res;
+        const types = (data?.taxTypes ?? []) as Array<{ code: string; label: string }>;
+        if (types.length) {
+          setOptions(types.map((t) => ({ value: t.code as RraTaxCode, label: t.label })));
+        }
+      })
+      .catch(() => { /* keep last-resort static options */ });
+  }, []);
+
   return (
     <div className="space-y-2">
       <Select
@@ -27,7 +43,7 @@ export function RraTaxCodeSelect({ value, onChange, error, disabled, className }
           <SelectValue placeholder="Select tax code" />
         </SelectTrigger>
         <SelectContent>
-          {RRA_TAX_CODE_OPTIONS.map((opt) => (
+          {options.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
               {opt.label}
             </SelectItem>

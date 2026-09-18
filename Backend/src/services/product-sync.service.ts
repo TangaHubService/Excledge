@@ -96,6 +96,13 @@ export async function syncProductToRra(
     // exactly, so the payload can be read alongside the spec without translation.
     // origin is stored on the product; fallback to org default if somehow missing
     const origin = product.origin ?? (await getOriginNationCode(product.organizationId));
+    if (!origin) {
+      await prisma.product.update({
+        where: { id: productId },
+        data: { ebmSyncStatus: 'FAILED' },
+      });
+      return { success: false, error: 'Product is missing origin country (orgnNatCd) — pick a country from the RRA code list (class 05)' };
+    }
 
     const payload: Record<string, unknown> = {
       itemCd: product.itemCd,

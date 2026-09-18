@@ -15,6 +15,7 @@ import { History, Edit } from "lucide-react";
 import InventoryHistoryDialog from "./InventoryHistoryDialog";
 import StockAdjustmentDialog from "./StockAdjustmentDialog";
 import { PACKAGING_UNIT_LABELS } from "../../../types/ebm";
+import { useRraCodeCatalog } from "../../../lib/useRraCodeCatalog";
 
 
 // Helper function to compute remaining days
@@ -37,8 +38,20 @@ export default function ViewProductDialog({
 
   const { t } = useTranslation();
   const { theme } = useTheme();
+  const { catalog } = useRraCodeCatalog();
   const [showHistory, setShowHistory] = useState(false);
   const [showAdjustment, setShowAdjustment] = useState(false);
+
+  const taxLabel = (() => {
+    if (!viewProduct?.taxCode) return '';
+    const fromCatalog = catalog.taxTypes.find((t) => t.code === viewProduct.taxCode);
+    if (fromCatalog) {
+      return fromCatalog.label.includes(fromCatalog.code)
+        ? fromCatalog.label
+        : `${fromCatalog.code} — ${fromCatalog.label} (${fromCatalog.rate}%)`;
+    }
+    return viewProduct.taxCode;
+  })();
 
 
   return (
@@ -123,11 +136,7 @@ export default function ViewProductDialog({
                     Tax Category
                   </p>
                   <p className="mt-1">
-                    {viewProduct.taxCode === 'A' ? 'A — VAT Exempt (0%)' :
-                     viewProduct.taxCode === 'B' ? 'B — Standard VAT (18%)' :
-                     viewProduct.taxCode === 'C' ? 'C — Export / Zero-rated (0%)' :
-                     viewProduct.taxCode === 'D' ? 'D — Not VAT Registered (0%)' :
-                     viewProduct.taxCode}
+                    {taxLabel}
                   </p>
                 </div>
               )}

@@ -2,7 +2,11 @@ import { prisma } from '../lib/prisma';
 import type { Prisma } from '@prisma/client';
 import { isEbmEnabled, fix2, toRraDate, toRraDateTime } from './rra-ebm.service';
 import { buildVsdcEnvelope, selectPurchases, savePurchase, validateVsdcEnvelope, toRraReqDt } from './vsdc-api.service';
-import { addStock } from './inventory-ledger.service';
+import { receiveStockOnBranch, resolveActiveBranchId } from './inventory-ledger.service';
+import { allocateItemCd, getOriginNationCode, DEFAULT_PKG_UNIT_CD } from './item-code.service';
+import { TaxService } from './tax.service';
+import { getTaxationTypes } from './rra-code.service';
+import { syncProductToRra } from './product-sync.service';
 import logger from '../utils/logger';
 
 /**
@@ -118,10 +122,154 @@ export async function syncRraPurchases(
 const A_D = ['A', 'B', 'C', 'D'] as const;
 const TAX_RATES: Record<string, number> = { A: 0, B: 18, C: 0, D: 0 };
 
+const QTY_UNIT_TO_MEASUREMENT: Record<string, string> = {
+  U: 'PCS', KG: 'KG', LTR: 'LTR', MTR: 'MTR', BX: 'BOX', PR: 'PAIR', DZ: 'DOZEN', GRM: 'GRAM',
+};
+
+/** Per-line overrides sent when the operator confirms a purchase. */
+export type PurchaseItemOverride = {
+  itemId?: number;
+  itemSeq?: number;
+  /** Buyer's catalog name — sent to VSDC as `itemNm`; supplier name stays on `spplrItemNm`. */
+  itemNm?: string;
+  /** Existing local product to receive this line's stock. */
+  linkProductId?: number;
+};
+
+type PurchaseLine = {
+  id: number;
+  itemSeq: number;
+  itemCd: string | null;
+  itemClsCd: string | null;
+  itemNm: string | null;
+  bcd: string | null;
+  pkgUnitCd: string | null;
+  qtyUnitCd: string | null;
+  taxTyCd: string | null;
+  prc: { toNumber: () => number };
+};
+
+type ResolvedProduct = { id: number; name: string; itemCd: string | null };
+
+function overrideFor(it: PurchaseLine, items?: PurchaseItemOverride[]): PurchaseItemOverride | undefined {
+  if (!items?.length) return undefined;
+  return items.find((o) =>
+    (o.itemId != null && o.itemId === it.id) || (o.itemSeq != null && o.itemSeq === it.itemSeq),
+  );
+}
+
+function localNameFor(it: PurchaseLine, ov?: PurchaseItemOverride): string {
+  const named = ov?.itemNm?.trim();
+  return named || it.itemNm?.trim() || 'Item';
+}
+
+async function createProductFromPurchaseLine(
+  organizationId: number,
+  it: PurchaseLine,
+  localNm: string,
+): Promise<ResolvedProduct> {
+  const pkgUnitCd = it.pkgUnitCd?.trim() || DEFAULT_PKG_UNIT_CD;
+  const qtyUnitCd = it.qtyUnitCd?.trim() || 'U';
+  const origin = await getOriginNationCode(organizationId);
+  const taxTyCd = (it.taxTyCd ?? '').trim().toUpperCase();
+  const types = await getTaxationTypes(organizationId);
+  const cachedTax = types.find((t) => t.code.toUpperCase() === taxTyCd);
+  const taxCode = (cachedTax?.code ?? (types.find((t) => t.rate === 0)?.code) ?? taxTyCd) as 'A' | 'B' | 'C' | 'D';
+  if (!taxCode) {
+    throw new Error('Cannot create a product from this purchase line: no taxation type on the line and none cached (class 04)');
+  }
+  const prc = Math.abs(it.prc.toNumber());
+  const itemCd = origin
+    ? await allocateItemCd(organizationId, 'PRODUCT', pkgUnitCd, qtyUnitCd, origin)
+    : null;
+  const product = await prisma.product.create({
+    data: {
+      name: localNm,
+      organizationId,
+      unitPrice: prc,
+      purchasePrice: prc,
+      quantity: 0,
+      taxCode,
+      taxCategory: TaxService.getTaxCategory(taxCode),
+      measurementUnit: (QTY_UNIT_TO_MEASUREMENT[qtyUnitCd] ?? 'PCS') as 'PCS' | 'KG' | 'LTR' | 'MTR' | 'BOX' | 'PAIR' | 'DOZEN' | 'GRAM' | 'OTHER',
+      itemType: 'PRODUCT',
+      itemCd,
+      itemClsCd: it.itemClsCd ?? null,
+      pkgUnitCd,
+      qtyUnitCd,
+      barcode: it.bcd?.trim() || null,
+      origin,
+    },
+    select: { id: true, name: true, itemCd: true },
+  });
+  if (it.itemClsCd) {
+    const sync = await syncProductToRra(product.id);
+    if (!sync.success) {
+      logger.warn(`[EBM] new product #${product.id} from purchase confirm did not sync to RRA: ${sync.error}`);
+    }
+  }
+  return product;
+}
+
+async function resolvePurchaseLineProduct(
+  organizationId: number,
+  it: PurchaseLine,
+  ov?: PurchaseItemOverride,
+): Promise<{ product: ResolvedProduct; localNm: string } | { error: string }> {
+  const localNm = localNameFor(it, ov);
+  const select = { id: true, name: true, itemCd: true } as const;
+  let product: ResolvedProduct | null = null;
+
+  if (ov?.linkProductId != null) {
+    product = await prisma.product.findFirst({
+      where: { id: ov.linkProductId, organizationId, deletedAt: null },
+      select,
+    });
+    if (!product) return { error: `Linked product ${ov.linkProductId} was not found` };
+  }
+
+  if (!product && it.itemCd) {
+    product = await prisma.product.findFirst({
+      where: { organizationId, itemCd: it.itemCd, deletedAt: null },
+      select,
+    });
+  }
+
+  if (!product) {
+    product = await prisma.product.findFirst({
+      where: {
+        organizationId,
+        deletedAt: null,
+        isActive: true,
+        name: { equals: localNm, mode: 'insensitive' },
+      },
+      select,
+    });
+  }
+
+  if (!product) {
+    product = await createProductFromPurchaseLine(organizationId, it, localNm);
+  } else if (localNm !== product.name) {
+    product = await prisma.product.update({
+      where: { id: product.id },
+      data: { name: localNm },
+      select,
+    });
+  }
+
+  return { product, localNm };
+}
+
 export async function confirmRraPurchase(
   organizationId: number,
   rraPurchaseId: number,
-  opts: { branchId?: number | null; userId?: number; reject?: boolean; prcOrdCd?: string } = {},
+  opts: {
+    branchId?: number | null;
+    userId?: number;
+    reject?: boolean;
+    prcOrdCd?: string;
+    items?: PurchaseItemOverride[];
+  } = {},
 ): Promise<{ success: boolean; error?: string }> {
   const rp = await prisma.rraPurchase.findFirst({
     where: { id: rraPurchaseId, organizationId },
@@ -149,9 +297,16 @@ export async function confirmRraPurchase(
   const taxblByBand: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 };
   const taxByBand: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 };
 
+  const resolved: Array<{ product: ResolvedProduct; localNm: string }> = [];
+  for (const it of rp.items) {
+    const mapped = await resolvePurchaseLineProduct(organizationId, it, overrideFor(it, opts.items));
+    if ('error' in mapped) return { success: false, error: mapped.error };
+    resolved.push(mapped);
+  }
+
   const itemList = rp.items.map((it, idx) => {
-    const band = (it.taxTyCd ?? 'B').toUpperCase();
-    const slot = A_D.includes(band as any) ? band : 'B';
+    const band = (it.taxTyCd ?? '').toUpperCase();
+    const slot = A_D.includes(band as any) ? band : 'A';
     const qty = Math.abs(it.qty.toNumber());
     const prc = Math.abs(it.prc.toNumber());
     const splyAmt = fix2(it.splyAmt != null ? Math.abs(it.splyAmt.toNumber()) : qty * prc);
@@ -162,11 +317,14 @@ export async function confirmRraPurchase(
     const taxblAmt = fix2(lineTot);
     taxblByBand[slot] = fix2(taxblByBand[slot] + taxblAmt);
     taxByBand[slot] = fix2(taxByBand[slot] + taxAmt);
+    const local = resolved[idx];
+    // `itemNm` / `itemCd` are the buyer's catalog values; `spplr*` keep the
+    // supplier's original name and code from the pulled sale.
     return {
       itemSeq: it.itemSeq ?? idx + 1,
-      itemCd: it.itemCd ?? undefined,
+      itemCd: local.product.itemCd ?? it.itemCd ?? undefined,
       itemClsCd: it.itemClsCd ?? undefined,
-      itemNm: it.itemNm ?? 'Item',
+      itemNm: local.localNm,
       bcd: it.bcd ?? undefined,
       spplrItemClsCd: it.itemClsCd ?? undefined,
       spplrItemCd: it.itemCd ?? undefined,
@@ -251,46 +409,40 @@ export async function confirmRraPurchase(
     // already booked the stock-in from /trnsPurchase/savePurchases (pchsSttsCd
     // 02), so these ledger rows are written with skipEbmSync — re-sending them
     // via /stock/saveStockItems would double-count the same receipt at the VSDC.
+    // receiveStockOnBranch also upserts the branch batch POS/inventory read.
+    const stockBranchId = await resolveActiveBranchId(organizationId, opts.branchId);
     let stockBooked = 0;
-    if (opts.branchId != null) {
-      const itemCds = rp.items.map((it) => it.itemCd).filter((c): c is string => !!c);
-      const productByCd = new Map(
-        (itemCds.length
-          ? await prisma.product.findMany({
-              where: { organizationId, itemCd: { in: itemCds } },
-              select: { id: true, itemCd: true },
-            })
-          : []
-        ).map((p) => [p.itemCd as string, p.id]),
-      );
-      for (const it of rp.items) {
-        const productId = it.itemCd ? productByCd.get(it.itemCd) : undefined;
+    if (stockBranchId != null) {
+      for (let i = 0; i < rp.items.length; i++) {
+        const it = rp.items[i];
         const qty = Math.round(Math.abs(it.qty.toNumber()));
-        if (!productId || qty <= 0) continue;
-        await addStock({
+        if (qty <= 0) continue;
+        const reference = `RRA-PURCHASE-${rp.spplrTin}-${rp.spplrInvcNo}`;
+        await receiveStockOnBranch({
           organizationId,
-          productId,
+          productId: resolved[i].product.id,
           userId: opts.userId ?? 0,
           quantity: qty,
           movementType: 'PURCHASE',
-          branchId: opts.branchId,
+          branchId: stockBranchId,
           unitCost: Math.abs(it.prc.toNumber()),
-          reference: `RRA-PURCHASE-${rp.spplrTin}-${rp.spplrInvcNo}`,
+          reference,
           referenceType: 'RRA_PURCHASE',
+          batchNumber: reference,
           note: `Confirmed RRA purchase from ${rp.spplrNm ?? rp.spplrTin}`,
           skipEbmSync: true,
         });
         stockBooked += 1;
       }
     } else {
-      logger.warn(`[EBM] confirm RRA purchase #${rraPurchaseId}: no branch supplied — local stock not booked`);
+      logger.warn(`[EBM] confirm RRA purchase #${rraPurchaseId}: no active branch — local stock not booked`);
     }
 
     await prisma.organization.update({
       where: { id: organizationId },
       data: { lastSuccessfulVdsContact: new Date() },
     });
-    logger.info(`[EBM] confirmed RRA purchase #${rraPurchaseId} — ${stockBooked} item(s) booked into branch ${opts.branchId ?? '-'} stock`);
+    logger.info(`[EBM] confirmed RRA purchase #${rraPurchaseId} — ${stockBooked} item(s) booked into branch ${stockBranchId ?? '-'} stock`);
     return { success: true };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Purchase confirmation failed';

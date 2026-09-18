@@ -1,11 +1,10 @@
 /**
- * RRA VSDC Supported Country Codes (ISO 3166-1 alpha-2)
- * 
- * This list mirrors the RRA VSDC specification's country code table.
- * Rwanda is listed first as the default for locally sourced goods.
- * 
- * Source: RRA VSDC API Documentation v1.0.5
- * Used for: product origin (orgnNatCd), itemCd generation
+ * Static ISO 3166-1 alpha-2 country names used only as a last-resort lookup
+ * when `/code/selectCodes` class 05 has not been cached yet.
+ *
+ * Do not use these as silent payload defaults. Product origin (`orgnNatCd`)
+ * and itemCd generation must come from the cached class-05 list or an
+ * explicit operator/org preference — never invent `RW`.
  */
 export const RRA_COUNTRY_CODES: Record<string, string> = {
   RW: 'Rwanda',
@@ -76,7 +75,7 @@ export const RRA_COUNTRY_CODES: Record<string, string> = {
 /** Array of valid RRA country code keys for validation */
 export const VALID_RRA_COUNTRY_CODES: string[] = Object.keys(RRA_COUNTRY_CODES);
 
-/** Default country code (Rwanda) */
+/** Present for tests/docs only — never send this as a silent VSDC default. */
 export const DEFAULT_RRA_COUNTRY_CODE = 'RW';
 
 /**

@@ -8,7 +8,7 @@ import {
   validateVsdcEnvelope,
   toRraReqDt,
 } from './vsdc-api.service';
-import { addStock } from './inventory-ledger.service';
+import { receiveStockOnBranch, resolveActiveBranchId } from './inventory-ledger.service';
 import logger from '../utils/logger';
 
 /**
@@ -195,20 +195,29 @@ export async function actionRraImport(
     });
 
     // §74: an approved import affects stock in real time. When a local product
-    // is linked, book the stock-in — the stock-sync batch reports it to RRA as
-    // an Import (sarTyCd 01) via /stock/saveStockItems + /stockMaster.
-    if (action === 'approve' && opts.linkProductId && opts.branchId != null && line.qty) {
-      await addStock({
-        organizationId,
-        productId: opts.linkProductId,
-        userId: opts.userId ?? 0,
-        quantity: Math.round(line.qty.toNumber()),
-        movementType: 'PURCHASE',
-        branchId: opts.branchId,
-        reference: `IMPORT-${line.taskCd}-${line.dclNo ?? line.dclDe}`,
-        referenceType: 'RRA_IMPORT',
-        note: `Approved import declaration ${line.dclNo ?? line.taskCd} line ${line.itemSeq}`,
-      });
+    // is linked, book the stock-in on the ledger *and* the branch batch POS
+    // reads — the stock-sync batch then reports it to RRA as an Import
+    // (sarTyCd 01) via /stock/saveStockItems + /stockMaster.
+    const stockBranchId = await resolveActiveBranchId(organizationId, opts.branchId);
+    if (action === 'approve' && opts.linkProductId && stockBranchId != null && line.qty) {
+      const qty = Math.round(line.qty.toNumber());
+      if (qty > 0) {
+        const reference = `IMPORT-${line.taskCd}-${line.dclNo ?? line.dclDe}`;
+        await receiveStockOnBranch({
+          organizationId,
+          productId: opts.linkProductId,
+          userId: opts.userId ?? 0,
+          quantity: qty,
+          movementType: 'PURCHASE',
+          branchId: stockBranchId,
+          reference,
+          referenceType: 'RRA_IMPORT',
+          batchNumber: reference,
+          note: `Approved import declaration ${line.dclNo ?? line.taskCd} line ${line.itemSeq}`,
+        });
+      }
+    } else if (action === 'approve' && opts.linkProductId && stockBranchId == null) {
+      logger.warn(`[EBM] import action #${importItemId}: no active branch — local stock not booked`);
     }
 
     await prisma.organization.update({
