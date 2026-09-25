@@ -776,7 +776,7 @@ interface RraPurchase {
 }
 
 const PMT_LABEL: Record<string, string> = {
-  "01": "Cash", "02": "Cheque", "03": "Credit", "04": "Bank transfer", "05": "Card", "06": "Mobile money", "07": "Other",
+  "01": "Cash", "02": "Credit", "03": "Cash/Credit", "04": "Bank Check", "05": "Card", "06": "Mobile money", "07": "Other",
 };
 
 interface CatalogProduct {

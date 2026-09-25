@@ -1542,7 +1542,7 @@ export async function composeInvoicePayload(
       },
       customer: {
         name: sale.customer?.name ?? "",
-        tin: sale.customer?.TIN ?? null,
+        tin: sale.customer?.TIN?.trim() || sale.customer?.phone?.trim() || null,
         phone: sale.customer?.phone ?? null,
         email: sale.customer?.email ?? null,
         // Free-text legacy address first, then the structured RRA buyer
@@ -1673,10 +1673,10 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
 /** Authoritative backend-generated invoice PDF (A4, A5 or 80mm) for download, preview, sharing, and printing. */
 export const getInvoicePdf = async (req: BranchAuthRequest, res: Response) => {
   try {
-    // A PDF download/print is always an explicit user action — allow it before
-    // VSDC confirmation and let the renderer stamp it NOT FISCALISED, rather
-    // than 425 and leave the user with no document at all.
-    const invoiceData = await composeInvoicePayload(req, { allowUnfiscalized: true })
+    // CIS §16/§22: an official receipt is not issued until VSDC has signed it.
+    // Proforma and training are composed without a signature; a pending or
+    // failed fiscal sale returns 425 instead of a printable document.
+    const invoiceData = await composeInvoicePayload(req)
     if (!invoiceData) return res.status(404).json(apiError("Sale not found"))
 
     const q = String(req.query.format ?? "").toUpperCase()

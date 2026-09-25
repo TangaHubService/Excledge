@@ -747,6 +747,14 @@ export default function SalesPage() {
                                 Download A4
                               </button>
                               <button
+                                onClick={() => { handleDownloadInvoice(sale, 'A5'); setOpenRowMenu(null); }}
+                                disabled={isDownloadingInvoice === sale.id}
+                                className="w-full text-left px-3 py-2 flex items-center gap-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                Download A5
+                              </button>
+                              <button
                                 onClick={() => { handleDownloadInvoice(sale, '80mm'); setOpenRowMenu(null); }}
                                 disabled={isDownloadingInvoice === sale.id}
                                 className="w-full text-left px-3 py-2 flex items-center gap-2 text-gray-700 hover:bg-gray-50 transition-colors"
@@ -954,7 +962,7 @@ export default function SalesPage() {
               {t('common.close')}
             </button>
             <div className="flex items-center rounded-lg border border-slate-200 p-0.5">
-              {(['A4', '80mm'] as const).map((option) => (
+              {(['A4', 'A5', '80mm'] as const).map((option) => (
                 <button
                   key={option}
                   type="button"

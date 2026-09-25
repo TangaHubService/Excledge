@@ -161,7 +161,7 @@ export default function SaleSuccessModal({
                   <AlertTriangle className="size-4 shrink-0" />
                   {t(
                     "pos.fiscalFailed",
-                    "Sale saved, but the tax office has not approved this receipt yet. You can still print or share a copy — it will be marked as not tax-approved. Open Sales and try again when your connection is working.",
+                    "Sale saved, but the tax office has not approved this receipt. An official receipt cannot be printed until VSDC confirms it. Open Sales and retry when the connection is working.",
                   )}
                 </div>
               ) : (
@@ -180,7 +180,7 @@ export default function SaleSuccessModal({
                 // not going to confirm on its own, so its invoice is allowed —
                 // it renders stamped NOT FISCALISED. Download/Share follow the
                 // same rule and stay enabled unless we're still waiting.
-                const printBlocked = saleData.fiscalizationStatus === "pending"
+                const printBlocked = saleData.fiscalizationStatus === "pending" || saleData.fiscalizationStatus === "failed"
                 return (
                   <>
                     <div className="mt-5 flex flex-col gap-2 sm:flex-row">

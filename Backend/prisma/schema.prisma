@@ -1812,6 +1812,7 @@ enum SalePaymentType {
   MIXED
   CREDIT_CARD
   MOBILE_MONEY
+  BANK_CHECK
 }
 
 enum SalePaymentMethodType {
@@ -1824,6 +1825,7 @@ enum SalePaymentMethodType {
   WALLET
   GIFT_CARD
   STORE_CREDIT
+  BANK_CHECK
 }
 
 enum NotificationType {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import { Package, Eye, EyeOff, MailCheck } from "lucide-react";
@@ -8,9 +8,12 @@ import { LoginSchema } from "../../schema/auth";
 import { useAuth } from "../../context/AuthContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { resolveLandingPath } from "../../lib/landingPage";
+import { safeAccountingHandoffPath } from "../../lib/accounting-handoff";
 
 export default function LoginPage() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const handoffNext = safeAccountingHandoffPath(searchParams.get("next"));
     const { login } = useAuth();
     const { setOrganization } = useOrganization();
     const [showPassword, setShowPassword] = useState(false);
@@ -27,11 +30,15 @@ export default function LoginPage() {
     });
 
     useEffect(() => {
+        if (handoffNext && localStorage.getItem("token")) {
+            navigate(handoffNext, { replace: true });
+            return;
+        }
         const currentPharmacyId = localStorage.getItem("current_pharmacy_id");
         if (currentPharmacyId) {
             navigate("/", { replace: true });
         }
-    }, []);
+    }, [handoffNext, navigate]);
 
     const showToast = (message: string, type: "error" | "success") => {
         if (type === "error") {
@@ -71,6 +78,10 @@ export default function LoginPage() {
             if (result?.user?.requirePasswordChange) {
                 showToast("Please change your password to continue", "success");
                 setTimeout(() => navigate("/change-password"), 2000);
+                return;
+            }
+            if (handoffNext) {
+                navigate(handoffNext, { replace: true });
                 return;
             }
             if (result?.user?.role === "SYSTEM_OWNER") {

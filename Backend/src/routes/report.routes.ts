@@ -16,6 +16,8 @@ import {
     getElectronicJournal,
     getElectronicJournalEntry,
     getPurchasesReport,
+  getItemsReport,
+  getImportationReport,
 } from "../controllers/report.controller"
 import { authenticate, authorize } from "../middleware/auth.middleware"
 import { branchAuth } from "../middleware/branchAuth.middleware"
@@ -46,5 +48,7 @@ router.get("/electronic-journal/:organizationId", authenticate, orgAccess, requi
 router.get("/electronic-journal/:organizationId/:saleId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getElectronicJournalEntry)
 // Detailed purchases report (RRA checklist §25)
 router.get("/purchases/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getPurchasesReport)
+router.get("/items/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getItemsReport)
+router.get("/imports/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getImportationReport)
 
 export default router

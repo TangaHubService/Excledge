@@ -4,6 +4,7 @@ import { DashboardLayout } from "./layouts/DashboardLayout";
 import { Loading } from "./components/Loading";
 import { Dashboard } from "./pages/Dashboard";
 import Login from "./pages/auth/login";
+import AccountingHandoff from "./pages/auth/AccountingHandoff";
 import Signup from "./pages/auth/SignUp";
 import CreateOrganization from "./pages/CreateOrganization";
 import { InventoryManagement } from "./pages/dashboard/InventoryManagement";
@@ -97,6 +98,7 @@ function App() {
                     <Route path="/" element={<LandingPage />} />
                     <Route path="/landing" element={<LandingPage />} />
                     <Route path="/login" element={<Login />} />
+                    <Route path="/accounting-handoff" element={<AccountingHandoff />} />
                     <Route path="/signup" element={<Signup />} />
                     <Route path="/verify" element={<VerificationPage />} />
                     <Route path="/forgot-password" element={<ForgotPasswordPage />} />

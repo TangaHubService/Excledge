@@ -19,7 +19,7 @@ export const saleItemSchema = z.object({
 );
 
 const salePaymentSchema = z.object({
-  paymentMethod: z.enum(['CASH', 'BANK', 'CARD', 'PAYPACK', 'MTN_MOMO', 'AIRTEL_MONEY', 'WALLET', 'GIFT_CARD', 'STORE_CREDIT']),
+  paymentMethod: z.enum(['CASH', 'BANK', 'BANK_CHECK', 'CARD', 'PAYPACK', 'MTN_MOMO', 'AIRTEL_MONEY', 'WALLET', 'GIFT_CARD', 'STORE_CREDIT']),
   amount: z.coerce.number().positive('Payment amount must be positive'),
   reference: z.string().max(200).nullish(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -32,7 +32,7 @@ export const createSaleSchema = z.object({
     // Optional: a PROFORMA quote collects no payment, so the frontend sends
     // debtAmount/cashAmount/insuranceAmount without a paymentType — the
     // controller derives finalPaymentType from those amounts when omitted.
-    paymentType: z.enum(['CASH', 'DEBT', 'INSURANCE', 'MIXED', 'MOBILE_MONEY', 'CREDIT_CARD']).optional(),
+    paymentType: z.enum(['CASH', 'DEBT', 'INSURANCE', 'MIXED', 'MOBILE_MONEY', 'CREDIT_CARD', 'BANK_CHECK']).optional(),
     cashAmount: z.coerce.number().nonnegative('Cash amount cannot be negative').optional(),
     debtAmount: z.coerce.number().nonnegative('Debt amount cannot be negative').optional(),
     insuranceAmount: z.coerce.number().nonnegative('Insurance amount cannot be negative').optional(),
@@ -61,7 +61,7 @@ export const convertProformaSchema = z.object({
   body: z.object({
     customerId: z.coerce.number().positive().optional(),
     items: z.array(saleItemSchema).min(1).optional(),
-    paymentType: z.enum(['CASH', 'DEBT', 'INSURANCE', 'MIXED', 'MOBILE_MONEY', 'CREDIT_CARD']).optional(),
+    paymentType: z.enum(['CASH', 'DEBT', 'INSURANCE', 'MIXED', 'MOBILE_MONEY', 'CREDIT_CARD', 'BANK_CHECK']).optional(),
     cashAmount: z.coerce.number().nonnegative().optional(),
     debtAmount: z.coerce.number().nonnegative().optional(),
     insuranceAmount: z.coerce.number().nonnegative().optional(),

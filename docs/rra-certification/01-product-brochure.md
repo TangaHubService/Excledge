@@ -6,9 +6,9 @@
 ```
 Software Version:    1.0.0
 Document Reference:  EXC-BROCHURE-v1.0.0-2026
-Prepared by:         [COMPANY LEGAL NAME]
+Prepared by:         Excledge CPA Ltd
 Date:                June 2026
-RRA Certification:   Pending — Application Reference [APPLICATION REF]
+RRA Certification:   Pending — application not yet issued by RRA
 Contact:             exceledgecpaltd@gmail.com
 Deployed URL:        https://erp.exceledgecpa.com
 ```
@@ -37,7 +37,7 @@ Deployed URL:        https://erp.exceledgecpa.com
 
 ### 1.1 Product Identity and Core Purpose
 
-Excledge ERP/POS is a comprehensive, web-based Enterprise Resource Planning and Point-of-Sale system designed, engineered, and deployed specifically for taxpaying businesses operating within the Republic of Rwanda. As a Certified Invoicing System (CIS) as defined by the Rwanda Revenue Authority, Excledge ERP/POS provides a complete, end-to-end solution for the issuance of legally compliant certified receipts, the management of VAT obligations, real-time inventory control, and seamless electronic integration with the RRA's Virtual Sales Data Controller (VSDC) infrastructure. The system enables businesses of all sizes to fulfil their statutory obligations under Rwandan tax law with efficiency, accuracy, and confidence. Every certified receipt issued through Excledge ERP/POS carries a cryptographic signature, a unique sequential identifier, a machine-readable QR code in the RRA-mandated format, and a complete SDC INFORMATION block, ensuring that every transaction is verifiable, tamper-evident, and permanently recorded on the RRA Authority Server. The platform is accessible via modern web browsers at https://erp.exceledgecpa.com and is maintained and supported by [COMPANY LEGAL NAME], a Rwandan technology company dedicated to building compliant fiscal software solutions for the local market.
+Excledge ERP/POS is a comprehensive, web-based Enterprise Resource Planning and Point-of-Sale system designed, engineered, and deployed specifically for taxpaying businesses operating within the Republic of Rwanda. As a Certified Invoicing System (CIS) as defined by the Rwanda Revenue Authority, Excledge ERP/POS provides a complete, end-to-end solution for the issuance of legally compliant certified receipts, the management of VAT obligations, real-time inventory control, and seamless electronic integration with the RRA's Virtual Sales Data Controller (VSDC) infrastructure. The system enables businesses of all sizes to fulfil their statutory obligations under Rwandan tax law with efficiency, accuracy, and confidence. Every certified receipt issued through Excledge ERP/POS carries a cryptographic signature, a unique sequential identifier, a machine-readable QR code in the RRA-mandated format, and a complete SDC INFORMATION block, ensuring that every transaction is verifiable, tamper-evident, and permanently recorded on the RRA Authority Server. The platform is accessible via modern web browsers at https://erp.exceledgecpa.com and is maintained and supported by Excledge CPA Ltd, a Rwandan technology company dedicated to building compliant fiscal software solutions for the local market.
 
 ### 1.2 Target Market and Business Types Served
 
@@ -131,7 +131,7 @@ Excledge ERP/POS is designed from the ground up to support businesses with multi
 
 ### Feature 8: Multi-Tenant Support
 
-The Excledge ERP/POS platform is built as a true multi-tenant system, enabling multiple independent organisations to share the same platform infrastructure while maintaining complete and absolute data isolation from one another. The `Organization` model in the system stores each tenant's unique 9-digit Taxpayer Identification Number (TIN), Value Added Tax Registration Number (VRN), and all other tax-related configuration fields. Every query in the system is scoped by `organizationId`, ensuring that no data from one organisation is ever accessible to users of another organisation. Each organisation can operate one or more branches, each with its own independent EBM device registration. The system supports the full range of Rwandan business types that require EBM compliance, including pharmacy and medical supply businesses, retail and wholesale operations, service-based businesses, and hospitality establishments, with business-type-specific workflows and reporting configurations available for each. Multi-tenant architecture allows [COMPANY LEGAL NAME] to efficiently deploy and maintain the system for multiple clients while providing each client with a completely private, secure, and independently configured environment.
+The Excledge ERP/POS platform is built as a true multi-tenant system, enabling multiple independent organisations to share the same platform infrastructure while maintaining complete and absolute data isolation from one another. The `Organization` model in the system stores each tenant's unique 9-digit Taxpayer Identification Number (TIN), Value Added Tax Registration Number (VRN), and all other tax-related configuration fields. Every query in the system is scoped by `organizationId`, ensuring that no data from one organisation is ever accessible to users of another organisation. Each organisation can operate one or more branches, each with its own independent EBM device registration. The system supports the full range of Rwandan business types that require EBM compliance, including pharmacy and medical supply businesses, retail and wholesale operations, service-based businesses, and hospitality establishments, with business-type-specific workflows and reporting configurations available for each. Multi-tenant architecture allows Excledge CPA Ltd to efficiently deploy and maintain the system for multiple clients while providing each client with a completely private, secure, and independently configured environment.
 
 ### Feature 9: Offline Resilience and Guaranteed VSDC Delivery
 
@@ -209,7 +209,7 @@ Excledge ERP/POS displays the current software version (1.0.0) in multiple locat
 
 ### 5.1 Formal Declaration of Compliance
 
-[COMPANY LEGAL NAME] hereby formally declares that Excledge ERP/POS version 1.0.0, as submitted for certification under this application reference [APPLICATION REF], has been designed, developed, and tested in full compliance with the **Rwanda Revenue Authority CIS/VSDC Technical Specification Version 1.0, dated March 2018**, and with all applicable provisions of Rwandan tax law governing the use of Certified Invoicing Systems. The system implements every mandatory functional requirement of the CIS specification, including but not limited to: the generation and management of all seven certified receipt types; real-time VSDC communication with the mandated 1,000-millisecond timeout; the complete SDC INFORMATION block on every receipt; QR code generation in the mandated format; complete four-band VAT calculation and display; independent sequential receipt counters per branch per receipt type; daily X and Z report generation; Electronic Journal (EJ_DATA) transmission; stock gate enforcement; training mode; software version display; and a read-only audit interface. [COMPANY LEGAL NAME] further commits to maintaining compliance with all future amendments to the RRA CIS/VSDC specification and to releasing compliant updates to the software within the timeframes established in the accompanying Software Product Warranty Statement (Document Reference: EXC-WARRANTY-v1.0.0-2026).
+Excledge CPA Ltd hereby formally declares that Excledge ERP/POS version 1.0.0, as submitted for certification under this application reference [APPLICATION REF], has been designed, developed, and tested in full compliance with the **Rwanda Revenue Authority CIS/VSDC Technical Specification Version 1.0, dated March 2018**, and with all applicable provisions of Rwandan tax law governing the use of Certified Invoicing Systems. The system implements every mandatory functional requirement of the CIS specification, including but not limited to: the generation and management of all seven certified receipt types; real-time VSDC communication with the mandated 1,000-millisecond timeout; the complete SDC INFORMATION block on every receipt; QR code generation in the mandated format; complete four-band VAT calculation and display; independent sequential receipt counters per branch per receipt type; daily X and Z report generation; Electronic Journal (EJ_DATA) transmission; stock gate enforcement; training mode; software version display; and a read-only audit interface. Excledge CPA Ltd further commits to maintaining compliance with all future amendments to the RRA CIS/VSDC specification and to releasing compliant updates to the software within the timeframes established in the accompanying Software Product Warranty Statement (Document Reference: EXC-WARRANTY-v1.0.0-2026).
 
 ### 5.2 Compliance Matrix
 
@@ -249,7 +249,7 @@ The following table maps the key sections of the RRA CIS/VSDC Technical Specific
 
 | Field | Details |
 |---|---|
-| **Company Legal Name** | [COMPANY LEGAL NAME] |
+| **Company Legal Name** | Excledge CPA Ltd |
 | **Company Type** | [Limited Liability Company / Other] |
 | **Registration Number** | [COMPANY REGISTRATION NUMBER] |
 | **TIN** | [COMPANY TIN] |

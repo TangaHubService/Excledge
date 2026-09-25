@@ -92,6 +92,8 @@ const ERP_TO_RRA_PAYMENT_METHOD: Record<string, string> = {
   AIRTEL_MONEY: '06',
   BANK_TRANSFER: '04',
   BANK: '04',
+  BANK_CHECK: '04',
+  CHEQUE: '04',
   CARD: '05',
   PAYPACK: '06',
   WALLET: '06',

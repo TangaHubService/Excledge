@@ -126,7 +126,7 @@ export default function InvoicesListPage() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-lg border border-gray-300 p-0.5">
-            {(['A4', '80mm'] as const).map((option) => (
+            {(['A4', 'A5', '80mm'] as const).map((option) => (
               <button
                 key={option}
                 type="button"

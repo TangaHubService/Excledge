@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma';
+import { enqueueInventoryMovementAccountingEvent } from './accounting-outbox.service';
 
 export interface CreateBatchParams {
   productId: number;
@@ -107,7 +108,7 @@ export async function createBatch(params: CreateBatchParams) {
       branchId
     );
 
-    await tx.inventoryLedger.create({
+    const ledgerEntry = await tx.inventoryLedger.create({
       data: {
         organizationId,
         productId,
@@ -127,6 +128,7 @@ export async function createBatch(params: CreateBatchParams) {
         note: `Batch ${batchNumber} created`,
       },
     });
+    await enqueueInventoryMovementAccountingEvent(tx, ledgerEntry);
 
     // Update product quantity cache
     await tx.product.update({

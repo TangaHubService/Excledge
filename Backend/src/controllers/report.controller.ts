@@ -2098,3 +2098,40 @@ export const getPurchasesReport = async (req: BranchAuthRequest, res: Response) 
     res.status(500).json(apiError('Failed to generate purchases report'));
   }
 };
+
+/** Detailed items report (RRA checklist §25). Same stock catalog as inventory, under its own route. */
+export const getItemsReport = getInventoryReport;
+
+/** Importation report (RRA checklist §25), separate from local purchase orders. */
+export const getImportationReport = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const imports = await prisma.rraImportItem.findMany({
+      where: { organizationId },
+      orderBy: [{ dclDe: 'desc' }, { itemSeq: 'asc' }],
+      take: 500,
+    });
+    const byStatus = { PENDING: 0, APPROVED: 0, REJECTED: 0 };
+    for (const i of imports) byStatus[i.status] += 1;
+    res.json(success({
+      summary: { lines: imports.length, ...byStatus },
+      items: imports.map((i) => ({
+        taskCd: i.taskCd,
+        dclNo: i.dclNo,
+        dclDe: i.dclDe,
+        itemSeq: i.itemSeq,
+        hsCd: i.hsCd,
+        itemNm: i.itemNm,
+        orgnNatCd: i.orgnNatCd,
+        supplier: i.spplrNm,
+        qty: i.qty ? i.qty.toNumber() : null,
+        invcFcurAmt: i.invcFcurAmt ? i.invcFcurAmt.toNumber() : null,
+        invcFcurCd: i.invcFcurCd,
+        status: i.status,
+      })),
+    }));
+  } catch (error: any) {
+    console.error('[Importation Report Error]:', error);
+    res.status(500).json(apiError('Failed to generate importation report'));
+  }
+};
