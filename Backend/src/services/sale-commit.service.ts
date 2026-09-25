@@ -338,7 +338,11 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         const item = items[i]
         const isService = item.itemType === "SERVICE"
         const quantity = item.quantity
-        const unitPrice = item.unitPrice
+        const chargedUnit = Number(item.unitPrice)
+        const dcAmt = Math.max(0, Number(item.discount ?? 0))
+        const unitPrice = quantity > 0 ? chargedUnit + dcAmt / quantity : chargedUnit
+        const dcRate = unitPrice > 0 && quantity > 0 ? Math.round(((dcAmt / quantity) / unitPrice) * 10000) / 100 : 0
+        const lineTotal = chargedUnit * quantity
         const itemTax = taxSummary.items[i]
 
         if (isService) {
@@ -352,9 +356,11 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
           saleItemsData.push({
             quantity,
             unitPrice,
-            totalPrice: quantity * unitPrice,
+            totalPrice: lineTotal,
+            dcRate,
+            dcAmt,
             costPrice: 0,
-            profit: quantity * unitPrice,
+            profit: lineTotal,
             taxRate: itemTax?.taxRate || 0,
             taxAmount: itemTax?.taxAmount || 0,
             taxCode: itemTax?.taxCode || null,
@@ -404,12 +410,14 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
           costPrice = avgCost?.averageCost || 0
         }
 
-        const profit = (unitPrice - costPrice) * quantity
+        const profit = lineTotal - costPrice * quantity
 
         saleItemsData.push({
           quantity,
           unitPrice,
-          totalPrice: quantity * unitPrice,
+          totalPrice: lineTotal,
+          dcRate,
+          dcAmt,
           costPrice,
           profit,
           taxRate: itemTax.taxRate,
@@ -433,8 +441,8 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
       let vsdcInvcNo: number | null = null
       let localReceiptSeq: number | null = null
       let localReceiptTotalSeq: number | null = null
-      if (isProforma) {
-        const localSeq = await allocateLocalReceiptSequence(branchId, "PS", tx)
+      if (isProforma || org?.trainingMode) {
+        const localSeq = await allocateLocalReceiptSequence(branchId, isProforma ? "PS" : "TS", tx)
         localReceiptSeq = localSeq.typeSeq
         localReceiptTotalSeq = localSeq.totalSeq
         invoiceNumber = null
@@ -522,6 +530,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
             referenceType: "SALE",
             note: `Sale #${saleNumber}`,
             batchId: saleItem?.batchId || null,
+            unitCost: saleItem?.costPrice != null ? Number(saleItem.costPrice) : null,
             tx,
           })
         }
@@ -539,7 +548,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
       }
 
       // 7. Write transactional outbox entry (atomic with the sale). Skipped for proforma.
-      if (!isProforma && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+      if (!isProforma && !org?.trainingMode && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
         const operation: EbmOperation = "SALE"
         const idempotencyKey = `ebm-${operation}-${organizationId}-${newSale.id}`
         await tx.ebmOutbox.create({
@@ -571,7 +580,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
     isCertified: false,
   }
 
-  if (!isProforma && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+  if (!isProforma && !org?.trainingMode && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
     const EBM_INLINE_WAIT_MS = 5000
     await Promise.race([
       processEbmOutboxBatch(5).catch((e) => {
@@ -605,7 +614,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
   // Record split payments if provided
   if (splitPayments && Array.isArray(splitPayments) && splitPayments.length > 0) {
     const validPaymentMethods = [
-      "CASH", "BANK", "CARD", "PAYPACK", "MTN_MOMO", "AIRTEL_MONEY", "WALLET", "GIFT_CARD", "STORE_CREDIT",
+      "CASH", "BANK", "BANK_CHECK", "CARD", "PAYPACK", "MTN_MOMO", "AIRTEL_MONEY", "WALLET", "GIFT_CARD", "STORE_CREDIT",
     ]
 
     for (const pmt of splitPayments) {

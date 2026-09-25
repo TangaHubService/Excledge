@@ -26,6 +26,7 @@ const PAYMENT_METHODS = [
   { value: 'MOBILE_MONEY', label: 'Mobile Money',  icon: Smartphone },
   { value: 'CREDIT_CARD',  label: 'Card',          icon: CreditCard },
   { value: 'DEBT',         label: 'Debt',          icon: FileText   },
+  { value: 'BANK_CHECK',   label: 'Bank Check',    icon: FileText   },
   { value: 'INSURANCE',    label: 'Insurance',     icon: Shield     },
 ];
 

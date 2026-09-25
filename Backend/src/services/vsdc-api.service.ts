@@ -1070,10 +1070,13 @@ export async function saveAndVerifyZReport(
   const rptDeTimestamp = `${ymd}${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
 
   const save = await saveZReport(envelope, rptDeTimestamp);
-  // Verify with the exact timestamp just saved: its date part matches the
-  // report day (so date-truncating servers verify), and exact-match servers
-  // also verify — whereas a midnight-expanded date would fail exact match.
-  const check = await checkZReport(envelope, rptDeTimestamp);
+  // The local VSDC WAR validates a 14-digit timestamp. The RRA server behind
+  // some sandbox builds requires an 8-digit day. Verify with the timestamp
+  // first, then with the day if RRA rejects the length.
+  let check = await checkZReport(envelope, rptDeTimestamp);
+  if (!check.success && /length must be between 8 and 8/i.test(check.error ?? '')) {
+    check = await checkZReport(envelope, ymd);
+  }
 
   return {
     saved: save.success,

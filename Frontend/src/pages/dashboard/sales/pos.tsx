@@ -769,7 +769,8 @@ export default function SalesForm() {
           let paymentMethod = p.method
           if (p.method === 'MOBILE_MONEY') paymentMethod = 'MTN_MOMO'
           else if (p.method === 'CREDIT_CARD') paymentMethod = 'CARD'
-          if (paymentMethod === 'CASH' || paymentMethod === 'CARD' || paymentMethod === 'MTN_MOMO') cashAmount += p.amount
+          else if (p.method === 'BANK_CHECK') paymentMethod = 'BANK_CHECK'
+          if (paymentMethod === 'CASH' || paymentMethod === 'CARD' || paymentMethod === 'MTN_MOMO' || paymentMethod === 'BANK_CHECK') cashAmount += p.amount
           else if (p.method === 'INSURANCE') insuranceAmount += p.amount
           else if (p.method === 'DEBT') debtAmount += p.amount
           return {
@@ -782,12 +783,17 @@ export default function SalesForm() {
 
       const payload = {
         customerId: selectedCustomer,
-        items: cart.map(i => ({
-          productId: i.product.id,
-          quantity: i.quantity,
-          unitPrice: i.unitPrice,
-          itemType: i.product.itemType === 'SERVICE' ? 'SERVICE' : (i.product.itemType === 'RAW_MATERIAL' ? 'RAW_MATERIAL' : 'PRODUCT'),
-        })),
+        items: cart.map(i => {
+          const list = Number(i.product.unitPrice ?? i.product.price ?? i.unitPrice)
+          const charged = Number(i.unitPrice)
+          return {
+            productId: i.product.id,
+            quantity: i.quantity,
+            unitPrice: charged,
+            discount: Math.max(0, Math.round((list - charged) * i.quantity)),
+            itemType: i.product.itemType === 'SERVICE' ? 'SERVICE' : (i.product.itemType === 'RAW_MATERIAL' ? 'RAW_MATERIAL' : 'PRODUCT'),
+          }
+        }),
         paymentType,
         cashAmount,
         insuranceAmount,
@@ -874,12 +880,17 @@ export default function SalesForm() {
       setIsSubmitting(true)
       const payload = {
         customerId: selectedCustomer,
-        items: cart.map(i => ({
-          productId: i.product.id,
-          quantity: i.quantity,
-          unitPrice: i.unitPrice,
-          itemType: i.product.itemType === 'SERVICE' ? 'SERVICE' : (i.product.itemType === 'RAW_MATERIAL' ? 'RAW_MATERIAL' : 'PRODUCT'),
-        })),
+        items: cart.map(i => {
+          const list = Number(i.product.unitPrice ?? i.product.price ?? i.unitPrice)
+          const charged = Number(i.unitPrice)
+          return {
+            productId: i.product.id,
+            quantity: i.quantity,
+            unitPrice: charged,
+            discount: Math.max(0, Math.round((list - charged) * i.quantity)),
+            itemType: i.product.itemType === 'SERVICE' ? 'SERVICE' : (i.product.itemType === 'RAW_MATERIAL' ? 'RAW_MATERIAL' : 'PRODUCT'),
+          }
+        }),
         cashAmount: 0,
         insuranceAmount: 0,
         debtAmount: total,

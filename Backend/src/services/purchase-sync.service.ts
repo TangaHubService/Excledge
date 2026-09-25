@@ -372,7 +372,9 @@ export async function confirmRraPurchase(
     pchsTyCd: 'N',
     // §38: the RRA purchase order code for this incoming purchase, when the
     // operator provides one (the select-purchases pull does not return it).
-    ...(opts.prcOrdCd?.trim() ? { prcOrdCd: opts.prcOrdCd.trim() } : {}),
+    ...((opts.prcOrdCd?.trim() || (rp as { prcOrdCd?: string }).prcOrdCd || (rp.rawResponse as { prcOrdCd?: string } | null)?.prcOrdCd)
+      ? { prcOrdCd: (opts.prcOrdCd?.trim() || (rp as { prcOrdCd?: string }).prcOrdCd || (rp.rawResponse as { prcOrdCd?: string }).prcOrdCd || '').trim() }
+      : {}),
     rcptTyCd,
     pmtTyCd: rp.pmtTyCd ?? '01',
     pchsSttsCd: '02', // §4.x — 02 Approved (records the purchase + stock-in)

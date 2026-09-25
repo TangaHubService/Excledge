@@ -817,7 +817,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
 
       // C8: build electronic journal text
       const rcptLabel = (sale as any).rcptLabel ?? (row.operation === 'REFUND' ? 'NR' : 'NS');
-      const ejText = row.operation === 'SALE'
+      const ejText = row.operation === 'SALE' || row.operation === 'REFUND'
         ? buildElectronicJournal(sale as SaleWithRelations, rcptLabel, {
             sdcId: envelope.sdcId,
             mrcNo: envelope.mrcNo,

@@ -1,5 +1,6 @@
 import { InventoryMovementType, InventoryDirection } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import { enqueueInventoryMovementAccountingEvent } from './accounting-outbox.service';
 
 /**
  * RRA Stock In/Out reporting (RRA checklist §72/§73): every non-sale inventory
@@ -9,6 +10,16 @@ import { prisma } from '../lib/prisma';
  */
 function ebmSyncStatusFor(movementType: InventoryMovementType): 'PENDING' | null {
   return movementType === 'SALE' ? null : 'PENDING';
+}
+
+function queueStockSync(entry: { id?: number; ebmSyncStatus?: string | null } | null | undefined) {
+  if (!entry?.id || entry.ebmSyncStatus !== 'PENDING') return;
+  const ledgerId = entry.id;
+  setImmediate(() => {
+    import('./stock-movement-sync.service')
+      .then((m) => m.submitStockLedgerEntryToEbmAsync(ledgerId))
+      .catch(() => undefined);
+  });
 }
 
 
@@ -96,6 +107,8 @@ export interface RemoveStockParams {
   referenceType?: string;
   note?: string;
   metadata?: Record<string, any>;
+  /** Cost the caller already used for this stock (e.g. a sale's batch cost); passed to Accounting only. */
+  unitCost?: number | null;
   tx?: any; // Optional transaction client for use within existing transactions
 }
 
@@ -292,6 +305,7 @@ export async function addStock(params: AddStockParams) {
         ebmSyncStatus: skipEbmSync ? null : ebmSyncStatusFor(movementType),
       },
     });
+    await enqueueInventoryMovementAccountingEvent(tx, ledgerEntry);
 
     // Update product quantity cache (global aggregate across all branches)
     // Use incremental update so branch-specific operations don't overwrite
@@ -340,9 +354,11 @@ export async function addStock(params: AddStockParams) {
   }
 
   // Use transaction to ensure atomicity and calculate running balance
-  return await prisma.$transaction(async (tx) => {
+  const entry = await prisma.$transaction(async (tx) => {
     return await executeInTransaction(tx);
   });
+  queueStockSync(entry);
+  return entry;
 }
 
 /**
@@ -426,6 +442,7 @@ export async function removeStock(params: RemoveStockParams) {
     referenceType,
     note,
     metadata,
+    unitCost,
     tx: providedTx,
   } = params;
 
@@ -486,6 +503,7 @@ export async function removeStock(params: RemoveStockParams) {
         ebmSyncStatus: ebmSyncStatusFor(movementType),
       },
     });
+    await enqueueInventoryMovementAccountingEvent(tx, ledgerEntry, { unitCost });
 
     // Update product quantity cache (global aggregate across all branches)
     await tx.product.update({
@@ -532,9 +550,11 @@ export async function removeStock(params: RemoveStockParams) {
   }
 
   // Use transaction to ensure atomicity with row-level locking
-  return await prisma.$transaction(async (tx) => {
+  const entry = await prisma.$transaction(async (tx) => {
     return await executeInTransaction(tx);
   });
+  queueStockSync(entry);
+  return entry;
 }
 
 /**
@@ -592,7 +612,7 @@ export async function adjustStock(params: AdjustStockParams) {
   }
 
   // Use transaction
-  return await prisma.$transaction(async (tx) => {
+  const entry = await prisma.$transaction(async (tx) => {
     // Lock product row using FOR UPDATE to prevent race conditions — matches
     // addStock/removeStock so a concurrent sale/adjustment on the same product
     // can't read the same pre-adjustment balance and push stock negative.
@@ -654,6 +674,7 @@ export async function adjustStock(params: AdjustStockParams) {
         ebmSyncStatus: ebmSyncStatusFor(movementType),
       } as any,
     });
+    await enqueueInventoryMovementAccountingEvent(tx, ledgerEntry);
 
     // Update product quantity cache (global aggregate across all branches)
     // quantity may be positive (IN) or negative (OUT); { increment } handles both
@@ -666,6 +687,8 @@ export async function adjustStock(params: AdjustStockParams) {
 
     return ledgerEntry;
   });
+  queueStockSync(entry);
+  return entry;
 }
 
 /**

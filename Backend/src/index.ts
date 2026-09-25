@@ -41,6 +41,7 @@ import warehouseRoutes from "./routes/warehouse.routes";
 import expenseRoutes from "./routes/expense.routes";
 import supplierPaymentRoutes from "./routes/supplier-payment.routes";
 import stockTransferRoutes from "./routes/stock-transfer.routes";
+import accountingIntegrationRoutes from "./routes/accounting-integration.routes";
 import ebmOutboxRoutes from "./routes/ebm-outbox.routes";
 import shiftRoutes from "./routes/shift.routes";
 import heldSaleRoutes from "./routes/held-sale.routes";
@@ -84,6 +85,10 @@ const allowedOrigins = [
   ...(process.env.FRONTEND_URL || "http://localhost:5173")
     .split(',')
     .map(s => s.trim())
+    .filter(Boolean),
+  ...(process.env.ACCOUNTING_WEB_URL || "http://localhost:5174") // Accounting web app
+    .split(',')
+    .map(s => s.trim().replace(/\/+$/, ''))
     .filter(Boolean),
   "https://erp.exceledgecpa.com", // always allow production origin
   "http://localhost:5173",         // Vite dev server
@@ -164,6 +169,7 @@ app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/supplier-payments", supplierPaymentRoutes);
 app.use("/api/stock-transfers", stockTransferRoutes);
+app.use("/api/accounting-integration", accountingIntegrationRoutes);
 app.use("/api/organizations", ebmOutboxRoutes);
 app.use("/api/supplier-invoices", supplierInvoiceRoutes);
 app.use("/api/supplier-portal", supplierPortalRoutes);
