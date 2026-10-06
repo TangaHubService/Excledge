@@ -55,10 +55,10 @@ export async function calculateProfit(params: CalculateProfitParams): Promise<{
 
       if (batches.length > 0) {
         const totalCost = batches.reduce(
-          (sum, b) => sum + b.unitCost.toNumber() * b.quantity,
+          (sum, b) => sum + b.unitCost.toNumber() * Number(b.quantity),
           0
         );
-        const totalQuantity = batches.reduce((sum, b) => sum + b.quantity, 0);
+        const totalQuantity = batches.reduce((sum, b) => sum + Number(b.quantity), 0);
         costPrice = totalQuantity > 0 ? totalCost / totalQuantity : 0;
       } else {
         // Fallback: use 0 cost if no batches (for products without cost tracking)
@@ -103,7 +103,7 @@ export async function calculateAndStoreProfitForSale(saleId: number) {
       saleItemId: item.id,
       batchId: item.batchId || null,
       unitPrice: item.unitPrice.toNumber(),
-      quantity: item.quantity,
+      quantity: Number(item.quantity),
       saleDate: sale.createdAt,
     });
 
@@ -141,7 +141,7 @@ export async function getSaleProfitSummary(saleId: number) {
     0
   );
   const totalCost = saleItems.reduce(
-    (sum, item) => sum + (item.costPrice?.toNumber() || 0) * item.quantity,
+    (sum, item) => sum + (item.costPrice?.toNumber() || 0) * Number(item.quantity),
     0
   );
   const totalProfit = saleItems.reduce(
@@ -216,7 +216,7 @@ export async function getProfitReport(
     0
   );
   const totalCost = saleItems.reduce(
-    (sum, item) => sum + (item.costPrice?.toNumber() || 0) * item.quantity,
+    (sum, item) => sum + (item.costPrice?.toNumber() || 0) * Number(item.quantity),
     0
   );
   const totalProfit = saleItems.reduce(
@@ -238,9 +238,9 @@ export async function getProfitReport(
       };
     }
     acc[productId].revenue += item.totalPrice.toNumber();
-    acc[productId].cost += (item.costPrice?.toNumber() || 0) * item.quantity;
+    acc[productId].cost += (item.costPrice?.toNumber() || 0) * Number(item.quantity);
     acc[productId].profit += item.profit?.toNumber() || 0;
-    acc[productId].quantity += item.quantity;
+    acc[productId].quantity += Number(item.quantity);
     return acc;
   }, {} as Record<number, any>);
 

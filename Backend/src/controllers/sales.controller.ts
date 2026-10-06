@@ -629,7 +629,10 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
         const itemsToRefund = ((sale as any).saleItems || []).map((item: any) => ({
           saleItemId: item.id,
           productId: item.productId,
-          quantity: item.quantity,
+          // SaleItem.quantity is Decimal(15,3) — normalize to number once here;
+          // every consumer below (negation, stock restore, batch restock) needs
+          // a plain number (unary minus / + on a Decimal would yield NaN).
+          quantity: Number(item.quantity),
           unitPrice: item.unitPrice.toNumber(),
           totalPrice: item.totalPrice.toNumber(),
           taxRate: Number(item.taxRate ?? 0),
@@ -766,7 +769,7 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
               await prisma.batch.update({
                 where: { id: item.batchId },
                 data: {
-                  quantity: existingBatch.quantity + item.quantity,
+                  quantity: Number(existingBatch.quantity) + item.quantity,
                   isActive: true,
                 },
               });
@@ -1177,7 +1180,7 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
           organizationId: organizationId!,
           productId,
           userId: parseInt(userId as string),
-          quantity: item.quantity,
+          quantity: Number(item.quantity),
           movementType: 'RETURN_CUSTOMER',
           branchId: (sale as any).branchId,
           reference: sale.saleNumber,
@@ -1195,7 +1198,7 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
             await prisma.batch.update({
               where: { id: batchId },
               data: {
-                quantity: existingBatch.quantity + item.quantity,
+                quantity: Number(existingBatch.quantity) + Number(item.quantity),
                 isActive: true,
               },
             });

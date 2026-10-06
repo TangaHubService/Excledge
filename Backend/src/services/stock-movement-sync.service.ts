@@ -116,7 +116,7 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
     return { success: false, error: envErr };
   }
 
-  const qty = Math.abs(entry.quantity);
+  const qty = Math.abs(Number(entry.quantity));
   const prc = entry.unitCost != null ? Math.abs(entry.unitCost.toNumber()) : Math.abs(product.unitPrice.toNumber());
   const splyAmt = fix2(qty * prc);
   const taxTyCd = product.taxCode?.trim().toUpperCase() || '';

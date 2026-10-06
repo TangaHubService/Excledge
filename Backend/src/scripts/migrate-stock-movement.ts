@@ -81,9 +81,9 @@ async function getRunningBalanceUpTo(
   let balance = 0;
   for (const entry of ledgerEntries) {
     if (entry.direction === 'IN') {
-      balance += entry.quantity;
+      balance += Number(entry.quantity);
     } else {
-      balance -= entry.quantity;
+      balance -= Number(entry.quantity);
     }
   }
 

@@ -298,7 +298,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
 
         const inQty = stockAggregates.find((a) => a.direction === "IN")?._sum.quantity || 0
         const outQty = stockAggregates.find((a) => a.direction === "OUT")?._sum.quantity || 0
-        const currentStock = inQty - outQty
+        const currentStock = Number(inQty) - Number(outQty)
 
         if (
           currentStock < item.quantity

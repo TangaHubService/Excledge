@@ -108,9 +108,9 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
           date: sale.createdAt.toISOString().split('T')[0],
           product: item.product!.name,
           category: item.product!.category || 'Uncategorized',
-          quantity: item.quantity,
+          quantity: Number(item.quantity),
           unitPrice: item.unitPrice.toNumber(),
-          total: item.quantity * item.unitPrice.toNumber(),
+          total: Number(item.quantity) * item.unitPrice.toNumber(),
           costPrice: item.costPrice.toNumber(),
           profit: item.profit.toNumber(),
           taxAmount: item.taxAmount.toNumber(),
@@ -153,7 +153,7 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
         netRevenue,
         totalVat,
         totalTaxable,
-        totalQuantity: filteredTransactions.reduce((sum, t) => sum + t.quantity, 0),
+        totalQuantity: filteredTransactions.reduce((sum, t) => sum + Number(t.quantity), 0),
         totalTransactions,
         avgTransaction,
         totalCost: filteredTransactions.reduce((sum, t) => sum + t.costPrice, 0),
@@ -251,7 +251,7 @@ async function buildPluRows(
       taxAmount: 0,
       transactionCount: 0,
     };
-    existing.quantity += line.quantity;
+    existing.quantity += Number(line.quantity);
     existing.revenue += line.totalPrice.toNumber();
     existing.taxAmount += line.taxAmount.toNumber();
     existing.transactionCount += 1;
@@ -464,7 +464,7 @@ export const getInventoryReport = async (req: BranchAuthRequest, res: Response) 
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
-    }) as Array<{
+    }) as unknown as Array<{
       id: number
       productId: number
       quantity: number
@@ -485,7 +485,7 @@ export const getInventoryReport = async (req: BranchAuthRequest, res: Response) 
         const salesChanges = product.saleItems.map((item) => ({
           date: item.sale.createdAt.toISOString().split('T')[0],
           type: 'sale' as const,
-          quantity: -item.quantity,
+          quantity: -Number(item.quantity),
           newStock: 0, // Will be calculated below
           note: `Sale #${item.sale.saleNumber}`,
         }))
@@ -506,7 +506,7 @@ export const getInventoryReport = async (req: BranchAuthRequest, res: Response) 
         )
 
         // Calculate newStock for each change
-        let currentStock = product.quantity
+        let currentStock = Number(product.quantity)
         const changesWithStock: StockChange[] = allChanges.map((change) => {
           const newStock = currentStock - change.quantity
           const changeWithStock = {
@@ -526,14 +526,15 @@ export const getInventoryReport = async (req: BranchAuthRequest, res: Response) 
             }
             return stock - change.quantity
           },
-          product.quantity
+          Number(product.quantity)
         )
 
         // Get stock status
         const getStockStatus = (): 'critical' | 'low' | 'normal' | 'high' => {
-          if (product.quantity <= product.minStock) return 'critical'
-          if (product.quantity <= product.minStock * 1.5) return 'low'
-          if (product.quantity >= maxStock * 0.9) return 'high'
+          const pq = Number(product.quantity)
+          if (pq <= product.minStock) return 'critical'
+          if (pq <= product.minStock * 1.5) return 'low'
+          if (pq >= maxStock * 0.9) return 'high'
           return 'normal'
         }
 
@@ -697,7 +698,7 @@ export const exportReport = async (req: BranchAuthRequest, res: Response) => {
                 "  " +
                 new Date(sale.createdAt).toLocaleTimeString("en-GB", { hour12: false }),
               Product: item.product!.name,
-              Quantity: item.quantity,
+              Quantity: Number(item.quantity),
               PricePerUnity: item.unitPrice.toString(),
               TotalPrice: item.totalPrice.toString(),
               Customer: sale.customer?.name || "Walk-in",
@@ -727,10 +728,10 @@ export const exportReport = async (req: BranchAuthRequest, res: Response) => {
           Category: item.category || "N/A",
           "Batch Number": item.batchNumber,
           "Expiry Date": item.expiryDate ? new Date(item.expiryDate).toISOString().split("T")[0] : "N/A",
-          Quantity: item.quantity.toString(),
+          Quantity: Number(item.quantity).toString(),
           "Unit Price": item.unitPrice.toString(),
           "Selling Price": (invSaleTotalMap.get(item.id) ?? 0).toString(),
-          Status: item.quantity > 0 ? "In Stock" : "Out of Stock",
+          Status: Number(item.quantity) > 0 ? "In Stock" : "Out of Stock",
         }))
         filename = `inventory-report-${new Date().toISOString().split("T")[0]}.xlsx`
         break
@@ -837,7 +838,7 @@ export const exportReport = async (req: BranchAuthRequest, res: Response) => {
 
         const stockReportData = stockProducts.map((product) => {
           const openingStock = exportOpeningMap.get(product.id) ?? 0;
-          const closingStock = exportClosingMap.get(product.id) ?? product.quantity;
+          const closingStock = exportClosingMap.get(product.id) ?? Number(product.quantity);
           const moves = exportMovementsMap.get(product.id) ?? { in: 0, out: 0 };
           return {
             "Product Name": product.name,
@@ -1438,7 +1439,7 @@ export const getStockReport = async (req: BranchAuthRequest, res: Response) => {
 
     const reportData = products.map((product) => {
       const openingStock = openingMap.get(product.id) ?? 0;
-      const closingStock = closingMap.get(product.id) ?? product.quantity;
+      const closingStock = closingMap.get(product.id) ?? Number(product.quantity);
       const moves = movementsMap.get(product.id) ?? { in: 0, out: 0 };
       return {
         productId: product.id,
@@ -1516,21 +1517,24 @@ export const getStockHistory = async (req: BranchAuthRequest, res: Response) => 
     ]);
 
     // Transform movements to match expected format
-    const transformedMovements = movements.map(m => ({
+    const transformedMovements = movements.map(m => {
+      const qty = Number(m.quantity);
+      const balance = Number(m.runningBalance);
+      return {
       id: m.id,
       productId: m.productId,
       product: m.product,
       user: m.user,
       movementType: m.movementType,
       direction: m.direction,
-      quantity: m.quantity,
-      runningBalance: m.runningBalance,
-      previousStock: m.runningBalance - (m.direction === 'IN' ? m.quantity : -m.quantity),
-      newStock: m.runningBalance,
+      quantity: qty,
+      runningBalance: balance,
+      previousStock: balance - (m.direction === 'IN' ? qty : -qty),
+      newStock: balance,
       note: m.note,
       reference: m.reference,
       createdAt: m.createdAt,
-    }));
+    }});
 
     res.json({
       data: transformedMovements,

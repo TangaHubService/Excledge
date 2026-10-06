@@ -176,7 +176,7 @@ export async function getCurrentStock(
 
   const inQty = stockAggregates.find((a: any) => a.direction === 'IN')?._sum.quantity || 0;
   const outQty = stockAggregates.find((a: any) => a.direction === 'OUT')?._sum.quantity || 0;
-  const currentStock = inQty - outQty;
+  const currentStock = Number(inQty) - Number(outQty);
 
   return currentStock;
 }
@@ -216,9 +216,9 @@ export async function getStockAtDate(
   let balance = 0;
   for (const entry of ledgerEntries) {
     if (entry.direction === 'IN') {
-      balance += entry.quantity;
+      balance += Number(entry.quantity);
     } else {
-      balance -= entry.quantity;
+      balance -= Number(entry.quantity);
     }
   }
 
@@ -937,7 +937,7 @@ export async function getCurrentStockInTransaction(
   // Calculate from aggregated totals
   const inQty = stockAggregates.find((a: any) => a.direction === 'IN')?._sum.quantity || 0;
   const outQty = stockAggregates.find((a: any) => a.direction === 'OUT')?._sum.quantity || 0;
-  const currentStock = inQty - outQty;
+  const currentStock = Number(inQty) - Number(outQty);
 
   return currentStock;
 }
