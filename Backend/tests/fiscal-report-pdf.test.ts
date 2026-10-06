@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+import PDFDocument from "pdfkit"
 import {
   renderDailyReportPdf,
   renderPluReportPdf,
@@ -23,6 +24,8 @@ function dailyFixture(reportType: "X" | "Z"): DailyReportData {
     generatedAt: "2026-08-30T18:00:00.000Z",
     periodStart: "2026-08-30T00:00:00.000Z",
     periodEnd: "2026-08-30T23:59:59.999Z",
+    previousCloseAt: null,
+    coversSinceLastZ: false,
     header,
     counters: { firstRcptNo: 12, lastRcptNo: 47, lastTotalRcptNo: 512, receiptCount: 36, itemCount: 120 },
     summary: {
@@ -50,7 +53,15 @@ function dailyFixture(reportType: "X" | "Z"): DailyReportData {
       D: { taxableAmt: 0, taxAmt: 0, salesAmt: 0 },
     },
     taxRates: { A: 0, B: 18, C: 0, D: 0, E: 0 },
+    refundBands: {
+      A: { taxableAmt: 0, taxAmt: 0, salesAmt: 0 },
+      B: { taxableAmt: -100_000, taxAmt: -15_254, salesAmt: -118_000 },
+    },
     paymentBreakdown: { CASH: 3_900_000, MOBILE_MONEY: 482_000 },
+    refundPaymentBreakdown: { CASH: -118_000 },
+    groupTotals: {
+      Dairy: { salesAmt: 4_382_440, refundAmt: -118_000, itemCount: 37 },
+    },
     vsdcConfirmation: reportType === "Z" ? { checked: true, rptDe: "20260830" } : null,
   }
 }
@@ -81,6 +92,23 @@ describe("fiscal report PDFs", () => {
     const pdf = await renderDailyReportPdf(dailyFixture("Z"))
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-")
     expect(pdf.length).toBeGreaterThan(2_000)
+  })
+
+  it("renders refund bands, refunds by method and main groups (R10 splits)", async () => {
+    const drawn: string[] = []
+    const spy = vi.spyOn(PDFDocument.prototype, "text").mockImplementation(function (this: any, text: unknown) {
+      drawn.push(String(text))
+      return this
+    })
+    try {
+      await renderDailyReportPdf(dailyFixture("Z"))
+    } finally {
+      spy.mockRestore()
+    }
+    const blob = drawn.join("\n")
+    expect(blob).toMatch(/REFUND BANDS/)
+    expect(blob).toMatch(/REFUNDS BY METHOD/)
+    expect(blob).toMatch(/MAIN GROUPS/)
   })
 
   it("renders a PLU report", async () => {
