@@ -30,6 +30,7 @@ export function sarTyCdFor(
       case 'PURCHASE':          return '02'; // Purchase
       case 'RETURN_CUSTOMER':   return '03'; // Return
       case 'TRANSFER_IN':       return '04'; // Stock Movement
+      case 'PRODUCTION_OUTPUT': return '05'; // Processing (finished goods)
       case 'INITIAL_STOCK':
       case 'ADJUSTMENT_IN':
       case 'ADJUSTMENT':
@@ -40,6 +41,7 @@ export function sarTyCdFor(
   switch (movementType) {
     case 'SALE':          return '11';  // Sale / Outgoing (after saveSales ack — S8)
     case 'TRANSFER_OUT':  return '13';  // Stock Movement
+    case 'PRODUCTION_CONSUME': return '14'; // Processing (raw materials)
     case 'DAMAGE':
     case 'EXPIRED':       return '15';  // Discarding
     case 'ADJUSTMENT_OUT':
