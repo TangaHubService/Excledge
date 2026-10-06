@@ -4,6 +4,8 @@ import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, grou
 import { getOrganizationLogo, getRraCertificationLogo } from "./invoice-logo.service"
 import { NOT_FISCALIZED_NOTICE, NOT_FISCALIZED_TITLE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_DOCUMENT_LABEL, REFUND_NOTICE, SYSTEM_FOOTER, TRAINING_MODE_LABEL } from "./system-branding.service"
 import { TAX_RATE_BY_SLOT } from "./rra-ebm.service"
+import { Decimal } from "@prisma/client/runtime/library"
+import { bandTaxFromNet } from "./money.service"
 
 // The layout below is authored in A4 coordinate space. A5 output renders the
 // exact same layout scaled down to fit an A5 sheet (RRA checklist §18: the CIS
@@ -325,8 +327,18 @@ export function taxGroups(data: RenderInvoicePayload): TaxGroup[] {
     const key = actualCode || `TAX-${formatInvoiceQuantity(item.vatPct)}%`
     const existing = grouped.get(key) ?? { code: key, rate: Number(item.vatPct) || 0, total: 0, tax: 0 }
     existing.total += Number(item.total) || 0
-    existing.tax += Number(item.taxAmount) || 0
+    // Line taxes are NOT summed here: band tax is derived once from the band
+    // NET below (money.service policy), so the printed TAX rows match the
+    // R4 sample (5340.00 x 18/118 = 814.58) instead of drifting a cent from
+    // per-line cent rounding (768.81 + 45.76 = 814.57).
     grouped.set(key, existing)
+  }
+  // Derive every A/B/C/D band tax from its net; legacy fallback keys keep
+  // their (zero) tax.
+  const derived = bandTaxAmounts(data.items, programmed)
+  for (const [code, tax] of Object.entries(derived)) {
+    const band = grouped.get(code)
+    if (band && ["A", "B", "C", "D"].includes(code)) band.tax = tax
   }
   const order = ["A", "B", "C", "D"]
   return [...grouped.values()].sort((a, b) => {
@@ -373,6 +385,44 @@ export function programmedRates(data: RenderInvoicePayload): [number, number, nu
     return [t[0], t[1], t[2], t[3]]
   }
   return [...TAX_RATE_BY_SLOT] as [number, number, number, number]
+}
+
+export interface BandTaxItem {
+  total: number
+  taxCode?: string | null
+  vatPct?: number
+  taxAmount?: number
+}
+
+/**
+ * Band-level taxes derived from each band's NET (money.service policy:
+ * derived, never summed from per-line cents). `rates` is the programmed
+ * A/B/C/D tuple; non-A/B/C/D codes fall back to summing stored line taxes.
+ * Signed nets (refunds) yield signed taxes.
+ */
+export function bandTaxAmounts(
+  items: BandTaxItem[],
+  rates: [number, number, number, number],
+): Record<string, number> {
+  const nets: Record<string, Decimal> = {}
+  for (const it of items) {
+    const code = (it.taxCode ?? "").toUpperCase() || "A"
+    // Exact Decimal accumulation per line leg (each leg string-normalized),
+    // so binary-float dust in the legs can never reach the band derivation.
+    nets[code] = (nets[code] ?? new Decimal(0)).plus(new Decimal(String(Number(it.total) || 0)))
+  }
+  const out: Record<string, number> = {}
+  for (const [code, net] of Object.entries(nets)) {
+    const slot = ["A", "B", "C", "D"].indexOf(code)
+    if (slot >= 0) {
+      out[code] = rates[slot] > 0 ? bandTaxFromNet(net, rates[slot]) : 0
+    } else {
+      out[code] = items
+        .filter((it) => ((it.taxCode ?? "").toUpperCase() || "A") === code)
+        .reduce((s, it) => s + (Number(it.taxAmount) || 0), 0)
+    }
+  }
+  return out
 }
 
 function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void {

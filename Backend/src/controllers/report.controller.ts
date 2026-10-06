@@ -8,6 +8,7 @@ import { success, error as apiError } from "../utils/apiResponse"
 import { buildVsdcEnvelope, checkZReport } from "../services/vsdc-api.service"
 import { isEbmEnabled } from "../services/rra-ebm.service"
 import { getTaxRatesBySlot } from "../services/rra-code.service"
+import { aggregateSalesLegs, splitReportSales } from "../services/daily-report-aggregate.service"
 import {
   renderDailyReportPdf,
   renderPluReportPdf,
@@ -1583,8 +1584,6 @@ export const getProfitReportController = async (req: BranchAuthRequest, res: Res
 // Z = end-of-day legal record (resets daily counters)
 // ──────────────────────────────────────────────
 
-const TAX_CODES = ['A', 'B', 'C', 'D', 'E'] as const;
-
 function fix2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -1732,103 +1731,41 @@ async function buildDailyReport(
   // (spec §18.1.15/§19.1.15), since they never happened as real business
   // transactions. Proforma (PS) and incomplete (DRAFT/PENDING/held) are also
   // reported separately (§18.1.16 / §18.1.20).
-  const fiscalSales = sales.filter((s) => s.status === 'COMPLETED' || s.status === 'REFUNDED');
-  const normalSales   = fiscalSales.filter(s => s.status === 'COMPLETED' && !s.isProforma && s.rcptLabel !== 'TR' && s.rcptLabel !== 'TS' && s.rcptLabel !== 'PS');
-  const normalRefunds = fiscalSales.filter(s => s.status === 'REFUNDED'  && s.rcptLabel !== 'TR' && s.rcptLabel !== 'TS');
-  const trainingSales = fiscalSales.filter(s => s.rcptLabel === 'TS' || s.rcptLabel === 'TR');
-  const proformaSales = sales.filter(s => s.isProforma || s.rcptLabel === 'PS');
-  // Reprints (CS/CR receipts, spec §18.1.14/§19.1.14) aren't a separate fiscal
-  // record here — a copy is just a re-print of its original NS/NR/TS/TR sale,
-  // tracked via `reprintCount`.
-  const copiedSales = fiscalSales.filter(s => (s.reprintCount ?? 0) > 0);
-  const incompleteDrafts = sales.filter(s => s.status === 'DRAFT' || s.status === 'PENDING').length;
+  const {
+    fiscalSales,
+    normalSales,
+    normalRefunds,
+    trainingSales,
+    proformaSales,
+    copiedSales,
+    incompleteDrafts,
+  } = splitReportSales(sales as any);
 
-  // Per-tax-band totals
-  const taxBands: Record<string, { taxableAmt: number; taxAmt: number; salesAmt: number }> = {};
-  for (const code of TAX_CODES) {
-    taxBands[code] = { taxableAmt: 0, taxAmt: 0, salesAmt: 0 };
-  }
-  for (const sale of normalSales) {
-    for (const si of sale.saleItems) {
-      const code = (si.taxCode ?? 'A').toUpperCase();
-      if (!taxBands[code]) taxBands[code] = { taxableAmt: 0, taxAmt: 0, salesAmt: 0 };
-      const total = Number(si.totalPrice);
-      const tax   = Number(si.taxAmount);
-      taxBands[code].taxAmt    = fix2(taxBands[code].taxAmt    + tax);
-      taxBands[code].taxableAmt= fix2(taxBands[code].taxableAmt+ (total - tax));
-      taxBands[code].salesAmt  = fix2(taxBands[code].salesAmt  + total);
-    }
-  }
-
-  // R10: the same per-rate legs for REFUNDS, kept signed (negative) and split
-  // from sales so the two reconcile against the receipts they cover.
-  const refundBands: Record<string, { taxableAmt: number; taxAmt: number; salesAmt: number }> = {};
-  for (const code of TAX_CODES) {
-    refundBands[code] = { taxableAmt: 0, taxAmt: 0, salesAmt: 0 };
-  }
-  for (const sale of normalRefunds) {
-    for (const si of sale.saleItems) {
-      const code = (si.taxCode ?? 'A').toUpperCase();
-      if (!refundBands[code]) refundBands[code] = { taxableAmt: 0, taxAmt: 0, salesAmt: 0 };
-      const total = Number(si.totalPrice);
-      const tax   = Number(si.taxAmount);
-      refundBands[code].taxAmt    = fix2(refundBands[code].taxAmt    + tax);
-      refundBands[code].taxableAmt= fix2(refundBands[code].taxableAmt+ (total - tax));
-      refundBands[code].salesAmt  = fix2(refundBands[code].salesAmt  + total);
-    }
-  }
-
-  // R10: totals per main group (product category), sales vs (signed) refunds.
-  const groupTotals: Record<string, { salesAmt: number; refundAmt: number; itemCount: number }> = {};
-  const groupOf = (name: unknown) => {
-    const key = String(name ?? '').trim() || 'Uncategorized';
-    return groupTotals[key] ?? (groupTotals[key] = { salesAmt: 0, refundAmt: 0, itemCount: 0 });
-  };
-  for (const sale of normalSales) {
-    for (const si of sale.saleItems) {
-      const g = groupOf((si as any).product?.category);
-      g.salesAmt = fix2(g.salesAmt + Number(si.totalPrice));
-      g.itemCount += 1;
-    }
-  }
-  for (const sale of normalRefunds) {
-    for (const si of sale.saleItems) {
-      const g = groupOf((si as any).product?.category);
-      g.refundAmt = fix2(g.refundAmt + Number(si.totalPrice));
-      g.itemCount += 1;
-    }
-  }
-
+  // Sales/refund legs aggregated by the pure, unit-tested aggregator so the
+  // controller and the fiscal record can never disagree on the money math.
+  // Band taxes derive once per band from the band NET and the programmed
+  // rates (money.service policy) — the rates are fetched first for that.
   const [rateA, rateB, rateC, rateD] = await getTaxRatesBySlot(organizationId);
   const taxRates: Record<string, number> = {
     A: rateA, B: rateB, C: rateC, D: rateD, E: 0,
   };
-
-  // Payment breakdown
-  const paymentTotals: Record<string, number> = {};
-  for (const sale of normalSales) {
-    const pt = sale.paymentType;
-    paymentTotals[pt] = fix2((paymentTotals[pt] ?? 0) + Number(sale.totalAmount));
-  }
-
-  // R10: refunds split by means of payment (signed), separate from sales.
-  const refundPaymentTotals: Record<string, number> = {};
-  for (const sale of normalRefunds) {
-    const pt = sale.paymentType;
-    refundPaymentTotals[pt] = fix2((refundPaymentTotals[pt] ?? 0) + Number(sale.totalAmount));
-  }
-
-  const grossSalesAmt  = fix2(normalSales.reduce((s, sale) => s + Number(sale.totalAmount), 0));
-  const grossRefundAmt = fix2(normalRefunds.reduce((s, sale) => s + Math.abs(Number(sale.totalAmount)), 0));
-  const netSalesAmt    = fix2(grossSalesAmt - grossRefundAmt);
-  const totalTaxAmt    = fix2(Object.values(taxBands).reduce((s, b) => s + b.taxAmt, 0));
+  const legs = aggregateSalesLegs(normalSales as any, normalRefunds as any, [rateA, rateB, rateC, rateD]);
+  const {
+    taxBands,
+    refundBands,
+    groupTotals,
+    paymentTotals,
+    refundPaymentTotals,
+    grossSalesAmt,
+    grossRefundAmt,
+    netSalesAmt,
+    totalTaxAmt,
+    discountTotal,
+  } = legs;
   const openingDeposit = fix2(Number(shiftAgg._sum.openingFloat ?? 0));
   const proformaAmt = fix2(proformaSales.reduce((s, sale) => s + Math.abs(Number(sale.totalAmount)), 0));
-  const discountTotal = fix2(normalSales.reduce(
-    (s, sale) => s + sale.saleItems.reduce((a, si) => a + Math.abs(Number((si as any).dcAmt ?? 0)), 0),
-    0,
-  ));
   const otherReductionsAmt = fix2(voidedSales.reduce((s, sale) => s + Math.abs(Number(sale.totalAmount)), 0));
+
   const incompleteSalesCount = heldCount + incompleteDrafts;
 
   // Receipt counters — the "A"/"B" halves of the RRA A/B RT counter, taken from
