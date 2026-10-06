@@ -262,10 +262,10 @@ async function ledgerBalanceByProduct(
 
 function effectiveQuantity(
   productId: number,
-  cachedQuantity: number,
+  cachedQuantity: number | { toNumber(): number },
   ledgerMap: Map<number, number>
 ): number {
-  if (!ledgerMap.has(productId)) return cachedQuantity
+  if (!ledgerMap.has(productId)) return Number(cachedQuantity)
   return ledgerMap.get(productId) ?? 0
 }
 
@@ -922,7 +922,7 @@ export const getDetailedInventory = async (req: BranchAuthRequest, res: Response
     });
 
     const inventoryData = products.map(product => {
-      const soldLastMonth = product.saleItems.reduce((sum, sale) => sum + sale.quantity, 0);
+      const soldLastMonth = product.saleItems.reduce((sum, sale) => sum + Number(sale.quantity), 0);
       const currentStock = effectiveQuantity(product.id, product.quantity, ledgerMap);
       const averageStock = (product.minStock + currentStock) / 2;
       const turnoverRate = averageStock > 0 ? soldLastMonth / averageStock : 0;
@@ -1140,8 +1140,9 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
     const now = new Date()
 
     for (const p of products) {
-      if (p.quantity <= 0) outOfStockCount++
-      else if (p.minStock > 0 && p.quantity <= p.minStock) lowStockCount++
+      const pq = Number(p.quantity);
+      if (pq <= 0) outOfStockCount++
+      else if (p.minStock > 0 && pq <= p.minStock) lowStockCount++
 
       if (p.expiryDate && new Date(p.expiryDate) < now) expiredCount++
     }
@@ -1231,9 +1232,9 @@ export const getOverviewDashboard = async (req: BranchAuthRequest, res: Response
       : []
     const topProdMap = new Map(topProdDetails.map(p => [p.id, p.name]))
 
-    const maxSold = Math.max(...topSaleItems.map(i => i._sum.quantity || 0), 1)
+    const maxSold = Math.max(...topSaleItems.map(i => Number(i._sum.quantity || 0)), 1)
     const topSellingProductsList = topSaleItems.map(item => {
-      const sold = item._sum.quantity || 0
+      const sold = Number(item._sum.quantity || 0)
       const revenue = Number(item._sum.totalPrice || 0)
       const name = topProdMap.get(item.productId!) || 'Unknown Product'
       const percentage = Math.round((sold / maxSold) * 100)

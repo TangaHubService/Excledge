@@ -153,7 +153,7 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
 
       for (const pid of productIds) { stockMap[pid] = 0; }
       for (const row of batchAggregates) {
-        stockMap[row.productId] = row._sum.quantity || 0;
+        stockMap[row.productId] = Number(row._sum.quantity || 0);
       }
     }
 
@@ -720,19 +720,19 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
                 organizationId: organizationId!,
                 branchId,
                 batchNumber: batchName,
-                quantity: product.quantity || 0,
+                quantity: Number(product.quantity) || 0,
                 unitCost: batchUnitCost,
                 expiryDate: product.expiryDate || null,
                 isActive: true,
               },
             });
 
-            if (product.quantity > 0) {
+            if (Number(product.quantity) > 0) {
               await ledgerAddStock({
                 organizationId: organizationId!,
                 productId: product.id,
                 userId,
-                quantity: product.quantity,
+                quantity: Number(product.quantity),
                 movementType: 'INITIAL_STOCK',
                 branchId,
                 reference: `INIT-${product.id}`,
@@ -1259,8 +1259,8 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
     let filtered: Candidate[] = candidates
       .map(p => {
         const effectiveStock = branchId !== undefined
-          ? ((p as any).batches as Array<{ quantity: number }>).reduce((s, b) => s + b.quantity, 0)
-          : p.quantity
+          ? ((p as any).batches as Array<{ quantity: number }>).reduce((s, b) => s + Number(b.quantity), 0)
+          : Number(p.quantity)
         const effectiveMinStock = p.minStock > 0 ? p.minStock : (overrideThreshold ?? 0)
         return { ...p, effectiveStock, effectiveMinStock }
       })

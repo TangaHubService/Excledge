@@ -91,8 +91,8 @@ type InventoryLedgerRow = {
   branchId: number | null;
   movementType: string;
   direction: string;
-  quantity: number;
-  runningBalance: number;
+  quantity: number | Prisma.Decimal;
+  runningBalance: number | Prisma.Decimal;
   unitCost?: Prisma.Decimal | number | null;
   reference?: string | null;
   referenceType?: string | null;
@@ -108,9 +108,9 @@ async function branchAverageCost(tx: Prisma.TransactionClient, organizationId: n
     where: { organizationId, productId, branchId, isActive: true, quantity: { gt: 0 } },
     select: { unitCost: true, quantity: true },
   });
-  const quantity = batches.reduce((sum, b) => sum + b.quantity, 0);
+  const quantity = batches.reduce((sum, b) => sum + Number(b.quantity), 0);
   if (quantity <= 0) return null;
-  return batches.reduce((sum, b) => sum + Number(b.unitCost) * b.quantity, 0) / quantity;
+  return batches.reduce((sum, b) => sum + Number(b.unitCost) * Number(b.quantity), 0) / quantity;
 }
 
 /**
@@ -162,8 +162,8 @@ export async function enqueueInventoryMovementAccountingEvent(
       unit: product?.qtyUnitCd,
       branchId: row.branchId,
       branchName: branch?.name,
-      quantity: row.quantity,
-      runningBalance: row.runningBalance,
+      quantity: Number(row.quantity),
+      runningBalance: Number(row.runningBalance),
       unitCost: unitCost ?? null,
       reference: row.reference,
       referenceType: row.referenceType,
@@ -209,11 +209,11 @@ export async function enqueueInventoryOpeningSnapshot(organizationId: number) {
   for (const b of batches) {
     const key = `${b.productId}:${b.branchId}`;
     const row = costs.get(key) ?? { cost: 0, quantity: 0 };
-    row.cost += Number(b.unitCost) * b.quantity;
-    row.quantity += b.quantity;
+    row.cost += Number(b.unitCost) * Number(b.quantity);
+    row.quantity += Number(b.quantity);
     costs.set(key, row);
   }
-  const onHand = latest.filter((l) => l.branchId != null && l.runningBalance > 0);
+  const onHand = latest.filter((l) => l.branchId != null && Number(l.runningBalance) > 0);
   const products = await prisma.product.findMany({
     where: { id: { in: [...new Set(onHand.map((l) => l.productId))] } },
     select: { id: true, name: true, sku: true, category: true, qtyUnitCd: true },
@@ -232,7 +232,7 @@ export async function enqueueInventoryOpeningSnapshot(organizationId: number) {
       unit: product?.qtyUnitCd,
       branchId: l.branchId,
       branchName: branchName.get(l.branchId as number),
-      quantity: l.runningBalance,
+      quantity: Number(l.runningBalance),
       unitCost: cost && cost.quantity > 0 ? cost.cost / cost.quantity : 0,
     };
   });

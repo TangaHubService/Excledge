@@ -75,10 +75,11 @@ async function findBatchForConsumption(
 
   let remaining = quantityNeeded;
   for (const batch of batches) {
-    if (batch.quantity >= remaining) {
+    const available = Number(batch.quantity);
+    if (available >= remaining) {
       return { batchId: batch.id, batchNumber: batch.batchNumber, quantity: remaining };
     }
-    remaining -= batch.quantity;
+    remaining -= available;
   }
 
   return null;
@@ -124,7 +125,7 @@ async function consumeFromBatches(
   for (const batch of batches) {
     if (remaining <= 0) break;
 
-    const consumeQty = Math.min(batch.quantity, remaining);
+    const consumeQty = Math.min(Number(batch.quantity), remaining);
 
     const ledgerEntry = await removeStock({
       organizationId,
@@ -452,7 +453,7 @@ export async function reverseProductionRun(
         organizationId,
         productId: entry.productId,
         userId,
-        quantity: entry.quantity,
+        quantity: Number(entry.quantity),
         movementType: 'ADJUSTMENT_IN',
         branchId: entry.branchId ?? 0,
         batchId: entry.batchId ?? undefined,
@@ -465,7 +466,7 @@ export async function reverseProductionRun(
       if (entry.batchId) {
         await tx.batch.update({
           where: { id: entry.batchId },
-          data: { quantity: { increment: entry.quantity } },
+          data: { quantity: { increment: Number(entry.quantity) } },
         });
       }
     }
@@ -484,7 +485,7 @@ export async function reverseProductionRun(
         organizationId,
         productId: produced.productId,
         userId,
-        quantity: produced.quantity,
+        quantity: Number(produced.quantity),
         movementType: 'ADJUSTMENT_OUT',
         branchId: produced.branchId ?? 0,
         batchId: produced.batchId ?? undefined,

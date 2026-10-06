@@ -115,10 +115,10 @@ export async function getAverageCost(
   }
 
   const totalCost = batches.reduce(
-    (sum, batch) => sum + batch.unitCost.toNumber() * batch.quantity,
+    (sum, batch) => sum + batch.unitCost.toNumber() * Number(batch.quantity),
     0
   );
-  const totalQuantity = batches.reduce((sum, batch) => sum + batch.quantity, 0);
+  const totalQuantity = batches.reduce((sum, batch) => sum + Number(batch.quantity), 0);
 
   if (totalQuantity === 0) {
     return null;
@@ -197,7 +197,7 @@ export async function updateBatchCostPrice(
       data: {
         batchId,
         unitCost: newUnitCost,
-        quantity: batch.quantity,
+        quantity: Number(batch.quantity),
         reason: reason || 'Cost price update',
         recordedById: userId,
       },

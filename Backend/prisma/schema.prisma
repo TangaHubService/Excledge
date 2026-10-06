@@ -464,7 +464,7 @@ model Product {
   name                 String
   sku                  String?
   batchNumber          String?
-  quantity             Int                   @default(0)
+  quantity             Decimal               @default(0) @db.Decimal(15, 3)
   unitPrice            Decimal               @db.Decimal(15, 2) // Sales price
   purchasePrice        Decimal?              @db.Decimal(15, 2) // Cost/purchase price — seeds the initial batch's unitCost
   expiryDate           DateTime?
@@ -739,7 +739,8 @@ model SaleItem {
   saleId             Int
   productId          Int?
   batchId            Int?
-  quantity           Int
+  // Fractional quantities (kg, litres…) for RRA-weighed goods — Decimal(15,3).
+  quantity           Decimal         @db.Decimal(15, 3)
   unitPrice          Decimal         @db.Decimal(15, 2)
   totalPrice         Decimal         @db.Decimal(15, 2)
   costPrice          Decimal         @default(0) @db.Decimal(15, 2)
@@ -787,9 +788,9 @@ model Notification {
 
 model StockMovement {
   type           StockMovementType
-  quantity       Int
-  previousStock  Int
-  newStock       Int
+  quantity       Decimal @db.Decimal(15, 3)
+  previousStock  Decimal @db.Decimal(15, 3)
+  newStock       Decimal @db.Decimal(15, 3)
   note           String?
   reference      String?
   createdAt      DateTime          @default(now())
@@ -839,7 +840,7 @@ model Batch {
   branchId         Int // NEW: Branch-based inventory
   warehouseId      Int? // DEPRECATED: kept for migration
   batchNumber      String
-  quantity         Int
+  quantity         Decimal            @db.Decimal(15, 3)
   unitCost         Decimal            @db.Decimal(15, 2)
   expiryDate       DateTime?
   receivedAt       DateTime           @default(now())
@@ -891,8 +892,8 @@ model InventoryLedger {
   userId         Int
   movementType   InventoryMovementType
   direction      InventoryDirection
-  quantity       Int
-  runningBalance Int
+  quantity       Decimal               @db.Decimal(15, 3)
+  runningBalance Decimal               @db.Decimal(15, 3)
   unitCost       Decimal?              @db.Decimal(15, 2)
   totalCost      Decimal?              @db.Decimal(15, 2)
   reference      String?

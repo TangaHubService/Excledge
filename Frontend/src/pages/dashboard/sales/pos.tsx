@@ -72,7 +72,18 @@ export interface CartItem {
 }
 
 function productsFromInventoryResponse(res: unknown): Product[] {
-  return parseInventoryGetProductsResponse(res).items as Product[]
+  // Backend Decimal(15,3) quantities serialize as strings — normalize to
+  // numbers once here so every comparison and cart computation below is safe.
+  return parseInventoryGetProductsResponse(res).items.map((raw) => {
+    const p = raw as Record<string, unknown>
+    return {
+      ...(p as object),
+      price: Number(p.price ?? p.unitPrice ?? 0),
+      stock: Number(p.stock ?? p.quantity ?? 0),
+      quantity: Number(p.quantity ?? 0),
+      unitPrice: p.unitPrice != null ? Number(p.unitPrice) : undefined,
+    } as Product
+  })
 }
 
 // ── ProductCard ───────────────────────────────────────────────────────────────
@@ -164,8 +175,9 @@ const CartItemRow = memo(({
   const [editingQty, setEditingQty] = useState(false)
 
   const commitQty = () => {
-    const n = parseInt(quantityInput, 10)
-    if (!isNaN(n) && n > 0) onUpdateQuantity(item.product.id, n)
+    // Fractional quantities allowed (weighed goods: kg, litres…).
+    const n = Number(quantityInput)
+    if (Number.isFinite(n) && n > 0) onUpdateQuantity(item.product.id, Math.round(n * 1000) / 1000)
     else setQuantityInput(String(item.quantity))
     setEditingQty(false)
   }

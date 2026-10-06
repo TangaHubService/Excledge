@@ -40,7 +40,7 @@ export const recordStockMovement = async (params: RecordMovementParams) => {
             throw new Error(`Product with ID ${productId} not found`);
         }
 
-        const previousStock = product.quantity;
+        const previousStock = Number(product.quantity);
         const newStock = previousStock + quantity;
 
         // 2. Create stock movement record

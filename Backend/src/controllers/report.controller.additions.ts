@@ -135,7 +135,7 @@ export const getCashFlowReport = async (req: AuthRequest, res: Response) => {
         });
 
         const openingBalance = inventoryProducts.reduce((sum, product) => {
-            return sum + (product.quantity * product.unitPrice.toNumber());
+            return sum + (Number(product.quantity) * product.unitPrice.toNumber());
         }, 0);
         const transactions: any[] = [];
         let runningBalance = openingBalance;
