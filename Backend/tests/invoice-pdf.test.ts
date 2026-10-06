@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+import PDFDocument from "pdfkit"
 import QRCode from "qrcode"
-import { generateEbmInvoicePdf } from "../src/services/invoice-pdf.service"
+import { documentIndicator, generateEbmInvoicePdf } from "../src/services/invoice-pdf.service"
 import type { RenderInvoicePayload } from "../src/services/invoice-render.service"
-import { SYSTEM_FOOTER } from "../src/services/system-branding.service"
+import { NOT_FISCALIZED_TITLE, SYSTEM_FOOTER } from "../src/services/system-branding.service"
 
 function invoiceFixture(itemCount = 1): RenderInvoicePayload {
   const items = Array.from({ length: itemCount }, (_, index) => ({
@@ -116,5 +117,126 @@ describe("backend EBM A4 PDF generation", () => {
     const pdf = await generateEbmInvoicePdf(invoice, "A4")
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-")
     expect(pdf.length).toBeGreaterThan(10_000)
+  })
+})
+
+describe("per-tax-type sales totals (Total A/B/C/D)", () => {
+  function bandFixture(): RenderInvoicePayload {
+    const invoice = normalOriginalFixture()
+    const bands: Array<{ code: string; total: number; tax: number; vat: number }> = [
+      { code: "A", total: 1500, tax: 0, vat: 0 },
+      { code: "B", total: 1180, tax: 180, vat: 18 },
+      { code: "C", total: 2000, tax: 0, vat: 0 },
+      { code: "D", total: 750, tax: 0, vat: 0 },
+    ]
+    invoice.items = bands.map((b, i) => ({
+      line: i + 1,
+      code: `ITEM-${b.code}`,
+      description: `Band ${b.code} item`,
+      quantity: 1,
+      unit: "PCS",
+      unitPrice: b.total,
+      discountPct: 0,
+      discountAmt: 0,
+      taxCode: b.code,
+      vatPct: b.vat,
+      taxAmount: b.tax,
+      subtotal: b.total,
+      net: b.total,
+      total: b.total,
+    }))
+    return invoice
+  }
+
+  it("A4 prints one sales-total row per band in play (B always, even at zero)", async () => {
+    const drawn = await captureDrawnText(() => generateEbmInvoicePdf(bandFixture(), "A4"))
+    const blob = drawn.join("\n")
+    for (const code of ["A", "B", "C", "D"]) {
+      expect(blob).toMatch(new RegExp(`Total ${code} Rwf`))
+    }
+  })
+
+  it("A4 omits unused bands but keeps B at zero sales", async () => {
+    const invoice = normalOriginalFixture()
+    invoice.items = invoice.items.filter((i) => i.taxCode === "B")
+    const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))
+    const blob = drawn.join("\n")
+    expect(blob).toMatch(/Total B Rwf/)
+    expect(blob).not.toMatch(/Total A Rwf/)
+    expect(blob).not.toMatch(/Total C Rwf/)
+    expect(blob).not.toMatch(/Total D Rwf/)
+  })
+})
+
+/** Collect every string drawn into the PDF, regardless of stream compression. */
+function captureDrawnText(run: () => Promise<Buffer>): Promise<string[]> {
+  const drawn: string[] = []
+  const spy = vi.spyOn(PDFDocument.prototype, "text").mockImplementation(function (this: any, text: unknown, ...rest: unknown[]) {
+    drawn.push(String(text))
+    return this
+  })
+  return run().finally(() => spy.mockRestore()).then(() => drawn)
+}
+
+function normalOriginalFixture(): RenderInvoicePayload {
+  const invoice = invoiceFixture(1)
+  invoice.invoice.isCopy = false
+  invoice.invoice.rcptLabel = "NS"
+  invoice.invoice.notFiscalized = null
+  invoice.invoice.receiptNumber = "12/20 NS"
+  invoice.sdcInformation.receiptNumber = "12/20 NS"
+  invoice.sdcInformation.rcptLabel = "NS"
+  return invoice
+}
+
+describe("no center stamp (designation lives in the header title only)", () => {
+  it("a fiscalized NORMAL original prints no designation at all", async () => {
+    const invoice = normalOriginalFixture()
+    expect(documentIndicator(invoice)).toBe("")
+    const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))
+    const blob = drawn.join("\n")
+    expect(blob).not.toContain("COPY")
+    expect(blob).not.toContain("TRAINING MODE")
+    expect(blob).not.toContain("PROFORMA")
+    expect(blob).not.toContain(NOT_FISCALIZED_TITLE)
+  })
+
+  it("a COPY reprint prints the designation once (header title, no center stamp)", async () => {
+    const invoice = normalOriginalFixture()
+    invoice.invoice.isCopy = true
+    expect(documentIndicator(invoice)).toBe("COPY")
+    const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))
+    expect(drawn.filter((t) => t === "COPY")).toHaveLength(1)
+  })
+
+  it("a fiscalized TRAINING original designates in the title only (no center stamp)", async () => {
+    const invoice = normalOriginalFixture()
+    invoice.invoice.rcptLabel = "TS"
+    invoice.invoice.receiptNumber = "12/9 TS"
+    invoice.sdcInformation.receiptNumber = "12/9 TS"
+    invoice.sdcInformation.rcptLabel = "TS"
+    expect(documentIndicator(invoice)).toBe("TRAINING MODE")
+    const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))
+    expect(drawn.filter((t) => t === "TRAINING MODE")).toHaveLength(1)
+  })
+
+  it("a fiscalized PROFORMA original designates in the title only (no center stamp)", async () => {
+    const invoice = normalOriginalFixture()
+    invoice.invoice.isProforma = true
+    invoice.invoice.rcptLabel = "PS"
+    invoice.invoice.receiptNumber = "7/4 PS"
+    invoice.sdcInformation.receiptNumber = "7/4 PS"
+    invoice.sdcInformation.rcptLabel = "PS"
+    expect(documentIndicator(invoice)).toBe("PROFORMA")
+    const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))
+    expect(drawn.filter((t) => t === "PROFORMA")).toHaveLength(1)
+  })
+
+  it("a NOT FISCALISED provisional document designates in the title only (no center stamp)", async () => {
+    const invoice = normalOriginalFixture()
+    invoice.invoice.notFiscalized = "pending"
+    expect(documentIndicator(invoice)).toBe(NOT_FISCALIZED_TITLE)
+    const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))
+    expect(drawn.filter((t) => t === NOT_FISCALIZED_TITLE)).toHaveLength(1)
   })
 })

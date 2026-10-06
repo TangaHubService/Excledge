@@ -670,8 +670,9 @@ model Sale {
   rcptLabel            RcptLabel? // RRA receipt type label (B4): NS/NR/CS/CR/TS/TR/PS
   vsdcInvcNo           Int?             @map("vsdc_invc_no") // Raw numeric invoice number sent to VSDC as invcNo (reused as orgInvcNo on refund)
   // Local, non-fiscal per-branch/per-rcptLabel counter (BranchReceiptCounter) —
-  // used ONLY for isProforma sales, which are never submitted to VSDC and so
-  // never receive a real vsdcInvcNo/sdcRcptNo. This is the "A" in the printed
+  // kept for proforma/training sales as the fallback receipt number printed
+  // until VSDC confirms the submission (all receipt types are fiscalized and
+  // receive a real vsdcInvcNo/sdcRcptNo). This is the "A" in the printed
   // "A/B RT" receipt counter (spec §7.25) — count within this receipt type only.
   localReceiptSeq      Int?             @map("local_receipt_seq")
   // The "B" in "A/B RT" — a running total across every locally-numbered

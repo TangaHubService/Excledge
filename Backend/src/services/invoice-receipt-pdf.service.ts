@@ -3,7 +3,7 @@ import type { RenderInvoicePayload } from "./invoice-render.service"
 import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, groupFiscalValue } from "./invoice-format.service"
 import { getOrganizationLogo, getRraCertificationLogo } from "./invoice-logo.service"
 import { NOT_FISCALIZED_NOTICE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_NOTICE, SYSTEM_FOOTER } from "./system-branding.service"
-import { dataUrlBuffer, documentIndicator, isFormalNoticeIndicator, isRefundTransaction, safe, taxGroups } from "./invoice-pdf.service"
+import { dataUrlBuffer, documentIndicator, isFormalNoticeIndicator, isRefundTransaction, safe, salesBands, taxGroups } from "./invoice-pdf.service"
 
 /**
  * Narrow, continuous "thermal roll" layout for 80mm POS printers — the
@@ -104,11 +104,6 @@ function drawReceipt(
   if (data.invoice.notFiscalized) {
     y = centeredText(doc, NOT_FISCALIZED_NOTICE, y, true, 6)
   }
-  // Real sale printed before VSDC confirmed it — spell out that the slip is
-  // provisional right under the NOT FISCALISED title.
-  if (data.invoice.notFiscalized) {
-    y = centeredText(doc, NOT_FISCALIZED_NOTICE, y, true, 6)
-  }
   // A copied refund (watermark title "COPY") is still a refund and keeps its
   // reference to the original sale, independent of which title printed above.
   if (isRefundTransaction(data)) {
@@ -152,9 +147,11 @@ function drawReceipt(
   const totalTax = taxGroups(data).reduce((sum, group) => sum + group.tax, 0)
 
   y = labelValueLine(doc, `TOTAL${currencyLabel}`, formatInvoiceAmount(data.totals.grandTotal), y, true)
-  // One authoritative total: per-band SALES totals ("TOTAL A …") are not
-  // printed (they duplicate the grand total sliced by band); per-band TAX
-  // rows carry the RRA-required breakdown.
+  // Grand total sliced by tax band ("TOTAL A/B/C/D …" — the per-type sales
+  // totals), then the per-band TAX rows carrying the RRA-required breakdown.
+  for (const group of salesBands(data)) {
+    y = labelValueLine(doc, `TOTAL ${group.code}${currencyLabel}`, formatInvoiceAmount(group.total), y)
+  }
   for (const group of groups) {
     y = labelValueLine(doc, `TOTAL TAX ${group.code}`, formatInvoiceAmount(group.tax), y)
   }
