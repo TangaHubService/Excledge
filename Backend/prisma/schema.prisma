@@ -918,9 +918,13 @@ model InventoryLedger {
   createdAt      DateTime              @default(now())
   batchId        Int?
   // RRA Stock In/Out sync (/stock/saveStockItems + /stockMaster/saveStockMaster).
-  // Null = not applicable (e.g. SALE rows — RRA derives stock-out from saveSales).
+  // SALE rows are queued (sarTyCd 11) only after their sales invoice is
+  // fiscalized (S8 order); PENDING = ready, SYNCED = acked, FAILED = retry.
+  // ebmOrgSarNo stores orgSarNo (original SAR number) for refund/return rows;
+  // NULL = no original / not confirmed — never assume 0 (provider to confirm).
   ebmSyncStatus  EbmSyncStatus?
   ebmSarNo       Int?
+  ebmOrgSarNo    Int?
   ebmSyncedAt    DateTime?
   ebmError       String?
   batch          Batch?                @relation(fields: [batchId], references: [id])
@@ -939,6 +943,7 @@ model InventoryLedger {
   @@index([branchId]) // NEW
   @@index([branchId, productId]) // NEW
   @@index([organizationId, ebmSyncStatus])
+  @@unique([organizationId, ebmSarNo])
   @@map("inventory_ledger")
 }
 
