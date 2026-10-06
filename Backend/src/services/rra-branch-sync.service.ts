@@ -397,3 +397,58 @@ export async function syncRraStockMoves(
   await saveCursor(organizationId, 'stockMoves', runAt, `OK: ${list.length} stock moves`);
   return { ok: true, fetched: list.length, stockList: list };
 }
+
+/**
+ * S12: apply HQ↔branch movements from /stock/selectStockItems to local
+ * inventory. Idempotent: each (sarNo, itemCd) is booked at most once, keyed by
+ * reference `RRA-SAR-{sarNo}`. Incoming branch moves book as TRANSFER_IN
+ * (sarTyCd 04) through the centralized ledger service. Movements for unknown
+ * itemCd are skipped (counted) — never invent products from a stock move.
+ */
+export async function applyRraStockMoves(
+  organizationId: number,
+  stockList: RraStockMoveLVO[],
+  opts: { branchId?: number | null; userId?: number } = {},
+): Promise<{ applied: number; skipped: number }> {
+  const { addStock } = await import('./inventory-ledger.service');
+  let applied = 0;
+  let skipped = 0;
+  const branchId = opts.branchId ?? (await defaultBranchId(organizationId));
+  if (branchId == null) return { applied: 0, skipped: stockList.length };
+  let userId = opts.userId;
+  if (userId == null) {
+    const u = await prisma.user.findFirst({ where: { organizationId } as any, orderBy: { id: 'asc' }, select: { id: true } });
+    userId = (u as any)?.id ?? null;
+  }
+  if (userId == null) return { applied: 0, skipped: stockList.length };
+  for (const move of stockList) {
+    const ref = `RRA-SAR-${move.sarNo}`;
+    for (const line of move.itemList ?? []) {
+      if (!line.itemCd || !(line.qty > 0)) { skipped += 1; continue; }
+      const product = await prisma.product.findFirst({
+        where: { organizationId, itemCd: line.itemCd },
+        select: { id: true },
+      });
+      if (!product) { skipped += 1; continue; }
+      const existing = await prisma.inventoryLedger.findFirst({
+        where: { organizationId, productId: product.id, reference: ref, referenceType: 'RRA_STOCK_MOVE' },
+        select: { id: true },
+      });
+      if (existing) { skipped += 1; continue; }
+      await addStock({
+        organizationId,
+        productId: product.id,
+        userId,
+        quantity: Number(line.qty),
+        movementType: 'TRANSFER_IN',
+        branchId,
+        reference: ref,
+        referenceType: 'RRA_STOCK_MOVE',
+        note: `HQ/branch stock move sarNo ${move.sarNo}`,
+        metadata: { rraSarNo: move.sarNo, itemSeq: line.itemSeq ?? null } as any,
+      });
+      applied += 1;
+    }
+  }
+  return { applied, skipped };
+}
