@@ -22,6 +22,23 @@ function queueStockSync(entry: { id?: number; ebmSyncStatus?: string | null } | 
   });
 }
 
+/**
+ * Serialize concurrent writers for the same (org, product, branch) stock.
+ * The availability check is a ledger aggregate (non-locking groupBy), so two
+ * simultaneous sales could both pass and oversell. The products-row FOR UPDATE
+ * below does not serialize the aggregate read. A transaction-scoped advisory
+ * lock on the stock key closes the race; it is released at commit/rollback.
+ */
+async function acquireStockLock(
+  tx: any,
+  organizationId: number,
+  productId: number,
+  branchId: number | null | undefined,
+) {
+  const key = `stock:${organizationId}:${productId}:${branchId ?? 'null'}`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+}
+
 
 /**
  * Inventory Ledger Service
@@ -256,6 +273,8 @@ export async function addStock(params: AddStockParams) {
 
   // Use provided transaction client or create a new one
   const executeInTransaction = async (tx: any) => {
+    // Serialize writers for this stock key (oversell guard — S2/S14).
+    await acquireStockLock(tx, organizationId, productId, branchId);
     // Lock product row using FOR UPDATE to prevent race conditions
     const product = await tx.$queryRaw<Array<{ id: number; quantity: number; name: string }>>`
       SELECT id, quantity, name
@@ -453,6 +472,8 @@ export async function removeStock(params: RemoveStockParams) {
 
   // Use provided transaction client or create a new one
   const executeInTransaction = async (tx: any) => {
+    // Serialize writers for this stock key (oversell guard — S2/S14).
+    await acquireStockLock(tx, organizationId, productId, branchId);
     // Lock product row using FOR UPDATE to prevent race conditions
     const product = await tx.$queryRaw<Array<{ id: number; quantity: number; name: string }>>`
       SELECT id, quantity, name
@@ -613,6 +634,8 @@ export async function adjustStock(params: AdjustStockParams) {
 
   // Use transaction
   const entry = await prisma.$transaction(async (tx) => {
+    // Serialize writers for this stock key (oversell guard — S2/S14).
+    await acquireStockLock(tx, organizationId, productId, branchId);
     // Lock product row using FOR UPDATE to prevent race conditions — matches
     // addStock/removeStock so a concurrent sale/adjustment on the same product
     // can't read the same pre-adjustment balance and push stock negative.
