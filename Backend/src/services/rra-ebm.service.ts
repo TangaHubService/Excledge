@@ -5,6 +5,7 @@ import type { Prisma } from '@prisma/client';
 import { isValidPurchaseCode, generateValidPurchaseCodes } from './purchase-code.checksum';
 import { deriveQtyUnitCd } from './item-code.service';
 import { getRraPaymentCode, requiresPurchaseCode, resolvePkgUnitCd, resolveQtyUnitCd } from './rra-code.service';
+import { diff2 } from './money.service';
 
 /** Any Prisma client capable of running queries — the top-level client or a $transaction callback's `tx`. */
 type PrismaClientOrTx = typeof prisma | Prisma.TransactionClient;
@@ -657,8 +658,15 @@ export function buildRraSendReceiptPayload(
     const qty = Math.abs(Number(si.quantity));
     const prc = Math.abs(si.unitPrice.toNumber());
     const splyAmt = fix2(qty * prc);
+    const dcAmtAbs = fix2(Math.abs(si.dcAmt.toNumber()));
     const tAmt = Math.abs(fix2(si.taxAmount.toNumber()));
-    taxblAmt[slot] = fix2(taxblAmt[slot] + splyAmt);
+    // R4: the DISCOUNTED amount enters the totals. splyAmt stays the gross
+    // qty×prc (unit-price identity + the sandbox's dcAmt<=splyAmt check), but
+    // the taxable band and the line total are net of discount. si.taxAmount is
+    // already net-based — commitSale computes tax on the charged (post-
+    // discount) prices — so only the splyAmt leg needed correcting.
+    const netAmt = diff2(splyAmt, dcAmtAbs);
+    taxblAmt[slot] = fix2(taxblAmt[slot] + netAmt);
     taxAmt[slot]   = fix2(taxAmt[slot] + tAmt);
 
     // Sales are always rung up per individual unit (qty), never per whole
@@ -735,9 +743,9 @@ export function buildRraSendReceiptPayload(
         };
       })(),
       taxTyCd:    rawCode,
-      taxblAmt:   fix2(splyAmt),
+      taxblAmt:   fix2(netAmt),
       taxAmt:     fix2(tAmt),
-      totAmt:     fix2(splyAmt),
+      totAmt:     fix2(netAmt),
     };
   });
 

@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { Decimal } from '@prisma/client/runtime/library';
-import { computeFiscalLine, computeFiscalTotals, round2 } from '../src/services/money.service';
+import { computeFiscalLine, computeFiscalTotals, diff2, round2 } from '../src/services/money.service';
 
 describe('central money module — rounding policy (exact per line, round once per rate)', () => {
   it('round2 is half-up on exact decimals (2.675 -> 2.68, no float error)', () => {
     expect(round2('2.675')).toBe(2.68);
     expect(round2('2.674')).toBe(2.67);
     expect(round2(0)).toBe(0);
+  });
+
+  it('diff2 subtracts exactly through floats (10.03 - 0.07 = 9.96)', () => {
+    expect(diff2(10.03, 0.07)).toBe(9.96);
+    expect(diff2(6720, 1680)).toBe(5040);
   });
 
   it('extracts inclusive tax: 5340 @18% -> tax 814.58, taxable 4525.42', () => {
