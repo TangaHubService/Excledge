@@ -573,10 +573,10 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
                 tx,
               });
 
-              await tx.product.update({
-                where: { id: action.productId },
-                data: { quantity: { increment: qty } },
-              });
+              // NOTE (stock S14): addStock above already increments
+              // Product.quantity via the centralized ledger service. Do NOT
+              // add a second product.update increment here — that would
+              // double-count the cache (ledger runningBalance stays correct).
 
               await tx.supplierInvoiceItem.update({
                 where: { id: item.id },
@@ -588,14 +588,17 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
               });
 
             } else {
-              // Create new product
+              // Create new product — create with quantity 0; the addStock
+              // below (centralized ledger service) performs the single
+              // Product.quantity increment. Creating with qty AND calling
+              // addStock would double-count (S14).
               const newProduct = await tx.product.create({
                 data: {
                   name: String(mergedData.productName || 'Unknown Product'),
                   sku: mergedData.sku || null,
                   barcode: mergedData.barcode || null,
                   batchNumber,
-                  quantity: qty,
+                  quantity: 0,
                   unitPrice: sellingPrice,
                   expiryDate,
                   category: mergedData.category || null,
