@@ -90,14 +90,21 @@ export interface DailyReportData {
 export interface PluReportData {
   header: FiscalReportHeader
   periodLabel: string
+  periodStart: string | null
+  periodEnd: string | null
+  reportLabel: string
+  cisDesignation: string
   generatedAt: string
   rows: Array<{
     itemCd: string
     productName: string
     unit: string
+    unitPrice: number
+    taxRate: number
     quantity: number
     revenue: number
     taxAmount: number
+    remainingQty: number
     transactionCount: number
   }>
   summary: { uniqueItemCodes: number; totalQuantity: number; totalRevenue: number; totalTax: number }
@@ -324,12 +331,16 @@ function drawPluReport(doc: PDFKit.PDFDocument, data: PluReportData, logo: Buffe
   dashed(doc, y)
   y += 4
   y = centered(doc, "PLU REPORT", y, true, 8)
+  y = centered(doc, safe(data.reportLabel || "PRICE LOOK-UP (PLU) REPORT", "-"), y, false, 5.8)
+  y = centered(doc, safe(data.cisDesignation || "CIS", "-"), y, false, 5.4)
   y = centered(doc, "THIS IS NOT AN OFFICIAL FISCAL RECEIPT", y, false, 5.4)
   y += 2
   dashed(doc, y)
   y += 4
   const gen = formatInvoiceDateTime(data.generatedAt)
   y = line(doc, `PERIOD  : ${data.periodLabel}`, y)
+  if (data.periodStart) y = line(doc, `FROM    : ${data.periodStart}`, y)
+  if (data.periodEnd) y = line(doc, `TO      : ${data.periodEnd}`, y)
   y = line(doc, `PRINTED : ${gen.date} ${gen.time}`, y)
   y = line(doc, `SOFTWARE: ${CIS_VERSION_LABEL.replace(/^Software version:\s*/i, "")}`, y)
 
@@ -340,6 +351,7 @@ function drawPluReport(doc: PDFKit.PDFDocument, data: PluReportData, logo: Buffe
   for (const row of data.rows) {
     y = line(doc, safe(row.productName, "-"), y, 6.3)
     y = line(doc, `  ${safe(row.itemCd, "-")}`, y, 5.6)
+    y = pair(doc, `  price ${formatInvoiceAmount(row.unitPrice)}  rate ${formatInvoiceQuantity(row.taxRate)}%`, `stock ${formatInvoiceQuantity(row.remainingQty)}`, y)
     y = pair(doc, `  qty ${formatInvoiceQuantity(row.quantity)} ${safe(row.unit)}`, formatInvoiceAmount(row.revenue), y)
     y = pair(doc, `  tax`, formatInvoiceAmount(row.taxAmount), y)
     y += 1
