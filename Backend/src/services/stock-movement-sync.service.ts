@@ -154,8 +154,9 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
   const sarNo = entry.ebmSarNo ?? (await allocateSarNo(entry.organizationId));
   // orgSarNo: original SAR number for refund/return rows (new sarNo + link to
   // the original 11). Resolved from the original SALE ledger row for the same
-  // product/branch; NULL when there is no original (never assume 0 — the
-  // numbering rule awaits VSDC provider confirmation).
+  // product/branch. Live VSDC rejects null orgSarNo (910), and accepts 0 for
+  // original movements (proven by SYNCED rows) — so originals send 0 and only
+  // true returns carry a link.
   let orgSarNo: number | null = (entry as any).ebmOrgSarNo ?? null;
   if (orgSarNo == null && entry.movementType === 'RETURN_CUSTOMER') {
     const meta = (entry as any).metadata as { originalSaleNumber?: string } | null;
@@ -185,7 +186,7 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
 
   const payload = {
     sarNo,
-    orgSarNo,
+    orgSarNo: orgSarNo ?? 0,
     regTyCd: 'M', // Manual
     // StockIOSaveReq sample uses null customer fields for non-transfer movements.
     // Only inter-branch transfers should populate the counterparty TIN/bhfId.

@@ -782,13 +782,13 @@ describe('VSDC buyer identity mapping — official receipt structure', () => {
     expect('custMblNo' in receiptOf(payload)).toBe(true);
   });
 
-  it('2. customer with phone only → top-level custTin carries the mobile, receipt TIN is JSON null', () => {
+  it('2. customer with phone only → top-level custTin is JSON null (live VSDC 910-rejects phones), mobile stays in receipt', () => {
     const payload = buildRraSendReceiptPayload(
       makeBuyerSale({ TIN: null, phone: '788428899', customerType: 'INDIVIDUAL' }),
       seller,
       '01',
     ) as any;
-    expect(payload.custTin).toBe('788428899');
+    expect(payload.custTin).toBeNull();
     expect(receiptOf(payload).custTin).toBeNull();
     expect('custTin' in receiptOf(payload)).toBe(true);
     expect(receiptOf(payload).custMblNo).toBe('788428899');
@@ -816,14 +816,14 @@ describe('VSDC buyer identity mapping — official receipt structure', () => {
     expect(receiptOf(payload).custMblNo).toBeNull();
   });
 
-  it('5. invalid TIN is rejected as a TIN (individual falls back to phone; business blocks)', () => {
+  it('5. invalid TIN is rejected as a TIN (individual submits null custTin; business blocks)', () => {
     const individual = buildRraSendReceiptPayload(
       makeBuyerSale({ TIN: '123', phone: '+250788428899', customerType: 'INDIVIDUAL' }),
       seller,
       '01',
     ) as any;
     expect(receiptOf(individual).custTin).toBeNull();
-    expect(individual.custTin).toBe('+250788428899');
+    expect(individual.custTin).toBeNull();
     expect(() => buildRraSendReceiptPayload(
       makeBuyerSale({ TIN: '123', phone: '+250788428899', customerType: 'CORPORATE' }),
       seller,
