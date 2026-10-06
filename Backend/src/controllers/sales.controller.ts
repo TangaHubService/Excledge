@@ -653,6 +653,18 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
         const totalRefundVat = itemsToRefund.reduce((sum: number, item: any) => sum + item.taxAmount, 0);
         const totalRefundTaxable = totalRefundAmount - totalRefundVat;
 
+        // R9: per-rate legs mirror the original lines with the sign flipped,
+        // rounded once per band like the VSDC payload.
+        const refundBands: Record<string, { taxable: number; tax: number }> = {};
+        for (const item of itemsToRefund) {
+          const code = String(item.taxCode ?? 'A').toUpperCase();
+          const slot = refundBands[code] ?? { taxable: 0, tax: 0 };
+          slot.taxable = round2(slot.taxable + (item.totalPrice - item.taxAmount));
+          slot.tax = round2(slot.tax + item.taxAmount);
+          refundBands[code] = slot;
+        }
+        const refundBand = (code: string) => refundBands[code] ?? { taxable: 0, tax: 0 };
+
         // ── MODULE 2.3: Reject if refund exceeds original total (defense-in-depth) ──
         const originalTotal = Number((sale as any).totalAmount);
         if (totalRefundAmount > originalTotal + 0.01) {
@@ -706,6 +718,14 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             totalAmount: -totalRefundAmount, // Negative total
             vatAmount: -totalRefundVat,      // Negative — mirrors the original VAT being refunded
             taxableAmount: -totalRefundTaxable,
+            taxblAmtA: -refundBand('A').taxable,
+            taxblAmtB: -refundBand('B').taxable,
+            taxblAmtC: -refundBand('C').taxable,
+            taxblAmtD: -refundBand('D').taxable,
+            taxAmtA: -refundBand('A').tax,
+            taxAmtB: -refundBand('B').tax,
+            taxAmtC: -refundBand('C').tax,
+            taxAmtD: -refundBand('D').tax,
             status: 'REFUNDED',
             refundReason: reason,
             rfdRsnCd,

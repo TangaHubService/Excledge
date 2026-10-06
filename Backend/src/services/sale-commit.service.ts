@@ -1,5 +1,7 @@
 import { prisma } from "../lib/prisma"
 import { EbmOperation } from "@prisma/client"
+import { Decimal } from "@prisma/client/runtime/library"
+import { round2 } from "./money.service"
 import { auditLogger } from "../utils/auditLogger"
 import { removeStock } from "./inventory-ledger.service"
 import {
@@ -337,6 +339,18 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         )
       }
 
+      // R9: per-rate taxable/tax legs for the server record, aggregated from
+      // the same net-based item math as the VSDC payload (exact Decimal sums,
+      // rounded once per band — money.service policy).
+      const rateBands: Record<string, { taxable: Decimal; tax: Decimal }> = {}
+      for (const ti of taxSummary.items) {
+        const slot = rateBands[ti.taxCode] ?? { taxable: new Decimal(0), tax: new Decimal(0) }
+        slot.taxable = slot.taxable.plus(ti.taxableAmount)
+        slot.tax = slot.tax.plus(ti.taxAmount)
+        rateBands[ti.taxCode] = slot
+      }
+      const bandOf = (code: string) => rateBands[code] ?? { taxable: new Decimal(0), tax: new Decimal(0) }
+
       // 3. Select batches and calculate costs for PRODUCT items only
       const saleItemsData: any[] = []
 
@@ -476,6 +490,14 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
           totalAmount: computedTotal,
           vatAmount: taxSummary.vatAmount,
           taxableAmount: taxSummary.taxableAmount,
+          taxblAmtA: round2(bandOf("A").taxable),
+          taxblAmtB: round2(bandOf("B").taxable),
+          taxblAmtC: round2(bandOf("C").taxable),
+          taxblAmtD: round2(bandOf("D").taxable),
+          taxAmtA: round2(bandOf("A").tax),
+          taxAmtB: round2(bandOf("B").tax),
+          taxAmtC: round2(bandOf("C").tax),
+          taxAmtD: round2(bandOf("D").tax),
           status: "COMPLETED",
           isProforma: !!isProforma,
           rcptLabel: rcptLabel as any,

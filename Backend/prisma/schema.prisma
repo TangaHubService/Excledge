@@ -667,6 +667,18 @@ model Sale {
   invoiceNumber        String?          @unique @map("invoice_number")
   vatAmount            Decimal          @default(0) @db.Decimal(15, 2)
   taxableAmount        Decimal          @default(0) @db.Decimal(15, 2)
+  // R9 server-side record: per-rate taxable (totTaxablAmtA-D) and tax
+  // (totTaxA-D) amounts, tax-inclusive sales legs. Populated at commit from
+  // the same band math as the VSDC payload; historical rows predate the
+  // columns and stay NULL (reports derive bands from SaleItems instead).
+  taxblAmtA            Decimal?         @db.Decimal(15, 2) @map("taxbl_amt_a")
+  taxblAmtB            Decimal?         @db.Decimal(15, 2) @map("taxbl_amt_b")
+  taxblAmtC            Decimal?         @db.Decimal(15, 2) @map("taxbl_amt_c")
+  taxblAmtD            Decimal?         @db.Decimal(15, 2) @map("taxbl_amt_d")
+  taxAmtA              Decimal?         @db.Decimal(15, 2) @map("tax_amt_a")
+  taxAmtB              Decimal?         @db.Decimal(15, 2) @map("tax_amt_b")
+  taxAmtC              Decimal?         @db.Decimal(15, 2) @map("tax_amt_c")
+  taxAmtD              Decimal?         @db.Decimal(15, 2) @map("tax_amt_d")
   rcptLabel            RcptLabel? // RRA receipt type label (B4): NS/NR/CS/CR/TS/TR/PS
   vsdcInvcNo           Int?             @map("vsdc_invc_no") // Raw numeric invoice number sent to VSDC as invcNo (reused as orgInvcNo on refund)
   // Local, non-fiscal per-branch/per-rcptLabel counter (BranchReceiptCounter) —
