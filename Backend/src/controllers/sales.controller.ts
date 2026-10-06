@@ -1372,6 +1372,7 @@ export async function composeInvoicePayload(
         customer: { select: { id: true, name: true, phone: true, TIN: true, email: true, address: true, custPrvncNm: true, custDstrtNm: true, custSctrNm: true, custLocDesc: true } },
         user: { select: { id: true, name: true } },
         saleItems: { include: { product: true } },
+        salePayments: { select: { paymentMethod: true, amount: true } },
         ebmTransactions: { orderBy: { createdAt: "desc" } },
         originalSale: { select: { vsdcInvcNo: true, invoiceNumber: true, saleNumber: true } },
       },
@@ -1579,6 +1580,19 @@ export async function composeInvoicePayload(
     const invoiceDate = dateObj.toISOString()
 
     const paymentMethodLabel = PAYMENT_METHOD_LABEL[sale.paymentType] ?? sale.paymentType ?? ""
+    // R1: every means of payment prints with its amount. Split tenders come
+    // from the SalePayment rows; otherwise the single payment-type line with
+    // the grand total (unchanged legacy behavior).
+    const paymentLines = (sale.salePayments ?? [])
+      .map((p) => {
+        const method = String((p as any).paymentMethod ?? "")
+        return {
+          method,
+          label: PAYMENT_METHOD_LABEL[method] ?? method,
+          amount: round2(Number((p as any).amount ?? 0)),
+        }
+      })
+      .filter((l) => l.method && l.amount !== 0)
 
     const invoiceData: RenderInvoicePayload = {
       company: {
@@ -1665,6 +1679,7 @@ export async function composeInvoicePayload(
         cashAmount: round2(cashAmount),
         insuranceAmount: round2(insuranceAmount),
         debtAmount: round2(debtAmount),
+        lines: paymentLines,
       },
       sdcInformation: {
         sdcId,

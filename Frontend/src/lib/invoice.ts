@@ -88,6 +88,8 @@ export interface InvoicePayment {
   cashAmount?: number
   insuranceAmount?: number
   debtAmount?: number
+  /** One row per means of payment (R1). Empty/absent = legacy single line. */
+  lines?: Array<{ method: string; label: string; amount: number }>
 }
 
 export interface SdcInformation {
