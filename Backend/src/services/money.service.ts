@@ -71,7 +71,7 @@ export interface FiscalBandResult {
 }
 
 export interface FiscalTotalsResult {
-  bands: FiscalBandResult;
+  bands: Record<FiscalBandCode, FiscalBandResult>;
   /** Σ rounded band sales — the TOTAL to print and submit. */
   total: number;
   /** Σ rounded band taxable amounts. */
@@ -88,6 +88,16 @@ function toDecimal(value: MoneyInput | undefined | null, fallback = 0): Decimal 
 /** Round half-up to 2 decimals, returned as a JS number (e.g. 814.58). */
 export function round2(value: MoneyInput): number {
   return toDecimal(value).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+}
+
+/**
+ * Exact difference of two money numbers, rounded half-up to 2 dp.
+ * Converts through the shortest string form first so binary-float inputs
+ * like 10.03 - 0.07 come out as exactly 9.96.
+ */
+export function diff2(a: MoneyInput, b: MoneyInput): number {
+  const d = new Decimal(String(a)).minus(new Decimal(String(b)));
+  return d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
 }
 
 export function computeFiscalLine(line: FiscalLineInput): FiscalLineResult {
