@@ -667,10 +667,11 @@ model Sale {
   invoiceNumber        String?          @unique @map("invoice_number")
   vatAmount            Decimal          @default(0) @db.Decimal(15, 2)
   taxableAmount        Decimal          @default(0) @db.Decimal(15, 2)
-  // R9 server-side record: per-rate taxable (totTaxablAmtA-D) and tax
-  // (totTaxA-D) amounts, tax-inclusive sales legs. Populated at commit from
-  // the same band math as the VSDC payload; historical rows predate the
-  // columns and stay NULL (reports derive bands from SaleItems instead).
+  // R9 server-side record: per-rate VAT-inclusive band bases (totTaxablAmtA-D;
+  // equals band NET sales, so SUM == totalAmount) and band taxes (totTaxA-D).
+  // Populated at commit from the same band math as the VSDC payload;
+  // historical rows predate the columns and stay NULL (reports derive bands
+  // from SaleItems instead).
   taxblAmtA            Decimal?         @db.Decimal(15, 2) @map("taxbl_amt_a")
   taxblAmtB            Decimal?         @db.Decimal(15, 2) @map("taxbl_amt_b")
   taxblAmtC            Decimal?         @db.Decimal(15, 2) @map("taxbl_amt_c")

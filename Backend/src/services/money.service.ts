@@ -82,7 +82,11 @@ export interface FiscalTotalsResult {
 
 function toDecimal(value: MoneyInput | undefined | null, fallback = 0): Decimal {
   if (value === undefined || value === null) return new Decimal(fallback);
-  return value instanceof Decimal ? value : new Decimal(value);
+  if (value instanceof Decimal) return value;
+  // Through the shortest string form so binary-float inputs (0.2, 10.03)
+  // enter the arithmetic exactly instead of carrying float residue that
+  // could flip a half-cent boundary at rounding time.
+  return typeof value === 'number' ? new Decimal(String(value)) : new Decimal(value);
 }
 
 /** Round half-up to 2 decimals, returned as a JS number (e.g. 814.58). */
@@ -100,10 +104,32 @@ export function diff2(a: MoneyInput, b: MoneyInput): number {
   return d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
 }
 
+/**
+ * Band-level tax for a rounded band NET and a percent rate, rounded half-up
+ * once (policy ii). This is the R4 sample formula: 5340.00 x 18/118 = 814.58.
+ *
+ * A band's tax is ALWAYS derived this way — never summed from per-line
+ * taxes. Per-line taxes are already rounded to cents by the Decimal(15,2)
+ * storage columns, so summing them can land a cent away from the exact
+ * band value (768.81 + 45.76 = 814.57 vs the exact 814.58). Receipts, VSDC
+ * bands, Sale legs and reports all use this derivation and therefore agree.
+ */
+export function bandTaxFromNet(net: MoneyInput, ratePercent: MoneyInput): number {
+  const n = toDecimal(net);
+  const rate = toDecimal(ratePercent);
+  if (rate.lte(0)) return 0;
+  const divisor = new Decimal(1).plus(rate.div(100));
+  const tax = n.minus(n.div(divisor));
+  return tax.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+}
+
 export function computeFiscalLine(line: FiscalLineInput): FiscalLineResult {
   const qty = toDecimal(line.quantity);
   const price = toDecimal(line.unitPrice);
-  const discount = Decimal.max(0, toDecimal(line.discount, 0));
+  // No sign clamp: refund legs carry negative gross AND negative discount
+  // (mirrored storage), so net = gross − discount stays correct for both
+  // signs. Input policing (discount ≥ 0 on sales) belongs to validation.
+  const discount = toDecimal(line.discount, 0);
   const rate = toDecimal(line.taxRate, 0);
 
   const gross = qty.mul(price);

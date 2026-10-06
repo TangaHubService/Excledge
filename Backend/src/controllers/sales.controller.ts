@@ -21,7 +21,7 @@ import { TaxService } from "../services/tax.service"
 import { round2 } from "../services/money.service"
 import { getOrganizationSettings } from "../services/organization-settings.service"
 import { renderSalesInvoiceHtml, type RenderInvoicePayload } from "../services/invoice-render.service"
-import { generateEbmInvoicePdf, getEbmInvoiceFilename, type InvoicePdfFormat } from "../services/invoice-pdf.service"
+import { generateEbmInvoicePdf, getEbmInvoiceFilename, type InvoicePdfFormat, bandTaxAmounts } from "../services/invoice-pdf.service"
 import { generateEbmReceiptPdf80mm } from "../services/invoice-receipt-pdf.service"
 import { commitSale, CommitSaleError } from "../services/sale-commit.service"
 import { getTaxRatesBySlot } from "../services/rra-code.service"
@@ -654,16 +654,17 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
         const totalRefundTaxable = totalRefundAmount - totalRefundVat;
 
         // R9: per-rate legs mirror the original lines with the sign flipped,
-        // rounded once per band like the VSDC payload.
-        const refundBands: Record<string, { taxable: number; tax: number }> = {};
+        // rounded once per band like the VSDC payload. RRA `taxblAmt` is the
+        // VAT-inclusive band base (band NET), not the VAT-exclusive figure.
+        const refundBands: Record<string, { net: number; tax: number }> = {};
         for (const item of itemsToRefund) {
           const code = String(item.taxCode ?? 'A').toUpperCase();
-          const slot = refundBands[code] ?? { taxable: 0, tax: 0 };
-          slot.taxable = round2(slot.taxable + (item.totalPrice - item.taxAmount));
+          const slot = refundBands[code] ?? { net: 0, tax: 0 };
+          slot.net = round2(slot.net + item.totalPrice);
           slot.tax = round2(slot.tax + item.taxAmount);
           refundBands[code] = slot;
         }
-        const refundBand = (code: string) => refundBands[code] ?? { taxable: 0, tax: 0 };
+        const refundBand = (code: string) => refundBands[code] ?? { net: 0, tax: 0 };
 
         // ── MODULE 2.3: Reject if refund exceeds original total (defense-in-depth) ──
         const originalTotal = Number((sale as any).totalAmount);
@@ -718,10 +719,10 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             totalAmount: -totalRefundAmount, // Negative total
             vatAmount: -totalRefundVat,      // Negative — mirrors the original VAT being refunded
             taxableAmount: -totalRefundTaxable,
-            taxblAmtA: -refundBand('A').taxable,
-            taxblAmtB: -refundBand('B').taxable,
-            taxblAmtC: -refundBand('C').taxable,
-            taxblAmtD: -refundBand('D').taxable,
+            taxblAmtA: -refundBand('A').net,
+            taxblAmtB: -refundBand('B').net,
+            taxblAmtC: -refundBand('C').net,
+            taxblAmtD: -refundBand('D').net,
             taxAmtA: -refundBand('A').tax,
             taxAmtB: -refundBand('B').tax,
             taxAmtC: -refundBand('C').tax,
@@ -1515,7 +1516,9 @@ export async function composeInvoicePayload(
       const dcRate = toNumber(line.dcRate)
       const taxAmt = toNumber(line.taxAmount)
       const taxRate = toNumber(line.taxRate)
-      const net = gross - dcAmt
+      // Line money legs are 2 dp (DB columns are Decimal(15,2)); rounding here
+      // keeps float dust out of every downstream band derivation.
+      const net = round2(gross - dcAmt)
       return {
         id: String(line.id),
         line: index + 1,
@@ -1540,7 +1543,7 @@ export async function composeInvoicePayload(
         taxCode: line.taxCode ?? null,
         vatPct: taxRate,
         taxAmount: taxAmt,
-        subtotal: gross,
+        subtotal: round2(gross),
         net,
         // Unit prices and `sale.totalAmount` are VAT-inclusive throughout the
         // checkout flow. The tax is an extraction from the gross line, not an
@@ -1552,7 +1555,11 @@ export async function composeInvoicePayload(
 
     const subtotal = items.reduce((s, i) => s + i.subtotal, 0)
     const itemDiscount = items.reduce((s, i) => s + i.discountAmt, 0)
-    const lineTax = items.reduce((s, i) => s + i.taxAmount, 0)
+    // R4/R11: receipt-level tax is derived once per band from the band NETs
+    // (money.service policy) — never summed from per-line cents — so the
+    // printed TOTAL TAX matches the R4 sample (5340.00 x 18/118 = 814.58).
+    const derivedBandTax = bandTaxAmounts(items, programmedRates)
+    const receiptTax = round2(Object.values(derivedBandTax).reduce((s, t) => s + t, 0))
     // §56: keep the discount signed with the document (negative on a refund).
     // R11: two decimals everywhere — whole-unit Math.round destroyed cents.
     const discount = docSign * Math.max(0, round2(Math.abs(itemDiscount) + Math.abs(discountAmount)))
@@ -1653,8 +1660,8 @@ export async function composeInvoicePayload(
         subtotal: round2(subtotal),
         discount,
         taxable: round2(taxableAmount),
-        vat: round2(vatAmount),
-        tax: round2(lineTax),
+        vat: receiptTax,
+        tax: receiptTax,
         shipping: 0,
         paid,
         balance,

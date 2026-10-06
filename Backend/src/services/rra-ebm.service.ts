@@ -5,7 +5,7 @@ import type { Prisma } from '@prisma/client';
 import { isValidPurchaseCode, generateValidPurchaseCodes } from './purchase-code.checksum';
 import { deriveQtyUnitCd } from './item-code.service';
 import { getRraPaymentCode, requiresPurchaseCode, resolvePkgUnitCd, resolveQtyUnitCd } from './rra-code.service';
-import { diff2 } from './money.service';
+import { diff2, bandTaxFromNet } from './money.service';
 
 /** Any Prisma client capable of running queries — the top-level client or a $transaction callback's `tx`. */
 type PrismaClientOrTx = typeof prisma | Prisma.TransactionClient;
@@ -666,8 +666,9 @@ export function buildRraSendReceiptPayload(
     // already net-based — commitSale computes tax on the charged (post-
     // discount) prices — so only the splyAmt leg needed correcting.
     const netAmt = diff2(splyAmt, dcAmtAbs);
-    taxblAmt[slot] = fix2(taxblAmt[slot] + netAmt);
-    taxAmt[slot]   = fix2(taxAmt[slot] + tAmt);
+    // Exact-decimal slot accumulation through diff2 (a + b == a - (-b)) so
+    // binary-float dust in the legs can never reach the band derivation.
+    taxblAmt[slot] = diff2(taxblAmt[slot], -netAmt);
 
     // Sales are always rung up per individual unit (qty), never per whole
     // package. `pkg` is RRA's package count for the line, so when the product
@@ -749,6 +750,15 @@ export function buildRraSendReceiptPayload(
     };
   });
 
+  // R4/R11: band taxes are DERIVED once from each band's NET and its rate
+  // (money.service policy) — never summed from per-line cents, which are
+  // already rounded by the Decimal(15,2) columns and can land a cent away
+  // from the exact band value (768.81 + 45.76 = 814.57 vs 814.58 for the
+  // R4 sample). Per-LINE taxAmt above stays stored/line-based.
+  const bandRates = opts.taxRates ?? TAX_RATE_BY_SLOT;
+  for (let i = 0; i < 4; i++) {
+    taxAmt[i] = bandRates[i] > 0 ? bandTaxFromNet(taxblAmt[i], bandRates[i]) : 0;
+  }
   const totTaxAmt   = fix2(taxAmt.reduce((s, v) => s + v, 0));
   const totTaxblAmt = fix2(taxblAmt.reduce((s, v) => s + v, 0));
   const totAmt      = fix2(Math.abs(sale.totalAmount.toNumber()));
