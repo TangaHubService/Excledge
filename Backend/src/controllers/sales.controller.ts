@@ -24,6 +24,7 @@ import { renderSalesInvoiceHtml, type RenderInvoicePayload } from "../services/i
 import { generateEbmInvoicePdf, getEbmInvoiceFilename, type InvoicePdfFormat } from "../services/invoice-pdf.service"
 import { generateEbmReceiptPdf80mm } from "../services/invoice-receipt-pdf.service"
 import { commitSale, CommitSaleError } from "../services/sale-commit.service"
+import { getTaxRatesBySlot } from "../services/rra-code.service"
 import { validateRefundReasonCodeForOrg, DEFAULT_RFD_RSN_CD } from "../services/rra-code.service"
 import { SYSTEM_FOOTER, SYSTEM_POWERED_BY, CIS_VERSION_LABEL } from "../services/system-branding.service"
 import { getOrganizationLogo } from "../services/invoice-logo.service"
@@ -1466,6 +1467,9 @@ export async function composeInvoicePayload(
 
     const currency = org?.currency ?? "RWF"
     const toNumber = (v: unknown): number => (v == null ? 0 : typeof v === "number" ? v : Number(String(v)))
+    // R2: renderers print every programmed rate > 0 on every receipt.
+    const [rateA, rateB, rateC, rateD] = await getTaxRatesBySlot(organizationId)
+    const programmedRates: [number, number, number, number] = [rateA, rateB, rateC, rateD]
     const totalAmount = toNumber(sale.totalAmount)
     const cashAmount = toNumber(sale.cashAmount)
     const debtAmount = toNumber(sale.debtAmount)
@@ -1622,6 +1626,7 @@ export async function composeInvoicePayload(
         balance,
         grandTotal,
       },
+      taxRates: programmedRates,
       charges: {
         vatAmount: round2(vatAmount),
         taxableAmount: round2(taxableAmount),

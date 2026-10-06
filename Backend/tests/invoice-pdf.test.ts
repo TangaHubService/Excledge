@@ -151,8 +151,9 @@ describe("per-tax-type sales totals (Total A/B/C/D)", () => {
   it("A4 prints one sales-total row per band in play (B always, even at zero)", async () => {
     const drawn = await captureDrawnText(() => generateEbmInvoicePdf(bandFixture(), "A4"))
     const blob = drawn.join("\n")
-    for (const code of ["A", "B", "C", "D"]) {
-      expect(blob).toMatch(new RegExp(`Total ${code} Rwf`))
+    // R3 labels: exempt band as A-EX, taxed bands with their rate.
+    for (const label of ["Total A-EX Rwf", "Total B-18.00% Rwf", "Total C-0.00% Rwf", "Total D-0.00% Rwf"]) {
+      expect(blob).toMatch(new RegExp(label.replace(/[.*+%?^${}()|[\]\\]/g, "\\$&")))
     }
   })
 
@@ -161,10 +162,10 @@ describe("per-tax-type sales totals (Total A/B/C/D)", () => {
     invoice.items = invoice.items.filter((i) => i.taxCode === "B")
     const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))
     const blob = drawn.join("\n")
-    expect(blob).toMatch(/Total B Rwf/)
-    expect(blob).not.toMatch(/Total A Rwf/)
-    expect(blob).not.toMatch(/Total C Rwf/)
-    expect(blob).not.toMatch(/Total D Rwf/)
+    expect(blob).toMatch(/Total B-18\.00% Rwf/)
+    expect(blob).not.toMatch(/Total A-EX Rwf/)
+    expect(blob).not.toMatch(/Total C-/)
+    expect(blob).not.toMatch(/Total D-/)
   })
 })
 
