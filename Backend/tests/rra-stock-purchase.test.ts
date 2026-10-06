@@ -131,6 +131,7 @@ describe("sarTyCdFor (§4.19 stock in/out reason)", () => {
   })
   it("maps outgoing movements to OUT reason codes", () => {
     expect(sarTyCdFor("TRANSFER_OUT", "OUT")).toBe("13")
+    expect(sarTyCdFor("PRODUCTION_CONSUME", "OUT")).toBe("14")
     expect(sarTyCdFor("DAMAGE", "OUT")).toBe("15")
     expect(sarTyCdFor("ADJUSTMENT_OUT", "OUT")).toBe("16")
   })

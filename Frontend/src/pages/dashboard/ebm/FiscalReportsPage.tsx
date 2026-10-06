@@ -269,6 +269,7 @@ function Row({ label, value, strong }: { label: string; value: React.ReactNode; 
 interface PluRow {
   itemCd: string; productName: string; unit: string; quantity: number;
   revenue: number; taxAmount: number; transactionCount: number;
+  unitPrice: number; taxRate: number; remainingQty: number;
 }
 
 function PluCard() {
@@ -349,20 +350,26 @@ function PluCard() {
                   <TableRow>
                     <TableHead>Item code</TableHead>
                     <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
+                    <TableHead className="text-right">Unit price</TableHead>
+                    <TableHead className="text-right">Tax rate</TableHead>
+                    <TableHead className="text-right">Qty sold</TableHead>
+                    <TableHead className="text-right">In stock</TableHead>
                     <TableHead className="text-right">Revenue</TableHead>
                     <TableHead className="text-right">Tax</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.length === 0 && (
-                    <TableRow><TableCell colSpan={5} className="py-6 text-center text-muted-foreground">No sales in this period.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="py-6 text-center text-muted-foreground">No sales in this period.</TableCell></TableRow>
                   )}
                   {rows.map((r) => (
                     <TableRow key={r.itemCd}>
                       <TableCell className="font-mono text-xs">{r.itemCd}</TableCell>
                       <TableCell>{r.productName}</TableCell>
+                      <TableCell className="text-right tabular-nums">{money(r.unitPrice ?? 0)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{r.taxRate ?? 0}%</TableCell>
                       <TableCell className="text-right tabular-nums">{formatInt(r.quantity)} {r.unit}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatInt(r.remainingQty ?? 0)} {r.unit}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(r.revenue)}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(r.taxAmount)}</TableCell>
                     </TableRow>

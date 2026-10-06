@@ -105,7 +105,9 @@ describe("S11 mapping (v1.0.5)", () => {
     expect(sarTyCdFor("PURCHASE", "IN", null)).toBe("02")
     expect(sarTyCdFor("RETURN_CUSTOMER", "IN", null)).toBe("03")
     expect(sarTyCdFor("TRANSFER_IN", "IN", null)).toBe("04")
+    expect(sarTyCdFor("PRODUCTION_OUTPUT", "IN", null)).toBe("05")
     expect(sarTyCdFor("TRANSFER_OUT", "OUT", null)).toBe("13")
+    expect(sarTyCdFor("PRODUCTION_CONSUME", "OUT", null)).toBe("14")
     expect(sarTyCdFor("DAMAGE", "OUT", null)).toBe("15")
   })
   it("item types 1/2/3", () => {
