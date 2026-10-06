@@ -194,20 +194,28 @@ interface PluRow {
   productId: number | null
   productName: string
   unit: string
+  unitPrice: number
+  taxRate: number
   quantity: number
   revenue: number
   taxAmount: number
+  remainingQty: number
   transactionCount: number
 }
+
+const PLU_REPORT_LABEL = 'PRICE LOOK-UP (PLU) REPORT';
+const CIS_DESIGNATION = 'CIS';
 
 async function buildPluRows(
   req: BranchAuthRequest,
   organizationId: number,
   opts: { startDate?: unknown; endDate?: unknown; sortBy?: unknown; sortOrder?: unknown },
-): Promise<{ rows: PluRow[]; summary: PluReportData['summary']; periodLabel: string }> {
+): Promise<{ rows: PluRow[]; summary: PluReportData['summary']; periodLabel: string; periodStart: string | null; periodEnd: string | null }> {
   const { startDate, endDate, sortBy = 'quantity', sortOrder = 'desc' } = opts;
 
   let periodLabel = 'All time';
+  let periodStart: string | null = null;
+  let periodEnd: string | null = null;
   const dateFilter = startDate && endDate && startDate !== 'undefined' && endDate !== 'undefined'
     ? (() => {
         const start = new Date(startDate as string);
@@ -215,6 +223,8 @@ async function buildPluRows(
         if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
         end.setHours(23, 59, 59, 999);
         periodLabel = `${start.toISOString().split('T')[0]} → ${end.toISOString().split('T')[0]}`;
+        periodStart = start.toISOString();
+        periodEnd = end.toISOString();
         return { createdAt: { gte: start, lte: end } };
       })()
     : null;
@@ -234,7 +244,13 @@ async function buildPluRows(
       unitPrice: true,
       totalPrice: true,
       taxAmount: true,
-      product: { select: { id: true, name: true, itemCd: true, measurementUnit: true } },
+      taxRate: true,
+      product: {
+        select: {
+          id: true, name: true, itemCd: true, measurementUnit: true,
+          unitPrice: true, quantity: true,
+        },
+      },
     },
   });
 
@@ -247,15 +263,22 @@ async function buildPluRows(
       productId: line.product.id,
       productName: line.product.name,
       unit: line.product.measurementUnit ?? 'PCS',
+      unitPrice: Number((line.product as any).unitPrice ?? line.unitPrice),
+      taxRate: Number((line as any).taxRate ?? 0),
       quantity: 0,
       revenue: 0,
       taxAmount: 0,
+      remainingQty: Number((line.product as any).quantity ?? 0),
       transactionCount: 0,
     };
     existing.quantity += Number(line.quantity);
     existing.revenue += line.totalPrice.toNumber();
     existing.taxAmount += line.taxAmount.toNumber();
     existing.transactionCount += 1;
+    // Latest observed catalog price/rate wins for the S4 per-item fields.
+    existing.unitPrice = Number((line.product as any).unitPrice ?? line.unitPrice);
+    if (Number((line as any).taxRate ?? 0) !== 0) existing.taxRate = Number((line as any).taxRate);
+    existing.remainingQty = Number((line.product as any).quantity ?? existing.remainingQty);
     byItemCode.set(key, existing);
   }
 
@@ -270,6 +293,8 @@ async function buildPluRows(
   return {
     rows,
     periodLabel,
+    periodStart,
+    periodEnd,
     summary: {
       uniqueItemCodes: rows.length,
       totalQuantity: rows.reduce((sum, r) => sum + r.quantity, 0),
@@ -284,13 +309,24 @@ export const getPluReport = async (req: BranchAuthRequest, res: Response) => {
     const organizationId = parseInt(req.params.organizationId);
     const { page = '1', limit = '50' } = req.query;
 
-    const { rows, summary } = await buildPluRows(req, organizationId, req.query);
+    const { rows, summary, periodLabel, periodStart, periodEnd } = await buildPluRows(req, organizationId, req.query);
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true, TIN: true },
+    });
 
     const pageNum = Math.max(parseInt(page as string) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit as string) || 50, 1), 500);
     const pageRows = rows.slice((pageNum - 1) * limitNum, (pageNum - 1) * limitNum + limitNum);
 
     res.json(success({
+      reportLabel: PLU_REPORT_LABEL,
+      cisDesignation: CIS_DESIGNATION,
+      companyName: org?.name ?? null,
+      tin: org?.TIN ?? null,
+      periodLabel,
+      periodStart,
+      periodEnd,
       summary,
       items: pageRows,
       pagination: {
@@ -313,7 +349,7 @@ export const getPluReport = async (req: BranchAuthRequest, res: Response) => {
 export const getPluReportPdf = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
-    const { rows, summary, periodLabel } = await buildPluRows(req, organizationId, req.query);
+    const { rows, summary, periodLabel, periodStart, periodEnd } = await buildPluRows(req, organizationId, req.query);
 
     const org = await prisma.organization.findUnique({
       where: { id: organizationId },
@@ -332,6 +368,10 @@ export const getPluReportPdf = async (req: BranchAuthRequest, res: Response) => 
     const pdf = await renderPluReportPdf({
       header,
       periodLabel,
+      periodStart,
+      periodEnd,
+      reportLabel: PLU_REPORT_LABEL,
+      cisDesignation: CIS_DESIGNATION,
       generatedAt: new Date().toISOString(),
       rows: rows.slice(0, 500),
       summary,
