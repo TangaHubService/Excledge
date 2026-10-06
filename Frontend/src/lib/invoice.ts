@@ -169,6 +169,18 @@ export interface EbmInvoice {
 }
 
 /**
+ * Half-up 2-decimal rounding for RWF display math (mirrors the backend
+ * money.service round2; the backend stays authoritative for fiscal values).
+ * The +1e-9 nudge absorbs binary-float boundary error (e.g. 1.005*100).
+ */
+export function round2(n: unknown): number {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return 0
+  const sign = v < 0 ? -1 : 1
+  return (sign * Math.round(Math.abs(v) * 100 + 1e-9)) / 100
+}
+
+/**
  * Single shared source of truth for all money arithmetic used by the invoice
  * preview and every export. Totals are derived from the fetched line items and
  * sale-level charges rather than trusting a separately-sent total, so they can
@@ -197,15 +209,15 @@ export function calculateInvoiceTotals(
   const shipping = toNumber(charges?.shipping)
 
   return {
-    subtotal: Math.round(gross),
-    discount: Math.max(0, Math.round(itemDiscount + discountAmount)),
-    taxable: Math.round(taxableAmount),
-    vat: Math.round(vatAmount),
-    tax: Math.round(lineTax),
-    shipping: Math.round(shipping),
-    paid: Math.round(cashAmount + insuranceAmount),
-    balance: Math.round(debtAmount),
-    grandTotal: Math.round(totalAmount),
+    subtotal: round2(gross),
+    discount: Math.max(0, round2(itemDiscount + discountAmount)),
+    taxable: round2(taxableAmount),
+    vat: round2(vatAmount),
+    tax: round2(lineTax),
+    shipping: round2(shipping),
+    paid: round2(cashAmount + insuranceAmount),
+    balance: round2(debtAmount),
+    grandTotal: round2(totalAmount),
   }
 }
 

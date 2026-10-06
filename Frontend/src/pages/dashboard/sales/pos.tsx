@@ -24,7 +24,7 @@ import { parseInventoryGetProductsResponse } from '../../../lib/inventory-respon
 import { offlineQueue } from '../../../utils/offlineQueue'
 import { PaymentModal } from '../../../components/pos/PaymentModal'
 import SaleSuccessModal, { type SaleSuccessData } from '../../../components/pos/SaleSuccessModal'
-import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice'
+import { getInvoiceFilename, round2, unwrapInvoice } from '../../../lib/invoice'
 import { getInvoicePdfBlob } from '../../../lib/invoice-pdf'
 import { useVsdcOnlineStatus } from '../../../hooks/useVsdcOnlineStatus'
 import { useBranch } from '../../../context/BranchContext'
@@ -683,7 +683,7 @@ export default function SalesForm() {
     const rate = cached ?? (taxRateByCode.size === 0 && code === 'B' ? 18 : 0)
     if (!rate) return s
     const gross = i.unitPrice * i.quantity
-    return s + Math.round(gross - gross / (1 + rate / 100))
+    return s + round2(gross - gross / (1 + rate / 100))
   }, 0), [cart, vatRegistered, taxRateByCode])
   const vatLabelRate = taxRateByCode.get('B') ?? (taxRateByCode.size === 0 ? 18 : 0)
   const total = useMemo(() => subtotal, [subtotal])
@@ -802,7 +802,7 @@ export default function SalesForm() {
             productId: i.product.id,
             quantity: i.quantity,
             unitPrice: charged,
-            discount: Math.max(0, Math.round((list - charged) * i.quantity)),
+            discount: Math.max(0, round2((list - charged) * i.quantity)),
             itemType: i.product.itemType === 'SERVICE' ? 'SERVICE' : (i.product.itemType === 'RAW_MATERIAL' ? 'RAW_MATERIAL' : 'PRODUCT'),
           }
         }),
@@ -901,7 +901,7 @@ export default function SalesForm() {
             productId: i.product.id,
             quantity: i.quantity,
             unitPrice: charged,
-            discount: Math.max(0, Math.round((list - charged) * i.quantity)),
+            discount: Math.max(0, round2((list - charged) * i.quantity)),
             itemType: i.product.itemType === 'SERVICE' ? 'SERVICE' : (i.product.itemType === 'RAW_MATERIAL' ? 'RAW_MATERIAL' : 'PRODUCT'),
           }
         }),
