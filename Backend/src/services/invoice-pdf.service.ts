@@ -70,10 +70,15 @@ export function dataUrlBuffer(value?: string | null): Buffer | null {
 }
 
 /**
- * The watermark title printed on the receipt. PROFORMA and TRAINING MODE take
+ * The designation title printed on the receipt. PROFORMA and TRAINING MODE take
  * priority over COPY — reprinting a training/proforma receipt must never lose
  * that designation and start looking like an ordinary copied transaction.
  * COPY (§15) only applies to reprints of a NORMAL receipt in the first place.
+ *
+ * NOTE: this title is the ONLY designation mark — no translucent diagonal
+ * center stamp is drawn anywhere. A fiscalized training/proforma original
+ * carries its designation in the title and the "not an official receipt"
+ * notice, so no print ever looks stamped over the body.
  */
 export function documentIndicator(data: RenderInvoicePayload): string {
   const label = safe(data.invoice.rcptLabel).toUpperCase()
@@ -323,6 +328,15 @@ export function taxGroups(data: RenderInvoicePayload): TaxGroup[] {
   })
 }
 
+/**
+ * Per-tax-type SALES bands for the printed "Total A/B/C/D" rows: every band
+ * with sales, plus B always (RRA checklist §48 — the statutory 18% band must
+ * always print, even at zero).
+ */
+export function salesBands(data: RenderInvoicePayload): TaxGroup[] {
+  return taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.total) > 0)
+}
+
 function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void {
   const currency = safe(data.invoice.currency || data.company.currency, "RWF")
   const currencyLabel = currency.toUpperCase() === "RWF" ? "Rwf" : currency.toUpperCase()
@@ -330,11 +344,13 @@ function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void 
   // (RRA checklist §48 — statutory 18% band must always print).
   const groups = taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.tax) > 0)
   const totalTax = taxGroups(data).reduce((sum, group) => sum + group.tax, 0)
-  // One authoritative invoice total. Per-tax-slot SALES totals ("Total A …",
-  // "Total B …") are deliberately not printed: they duplicate the grand total
-  // sliced by tax band and were mistaken for the amount due. The per-band TAX
-  // rows below carry the RRA-required tax breakdown instead.
+  // One authoritative invoice total first, then the grand total sliced by tax
+  // band ("Total A/B/C/D …" — the per-type sales totals), then the per-band
+  // TAX rows carrying the RRA-required tax breakdown.
   const rows: Array<[string, number | string]> = [[`Total ${currencyLabel}`, data.totals.grandTotal]]
+  for (const group of salesBands(data)) {
+    rows.push([`Total ${group.code} ${currencyLabel}`, group.total])
+  }
   for (const group of groups) {
     rows.push([`Total Tax ${group.code} ${currencyLabel}`, group.tax])
   }
@@ -365,9 +381,11 @@ function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void 
 
 function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void {
   const sdc = data.sdcInformation
-  // Proforma and training-mode slips carry no VSDC signature, but the printout
-  // must still show the transaction's date/time and receipt number — fall back
-  // to the invoice-level values whenever the fiscal-specific fields are absent.
+  // Slips still awaiting VSDC confirmation (including proforma/training
+  // originals printed via allowPending) carry no VSDC signature yet, but the
+  // printout must still show the transaction's date/time and receipt number —
+  // fall back to the invoice-level values whenever the fiscal-specific fields
+  // are absent.
   const sdcDate = formatInvoiceDateTime(sdc.sdcDateTime || sdc.date || data.invoice.invoiceDate)
   const sdcReceiptNo = safe(sdc.receiptNumber) || safe(data.invoice.receiptNumber)
   const invoiceDate = formatInvoiceDateTime(data.invoice.invoiceDate)
@@ -457,15 +475,6 @@ function drawFinalFooter(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): v
 }
 
 /**
- * Big translucent diagonal "NOT FISCALISED" stamp — thin wrapper for callers
- * that still reference the older name. Drawn in A4 coordinate space (the
- * caller applies the A5 scale transform when needed).
- */
-function drawNotFiscalizedWatermark(doc: PDFKit.PDFDocument): void {
-  drawDiagonalWatermark(doc, NOT_FISCALIZED_TITLE, PAGE_WIDTH, PAGE_HEIGHT, "#D32F2F")
-}
-
-/**
  * Generate the authoritative portrait EBM invoice entirely on the backend.
  * `paper` is "A4" (default) or "A5" — A5 renders the identical layout scaled to
  * fit the smaller sheet.
@@ -523,40 +532,11 @@ export async function generateEbmInvoicePdf(
     drawTable(doc, lines, finalPage)
     if (finalPage) drawFinalFooter(doc, data)
     doc.restore()
-    // Watermarks drawn AFTER restore so they span the physical page.
-    const indicator = documentIndicator(data)
-    if (data.invoice.notFiscalized) drawDiagonalWatermark(doc, NOT_FISCALIZED_TITLE, sheetW, sheetH, "#D32F2F")
-    else if (indicator === "COPY" || indicator === TRAINING_MODE_LABEL || indicator === "PROFORMA") {
-      drawDiagonalWatermark(doc, indicator, sheetW, sheetH, "#424242")
-    }
+    // No diagonal center stamp is ever drawn: COPY / NOT FISCALISED /
+    // TRAINING / PROFORMA designations live in the header title plus the
+    // "not an official receipt" notice band, never as a stamp over the body.
   })
 
   doc.end()
   return output
-}
-
-/**
- * CIS §11 / §15–17: large diagonal watermark for COPY, TRAINING, PROFORMA
- * (and NOT FISCALISED). Drawn across the physical page so it cannot be missed.
- */
-function drawDiagonalWatermark(
-  doc: PDFKit.PDFDocument,
-  text: string,
-  pageW: number,
-  pageH: number,
-  color: string,
-): void {
-  doc.save()
-  doc.rotate(-33, { origin: [pageW / 2, pageH / 2] })
-  doc
-    .font(FONT_BOLD)
-    .fontSize(Math.max(36, Math.min(56, pageW * 0.09)))
-    .fillColor(color)
-    .opacity(0.14)
-    .text(text, pageW / 2 - pageW * 0.55, pageH / 2 - 34, {
-      width: pageW * 1.1,
-      align: "center",
-      characterSpacing: 2,
-    })
-  doc.opacity(1).fillColor("#000000").restore()
 }

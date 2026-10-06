@@ -212,9 +212,12 @@ export const createCustomer = async (req: BranchAuthRequest, res: Response) => {
       customerType = type
     }
 
-    // Walk-in / individual customers do not store a TIN.
-    const resolvedTin =
-      customerType === 'INDIVIDUAL' ? null : (TIN || tin || null)
+    // Individuals may also hold a real RRA TIN (RRA issues TINs to persons
+    // too) — store it whenever a valid one is supplied, for every customer
+    // type, so fiscal receipts use the customer's real TIN instead of a
+    // walk-in placeholder. Business buyers are still required to have one
+    // (see customers.validation.ts).
+    const resolvedTin = TIN || tin || null
 
     const contactError = validateCustomerContactFields(phone, resolvedTin)
     if (contactError) {
@@ -277,14 +280,18 @@ export const updateCustomer = async (req: BranchAuthRequest, res: Response) => {
     if (type !== undefined) updateData.customerType = type
     if (TIN !== undefined) updateData.TIN = TIN
     else if (tin !== undefined) updateData.TIN = tin
+    // A blank TIN means "no TIN on file", never a stored empty string.
+    if (updateData.TIN === '') updateData.TIN = null
     if (prcOrdCd !== undefined) updateData.prcOrdCd = prcOrdCd
     // Clear insurance codes when demoting away from INSURANCE.
     if (type && type !== 'INSURANCE') {
       updateData.isrccCd = null
       updateData.isrcRt = null
     }
-    // Walk-in / individual customers never keep a TIN on file.
-    if (type === 'INDIVIDUAL') {
+    // Only drop the stored TIN when the customer is (re)typed as INDIVIDUAL
+    // without a TIN in the same request — an explicitly supplied TIN is kept
+    // for every customer type (individuals may hold a real RRA TIN too).
+    if (type === 'INDIVIDUAL' && TIN === undefined && tin === undefined) {
       updateData.TIN = null
     }
 

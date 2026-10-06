@@ -3,7 +3,7 @@ import { SYSTEM_FOOTER, SYSTEM_POWERED_BY, NOT_OFFICIAL_RECEIPT_NOTICE, NOT_FISC
 // invoice-pdf.service only imports RenderInvoicePayload/RenderInvoiceLineItem
 // as types (`import type`, erased at build time), so importing its runtime
 // helpers here does not create a circular module dependency at runtime.
-import { documentIndicator, isFormalNoticeIndicator, taxGroups } from "./invoice-pdf.service"
+import { documentIndicator, isFormalNoticeIndicator, salesBands, taxGroups } from "./invoice-pdf.service"
 
 type NullableString = string | null | undefined
 
@@ -397,9 +397,16 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
 
   type SummaryRow = readonly [string, number, boolean]
 
+  // Grand total sliced by tax band ("TOTAL A/B/C/D" — the per-type sales
+  // totals): every band with sales, plus B always (RRA §48).
+  const salesBandRows: SummaryRow[] = salesBands(data)
+    .map((group) => (
+      [`TOTAL ${group.code}`, group.total, false] as SummaryRow
+    ))
+
   // RRA checklist §46: print the tax value under each A/B/C/D label actually
   // in play. Skip zero-tax bands (e.g. TOTAL TAX A 0.00); keep B even at 0
-  // (RRA §48). Per-band SALES totals ("TOTAL A …") are not shown.
+  // (RRA §48).
   const taxBreakdownRows: SummaryRow[] = taxGroups(data)
     .filter((group) => group.code === "B" || Math.abs(group.tax) > 0)
     .map((group) => (
@@ -408,6 +415,7 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
 
   const summaryRows: SummaryRow[] = [
     ["SUBTOTAL (VAT INCL.)", data.totals.grandTotal, true],
+    ...salesBandRows,
     ["DISCOUNT", data.totals.discount, false],
     ["VAT", data.totals.vat, false],
     ["TAX", data.totals.tax, false],
@@ -449,6 +457,8 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
         border-radius: 18px;
         box-shadow: 0 16px 60px rgba(15, 23, 42, 0.08);
         background: #fff;
+        position: relative;
+        overflow: hidden;
       }
       .rra-invoice .top-grid {
         display: grid;

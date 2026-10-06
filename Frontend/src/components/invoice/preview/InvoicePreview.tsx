@@ -1,6 +1,6 @@
 import { forwardRef, type ReactNode } from "react"
 import type { EbmInvoice } from "../../../lib/invoice"
-import { InvoiceHeader } from "./InvoiceHeader"
+import { documentTitle, InvoiceHeader } from "./InvoiceHeader"
 import { CustomerCard } from "./CustomerCard"
 import { InvoiceTable } from "./InvoiceTable"
 import { InvoiceSummary } from "./InvoiceSummary"
@@ -17,6 +17,9 @@ export interface InvoicePreviewProps {
  *  the off-screen html2canvas capture stage (Tailwind classes are not applied there). */
 export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(
   function InvoicePreview({ data, children }, ref) {
+    // No center stamp is ever rendered (mirrors the backend PDF): COPY /
+    // NOT FISCALISED / TRAINING / PROFORMA designations live in the header
+    // title, never as a stamp over the body.
     return (
       <div
         ref={ref}
@@ -29,9 +32,11 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(
           maxWidth: 860,
           margin: "0 auto",
           boxSizing: "border-box",
+          position: "relative",
+          overflow: "hidden",
         }}
       >
-        <InvoiceHeader data={data} />
+        <InvoiceHeader data={data} title={documentTitle(data.invoice)} />
 
         {/* Client and fiscal invoice details */}
         <CustomerCard data={data} />

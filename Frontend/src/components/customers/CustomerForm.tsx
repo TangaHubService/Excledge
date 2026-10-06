@@ -56,13 +56,6 @@ export function CustomerForm({
     const customerType = watch('type');
 
     useEffect(() => {
-        if (customerType === 'INDIVIDUAL') {
-            setValue('tin', '', { shouldValidate: true });
-            setRraCheck({ state: 'idle' });
-        }
-    }, [customerType, setValue]);
-
-    useEffect(() => {
         if (initialData) {
             const formData = {
                 name: initialData.name || '',
@@ -104,12 +97,10 @@ export function CustomerForm({
 
 
     const handleFormSubmit = (data: CustomerFormData) => {
-        // Walk-in / individual customers never store a TIN.
-        if (data.type === 'INDIVIDUAL') {
-            onSubmit({ ...data, tin: '' });
-            return;
-        }
-        onSubmit(data);
+        // A TIN may be stored for every customer type — individuals may hold a
+        // real RRA TIN too, and when present it is used on the fiscal receipt
+        // (sent to RRA) instead of a walk-in placeholder. Blank stays blank.
+        onSubmit({ ...data, tin: (data.tin || '').trim() });
     };
 
     return (
@@ -177,14 +168,17 @@ export function CustomerForm({
                                 />
                             </div>
 
-                            {customerType !== 'INDIVIDUAL' && (
                             <div>
                                 <label
                                     htmlFor="tin"
                                     className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                                 >
                                     {t('customers.tinNumber')}{' '}
-                                    <span className="text-red-500">*</span>
+                                    {customerType !== 'INDIVIDUAL' ? (
+                                        <span className="text-red-500">*</span>
+                                    ) : (
+                                        <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                    )}
                                 </label>
                                 <div className="flex gap-2">
                                     <input
@@ -246,10 +240,9 @@ export function CustomerForm({
                                     <p className="mt-1 flex items-center gap-1.5 text-sm text-amber-600"><AlertTriangle className="size-4" />{rraCheck.message}</p>
                                 )}
                             </div>
-                            )}
                             {customerType === 'INDIVIDUAL' && (
                               <p className="text-xs text-gray-500 dark:text-gray-400">
-                                Walk-in / individual customers do not need a TIN.
+                                Optional — when the individual has a real RRA TIN it is printed on the fiscal receipt and sent to RRA.
                               </p>
                             )}
 

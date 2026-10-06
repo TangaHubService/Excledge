@@ -15,7 +15,23 @@ type HeaderData = Pick<EbmInvoice, "company">
  * with RRA/EBM device credentials (`company.ebmLinked`) — an account that has
  * never been linked to RRA must never display RRA branding on its invoices.
  */
-export function InvoiceHeader({ data }: { data: HeaderData }) {
+/**
+ * Document designation mirroring the backend's documentIndicator: the title
+ * must read PROFORMA / TRAINING MODE / COPY / NOT FISCALISED / REFUND exactly
+ * when the authoritative PDF does, so the preview can never disagree with the
+ * fiscal record sent to RRA.
+ */
+export function documentTitle(invoice: EbmInvoice["invoice"]): string {
+  const label = String(invoice?.rcptLabel ?? "").toUpperCase()
+  if (invoice?.isProforma || label === "PS") return "PROFORMA"
+  if (label === "TS" || label === "TR") return "TRAINING MODE"
+  if (invoice?.isCopy || label === "CS" || label === "CR") return "COPY"
+  if (invoice?.notFiscalized) return "NOT FISCALISED"
+  if (label === "NR" || (!label && invoice?.status === "REFUNDED")) return "REFUND"
+  return "INVOICE"
+}
+
+export function InvoiceHeader({ data, title }: { data: HeaderData; title?: string }) {
   const company = data.company
   const companyName = safeText(company?.name)
   const isEbmLinked = Boolean(company?.ebmLinked)
@@ -63,7 +79,7 @@ export function InvoiceHeader({ data }: { data: HeaderData }) {
         <div style={{ position: "absolute", top: -2, left: "50%", width: 174, transform: "translateX(-50%)" }}>
           <FlagBar style={{ height: 4, borderRadius: 0 }} />
         </div>
-        <div style={{ color: C.navy, fontWeight: 900, fontSize: 31, letterSpacing: 0.4, lineHeight: 1, textTransform: "uppercase" }}>Invoice</div>
+        <div style={{ color: C.navy, fontWeight: 900, fontSize: 31, letterSpacing: 0.4, lineHeight: 1, textTransform: "uppercase" }}>{title ?? "Invoice"}</div>
       </div>
     </header>
   )

@@ -211,7 +211,7 @@ export async function fiscalizeSubscriptionPayment(params: {
 
   const org = await prisma.organization.findUnique({
     where: { id: params.organizationId },
-    select: { TIN: true, name: true, address: true },
+    select: { TIN: true, name: true, address: true, phone: true },
   });
   if (!org) {
     await markPaymentFailed(params.paymentId, 'Organization not found');

@@ -422,7 +422,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
 
     const org = await prisma.organization.findUnique({
       where: { id: row.organizationId },
-      select: { TIN: true, name: true, address: true },
+      select: { TIN: true, name: true, address: true, phone: true },
     });
 
     if (!org) {
@@ -669,21 +669,10 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
     });
 
     try {
-      // Check training mode — log but do not hit the live VSDC endpoint.
-      // Mark SUCCEEDED so the entry doesn't pile up as failures.
-      const orgCheck = await prisma.organization.findUnique({
-        where: { id: row.organizationId },
-        select: { trainingMode: true },
-      });
-      if (orgCheck?.trainingMode) {
-        await prisma.ebmOutbox.update({
-          where: { id: row.id },
-          data: { status: 'SUCCEEDED', lastError: 'Training mode — VSDC submission skipped' },
-        });
-        succeeded += 1;
-        continue;
-      }
-
+      // Training (TS/TR) and proforma (PS) receipts are fiscalized through
+      // VSDC exactly like normal sales — no skip. Their rcptLabel travels in
+      // the payload (rcptTyCd S/R) and on the printed receipt, so the fiscal
+      // record and the displayed invoice stay identical.
       const envelope = await buildVsdcEnvelope(row.organizationId, sale.branchId);
 
       // §22: never submit against a device that is not usable (missing/invalid

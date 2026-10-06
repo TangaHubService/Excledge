@@ -4,7 +4,6 @@ import type { Decimal } from '@prisma/client/runtime/library';
 import type { Prisma } from '@prisma/client';
 import { isValidPurchaseCode, generateValidPurchaseCodes } from './purchase-code.checksum';
 import { deriveQtyUnitCd } from './item-code.service';
-import { isValidCustomerPhone } from '../validations/customers.validation';
 import { getRraPaymentCode, requiresPurchaseCode, resolvePkgUnitCd, resolveQtyUnitCd } from './rra-code.service';
 
 /** Any Prisma client capable of running queries — the top-level client or a $transaction callback's `tx`. */
@@ -446,6 +445,60 @@ export function isValidRraTin(tin: string): boolean {
 }
 
 /**
+ * Official VSDC buyer-mobile shape for `receipt.custMblNo` (and the phone
+ * fallback for top-level `custTin`): optional leading `+`, 9–15 digits.
+ * Accepts the local mobile shape the VSDC API documents (e.g. "788428899")
+ * as well as 0-prefixed and +-prefixed forms. Judged by what VSDC accepts,
+ * not by what the CIS customer form requires.
+ */
+export const VSDC_PHONE_PATTERN = /^\+?\d{9,15}$/;
+
+export function isValidVsdcPhone(value: string | null | undefined): boolean {
+  return VSDC_PHONE_PATTERN.test((value ?? '').trim());
+}
+
+/**
+ * Coerce customer/org free text to a plain JSON-safe VSDC string: trimmed
+ * with control characters stripped (never valid in VSDC text fields — they
+ * would otherwise ride along inside the JSON body). Length caps stay with
+ * the per-field `clampField` calls; `custNm`/`trdeNm`/`adrs`/`topMsg`/`btmMsg`
+ * always remain normal string values.
+ */
+export function sanitizeVsdcText(value: unknown): string {
+  return String(value ?? '').replace(/[\u0000-\u001F\u007F]/g, '').trim();
+}
+
+export interface VsdcBuyerIdentity {
+  /** Top-level `custTin`: the valid customer TIN, else the valid customer
+   * mobile (the VSDC API accepts a mobile here), else null. */
+  custTin: string | null;
+  /** `receipt.custTin`: the valid customer TIN ONLY, else null. Never a phone. */
+  receiptCustTin: string | null;
+  /** `receipt.custMblNo`: the valid customer mobile ONLY, else null. Never a TIN. */
+  receiptCustMblNo: string | null;
+}
+
+/**
+ * Resolve the buyer identity for a VSDC sales submission from the stored
+ * customer record, per the official payload structure:
+ * - `receipt.custTin` carries a valid TIN or null — never a phone number.
+ * - `receipt.custMblNo` carries a valid phone number or null — never a TIN
+ *   (a stored phone that itself passes the TIN shape is dropped from both
+ *   slots: it is a suspected swap and must leak into neither field).
+ * - top-level `custTin` carries the TIN when present, else the phone where
+ *   the VSDC API allows a mobile, else null (sent as JSON null, never "").
+ */
+export function resolveVsdcBuyerIdentity(
+  customer: { TIN?: string | null; phone?: string | null } | null | undefined,
+): VsdcBuyerIdentity {
+  const rawTin = (customer?.TIN ?? '').trim();
+  const rawPhone = (customer?.phone ?? '').trim();
+  const tin = isValidRraTin(rawTin) ? rawTin : null;
+  const phone = rawPhone && isValidVsdcPhone(rawPhone) && !isValidRraTin(rawPhone) ? rawPhone : null;
+  return { custTin: tin ?? phone, receiptCustTin: tin, receiptCustMblNo: phone };
+}
+
+/**
  * Walk-in (no-TIN individual) buyer TIN for VSDC submission.
  *
  * The sandbox mandates a valid-format `custTin` on every receipt (resultCd
@@ -473,10 +526,13 @@ export function walkInCustTin(customerId: number): string {
 
 /**
  * The buyer TIN under which purchase codes are pooled/allocated for a sale:
- * the stored customer TIN when it is valid, otherwise the same resolved
- * value submitted as custTin (walk-in placeholder for individuals). Falls
- * back to the stored value when nothing resolves, so callers always get a
- * string and the payload builder still raises the precise error.
+ * the stored customer TIN when it is valid, otherwise the deterministic
+ * walk-in placeholder for individuals. NOTE: this scopes purchase-code pool
+ * lookups only — it is NOT what is submitted on the receipt (see
+ * resolveVsdcBuyerIdentity: receipt.custTin is a real TIN or null, never a
+ * placeholder). Falls back to the stored value when nothing resolves, so
+ * callers always get a string and the payload builder still raises the
+ * precise error.
  */
 export function effectiveBuyerTin(sale: Pick<SaleWithRelations, 'id' | 'saleNumber' | 'customer'>): string {
   const stored = sale.customer?.TIN?.trim() ?? '';
@@ -489,10 +545,12 @@ export function effectiveBuyerTin(sale: Pick<SaleWithRelations, 'id' | 'saleNumb
 }
 
 /**
- * Resolve the `custTin` to submit for a sale. Throws a descriptive error when
- * no submittable TIN exists (business buyers without a valid TIN, or a sale
- * with no customer at all) so the outbox dead-letters with an actionable
- * message instead of sending a fake value.
+ * Resolve the buyer TIN used to scope purchase-code pooling for a sale (see
+ * effectiveBuyerTin). NOT the receipt value — the submitted receipt fields
+ * come from resolveVsdcBuyerIdentity. Throws a descriptive error when no
+ * poolable TIN exists (business buyers without a valid TIN, or a sale with
+ * no customer at all) so the outbox dead-letters with an actionable message
+ * instead of pooling under a fake value.
  */
 export function resolveCustTinForVsdc(sale: Pick<SaleWithRelations, 'id' | 'saleNumber' | 'customer'>): string {
   const customerTin = sale.customer?.TIN?.trim() ?? '';
@@ -526,7 +584,7 @@ export const TAX_RATE_BY_SLOT: [number, number, number, number] = [0, 18, 0, 0];
  */
 export function buildRraSendReceiptPayload(
   sale: SaleWithRelations,
-  org: { TIN: string | null; name: string; address: string | null },
+  org: { TIN: string | null; name: string; address: string | null; phone?: string | null },
   rraPaymentCode: string,
   opts: {
     orgInvcNo?: number;
@@ -688,23 +746,30 @@ export function buildRraSendReceiptPayload(
   const totAmt      = fix2(Math.abs(sale.totalAmount.toNumber()));
   const now         = sale.createdAt;
 
-  // RRA requires a customer TIN on every fiscal receipt — verified live: the
-  // sandbox rejects a missing/invalid receipt.custTin with resultCd 910 and a
-  // missing prcOrdCd with 881. Business buyers without a real TIN are rejected
-  // (resolveCustTinForVsdc throws); walk-in individuals get the documented
-  // per-customer placeholder (see walkInCustTin — production validity of B2C
-  // placeholders must be confirmed with RRA). We never fall back to the
-  // seller's own TIN — that would silently convert the sale into a B2B
+  // Official buyer-field mapping (TrnsSalesSaveWrReq.custTin + receipt block):
+  // - receipt.custTin is a valid customer TIN or null — never a phone number.
+  // - receipt.custMblNo is a valid customer mobile or null — never a TIN.
+  // - top-level custTin is the TIN when present, else the mobile where the
+  //   VSDC API allows one, else null (sent as JSON null, never "").
+  // Business buyers without a real TIN still block here with an actionable
+  // error instead of submitting a value VSDC will reject. We never fall back
+  // to the seller's own TIN — that would silently convert the sale into a B2B
   // transaction.
-  const custTin = resolveCustTinForVsdc(sale);
-  const custNm  = sale.customer?.name ?? org.name;
-  // §4.6 custMblNo: only send a real, correctly-shaped phone number — never a
-  // raw unvalidated value, and never the TIN (a pre-fix swapped/duplicate
-  // record could otherwise leak the TIN into the mobile-number field).
-  const customerPhone = sale.customer?.phone?.trim() ?? '';
-  const custMblNo = customerPhone && isValidCustomerPhone(customerPhone) && customerPhone !== custTin
-    ? customerPhone
-    : '';
+  if (!sale.customer) {
+    throw new Error(
+      `Cannot fiscalize Sale ${sale.saleNumber ?? sale.id}: no customer on record and no valid TIN to submit.`,
+    );
+  }
+  const buyer = resolveVsdcBuyerIdentity(sale.customer);
+  const buyerType = (sale.customer.customerType ?? 'INDIVIDUAL').toUpperCase();
+  if (!buyer.receiptCustTin && buyerType !== 'INDIVIDUAL') {
+    throw new Error(
+      `Cannot fiscalize Sale ${sale.saleNumber ?? sale.id}: ${buyerType} customer "${sale.customer?.name ?? '?'}" has no valid 9-digit RRA TIN. ` +
+      `Register the customer's real TIN (verify via /rra/customers/:tin) before submitting.`,
+    );
+  }
+  const custTin = buyer.custTin;
+  const custNm = sanitizeVsdcText(sale.customer?.name) || sanitizeVsdcText(org.name);
   const invcNo = opts.invcNoOverride ?? sale.vsdcInvcNo ?? (() => {
     throw new Error(
       `Cannot build Sale ${sale.saleNumber ?? sale.id} to RRA: no VSDC invoice number (vsdcInvcNo) allocated. ` +
@@ -727,7 +792,7 @@ export function buildRraSendReceiptPayload(
     prcOrdCd: ((): string => {
       const code = (sale.prcOrdCd ?? sale.customer?.prcOrdCd ?? '').trim();
       if (!code) {
-        throw new PurchaseCodeMissingError(sale.saleNumber ?? sale.id, custTin);
+        throw new PurchaseCodeMissingError(sale.saleNumber ?? sale.id, custTin ?? '(buyer has no TIN/phone on record)');
       }
       return code;
     })(),
@@ -770,14 +835,28 @@ export function buildRraSendReceiptPayload(
     modrNm: regrNm,
     modrId: regrId,
     receipt: {
-      custTin,
-      custMblNo,
+      // receipt.custTin is the valid TIN or null — deliberately NOT the
+      // top-level custTin (which may carry a mobile where VSDC allows it).
+      custTin: buyer.receiptCustTin,
+      custMblNo: buyer.receiptCustMblNo,
       rptNo: invcNo,
       // RRA WAR rejects `trdeNm` longer than 20 chars with resultCd 910
       // ("length must be between 0 and 20") — clamp the trade name.
       trdeNm: clampField(org.name, 20),
       adrs: clampField(org.address, 200),
-      topMsg: '',
+      // Seller company information travels as the receipt's top message
+      // (topMsg prints above the receipt body on the VSDC printout). Same
+      // 20-character contract as trdeNm/btmMsg — longer values are rejected
+      // with 910 — so send the most identifying seller line that fits: the
+      // seller TIN, else the seller phone, else the trade name.
+      topMsg: clampField(
+        org.TIN?.trim()
+          ? `TIN:${org.TIN.trim()}`
+          : org.phone?.trim()
+            ? `TEL:${org.phone.trim()}`
+            : org.name,
+        20,
+      ),
       // The VSDC request contract limits this to 20 characters. Sending the
       // longer friendly message caused valid sales to be rejected with 910 by
       // the local RRA sandbox before fiscalisation could complete.
@@ -822,10 +901,10 @@ export async function generateInvoiceNumber(
 }
 
 /**
- * Allocate a local, non-fiscal receipt number pair for PROFORMA (and future
- * local-only types), which per the CIS spec (§6.3.6) must never be assigned a
- * VSDC-signed invoice number — they never draw from the real gapless RRA
- * sequence (allocateNextInvoiceSequence). Mirrors the spec's own "A/B RT"
+ * Allocate a local, non-fiscal receipt number pair for PROFORMA and TRAINING
+ * receipts, used as the fallback receipt number printed until VSDC confirms
+ * the submission (all receipt types draw their invoice number from the real
+ * gapless RRA sequence). Mirrors the spec's own "A/B RT"
  * counter shape (§7.25) with two independent, atomically-incremented values:
  *  - typeSeq: this branch's count of this specific receipt type only
  *    (BranchReceiptCounter, keyed by rcptLabel)

@@ -299,8 +299,13 @@ const AddCustomerDrawer = memo(({
     if (!formData.name.trim()) errs.name = t('validation.required')
     if (formData.phone && formData.phone.length < 10) errs.phone = t('validation.invalidPhone')
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errs.email = t('validation.invalidEmail')
-    if (formData.type !== 'INDIVIDUAL' && !/^\d{9}$/.test(formData.tin.trim())) {
+    const tinDigits = formData.tin.trim()
+    if (formData.type !== 'INDIVIDUAL' && !/^\d{9}$/.test(tinDigits)) {
       errs.tin = 'TIN is required for corporate and insurance customers'
+    } else if (tinDigits && !/^\d{9}$/.test(tinDigits)) {
+      // Individuals may also hold a real RRA TIN — optional, but when given
+      // it must be a valid 9-digit TIN (it is sent to RRA on the receipt).
+      errs.tin = 'TIN must be exactly 9 digits'
     }
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -315,7 +320,8 @@ const AddCustomerDrawer = memo(({
         ? (formData.phone.startsWith('+') ? formData.phone : `${formData.countryCode}${formData.phone}`)
         : undefined
       const { countryCode, ...rest } = { ...formData, phone }
-      const tin = formData.type === 'INDIVIDUAL' ? undefined : (formData.tin || undefined)
+      // A TIN may be stored for every customer type (blank stays blank).
+      const tin = formData.tin.trim() || undefined
       const newCustomer = await apiClient.createCustomer({ ...rest, tin })
       toast.success(t('messages.customerCreated'))
       onCustomerAdded(newCustomer)
@@ -358,12 +364,7 @@ const AddCustomerDrawer = memo(({
           </div>
           <div className="space-y-1.5">
             <Label>{t('pos.customerType')}</Label>
-            <Select value={formData.type} onValueChange={v => setFormData(p => ({
-              ...p,
-              type: v,
-              // Walk-in / individual customers do not use a TIN.
-              tin: v === 'INDIVIDUAL' ? '' : p.tin,
-            }))}>
+            <Select value={formData.type} onValueChange={v => setFormData(p => ({ ...p, type: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="INDIVIDUAL">{t('customers.individual')}</SelectItem>
@@ -372,15 +373,26 @@ const AddCustomerDrawer = memo(({
               </SelectContent>
             </Select>
           </div>
-          {formData.type !== 'INDIVIDUAL' ? (
-            <div className="space-y-1.5">
-              <Label>{t('customers.tinNumber')} <span className="text-red-500">*</span></Label>
-              <Input name="tin" value={formData.tin} onChange={handleChange} placeholder="e.g. 123456789" maxLength={9} />
-              {errors.tin && <p className="text-xs text-red-500">{errors.tin}</p>}
-            </div>
-          ) : (
-            <p className="text-xs text-gray-500">Walk-in / individual customers do not need a TIN.</p>
-          )}
+          <div className="space-y-1.5">
+            <Label>
+              {t('customers.tinNumber')}{' '}
+              {formData.type !== 'INDIVIDUAL'
+                ? <span className="text-red-500">*</span>
+                : <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>}
+            </Label>
+            <Input
+              name="tin"
+              value={formData.tin}
+              onChange={e => setFormData(p => ({ ...p, tin: e.target.value.replace(/\D/g, '').slice(0, 9) }))}
+              placeholder="e.g. 123456789"
+              maxLength={9}
+              inputMode="numeric"
+            />
+            {errors.tin && <p className="text-xs text-red-500">{errors.tin}</p>}
+            {formData.type === 'INDIVIDUAL' && !errors.tin && (
+              <p className="text-xs text-gray-500">Optional — sent to RRA on the receipt when the individual has a real TIN.</p>
+            )}
+          </div>
           <div className="flex gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">{t('common.cancel')}</Button>
             <Button onClick={handleSubmit} disabled={isSubmitting} className="flex-1 bg-blue-600 hover:bg-blue-700">
@@ -868,10 +880,12 @@ export default function SalesForm() {
   }, [cart, selectedCustomer, total, t, isOnline, selectedBranchId, pollFiscalization, trainingMode])
 
   // A proforma is a quote, not a sale: no payment is collected, no stock moves,
-  // and it is never sent to RRA (see createSale on the backend — isProforma
-  // skips fiscalization, stock deduction, and debt entirely). debtAmount is
-  // still set to `total` here only to satisfy the backend's payment-sum check;
-  // the backend does not actually add it to the customer's balance.
+  // and no customer debt is booked (see createSale on the backend — isProforma
+  // skips stock deduction and debt entirely). It IS fiscalized through RRA
+  // VSDC like every other receipt type, so its invoice matches the fiscal
+  // record. debtAmount is still set to `total` here only to satisfy the
+  // backend's payment-sum check; the backend does not actually add it to the
+  // customer's balance.
   const handleCreateProforma = useCallback(async () => {
     if (cart.length === 0) { toast.error(t('pos.noItemsInCart')); return }
     if (!selectedCustomer) { toast.error(t('pos.selectCustomer')); return }
@@ -919,8 +933,10 @@ export default function SalesForm() {
         changeReturned: 0,
         date: new Date(),
         cashierName,
-        // Proforma is never submitted to VSDC by design — always print-ready.
-        fiscalizationStatus: 'success',
+        // Proforma is fiscalized through VSDC like any other receipt — report
+        // the real submission outcome so the success modal never claims a
+        // receipt is print-ready before RRA confirms it.
+        fiscalizationStatus: ((createdSale as any)?.fiscalization?.status as 'success' | 'pending' | 'failed' | undefined) ?? 'pending',
       })
       setLastCreatedSale(createdSale)
       setIsSuccessOpen(true)

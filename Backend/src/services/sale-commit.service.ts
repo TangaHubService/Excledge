@@ -132,7 +132,8 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
   // business-buyer sale submitted without a valid 6-character prcOrdCd.
   // Catching this before the sale commits avoids completing a checkout
   // (payment taken, stock deducted) that can never be fiscalized. Skipped for
-  // proforma: it is never fiscalized, so RRA never sees it.
+  // proforma: a quote stays editable/convertible and its code is allocated at
+  // submission time (step 4b / outbox worker) instead of blocking creation.
   if (!isProforma && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
     const customer = await prisma.customer.findUnique({
       where: { id: customerId },
@@ -299,6 +300,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
           currentStock < item.quantity
           && !orgSettings.featureFlags.allowNegativeStock
           && !org?.trainingMode
+          && !isProforma
         ) {
           throw new Error(
             `Insufficient stock for product ${product.name}. Available: ${currentStock}, Requested: ${item.quantity}`,
@@ -433,23 +435,22 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
 
       // 4. Allocate an invoice/receipt number and create the sale together.
       //
-      // PROFORMA is explicitly "not an official receipt" (CIS spec §16/17) and
-      // per §6.3.6 must never be assigned a VSDC-signed number — it draws a
-      // local, non-fiscal counter instead and never touches the real gapless RRA
-      // sequence (vsdcInvcNo stays null).
-      let invoiceNumber: string | null
-      let vsdcInvcNo: number | null = null
+      // EVERY receipt type — normal (NS), training (TS/TR) and proforma (PS) —
+      // is submitted to RRA VSDC, so every sale draws from the real gapless
+      // per-device sequence: the invoice number printed on the receipt is
+      // exactly the invcNo sent to VSDC. Proforma/training additionally keep
+      // their local non-fiscal counter pair (localReceiptSeq /
+      // localReceiptTotalSeq) as the fallback receipt number until VSDC
+      // confirms the submission.
+      const generated = await generateInvoiceNumber(organizationId, branchId, tx)
+      const invoiceNumber: string = generated.invoiceNumber
+      const vsdcInvcNo: number = generated.vsdcInvcNo
       let localReceiptSeq: number | null = null
       let localReceiptTotalSeq: number | null = null
       if (isProforma || org?.trainingMode) {
         const localSeq = await allocateLocalReceiptSequence(branchId, isProforma ? "PS" : "TS", tx)
         localReceiptSeq = localSeq.typeSeq
         localReceiptTotalSeq = localSeq.totalSeq
-        invoiceNumber = null
-      } else {
-        const generated = await generateInvoiceNumber(organizationId, branchId, tx)
-        invoiceNumber = generated.invoiceNumber
-        vsdcInvcNo = generated.vsdcInvcNo
       }
 
       const newSale = await tx.sale.create({
@@ -483,21 +484,11 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         },
       } as any)
 
-      // 4a. Proforma's invoiceNumber is the sale's own id — a plain,
-      // auto-incrementing number instead of a "PROF-B..." string.
-      if (isProforma) {
-        const plainInvoiceNumber = String((newSale as any).id)
-        await tx.sale.update({
-          where: { id: (newSale as any).id },
-          data: { invoiceNumber: plainInvoiceNumber },
-        })
-        ;(newSale as any).invoiceNumber = plainInvoiceNumber
-      }
-
       // 4b. Consume an organization-level RRA purchase code for business (B2B)
-      // buyers. Skipped for proforma.
+      // buyers — for every receipt type, since training and proforma are
+      // fiscalized through VSDC like normal sales and need a code on record.
       const custTin = (newSale as any).customer?.TIN?.trim() ?? ""
-      if (!isProforma && custTin && !custTin.startsWith("7")) {
+      if (custTin && !custTin.startsWith("7")) {
         const allocated =
           (await consumeOrgPurchaseCode(organizationId, custTin, (newSale as any).id, tx)) ??
           ((newSale as any).customer?.prcOrdCd ?? null)
@@ -510,8 +501,10 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         }
       }
 
-      // 5. Record stock movements for PRODUCT items only. Skipped for proforma.
-      if (!isProforma) {
+      // 5. Record stock movements for PRODUCT items only. Skipped for
+      // proforma and training mode — neither is a real sale, so neither
+      // may consume (or fail on) real stock.
+      if (!isProforma && !org?.trainingMode) {
         for (const item of productItems) {
           const saleItem = (newSale as any).saleItems?.find(
             (si: any) => si.productId === parseInt(String(item.productId)),
@@ -547,8 +540,10 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         }
       }
 
-      // 7. Write transactional outbox entry (atomic with the sale). Skipped for proforma.
-      if (!isProforma && !org?.trainingMode && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+      // 7. Write transactional outbox entry (atomic with the sale) for every
+      // receipt type — normal, training and proforma are all fiscalized
+      // through VSDC, so all of them need a submission row.
+      if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
         const operation: EbmOperation = "SALE"
         const idempotencyKey = `ebm-${operation}-${organizationId}-${newSale.id}`
         await tx.ebmOutbox.create({
@@ -580,7 +575,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
     isCertified: false,
   }
 
-  if (!isProforma && !org?.trainingMode && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+  if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
     const EBM_INLINE_WAIT_MS = 5000
     await Promise.race([
       processEbmOutboxBatch(5).catch((e) => {

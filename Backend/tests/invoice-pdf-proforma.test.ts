@@ -5,10 +5,10 @@ import { generateEbmReceiptPdf80mm } from "../src/services/invoice-receipt-pdf.s
 import type { RenderInvoicePayload } from "../src/services/invoice-render.service"
 
 /**
- * A proforma / training slip is never signed by VSDC, so `sdcInformation`
- * carries no signature, internal data or SDC receipt counter. The printed slip
- * must still show the transaction date/time and the (local) receipt number
- * under SDC INFORMATION — regression guard for those lines silently dropping.
+ * A proforma / training slip still awaiting VSDC confirmation carries no
+ * signature, internal data or SDC receipt counter yet. The printed slip must
+ * still show the transaction date/time and the (local) receipt number under
+ * SDC INFORMATION — regression guard for those lines silently dropping.
  */
 function proformaFixture(): RenderInvoicePayload {
   return {
@@ -26,7 +26,7 @@ function proformaFixture(): RenderInvoicePayload {
     payment: { method: "CASH", methodLabel: "Cash", cashAmount: 1180, insuranceAmount: 0, debtAmount: 0 },
     sdcInformation: {
       sdcId: "SDC012000250", mrcNo: "MRC012000250",
-      // The signature-bearing fields are deliberately absent for a proforma.
+      // The signature-bearing fields are deliberately absent pre-confirmation.
       receiptNumber: "7/4 PS", receiptSignature: null, internalData: null,
       sdcDateTime: "2026-09-02T09:38:42.000Z", date: "2026-09-02T09:38:42.000Z", time: "11:38:42",
       ebmInvoiceNumber: "55", rcptLabel: "PS", poweredBy: "x", softwareVersion: "v1.0.0",
@@ -51,9 +51,9 @@ describe("proforma / training slip fiscal block", () => {
   it("A4: prints Date, Time, SDC ID and RECEIPT NUMBER even without a VSDC signature", async () => {
     const drawn = await captureText(() => generateEbmInvoicePdf(proformaFixture(), "A4"))
     const blob = drawn.join("\n")
-    expect(blob).toMatch(/Date: 02-09-2026 Time: 11:38:42/)
-    expect(blob).toMatch(/SDC ID: SDC012000250/)
-    expect(blob).toMatch(/RECEIPT NUMBER: 7\/4 PS/)
+    expect(blob).toMatch(/Date: 02-09-2026\s+11:38:42/)
+    expect(blob).toMatch(/SDC ID\s*:\s*SDC012000250/)
+    expect(blob).toMatch(/RECEIPT NUMBER\s*:\s*7\/4 PS/)
   })
 
   it("A4: RECEIPT NUMBER falls back to the invoice receipt number when sdc.receiptNumber is missing", async () => {
@@ -63,15 +63,15 @@ describe("proforma / training slip fiscal block", () => {
     fixture.sdcInformation.date = null
     const drawn = await captureText(() => generateEbmInvoicePdf(fixture, "A4"))
     const blob = drawn.join("\n")
-    expect(blob).toMatch(/RECEIPT NUMBER: 7\/4 PS/)
+    expect(blob).toMatch(/RECEIPT NUMBER\s*:\s*7\/4 PS/)
     expect(blob).toMatch(/Date: 02-09-2026/)
   })
 
   it("80mm: prints Date, SDC ID and RECEIPT NUMBER for a proforma", async () => {
     const drawn = await captureText(() => generateEbmReceiptPdf80mm(proformaFixture()))
     const blob = drawn.join("\n")
-    expect(blob).toMatch(/SDC ID: SDC012000250/)
-    expect(blob).toMatch(/RECEIPT NUMBER: 7\/4 PS/)
+    expect(blob).toMatch(/SDC ID\s*:\s*SDC012000250/)
+    expect(blob).toMatch(/RECEIPT NUMBER\s*:\s*7\/4 PS/)
     expect(blob).toMatch(/Date: 02-09-2026/)
   })
 
@@ -88,11 +88,11 @@ describe("proforma / training slip fiscal block", () => {
       () => generateEbmReceiptPdf80mm(training),
     ]) {
       const blob = (await captureText(run)).join("\n")
-      // Same non-fiscal footer as proforma: repeats SDC ID, no "Payment Mode"
-      // line and no bare software-version line.
-      expect(blob).toMatch(/SDC ID: SDC012000250/)
-      expect(blob).toMatch(/RECEIPT NUMBER: 12\/9 TS/)
-      expect(blob).not.toMatch(/Payment Mode:/)
+      // Same fiscal block as proforma: repeats SDC ID, keeps the shared
+      // summary rows (Payment Mode / Items Number print for every receipt
+      // type per the RRA sample layout) and no bare software-version line.
+      expect(blob).toMatch(/SDC ID\s*:\s*SDC012000250/)
+      expect(blob).toMatch(/RECEIPT NUMBER\s*:\s*12\/9 TS/)
       expect(blob).not.toMatch(/Software version/)
     }
   })

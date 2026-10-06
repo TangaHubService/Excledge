@@ -25,10 +25,11 @@ function QrCanvas({ payload }: { payload: string }) {
 }
 
 /**
- * Official verification data. Shown after real fiscalisation, and also for
- * training (TS/TR) and proforma (PS) receipts — neither is ever submitted to
- * the VSDC, so the block still needs to appear (with blank Internal Data /
- * Receipt Signature) rather than silently disappear.
+ * Official verification data. Shown after real fiscalisation — including
+ * training (TS/TR) and proforma (PS) receipts, which are fiscalized through
+ * the VSDC like every other receipt type. While confirmation is still pending
+ * the block still appears (with blank Internal Data / Receipt Signature)
+ * rather than silently disappearing.
  *
  * Layout matches the RRA thermal sample: SDC INFORMATION heading, fiscal
  * fields, bottom RECEIPT NUMBER:{vsdcInvcNo} + Date + MRC, then CIS branding.

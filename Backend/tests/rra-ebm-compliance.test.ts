@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TaxService } from '../src/services/tax.service';
 import { parseVsdcResponse, parseVsdcStatusCode } from '../src/services/vsdc-api.service';
-import { parseGatewayResponse, gatewayErrorMessage, buildRraSendReceiptPayload, isValidRraTin, resolveCustTinForVsdc, walkInCustTin, PurchaseCodeMissingError, type SaleWithRelations } from '../src/services/rra-ebm.service';
+import { parseGatewayResponse, gatewayErrorMessage, buildRraSendReceiptPayload, isValidRraTin, isValidVsdcPhone, resolveVsdcBuyerIdentity, resolveCustTinForVsdc, walkInCustTin, PurchaseCodeMissingError, type SaleWithRelations } from '../src/services/rra-ebm.service';
 import { validateRefundReasonCode, getRefundReasonCodes, DEFAULT_RFD_RSN_CD, resolvePkgUnitCd, resolveQtyUnitCd } from '../src/services/rra-code.service';
 import { deriveQtyUnitCd } from '../src/services/item-code.service';
 import { validateVsdcEnvelope } from '../src/services/vsdc-api.service';
@@ -579,7 +579,9 @@ describe('resolveCustTinForVsdc — safe customer TIN handling', () => {
       customer: { id: 42, name: 'Walk-in Customer', phone: '', TIN: null, customerType: 'INDIVIDUAL', email: null },
     });
     expect(tin).toBe(walkInCustTin(42));
-    expect(tin).toBe('100000042');
+    // 19xxxxxxx band (deliberate — avoids colliding with common RRA sandbox
+    // test TINs such as 100000000/100000001, see walkInCustTin).
+    expect(tin).toBe('190000042');
     expect(isValidRraTin(tin)).toBe(true);
   });
 });
@@ -685,6 +687,217 @@ describe('buildRraSendReceiptPayload — submission guards', () => {
       isrcAmt: null,
     });
     expect(payload.receipt.adrs.length).toBeLessThanOrEqual(200);
+  });
+
+  it('sends the seller company info as the receipt topMsg (seller TIN, ≤20 chars)', () => {
+    const payload = buildRraSendReceiptPayload(makeSale(), org, '01') as any;
+    expect(payload.receipt.topMsg).toBe('TIN:100000000');
+    expect(payload.receipt.topMsg.length).toBeLessThanOrEqual(20);
+  });
+
+  it('falls back to seller phone then trade name for topMsg', () => {
+    const noTin = buildRraSendReceiptPayload(
+      makeSale(),
+      { TIN: null, name: 'Seller', address: 'Kigali', phone: '+250788000000' },
+      '01',
+    ) as any;
+    expect(noTin.receipt.topMsg).toBe('TEL:+250788000000');
+    const bare = buildRraSendReceiptPayload(
+      makeSale(),
+      { TIN: null, name: 'Seller', address: 'Kigali' },
+      '01',
+    ) as any;
+    expect(bare.receipt.topMsg).toBe('Seller');
+  });
+});
+
+describe('VSDC buyer identity mapping — official receipt structure', () => {
+  function makeBuyerSale(customer: {
+    TIN?: string | null;
+    phone?: string | null;
+    name?: string;
+    customerType?: string;
+  }) {
+    return {
+      id: 7,
+      saleNumber: 'SALE-7',
+      invoiceNumber: 'INV-7',
+      vsdcInvcNo: 77,
+      prcOrdCd: 'ABC123',
+      rcptLabel: 'NS',
+      createdAt: new Date('2026-09-01T10:00:00.000Z'),
+      status: 'COMPLETED',
+      paymentType: 'CASH',
+      cashAmount: new Decimal(1180),
+      debtAmount: new Decimal(0),
+      insuranceAmount: new Decimal(0),
+      totalAmount: new Decimal(1180),
+      taxableAmount: new Decimal(1000),
+      vatAmount: new Decimal(180),
+      branchId: 1,
+      branch: { id: 1, name: 'Main', code: 'M', bhfId: '00', ebmDeviceId: null, ebmSerialNo: null },
+      customer: {
+        id: 9,
+        name: 'Buyer',
+        phone: '',
+        TIN: null,
+        customerType: 'INDIVIDUAL',
+        email: null,
+        ...customer,
+      },
+      user: { id: 1, name: 'Cashier' },
+      saleItems: [
+        {
+          productId: 10,
+          quantity: 1,
+          unitPrice: new Decimal(1180),
+          totalPrice: new Decimal(1180),
+          taxRate: new Decimal(18),
+          taxAmount: new Decimal(180),
+          taxCode: 'B',
+          dcRate: new Decimal(0),
+          dcAmt: new Decimal(0),
+          measurementUnit: 'PCS',
+          product: { name: 'Widget', itemCd: 'RW2CTU0000001', itemClsCd: '5059690800', pkgUnitCd: 'CT', qtyUnitCd: 'U', packagingQty: null },
+        },
+      ],
+    };
+  }
+  const seller = { TIN: '100000000', name: 'Seller', address: 'Kigali' };
+
+  function receiptOf(payload: unknown) {
+    return (payload as any).receipt as Record<string, unknown>;
+  }
+
+  it('1. customer with TIN only → TIN everywhere, phone slot is JSON null', () => {
+    const payload = buildRraSendReceiptPayload(
+      makeBuyerSale({ TIN: '100000001', phone: '', customerType: 'CORPORATE' }),
+      seller,
+      '01',
+    ) as any;
+    expect(payload.custTin).toBe('100000001');
+    expect(receiptOf(payload).custTin).toBe('100000001');
+    expect(receiptOf(payload).custMblNo).toBeNull();
+    expect('custMblNo' in receiptOf(payload)).toBe(true);
+  });
+
+  it('2. customer with phone only → top-level custTin carries the mobile, receipt TIN is JSON null', () => {
+    const payload = buildRraSendReceiptPayload(
+      makeBuyerSale({ TIN: null, phone: '788428899', customerType: 'INDIVIDUAL' }),
+      seller,
+      '01',
+    ) as any;
+    expect(payload.custTin).toBe('788428899');
+    expect(receiptOf(payload).custTin).toBeNull();
+    expect('custTin' in receiptOf(payload)).toBe(true);
+    expect(receiptOf(payload).custMblNo).toBe('788428899');
+  });
+
+  it('3. customer with both TIN and phone → TIN wins on top, both receipt slots filled, never swapped', () => {
+    const payload = buildRraSendReceiptPayload(
+      makeBuyerSale({ TIN: '100000001', phone: '+250788428899', customerType: 'INDIVIDUAL' }),
+      seller,
+      '01',
+    ) as any;
+    expect(payload.custTin).toBe('100000001');
+    expect(receiptOf(payload).custTin).toBe('100000001');
+    expect(receiptOf(payload).custMblNo).toBe('+250788428899');
+  });
+
+  it('4. customer with neither → all three buyer fields are JSON null (never "")', () => {
+    const payload = buildRraSendReceiptPayload(
+      makeBuyerSale({ TIN: null, phone: '', customerType: 'INDIVIDUAL' }),
+      seller,
+      '01',
+    ) as any;
+    expect(payload.custTin).toBeNull();
+    expect(receiptOf(payload).custTin).toBeNull();
+    expect(receiptOf(payload).custMblNo).toBeNull();
+  });
+
+  it('5. invalid TIN is rejected as a TIN (individual falls back to phone; business blocks)', () => {
+    const individual = buildRraSendReceiptPayload(
+      makeBuyerSale({ TIN: '123', phone: '+250788428899', customerType: 'INDIVIDUAL' }),
+      seller,
+      '01',
+    ) as any;
+    expect(receiptOf(individual).custTin).toBeNull();
+    expect(individual.custTin).toBe('+250788428899');
+    expect(() => buildRraSendReceiptPayload(
+      makeBuyerSale({ TIN: '123', phone: '+250788428899', customerType: 'CORPORATE' }),
+      seller,
+      '01',
+    )).toThrow(/no valid 9-digit RRA TIN/);
+  });
+
+  it('6. invalid phone is rejected as a phone (never lands in custMblNo; TIN-shaped phones dropped)', () => {
+    const badPhone = buildRraSendReceiptPayload(
+      makeBuyerSale({ TIN: '100000001', phone: 'not-a-phone', customerType: 'INDIVIDUAL' }),
+      seller,
+      '01',
+    ) as any;
+    expect(receiptOf(badPhone).custMblNo).toBeNull();
+    expect(badPhone.custTin).toBe('100000001');
+    // A TIN-shaped value sitting in the phone column is a suspected swap —
+    // it must leak into neither receipt slot.
+    const swapped = buildRraSendReceiptPayload(
+      makeBuyerSale({ TIN: null, phone: '100000002', customerType: 'INDIVIDUAL' }),
+      seller,
+      '01',
+    ) as any;
+    expect(receiptOf(swapped).custMblNo).toBeNull();
+    expect(receiptOf(swapped).custTin).toBeNull();
+    expect(swapped.custTin).toBeNull();
+  });
+
+  it('7. hostile customer text stays a plain JSON string and never corrupts the payload', () => {
+    const evil = "'; DROP TABLE Students; --";
+    const payload = buildRraSendReceiptPayload(
+      makeBuyerSale({ name: evil, TIN: '100000001', phone: '+250788428899', customerType: 'INDIVIDUAL' }),
+      seller,
+      '01',
+    ) as any;
+    expect(payload.custNm).toBe(evil);
+    expect(typeof payload.custNm).toBe('string');
+    // JSON round-trip (exactly what the VSDC sender transmits) preserves the
+    // value byte-for-byte and keeps every buyer field well-typed.
+    const wire = JSON.parse(JSON.stringify(payload));
+    expect(wire.custNm).toBe(evil);
+    expect(wire.custTin).toBe('100000001');
+    expect(wire.receipt.custTin).toBe('100000001');
+    expect(wire.receipt.custMblNo).toBe('+250788428899');
+    expect(typeof wire.receipt.trdeNm).toBe('string');
+    expect(typeof wire.receipt.adrs).toBe('string');
+    expect(typeof wire.receipt.topMsg).toBe('string');
+    expect(typeof wire.receipt.btmMsg).toBe('string');
+  });
+
+  it('isValidVsdcPhone accepts official mobile shapes only', () => {
+    expect(isValidVsdcPhone('788428899')).toBe(true);
+    expect(isValidVsdcPhone('+250788428899')).toBe(true);
+    expect(isValidVsdcPhone('0788428899')).toBe(true);
+    expect(isValidVsdcPhone('not-a-phone')).toBe(false);
+    expect(isValidVsdcPhone('123')).toBe(false);
+    expect(isValidVsdcPhone('')).toBe(false);
+    expect(isValidVsdcPhone(null)).toBe(false);
+  });
+
+  it('resolveVsdcBuyerIdentity never swaps the two receipt slots', () => {
+    expect(resolveVsdcBuyerIdentity({ TIN: '100000001', phone: '+250788428899' })).toEqual({
+      custTin: '100000001',
+      receiptCustTin: '100000001',
+      receiptCustMblNo: '+250788428899',
+    });
+    expect(resolveVsdcBuyerIdentity({ TIN: null, phone: null })).toEqual({
+      custTin: null,
+      receiptCustTin: null,
+      receiptCustMblNo: null,
+    });
+    expect(resolveVsdcBuyerIdentity(null)).toEqual({
+      custTin: null,
+      receiptCustTin: null,
+      receiptCustMblNo: null,
+    });
   });
 });
 

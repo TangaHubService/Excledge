@@ -80,9 +80,12 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
 
 /**
  * Recompute a proforma's line items / customer before it is converted.
- * A proforma never touched inventory, VSDC or the customer balance, so this is a
+ * A proforma never touched inventory or the customer balance, so this is a
  * pure recompute: replace saleItems, refresh totals. Only allowed while the
- * proforma has not been converted yet.
+ * proforma has not been converted yet AND VSDC has not confirmed it — a
+ * VSDC-signed proforma is immutable (like any fiscalized receipt), otherwise
+ * the printed invoice would no longer match what was sent to RRA. Pass edited
+ * lines to the convert endpoint instead.
  *
  * PUT /:organizationId/:saleId/proforma   body: { customerId?, items: [...] }
  */
@@ -107,6 +110,19 @@ customerId?: number
     if (!sale.isProforma) return res.status(400).json(apiError("Only a proforma can be edited this way"))
     if (sale.status === 'CONVERTED' || sale.convertedSale) {
       return res.status(409).json(apiError("This proforma has already been converted to a sale"))
+    }
+    // RRA checklist §28: a VSDC-signed receipt must never be modified. The
+    // proforma is fiscalized at creation, so once its outbox row SUCCEEDED its
+    // lines are frozen — convert with edited lines instead.
+    const proformaOutbox = await prisma.ebmOutbox.findFirst({
+      where: { saleId, operation: 'SALE' },
+      orderBy: { createdAt: 'desc' },
+      select: { status: true },
+    })
+    if (proformaOutbox?.status === 'SUCCEEDED') {
+      return res.status(409).json(apiError(
+        "This proforma has already been confirmed by RRA VSDC and can no longer be edited. Convert it to a sale, passing the corrected lines in the convert request.",
+      ))
     }
 
     const org = await prisma.organization.findUnique({
@@ -1338,18 +1354,20 @@ export async function composeInvoicePayload(
 
     if (!sale) return null
 
-    // Proforma sales are never submitted to VSDC by design and have no outbox
-    // row to check. A real (NS/NR) sale that does have an outbox row must have
+    // Every receipt type — normal (NS/NR), training (TS/TR) and proforma (PS)
+    // — is submitted to VSDC, so a sale that has an outbox row must have
     // reached SUCCEEDED before its receipt can be composed — anything else
     // (PENDING/PROCESSING/FAILED still retrying, or permanently DEAD_LETTER)
     // blocks here rather than silently degrading to an unsigned receipt.
+    // (Proforma/training sales created before this guarantee shipped have no
+    // outbox row at all and compose without a fiscal block, as before.)
     // Set when the sale is real but VSDC has not confirmed it yet. By default
     // that is a hard stop (RRA VSDC spec §16/§22 — no receipt without VSDC
     // confirmation); when the caller passes allowUnfiscalized (a deliberate,
     // user-initiated download/print), we instead compose the payload and stamp
     // it NOT FISCALISED so the document can never pass as a real tax receipt.
     let notFiscalized: "pending" | "failed" | null = null
-    if (!sale.isProforma) {
+    {
       // Not filtered to operation:"SALE" — a refund sale's outbox row is
       // written with operation:"REFUND" (see refundSale), and a voided sale's
       // with "VOID"; whichever applies to this sale is what must have SUCCEEDED.
@@ -1413,15 +1431,17 @@ export async function composeInvoicePayload(
     const totalRcptNo = fiscalTx?.totalRcptNo ?? null
     const internalData = fiscalTx?.internalData ?? norm?.intrlData ?? null
     const receiptSignature = fiscalTx?.receiptSignature ?? norm?.vsdcSignature ?? norm?.verificationCode ?? null
-    // Proforma has no fiscalTx (never sent to VSDC), so it has no VSDC-stamped
-    // time either — fall back to the CIS's own creation time, same as the
-    // spec's own proforma example still prints a date/time under SDC INFORMATION.
+    // A receipt with no fiscalTx yet (still pending VSDC confirmation, or a
+    // proforma/training sale created before all receipt types were fiscalized)
+    // has no VSDC-stamped time either — fall back to the CIS's own creation
+    // time, same as the spec's own proforma example still prints a date/time
+    // under SDC INFORMATION.
     const sdcDateTime = fiscalTx?.sdcDateTime ?? norm?.sdcDateTime ?? (sale.isProforma ? sale.createdAt : null)
     const ebmInvoiceNumber = fiscalTx?.ebmInvoiceNumber ?? norm?.ebmInvoiceNumber ?? sale.invoiceNumber ?? null
     const rcptLabel = fiscalTx?.rcptLabel ?? sale.rcptLabel ?? null
-    // Proforma is never submitted to VSDC (see createSale step 4/7), so it never
-    // has a fiscalTx/sdcRcptNo — it prints its own local, non-fiscal counter pair
-    // instead: localReceiptSeq (this type only) / localReceiptTotalSeq (every
+    // Until VSDC confirms (no fiscalTx/sdcRcptNo yet), a proforma or training
+    // receipt prints its own local, non-fiscal counter pair instead:
+    // localReceiptSeq (this type only) / localReceiptTotalSeq (every
     // locally-numbered type combined), the same distinct-A/B shape as a real
     // VSDC counter (spec §7.25's own example: "168/258 NS" — two different numbers).
     const fiscalReceiptNumber = sdcRcptNo != null
@@ -1470,7 +1490,14 @@ export async function composeInvoicePayload(
       return {
         id: String(line.id),
         line: index + 1,
-        code: line.product?.itemCd ?? line.product?.sku ?? line.product?.barcode ?? line.product?.name ?? line.serviceName ?? "",
+        // Item code must be EXACTLY what buildRraSendReceiptPayload submits to
+        // VSDC (registered itemCd, or SVC-n for ad-hoc service lines). Never
+        // substitute sku/barcode/name here — those values are never sent to
+        // RRA, so printing them would make the invoice disagree with the
+        // fiscal record. A catalog line still missing its itemCd prints blank
+        // (the submission then dead-letters with an actionable message instead
+        // of fiscalizing a code RRA never saw).
+        code: line.product?.itemCd ?? ((line as any).productId != null ? "" : `SVC-${index + 1}`),
         description: line.serviceName ?? line.product?.name ?? line.serviceDescription ?? "",
         quantity: qty,
         unit: line.measurementUnit ?? "PCS",
@@ -1674,8 +1701,8 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
 export const getInvoicePdf = async (req: BranchAuthRequest, res: Response) => {
   try {
     // CIS §16/§22: an official receipt is not issued until VSDC has signed it.
-    // Proforma and training are composed without a signature; a pending or
-    // failed fiscal sale returns 425 instead of a printable document.
+    // A pending or failed fiscal sale (any receipt type — normal, training or
+    // proforma) returns 425 instead of a printable document.
     const invoiceData = await composeInvoicePayload(req)
     if (!invoiceData) return res.status(404).json(apiError("Sale not found"))
 
