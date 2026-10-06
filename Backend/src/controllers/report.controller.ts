@@ -1589,6 +1589,20 @@ function fix2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/**
+ * Parse a VSDC rptDe timestamp (`yyyyMMddHHmmss`, local wall time) as used by
+ * the nightly Z job's `rra_sync_cursors` rows. Returns null when malformed.
+ */
+function parseRptDeTimestamp(raw: string | null | undefined): Date | null {
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec((raw ?? '').trim());
+  if (!m) return null;
+  const d = new Date(
+    parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]),
+    parseInt(m[4]), parseInt(m[5]), parseInt(m[6]),
+  );
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 /**
@@ -1617,6 +1631,37 @@ async function buildDailyReport(
     if (Object.keys(bFilter).length) Object.assign(branchFilter, bFilter);
   }
 
+  // R10 skipped-report rule: when closes were missed, this report covers the
+  // whole period since the previous SUCCESSFUL Z close (cursor
+  // rra_sync_cursors `zReport:<branchId>`, written by the nightly Z job).
+  // A FAILED attempt is not a close — the window falls back to start-of-day.
+  // Limitation: only the latest attempt is stored, so a failure that
+  // overwrote an older success still falls back to start-of-day (close
+  // history is the follow-up).
+  let periodStart = dayStart;
+  let previousCloseAt: string | null = null;
+  let coversSinceLastZ = false;
+  try {
+    const cursor = await prisma.rraSyncCursor.findFirst({
+      where: {
+        organizationId,
+        resource: targetBranchId != null ? `zReport:${targetBranchId}` : 'zReport',
+      },
+      select: { lastReqDt: true, lastResult: true },
+    });
+    if (cursor && /^(VERIFIED|SAVED_UNVERIFIED)/.test(cursor.lastResult ?? '')) {
+      const prev = parseRptDeTimestamp(cursor.lastReqDt);
+      if (prev && prev > dayStart) {
+        periodStart = prev;
+        previousCloseAt = prev.toISOString();
+        coversSinceLastZ = true;
+      }
+    }
+  } catch {
+    // Cursor lookup is best-effort — a missing/unreadable cursor keeps the
+    // legacy start-of-day window rather than failing the report.
+  }
+
   const [org, branch, sales, shiftAgg, heldCount, voidedSales] = await Promise.all([
     prisma.organization.findUnique({
       where: { id: organizationId },
@@ -1632,11 +1677,11 @@ async function buildDailyReport(
       where: {
         organizationId,
         ...branchFilter,
-        createdAt: { gte: dayStart, lte: dayEnd },
+        createdAt: { gte: periodStart, lte: dayEnd },
         status: { in: ['COMPLETED', 'REFUNDED', 'CANCELLED', 'DRAFT', 'PENDING', 'CONVERTED'] },
       },
       include: {
-        saleItems: { select: { taxCode: true, taxAmount: true, totalPrice: true, quantity: true, dcAmt: true } },
+        saleItems: { select: { taxCode: true, taxAmount: true, totalPrice: true, quantity: true, dcAmt: true, product: { select: { category: true } } } },
         ebmTransactions: {
           where: { submissionStatus: 'SUCCESS' },
           orderBy: { createdAt: 'desc' },
@@ -1649,7 +1694,7 @@ async function buildDailyReport(
       where: {
         organizationId,
         ...(targetBranchId != null ? { branchId: targetBranchId } : branchFilter),
-        openedAt: { gte: dayStart, lte: dayEnd },
+        openedAt: { gte: periodStart, lte: dayEnd },
       },
       _sum: { openingFloat: true },
     }),
@@ -1657,7 +1702,7 @@ async function buildDailyReport(
       where: {
         organizationId,
         ...(targetBranchId != null ? { branchId: targetBranchId } : branchFilter),
-        createdAt: { gte: dayStart, lte: dayEnd },
+        createdAt: { gte: periodStart, lte: dayEnd },
         resultingSale: { is: null },
       },
     }),
@@ -1665,7 +1710,7 @@ async function buildDailyReport(
       where: {
         organizationId,
         ...branchFilter,
-        createdAt: { gte: dayStart, lte: dayEnd },
+        createdAt: { gte: periodStart, lte: dayEnd },
         status: 'CANCELLED',
       },
       select: { totalAmount: true },
@@ -1715,6 +1760,45 @@ async function buildDailyReport(
     }
   }
 
+  // R10: the same per-rate legs for REFUNDS, kept signed (negative) and split
+  // from sales so the two reconcile against the receipts they cover.
+  const refundBands: Record<string, { taxableAmt: number; taxAmt: number; salesAmt: number }> = {};
+  for (const code of TAX_CODES) {
+    refundBands[code] = { taxableAmt: 0, taxAmt: 0, salesAmt: 0 };
+  }
+  for (const sale of normalRefunds) {
+    for (const si of sale.saleItems) {
+      const code = (si.taxCode ?? 'A').toUpperCase();
+      if (!refundBands[code]) refundBands[code] = { taxableAmt: 0, taxAmt: 0, salesAmt: 0 };
+      const total = Number(si.totalPrice);
+      const tax   = Number(si.taxAmount);
+      refundBands[code].taxAmt    = fix2(refundBands[code].taxAmt    + tax);
+      refundBands[code].taxableAmt= fix2(refundBands[code].taxableAmt+ (total - tax));
+      refundBands[code].salesAmt  = fix2(refundBands[code].salesAmt  + total);
+    }
+  }
+
+  // R10: totals per main group (product category), sales vs (signed) refunds.
+  const groupTotals: Record<string, { salesAmt: number; refundAmt: number; itemCount: number }> = {};
+  const groupOf = (name: unknown) => {
+    const key = String(name ?? '').trim() || 'Uncategorized';
+    return groupTotals[key] ?? (groupTotals[key] = { salesAmt: 0, refundAmt: 0, itemCount: 0 });
+  };
+  for (const sale of normalSales) {
+    for (const si of sale.saleItems) {
+      const g = groupOf((si as any).product?.category);
+      g.salesAmt = fix2(g.salesAmt + Number(si.totalPrice));
+      g.itemCount += 1;
+    }
+  }
+  for (const sale of normalRefunds) {
+    for (const si of sale.saleItems) {
+      const g = groupOf((si as any).product?.category);
+      g.refundAmt = fix2(g.refundAmt + Number(si.totalPrice));
+      g.itemCount += 1;
+    }
+  }
+
   const [rateA, rateB, rateC, rateD] = await getTaxRatesBySlot(organizationId);
   const taxRates: Record<string, number> = {
     A: rateA, B: rateB, C: rateC, D: rateD, E: 0,
@@ -1725,6 +1809,13 @@ async function buildDailyReport(
   for (const sale of normalSales) {
     const pt = sale.paymentType;
     paymentTotals[pt] = fix2((paymentTotals[pt] ?? 0) + Number(sale.totalAmount));
+  }
+
+  // R10: refunds split by means of payment (signed), separate from sales.
+  const refundPaymentTotals: Record<string, number> = {};
+  for (const sale of normalRefunds) {
+    const pt = sale.paymentType;
+    refundPaymentTotals[pt] = fix2((refundPaymentTotals[pt] ?? 0) + Number(sale.totalAmount));
   }
 
   const grossSalesAmt  = fix2(normalSales.reduce((s, sale) => s + Number(sale.totalAmount), 0));
@@ -1776,8 +1867,10 @@ async function buildDailyReport(
     reportDate: reportDate.toISOString().split('T')[0],
     organizationId,
     branchId: targetBranchId,
-    periodStart: dayStart.toISOString(),
+    periodStart: periodStart.toISOString(),
     periodEnd: dayEnd.toISOString(),
+    previousCloseAt,
+    coversSinceLastZ,
     generatedAt: new Date().toISOString(),
     header,
     counters: {
@@ -1807,8 +1900,11 @@ async function buildDailyReport(
       incompleteSalesCount,
     },
     taxBands,
+    refundBands,
     taxRates,
     paymentBreakdown: paymentTotals,
+    refundPaymentBreakdown: refundPaymentTotals,
+    groupTotals,
   };
 }
 

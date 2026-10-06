@@ -39,6 +39,11 @@ export interface DailyReportData {
   generatedAt: string
   periodStart: string
   periodEnd: string
+  /** ISO timestamp of the previous successful Z close when this report covers
+   *  the whole period since then (R10 skipped-report rule); null otherwise. */
+  previousCloseAt: string | null
+  /** True when periodStart is a previous Z close rather than start-of-day. */
+  coversSinceLastZ: boolean
   header: FiscalReportHeader
   counters: {
     firstRcptNo: number | null
@@ -71,8 +76,14 @@ export interface DailyReportData {
     incompleteSalesCount: number
   }
   taxBands: Record<string, { taxableAmt: number; taxAmt: number; salesAmt: number }>
+  /** R10: the same per-rate legs for REFUNDS (signed, negative), split from sales. */
+  refundBands: Record<string, { taxableAmt: number; taxAmt: number; salesAmt: number }>
   taxRates: Record<string, number>
   paymentBreakdown: Record<string, number>
+  /** R10: per-method refund legs (signed, negative), split from sales. */
+  refundPaymentBreakdown: Record<string, number>
+  /** R10: totals per main group (product category), sales vs refunds. */
+  groupTotals: Record<string, { salesAmt: number; refundAmt: number; itemCount: number }>
   vsdcConfirmation: { checked: boolean; rptDe?: string; error?: string } | null
 }
 
@@ -170,6 +181,10 @@ function drawDailyReport(doc: PDFKit.PDFDocument, data: DailyReportData, logo: B
   const gen = formatInvoiceDateTime(data.generatedAt)
   y = line(doc, `REPORT DATE : ${data.reportDate}`, y)
   y = line(doc, `PRINTED     : ${gen.date} ${gen.time}`, y)
+  if (data.coversSinceLastZ && data.previousCloseAt) {
+    const prev = formatInvoiceDateTime(data.previousCloseAt)
+    y = line(doc, `COVERS SINCE LAST Z: ${prev.date} ${prev.time}`, y)
+  }
   y = line(doc, `SOFTWARE    : ${CIS_VERSION_LABEL.replace(/^Software version:\s*/i, "")}`, y)
 
   y += 2
@@ -206,6 +221,26 @@ function drawDailyReport(doc: PDFKit.PDFDocument, data: DailyReportData, logo: B
     y = pair(doc, `${code}-${formatInvoiceQuantity(rate)}% tax`, formatInvoiceAmount(band.taxAmt), y)
   }
 
+  // R10: refund legs per rate (signed), split from the sales bands above.
+  const refundBands = data.refundBands ?? {}
+  const refundOrder = order.filter((code) => {
+    const band = refundBands[code]
+    return band && (band.salesAmt !== 0 || band.taxAmt !== 0)
+  })
+  if (refundOrder.length) {
+    y += 2
+    y = centered(doc, "REFUND BANDS", y, true)
+    for (const code of refundOrder) {
+      const band = refundBands[code]
+      const rate = data.taxRates[code] ?? 0
+      y = pair(doc, `${code}-${formatInvoiceQuantity(rate)}% refund`, formatInvoiceAmount(band.salesAmt), y)
+      y = pair(doc, `${code}-${formatInvoiceQuantity(rate)}% refund tax`, formatInvoiceAmount(band.taxAmt), y)
+    }
+    y += 2
+    dashed(doc, y)
+    y += 4
+  }
+
   y += 2
   dashed(doc, y)
   y += 4
@@ -217,6 +252,32 @@ function drawDailyReport(doc: PDFKit.PDFDocument, data: DailyReportData, logo: B
     for (const [method, amount] of payEntries) {
       y = pair(doc, PAYMENT_LABELS[method] ?? method, formatInvoiceAmount(amount), y)
     }
+  }
+  // R10: refunds split by method (signed), separate from the sales above.
+  const refundPayEntries = Object.entries(data.refundPaymentBreakdown ?? {})
+  if (refundPayEntries.length) {
+    y = centered(doc, "REFUNDS BY METHOD", y, true)
+    for (const [method, amount] of refundPayEntries) {
+      y = pair(doc, PAYMENT_LABELS[method] ?? method, formatInvoiceAmount(amount), y)
+    }
+  }
+
+  // R10: totals per main group (product category).
+  const groupEntries = Object.entries(data.groupTotals ?? {})
+  if (groupEntries.length) {
+    y += 2
+    dashed(doc, y)
+    y += 4
+    y = centered(doc, "MAIN GROUPS", y, true)
+    for (const [group, g] of groupEntries) {
+      y = pair(doc, `${safe(group, "-")} sales (${g.itemCount})`, formatInvoiceAmount(g.salesAmt), y)
+      if (g.refundAmt !== 0) {
+        y = pair(doc, `${safe(group, "-")} refunds`, formatInvoiceAmount(g.refundAmt), y)
+      }
+    }
+    y += 2
+    dashed(doc, y)
+    y += 4
   }
 
   y += 2
