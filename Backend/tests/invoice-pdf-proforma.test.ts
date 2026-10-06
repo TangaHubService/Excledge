@@ -51,7 +51,7 @@ describe("proforma / training slip fiscal block", () => {
   it("A4: prints Date, Time, SDC ID and RECEIPT NUMBER even without a VSDC signature", async () => {
     const drawn = await captureText(() => generateEbmInvoicePdf(proformaFixture(), "A4"))
     const blob = drawn.join("\n")
-    expect(blob).toMatch(/Date: 02-09-2026\s+11:38:42/)
+    expect(blob).toMatch(/Date: 02\/09\/2026\s+11:38:42/)
     expect(blob).toMatch(/SDC ID\s*:\s*SDC012000250/)
     expect(blob).toMatch(/RECEIPT NUMBER\s*:\s*7\/4 PS/)
   })
@@ -64,7 +64,7 @@ describe("proforma / training slip fiscal block", () => {
     const drawn = await captureText(() => generateEbmInvoicePdf(fixture, "A4"))
     const blob = drawn.join("\n")
     expect(blob).toMatch(/RECEIPT NUMBER\s*:\s*7\/4 PS/)
-    expect(blob).toMatch(/Date: 02-09-2026/)
+    expect(blob).toMatch(/Date: 02\/09\/2026/)
   })
 
   it("80mm: prints Date, SDC ID and RECEIPT NUMBER for a proforma", async () => {
@@ -72,7 +72,7 @@ describe("proforma / training slip fiscal block", () => {
     const blob = drawn.join("\n")
     expect(blob).toMatch(/SDC ID\s*:\s*SDC012000250/)
     expect(blob).toMatch(/RECEIPT NUMBER\s*:\s*7\/4 PS/)
-    expect(blob).toMatch(/Date: 02-09-2026/)
+    expect(blob).toMatch(/Date: 02\/09\/2026/)
   })
 
   it("a training slip renders the same SDC INFORMATION block as a proforma", async () => {
@@ -94,6 +94,34 @@ describe("proforma / training slip fiscal block", () => {
       expect(blob).toMatch(/SDC ID\s*:\s*SDC012000250/)
       expect(blob).toMatch(/RECEIPT NUMBER\s*:\s*12\/9 TS/)
       expect(blob).not.toMatch(/Software version/)
+    }
+  })
+
+  it("a fiscalized training receipt shows the returned VSDC response (Q3)", async () => {
+    // Training IS submitted to VSDC: once confirmed, the receipt prints the
+    // returned signature/internal data/QR alongside the TRAINING MODE title
+    // (and keeps the not-official notice per R7), never NOT FISCALISED.
+    const training = proformaFixture()
+    training.invoice.isProforma = false
+    training.invoice.rcptLabel = "TS"
+    training.invoice.receiptNumber = "12/9 TS"
+    training.sdcInformation.rcptLabel = "TS"
+    training.sdcInformation.receiptNumber = "12/9 TS"
+    training.sdcInformation.receiptSignature = "ABCD1234EFGH5678"
+    training.sdcInformation.internalData = "DATA1234DATA5678"
+    training.certification = { isCertified: true }
+    training.verification = { qrCodeImage: null, qrPayload: "qr", verificationUrl: null }
+
+    for (const run of [
+      () => generateEbmInvoicePdf(training, "A4"),
+      () => generateEbmReceiptPdf80mm(training),
+    ]) {
+      const blob = (await captureText(run)).join("\n")
+      expect(blob).toMatch(/TRAINING MODE/)
+      expect(blob).toMatch(/Receipt Signature/)
+      expect(blob).toMatch(/ABCD-1234-EFGH-5678/)
+      expect(blob).toMatch(/THIS IS NOT AN OFFICIAL RECEIPT/)
+      expect(blob).not.toMatch(/NOT FISCALISED/)
     }
   })
 })

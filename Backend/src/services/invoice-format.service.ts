@@ -21,8 +21,9 @@ export function formatInvoiceDateTime(value?: string | Date | null): { date: str
   const parsed = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(parsed.getTime())) return { date: String(value), time: "" }
   const p2 = (part: number) => String(part).padStart(2, "0")
+  // R6: receipt dates are DD/MM/YYYY (slashes, not dashes).
   return {
-    date: `${p2(parsed.getDate())}-${p2(parsed.getMonth() + 1)}-${parsed.getFullYear()}`,
+    date: `${p2(parsed.getDate())}/${p2(parsed.getMonth() + 1)}/${parsed.getFullYear()}`,
     time: `${p2(parsed.getHours())}:${p2(parsed.getMinutes())}:${p2(parsed.getSeconds())}`,
   }
 }
