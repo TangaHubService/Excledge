@@ -3,13 +3,15 @@ import { prisma } from '../lib/prisma';
 import { enqueueInventoryMovementAccountingEvent } from './accounting-outbox.service';
 
 /**
- * RRA Stock In/Out reporting (RRA checklist §72/§73): every non-sale inventory
- * movement is queued for the VSDC by marking its ledger row PENDING; a cron
- * batch (stock-sync.job) submits them. SALE rows are never queued — RRA derives
- * stock-out from /trnsSales/saveSales, so `null` here means "not applicable".
+ * RRA Stock In/Out reporting (RRA VSDC v1.0.5, S8): every inventory movement
+ * — including SALE (sarTyCd 11) — is queued for the VSDC by marking its ledger
+ * row PENDING. SALE rows are sent only after their sales invoice is fiscalized
+ * (gated in stock-movement-sync.service); a cron batch (stock-sync.job)
+ * submits them. Refund/return qty is always positive; direction rides on
+ * sarTyCd.
  */
 function ebmSyncStatusFor(movementType: InventoryMovementType): 'PENDING' | null {
-  return movementType === 'SALE' ? null : 'PENDING';
+  return 'PENDING';
 }
 
 function queueStockSync(entry: { id?: number; ebmSyncStatus?: string | null } | null | undefined) {

@@ -7,14 +7,13 @@ import { getTaxRateForCode } from './rra-code.service';
 import logger from '../utils/logger';
 
 /**
- * RRA Stock In/Out + Stock Master sync (RRA checklist §23, §72, §73).
+ * RRA Stock In/Out + Stock Master sync (RRA VSDC v1.0.5, S8).
  *
- * Every non-sale inventory movement (purchase receipt, adjustment, transfer,
- * damage/expiry, customer return) is reported to the VSDC as a Store Adjustment
- * Record via /stock/saveStockItems, and the item's new on-hand quantity is
- * pushed via /stockMaster/saveStockMaster. SALE movements are NOT sent here —
- * RRA derives the stock-out from /trnsSales/saveSales (stockRlsDt), so
- * double-reporting is avoided by never marking SALE ledger rows PENDING.
+ * Every inventory movement — including SALE (sarTyCd 11, positive qty) — is
+ * reported via /stock/saveStockItems, then the remaining quantity via
+ * /stockMaster/saveStockMaster. saveSales is the sales transaction; it never
+ * replaces the stock movement API. Order per sale: invoice ack first, then
+ * stock in/out, then stock master (gated below).
  */
 
 /** VSDC §4.19 Stock In/Out (`sarTyCd`) — mapped from our movement type + direction. */
@@ -39,7 +38,7 @@ export function sarTyCdFor(
     }
   }
   switch (movementType) {
-    case 'SALE':          return null;  // handled by /trnsSales/saveSales
+    case 'SALE':          return '11';  // Sale / Outgoing (after saveSales ack — S8)
     case 'TRANSFER_OUT':  return '13';  // Stock Movement
     case 'DAMAGE':
     case 'EXPIRED':       return '15';  // Discarding
@@ -52,7 +51,7 @@ export function sarTyCdFor(
 
 /** Whether an inventory movement needs to be reported to RRA as a stock adjustment. */
 export function stockMovementNeedsEbm(movementType: InventoryMovementType): boolean {
-  return movementType !== 'SALE';
+  return true;
 }
 
 async function allocateSarNo(organizationId: number): Promise<number> {
@@ -91,6 +90,25 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
   if (!sarTyCd) {
     await prisma.inventoryLedger.update({ where: { id: ledgerId }, data: { ebmSyncStatus: null } });
     return { success: true };
+  }
+
+  // S8 order: a SALE stock-out (11) must never be sent before its sales
+  // invoice. Defer (leave PENDING, no FAILED) until the linked sale's invoice
+  // is fiscalized. Linkage: ledger reference = saleNumber.
+  if (entry.movementType === 'SALE' && entry.reference) {
+    const linkedSale = await prisma.sale.findFirst({
+      where: { saleNumber: entry.reference, organizationId: entry.organizationId },
+      select: { id: true },
+    });
+    if (linkedSale) {
+      const invoiced = await prisma.ebmTransaction.findFirst({
+        where: { saleId: linkedSale.id, operation: 'SALE', submissionStatus: 'SUCCESS', ebmInvoiceNumber: { not: null } },
+        select: { id: true },
+      });
+      if (!invoiced) {
+        return { success: false, error: 'Original invoice not yet fiscalized — deferring stock 11' };
+      }
+    }
   }
 
   const product = entry.product;
@@ -132,12 +150,40 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
   const taxblAmt = fix2(splyAmt - taxAmt);
 
   const sarNo = entry.ebmSarNo ?? (await allocateSarNo(entry.organizationId));
+  // orgSarNo: original SAR number for refund/return rows (new sarNo + link to
+  // the original 11). Resolved from the original SALE ledger row for the same
+  // product/branch; NULL when there is no original (never assume 0 — the
+  // numbering rule awaits VSDC provider confirmation).
+  let orgSarNo: number | null = (entry as any).ebmOrgSarNo ?? null;
+  if (orgSarNo == null && entry.movementType === 'RETURN_CUSTOMER') {
+    const meta = (entry as any).metadata as { originalSaleNumber?: string } | null;
+    const originalRef = meta?.originalSaleNumber
+      ?? (entry.referenceType === 'SALE_REFUND' || entry.referenceType === 'SALE_CANCELLATION' ? undefined : undefined);
+    if (originalRef) {
+      const orig = await prisma.inventoryLedger.findFirst({
+        where: {
+          organizationId: entry.organizationId,
+          productId: product.id,
+          branchId: entry.branchId,
+          movementType: 'SALE',
+          reference: originalRef,
+          ebmSarNo: { not: null },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { ebmSarNo: true },
+      });
+      if (orig?.ebmSarNo != null) {
+        orgSarNo = orig.ebmSarNo;
+        await prisma.inventoryLedger.update({ where: { id: ledgerId }, data: { ebmOrgSarNo: orgSarNo } as any });
+      }
+    }
+  }
   const regr = { id: String(entry.user?.id ?? 'system'), name: entry.user?.name ?? 'System' };
   const now = entry.createdAt;
 
   const payload = {
     sarNo,
-    orgSarNo: 0,
+    orgSarNo,
     regTyCd: 'M', // Manual
     // StockIOSaveReq sample uses null customer fields for non-transfer movements.
     // Only inter-branch transfers should populate the counterparty TIN/bhfId.
@@ -179,6 +225,23 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
   };
 
   try {
+    // S14: header totals must equal the sums of the item lines (single-item
+    // payload today — validated explicitly so a future multi-line change fails
+    // loudly instead of sending inconsistent totals).
+    const lineSums = (payload.itemList as Array<{ taxblAmt: number; taxAmt: number; totAmt: number }>)
+      .reduce((a, l) => ({ taxbl: a.taxbl + l.taxblAmt, tax: a.tax + l.taxAmt, tot: a.tot + l.totAmt }), { taxbl: 0, tax: 0, tot: 0 });
+    if (
+      payload.totItemCnt !== (payload.itemList as unknown[]).length ||
+      Math.abs(payload.totTaxblAmt as number - lineSums.taxbl) > 0.005 ||
+      Math.abs(payload.totTaxAmt as number - lineSums.tax) > 0.005 ||
+      Math.abs(payload.totAmt as number - lineSums.tot) > 0.005
+    ) {
+      await prisma.inventoryLedger.update({
+        where: { id: ledgerId },
+        data: { ebmSyncStatus: 'FAILED', ebmError: 'Stock payload header/line totals mismatch' },
+      });
+      return { success: false, error: 'Stock payload header/line totals mismatch' };
+    }
     await prisma.inventoryLedger.update({
       where: { id: ledgerId },
       data: { ebmSyncStatus: 'PENDING', ebmSarNo: sarNo, ebmError: null },
@@ -238,7 +301,7 @@ export async function processStockSyncBatch(limit = 25): Promise<{ processed: nu
   if (!isEbmEnabled()) return { processed: 0, succeeded: 0, failed: 0 };
 
   const rows = await prisma.inventoryLedger.findMany({
-    where: { ebmSyncStatus: { in: ['PENDING', 'FAILED'] }, movementType: { not: 'SALE' } },
+    where: { ebmSyncStatus: { in: ['PENDING', 'FAILED'] } },
     orderBy: { createdAt: 'asc' },
     take: limit,
     select: { id: true },
@@ -255,14 +318,13 @@ export async function processStockSyncBatch(limit = 25): Promise<{ processed: nu
 }
 
 /**
- * Mark every not-yet-synced non-sale ledger row for this org PENDING so the
+ * Mark every not-yet-synced ledger row for this org PENDING so the
  * next batch picks them up. Used by the "sync stock now" endpoint.
  */
 export async function queuePendingStockForOrg(organizationId: number): Promise<number> {
   const res = await prisma.inventoryLedger.updateMany({
     where: {
       organizationId,
-      movementType: { not: 'SALE' },
       OR: [{ ebmSyncStatus: null }, { ebmSyncStatus: 'FAILED' }],
     },
     data: { ebmSyncStatus: 'PENDING' },
