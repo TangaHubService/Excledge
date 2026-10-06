@@ -30,6 +30,10 @@ export type CommitSaleItemInput = {
   productId?: number | string | null
   quantity: number
   unitPrice: number
+  /** Line discount amount (absolute money, tax-inclusive). Accepted by the
+   *  sales validation schema and read at commit time (dcAmt/dcRate
+   *  reconstruction) — declared here so the server-side pipeline typechecks. */
+  discount?: number
   itemType?: "PRODUCT" | "RAW_MATERIAL" | "SERVICE"
   serviceName?: string | null
   serviceDescription?: string | null

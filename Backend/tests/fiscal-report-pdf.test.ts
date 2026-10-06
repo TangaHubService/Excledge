@@ -36,6 +36,12 @@ function dailyFixture(reportType: "X" | "Z"): DailyReportData {
       trainingAmt: 1_180,
       copyCount: 3,
       copyAmt: 35_400,
+      openingDeposit: 50_000,
+      proformaCount: 1,
+      proformaAmt: 23_600,
+      discountTotal: 5_000,
+      otherReductionsAmt: 0,
+      incompleteSalesCount: 2,
     },
     taxBands: {
       A: { taxableAmt: 200_000, taxAmt: 0, salesAmt: 200_000 },
