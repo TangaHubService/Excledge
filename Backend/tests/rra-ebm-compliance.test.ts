@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { TaxService } from '../src/services/tax.service';
 import { parseVsdcResponse, parseVsdcStatusCode } from '../src/services/vsdc-api.service';
 import { parseGatewayResponse, gatewayErrorMessage, buildRraSendReceiptPayload, isValidRraTin, isValidVsdcPhone, resolveVsdcBuyerIdentity, resolveCustTinForVsdc, walkInCustTin, PurchaseCodeMissingError, type SaleWithRelations } from '../src/services/rra-ebm.service';
+import type { VsdcEnvelope } from '../src/services/vsdc-api.service';
 import { validateRefundReasonCode, getRefundReasonCodes, DEFAULT_RFD_RSN_CD, resolvePkgUnitCd, resolveQtyUnitCd } from '../src/services/rra-code.service';
 import { deriveQtyUnitCd } from '../src/services/item-code.service';
 import { validateVsdcEnvelope } from '../src/services/vsdc-api.service';
@@ -717,7 +718,7 @@ describe('VSDC buyer identity mapping — official receipt structure', () => {
     phone?: string | null;
     name?: string;
     customerType?: string;
-  }) {
+  }): SaleWithRelations {
     return {
       id: 7,
       saleNumber: 'SALE-7',
@@ -761,7 +762,7 @@ describe('VSDC buyer identity mapping — official receipt structure', () => {
           product: { name: 'Widget', itemCd: 'RW2CTU0000001', itemClsCd: '5059690800', pkgUnitCd: 'CT', qtyUnitCd: 'U', packagingQty: null },
         },
       ],
-    };
+    } as unknown as SaleWithRelations;
   }
   const seller = { TIN: '100000000', name: 'Seller', address: 'Kigali' };
 
@@ -904,8 +905,10 @@ describe('VSDC buyer identity mapping — official receipt structure', () => {
 describe('vsdcRequestBody — payload envelope parity', () => {
   it('sends only tin+bhfId from the device envelope (no sdcId/mrcNo/env pollution)', async () => {
     const { vsdcRequestBody } = await import('../src/services/vsdc-api.service');
+    // A full device envelope in, only tin+bhfId out (no sdcId/mrcNo/env pollution).
+    const envelope: VsdcEnvelope = { tin: '999945560', bhfId: '00', sdcId: 'SDC1', mrcNo: 'MRC1', dvcSrlNo: 'MRC1', env: 'sandbox' };
     const body = vsdcRequestBody(
-      { tin: '999945560', bhfId: '00', sdcId: 'SDC1', mrcNo: 'MRC1', dvcSrlNo: 'MRC1', env: 'sandbox' },
+      envelope,
       { invcNo: 1, salesTyCd: 'N' },
     );
     expect(body).toEqual({ tin: '999945560', bhfId: '00', invcNo: 1, salesTyCd: 'N' });

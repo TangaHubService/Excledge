@@ -5,7 +5,18 @@ const config: Config = {
   testEnvironment: 'node',
   roots: ['<rootDir>/tests'],
   testMatch: ['**/*.test.ts', '**/*.spec.ts'],
-  testPathIgnorePatterns: ['/node_modules/', 'product-validation.test.ts'],
+  // Vitest is the canonical runner (`npm run test:unit`) — every suite imports
+  // from 'vitest', and most rely on hoisted vi.mock() which jest cannot honor.
+  // Jest additionally runs the four fiscal suites that only use
+  // describe/it/expect (+vi.spyOn), via the tests/vitest-jest-shim.ts bridge.
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    'product-validation.test.ts',
+    'tests/(?!rra-ebm-compliance|invoice-pdf|invoice-pdf-proforma|fiscal-report-pdf).*\\.test\\.ts$',
+  ],
+  moduleNameMapper: {
+    '^vitest$': '<rootDir>/tests/vitest-jest-shim.ts',
+  },
   moduleFileExtensions: ['ts', 'js', 'json'],
   transform: {
     '^.+\\.ts$': ['ts-jest', {
