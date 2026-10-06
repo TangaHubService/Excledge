@@ -162,7 +162,14 @@ function drawReceipt(
   y += 2
   dashedLine(doc, y)
   y += 5
-  y = labelValueLine(doc, safe(data.invoice.paymentMethod, "CASH").toUpperCase(), formatInvoiceAmount(data.totals.grandTotal), y)
+  // R1: every means of payment prints with its amount. Split tenders print
+  // one row each; otherwise the single payment-type line (legacy behavior).
+  const payLines = data.payment.lines?.length
+    ? data.payment.lines.map((l) => ({ label: l.label, amount: l.amount }))
+    : [{ label: safe(data.invoice.paymentMethod, "CASH"), amount: data.totals.grandTotal }]
+  for (const pl of payLines) {
+    y = labelValueLine(doc, safe(pl.label, "CASH").toUpperCase(), formatInvoiceAmount(pl.amount), y)
+  }
   y = labelValueLine(doc, "ITEMS NUMBER", String(data.items.length), y)
   y += 2
   dashedLine(doc, y)

@@ -86,6 +86,8 @@ export interface RenderInvoicePayment {
   cashAmount?: number
   insuranceAmount?: number
   debtAmount?: number
+  /** One row per means of payment (R1). Empty/absent = legacy single line. */
+  lines?: Array<{ method: string; label: string; amount: number }>
 }
 
 export interface RenderInvoiceSdcInformation {
@@ -369,7 +371,10 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
   const receiptNo = safeText(data.invoice.receiptNumber)
   const invoiceDate = formatDateShort(data.invoice.invoiceDate)
   const invoiceTime = formatTime(data.invoice.time)
-  const paymentMethod = safeText(data.invoice.paymentMethod).toUpperCase()
+  // R1: split tenders list every method with its amount.
+  const paymentMethod = data.payment.lines?.length
+    ? data.payment.lines.map((l) => `${safeText(l.label)} ${formatAmount(l.amount)}`).join(" + ")
+    : safeText(data.invoice.paymentMethod).toUpperCase()
   const cashier = safeText(data.invoice.cashier)
   const poweredBy = safeText(data.branding.poweredBy, SYSTEM_POWERED_BY)
   const footerMessage = safeText(data.footer?.message, "THANK YOU FOR YOUR BUSINESS!")

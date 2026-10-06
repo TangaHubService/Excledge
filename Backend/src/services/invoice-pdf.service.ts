@@ -394,7 +394,14 @@ function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void 
   }
   rows.push([`Total Tax ${currencyLabel}`, totalTax])
   rows.push(["Items Number", data.items.length])
-  rows.push(["Payment Mode", safe(data.invoice.paymentMethod, "-")])
+  // R1: every means of payment with its amount; single line legacy otherwise.
+  if (data.payment.lines?.length) {
+    for (const pl of data.payment.lines) {
+      rows.push([safe(pl.label, "-"), pl.amount])
+    }
+  } else {
+    rows.push(["Payment Mode", safe(data.invoice.paymentMethod, "-")])
+  }
 
   const x = 341
   const y = 649
