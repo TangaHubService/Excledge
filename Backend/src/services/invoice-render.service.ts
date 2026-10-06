@@ -3,7 +3,7 @@ import { SYSTEM_FOOTER, SYSTEM_POWERED_BY, NOT_OFFICIAL_RECEIPT_NOTICE, NOT_FISC
 // invoice-pdf.service only imports RenderInvoicePayload/RenderInvoiceLineItem
 // as types (`import type`, erased at build time), so importing its runtime
 // helpers here does not create a circular module dependency at runtime.
-import { documentIndicator, isFormalNoticeIndicator, salesBands, taxGroups } from "./invoice-pdf.service"
+import { documentIndicator, isFormalNoticeIndicator, bandSalesLabel, salesBands, taxBandRows } from "./invoice-pdf.service"
 
 type NullableString = string | null | undefined
 
@@ -159,6 +159,9 @@ export interface RenderInvoicePayload {
   items: RenderInvoiceLineItem[]
   totals: RenderInvoiceTotals
   charges: RenderInvoiceCharges
+  /** Programmed A/B/C/D rates (percent) — renderers print every rate > 0 on
+   *  every receipt (R2), falling back to the statutory [0,18,0,0] when absent. */
+  taxRates?: [number, number, number, number]
   payment: RenderInvoicePayment
   sdcInformation: RenderInvoiceSdcInformation
   certification: RenderInvoiceCertification
@@ -397,18 +400,19 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
 
   type SummaryRow = readonly [string, number, boolean]
 
-  // Grand total sliced by tax band ("TOTAL A/B/C/D" — the per-type sales
-  // totals): every band with sales, plus B always (RRA §48).
+  // Grand total sliced by tax band ("TOTAL A-EX / TOTAL B-18.00%" — the
+  // per-type sales totals): every programmed band with rate > 0, plus B
+  // always, plus any band with sales (R2 — a zero-rate label only appears
+  // when an item with that rate was sold).
   const salesBandRows: SummaryRow[] = salesBands(data)
     .map((group) => (
-      [`TOTAL ${group.code}`, group.total, false] as SummaryRow
+      [bandSalesLabel(group.code, group.rate), group.total, false] as SummaryRow
     ))
 
-  // RRA checklist §46: print the tax value under each A/B/C/D label actually
-  // in play. Skip zero-tax bands (e.g. TOTAL TAX A 0.00); keep B even at 0
-  // (RRA §48).
-  const taxBreakdownRows: SummaryRow[] = taxGroups(data)
-    .filter((group) => group.code === "B" || Math.abs(group.tax) > 0)
+  // Per-band tax rows under each label actually in play (R2/R3): programmed
+  // bands with rate > 0 plus used bands, so TOTAL TAX always equals the sum
+  // of the printed per-rate taxes (R11).
+  const taxBreakdownRows: SummaryRow[] = taxBandRows(data)
     .map((group) => (
       [`TOTAL TAX ${group.code}`, group.tax, false] as SummaryRow
     ))

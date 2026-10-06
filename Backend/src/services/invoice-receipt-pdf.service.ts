@@ -3,7 +3,7 @@ import type { RenderInvoicePayload } from "./invoice-render.service"
 import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, groupFiscalValue } from "./invoice-format.service"
 import { getOrganizationLogo, getRraCertificationLogo } from "./invoice-logo.service"
 import { NOT_FISCALIZED_NOTICE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_NOTICE, SYSTEM_FOOTER } from "./system-branding.service"
-import { dataUrlBuffer, documentIndicator, isFormalNoticeIndicator, isRefundTransaction, safe, salesBands, taxGroups } from "./invoice-pdf.service"
+import { dataUrlBuffer, documentIndicator, isFormalNoticeIndicator, isRefundTransaction, safe, bandSalesLabel, salesBands, taxBandRows, taxGroups } from "./invoice-pdf.service"
 
 /**
  * Narrow, continuous "thermal roll" layout for 80mm POS printers — the
@@ -142,15 +142,17 @@ function drawReceipt(
 
   const currency = safe(data.invoice.currency || data.company.currency, "RWF")
   const currencyLabel = currency.toUpperCase() === "RWF" ? "" : ` ${currency.toUpperCase()}`
-  // Skip zero-tax bands (e.g. TOTAL TAX A 0.00). Keep B even at 0 (RRA §48).
-  const groups = taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.tax) > 0)
+  // R2/R3: every programmed rate > 0 prints its sales + tax rows on every
+  // receipt; zero-rate bands only when used. Labels: TOTAL A-EX / TOTAL B-18.00%.
+  const groups = taxBandRows(data)
   const totalTax = taxGroups(data).reduce((sum, group) => sum + group.tax, 0)
 
   y = labelValueLine(doc, `TOTAL${currencyLabel}`, formatInvoiceAmount(data.totals.grandTotal), y, true)
-  // Grand total sliced by tax band ("TOTAL A/B/C/D …" — the per-type sales
-  // totals), then the per-band TAX rows carrying the RRA-required breakdown.
+  // Grand total sliced by tax band ("TOTAL A-EX / TOTAL B-18.00% …" — the
+  // per-type sales totals), then the per-band TAX rows carrying the
+  // RRA-required breakdown.
   for (const group of salesBands(data)) {
-    y = labelValueLine(doc, `TOTAL ${group.code}${currencyLabel}`, formatInvoiceAmount(group.total), y)
+    y = labelValueLine(doc, `${bandSalesLabel(group.code, group.rate)}${currencyLabel}`, formatInvoiceAmount(group.total), y)
   }
   for (const group of groups) {
     y = labelValueLine(doc, `TOTAL TAX ${group.code}`, formatInvoiceAmount(group.tax), y)

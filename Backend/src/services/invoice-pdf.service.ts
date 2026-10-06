@@ -306,11 +306,20 @@ function drawTable(
 
 export function taxGroups(data: RenderInvoicePayload): TaxGroup[] {
   const grouped = new Map<string, TaxGroup>()
-  // RRA checklist §48: tax code B (the only statutory rate >0%, currently
-  // 18%) must print on every receipt even when no line item used it — seeded
-  // here at zero so it survives even for an all-exempt sale. A/C/D (§49) stay
+  // R2: every PROGRAMMED rate with value > 0 prints on every receipt, even
+  // when no line item used it — seeded here at zero so it survives even for
+  // an all-exempt sale. B (the only statutory rate >0%, currently 18%) is
+  // additionally always seeded (RRA checklist §48). A/C/D at zero (§49) stay
   // unseeded and only appear when a line item actually carries that code.
-  grouped.set("B", { code: "B", rate: TAX_RATE_BY_SLOT[1], total: 0, tax: 0 })
+  const programmed = programmedRates(data)
+  const seed: Array<[string, number]> = []
+  programmed.forEach((rate, i) => {
+    if (rate > 0) seed.push([['A', 'B', 'C', 'D'][i], rate])
+  })
+  if (!seed.some(([code]) => code === 'B')) seed.push(['B', programmed[1]])
+  for (const [code, rate] of seed) {
+    grouped.set(code, { code, rate, total: 0, tax: 0 })
+  }
   for (const item of data.items) {
     const actualCode = safe(item.taxCode).toUpperCase()
     const key = actualCode || `TAX-${formatInvoiceQuantity(item.vatPct)}%`
@@ -329,27 +338,56 @@ export function taxGroups(data: RenderInvoicePayload): TaxGroup[] {
 }
 
 /**
- * Per-tax-type SALES bands for the printed "Total A/B/C/D" rows: every band
- * with sales, plus B always (RRA checklist §48 — the statutory 18% band must
- * always print, even at zero).
+ * Per-tax-type SALES bands for the printed "Total A/B/C/D" rows: every
+ * programmed band with rate > 0 (R2 — prints even at zero sales), plus B
+ * always (§48), plus any band that actually has sales (so a zero-rate label
+ * only ever appears when an item with that rate was sold).
  */
 export function salesBands(data: RenderInvoicePayload): TaxGroup[] {
-  return taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.total) > 0)
+  return taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.total) > 0 || g.rate > 0)
+}
+
+/**
+ * Per-tax-type TAX rows: the same visibility rule as the sales bands, so
+ * TOTAL TAX = sum of the printed per-rate taxes (R11) and every programmed
+ * rate > 0 shows its tax row on every receipt.
+ */
+export function taxBandRows(data: RenderInvoicePayload): TaxGroup[] {
+  return taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.tax) > 0 || Math.abs(g.total) > 0 || g.rate > 0)
+}
+
+/** R3 receipt label for a band's sales row: `TOTAL A-EX`, `TOTAL B-18.00%`. */
+export function bandSalesLabel(code: string, rate: number): string {
+  return `TOTAL ${bandSalesSuffix(code, rate)}`
+}
+
+/** R3 band suffix shared by every renderer (`A-EX`, `B-18.00%`). */
+export function bandSalesSuffix(code: string, rate: number): string {
+  return code === "A" ? `${code}-EX` : `${code}-${rate.toFixed(2)}%`
+}
+
+/** Programmed A/B/C/D rates (percent) carried on the composed payload. */
+export function programmedRates(data: RenderInvoicePayload): [number, number, number, number] {
+  const t = (data as { taxRates?: unknown }).taxRates
+  if (Array.isArray(t) && t.length === 4 && t.every((r) => typeof r === "number" && Number.isFinite(r))) {
+    return [t[0], t[1], t[2], t[3]]
+  }
+  return [...TAX_RATE_BY_SLOT] as [number, number, number, number]
 }
 
 function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void {
   const currency = safe(data.invoice.currency || data.company.currency, "RWF")
   const currencyLabel = currency.toUpperCase() === "RWF" ? "Rwf" : currency.toUpperCase()
-  // Skip zero-tax bands (e.g. "Total Tax A Rwf 0.00"). Keep B even at 0
-  // (RRA checklist §48 — statutory 18% band must always print).
-  const groups = taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.tax) > 0)
+  // R2/R3: every programmed rate > 0 prints its sales + tax rows on every
+  // receipt; zero-rate bands only when used. Labels: Total A-EX / Total B-18.00%.
+  const groups = taxBandRows(data)
   const totalTax = taxGroups(data).reduce((sum, group) => sum + group.tax, 0)
   // One authoritative invoice total first, then the grand total sliced by tax
-  // band ("Total A/B/C/D …" — the per-type sales totals), then the per-band
-  // TAX rows carrying the RRA-required tax breakdown.
+  // band ("Total A-EX / Total B-18.00% …" — the per-type sales totals), then
+  // the per-band TAX rows carrying the RRA-required tax breakdown.
   const rows: Array<[string, number | string]> = [[`Total ${currencyLabel}`, data.totals.grandTotal]]
   for (const group of salesBands(data)) {
-    rows.push([`Total ${group.code} ${currencyLabel}`, group.total])
+    rows.push([`Total ${bandSalesSuffix(group.code, group.rate)} ${currencyLabel}`, group.total])
   }
   for (const group of groups) {
     rows.push([`Total Tax ${group.code} ${currencyLabel}`, group.tax])
