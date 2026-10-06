@@ -496,7 +496,12 @@ export function resolveVsdcBuyerIdentity(
   const rawPhone = (customer?.phone ?? '').trim();
   const tin = isValidRraTin(rawTin) ? rawTin : null;
   const phone = rawPhone && isValidVsdcPhone(rawPhone) && !isValidRraTin(rawPhone) ? rawPhone : null;
-  return { custTin: tin ?? phone, receiptCustTin: tin, receiptCustMblNo: phone };
+  // Live VSDC rejects every phone shape in top-level custTin (resultCd 910
+  // observed for +250788111111, 250788111111 and 0788111111) — only a valid
+  // 9-digit TIN passes there (proven: 190000007 accepted, rcpt 178).
+  // No-TIN walk-in buyers submit JSON null (B2C — proven: 4 receipts accepted,
+  // rcpt 185+), with the mobile kept solely in receipt.custMblNo (accepted).
+  return { custTin: tin, receiptCustTin: tin, receiptCustMblNo: phone };
 }
 
 /**

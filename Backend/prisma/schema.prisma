@@ -921,7 +921,8 @@ model InventoryLedger {
   // SALE rows are queued (sarTyCd 11) only after their sales invoice is
   // fiscalized (S8 order); PENDING = ready, SYNCED = acked, FAILED = retry.
   // ebmOrgSarNo stores orgSarNo (original SAR number) for refund/return rows;
-  // NULL = no original / not confirmed — never assume 0 (provider to confirm).
+  // NULL = no original linked yet. Wire default for originals is 0 (live VSDC
+  // rejects null orgSarNo; 0 accepted for original movements).
   ebmSyncStatus  EbmSyncStatus?
   ebmSarNo       Int?
   ebmOrgSarNo    Int?

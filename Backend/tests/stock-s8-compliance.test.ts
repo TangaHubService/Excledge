@@ -135,7 +135,7 @@ describe("S8 order: stock 11 only after invoice ack", () => {
     expect(stockPayload.sarTyCd).toBe("11")
     expect(stockPayload.qty ?? stockPayload.itemList[0].qty).toBeGreaterThan(0)
   })
-  it("refund qty positive, direction via sarTyCd; orgSarNo links original, never 0", async () => {
+  it("orgSarNo links original, 0 for originals (live VSDC rejects null)", async () => {
     ledgerRow = baseLedgerRow({
       id: 2, movementType: "RETURN_CUSTOMER", direction: "IN", quantity: 4,
       reference: "REFUND-SALE-1-xyz", referenceType: "SALE_REFUND",
@@ -149,7 +149,7 @@ describe("S8 order: stock 11 only after invoice ack", () => {
     expect(stockPayload.itemList[0].qty).toBe(4) // positive, not -4
     expect(stockPayload.orgSarNo).toBe(41) // linked, not 0
   })
-  it("orgSarNo stays null (not 0) when no original found", async () => {
+  it("orgSarNo is 0 (not null) when no original found", async () => {
     ledgerRow = baseLedgerRow({
       id: 3, movementType: "RETURN_CUSTOMER", direction: "IN", quantity: 1,
       reference: "REFUND-zzz", referenceType: "SALE_REFUND", metadata: { originalSaleNumber: "SALE-zzz" },
@@ -157,8 +157,7 @@ describe("S8 order: stock 11 only after invoice ack", () => {
     origSarRow = null
     const r = await submitStockLedgerEntryToEbm(3)
     expect(r.success).toBe(true)
-    expect(stockPayload.orgSarNo).toBeNull()
-    expect(stockPayload.orgSarNo).not.toBe(0)
+    expect(stockPayload.orgSarNo).toBe(0)
   })
 })
 
