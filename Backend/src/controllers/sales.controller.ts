@@ -18,6 +18,7 @@ import { getAverageCost } from "../services/cost-price.service"
 import { buildBranchFilter, getBranchIdForOperation, resolveBranchIdForWrite } from "../middleware/branchAuth.middleware"
 import { success, error as apiError } from "../utils/apiResponse"
 import { TaxService } from "../services/tax.service"
+import { round2 } from "../services/money.service"
 import { getOrganizationSettings } from "../services/organization-settings.service"
 import { renderSalesInvoiceHtml, type RenderInvoicePayload } from "../services/invoice-render.service"
 import { generateEbmInvoicePdf, getEbmInvoiceFilename, type InvoicePdfFormat } from "../services/invoice-pdf.service"
@@ -1525,10 +1526,11 @@ export async function composeInvoicePayload(
     const itemDiscount = items.reduce((s, i) => s + i.discountAmt, 0)
     const lineTax = items.reduce((s, i) => s + i.taxAmount, 0)
     // §56: keep the discount signed with the document (negative on a refund).
-    const discount = docSign * Math.max(0, Math.round(Math.abs(itemDiscount) + Math.abs(discountAmount)))
-    const grandTotal = Math.round(totalAmount)
-    const paid = Math.round(cashAmount + insuranceAmount)
-    const balance = Math.round(debtAmount)
+    // R11: two decimals everywhere — whole-unit Math.round destroyed cents.
+    const discount = docSign * Math.max(0, round2(Math.abs(itemDiscount) + Math.abs(discountAmount)))
+    const grandTotal = round2(totalAmount)
+    const paid = round2(cashAmount + insuranceAmount)
+    const balance = round2(debtAmount)
 
     // QR image is generated server-side — the frontend only renders the image returned by the API.
     const qrRaw = fiscalTx?.qrPayload ?? buildRraQrString({ sdcDateTime, sdcId, sdcRcptNo, internalData, receiptSignature })
@@ -1607,24 +1609,24 @@ export async function composeInvoicePayload(
       },
       items,
       totals: {
-        subtotal: Math.round(subtotal),
+        subtotal: round2(subtotal),
         discount,
-        taxable: Math.round(taxableAmount),
-        vat: Math.round(vatAmount),
-        tax: Math.round(lineTax),
+        taxable: round2(taxableAmount),
+        vat: round2(vatAmount),
+        tax: round2(lineTax),
         shipping: 0,
         paid,
         balance,
         grandTotal,
       },
       charges: {
-        vatAmount: Math.round(vatAmount),
-        taxableAmount: Math.round(taxableAmount),
-        discountAmount: Math.round(discountAmount),
-        cashAmount: Math.round(cashAmount),
-        insuranceAmount: Math.round(insuranceAmount),
-        debtAmount: Math.round(debtAmount),
-        totalAmount: Math.round(totalAmount),
+        vatAmount: round2(vatAmount),
+        taxableAmount: round2(taxableAmount),
+        discountAmount: round2(discountAmount),
+        cashAmount: round2(cashAmount),
+        insuranceAmount: round2(insuranceAmount),
+        debtAmount: round2(debtAmount),
+        totalAmount: round2(totalAmount),
         shipping: 0,
       },
       payment: {
@@ -1632,9 +1634,9 @@ export async function composeInvoicePayload(
         methodLabel: paymentMethodLabel,
         reference: null,
         bank: null,
-        cashAmount: Math.round(cashAmount),
-        insuranceAmount: Math.round(insuranceAmount),
-        debtAmount: Math.round(debtAmount),
+        cashAmount: round2(cashAmount),
+        insuranceAmount: round2(insuranceAmount),
+        debtAmount: round2(debtAmount),
       },
       sdcInformation: {
         sdcId,
