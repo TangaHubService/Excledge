@@ -204,7 +204,8 @@ function formatDateShort(iso?: NullableString): string {
   if (Number.isNaN(date.getTime())) return safeText(iso)
   const dd = String(date.getDate()).padStart(2, "0")
   const mm = String(date.getMonth() + 1).padStart(2, "0")
-  return `${dd}-${mm}-${date.getFullYear()}`
+  // R6: receipt dates are DD/MM/YYYY (slashes, not dashes).
+  return `${dd}/${mm}/${date.getFullYear()}`
 }
 
 function formatTime(value?: NullableString): string {
