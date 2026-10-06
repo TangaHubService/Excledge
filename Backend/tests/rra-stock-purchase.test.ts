@@ -134,9 +134,9 @@ describe("sarTyCdFor (§4.19 stock in/out reason)", () => {
     expect(sarTyCdFor("DAMAGE", "OUT")).toBe("15")
     expect(sarTyCdFor("ADJUSTMENT_OUT", "OUT")).toBe("16")
   })
-  it("never reports a SALE (RRA derives stock-out from saveSales)", () => {
-    expect(sarTyCdFor("SALE", "OUT")).toBeNull()
-    expect(stockMovementNeedsEbm("SALE")).toBe(false)
+  it("reports a SALE as sarTyCd 11 after its invoice (S8, v1.0.5)", () => {
+    expect(sarTyCdFor("SALE", "OUT")).toBe("11")
+    expect(stockMovementNeedsEbm("SALE")).toBe(true)
     expect(stockMovementNeedsEbm("PURCHASE")).toBe(true)
   })
 })
