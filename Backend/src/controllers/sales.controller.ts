@@ -780,6 +780,7 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             reference: refundSaleNumber,
             referenceType: 'SALE_REFUND',
             note: `Refund for Sale #${sale.saleNumber} (Full)`,
+            metadata: { originalSaleNumber: sale.saleNumber, originalSaleId: id },
             tx: prisma,
           });
 
@@ -1191,11 +1192,24 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
         }
       });
 
-      // Return items to inventory and record movements in ledger (Stock IN)
-      // Only restore stock for PRODUCT items; SERVICE items have no inventory
+      // Return items to inventory ONLY when the original sale actually
+      // released stock (RRA v1.0.5: cancellation is a sales-status 04 event;
+      // a 03 Return/Incoming movement is emitted only if inventory comes back
+      // — e.g. never for proforma/training/service-only sales that never
+      // deducted stock).
+      const deducted = await prisma.inventoryLedger.findMany({
+        where: {
+          organizationId: organizationId!,
+          movementType: 'SALE',
+          reference: sale.saleNumber,
+        },
+        select: { productId: true },
+      });
+      const deductedIds = new Set(deducted.map((d: any) => d.productId));
       for (const item of sale.saleItems) {
         const isService = (item as any).itemType === 'SERVICE' || !item.productId;
         if (isService) continue;
+        if (!deductedIds.has(item.productId)) continue;
 
         const productId = item.productId!;
         await addStock({
@@ -1208,6 +1222,7 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
           reference: sale.saleNumber,
           referenceType: 'SALE_CANCELLATION',
           note: `Sale cancellation: ${sale.saleNumber}`,
+          metadata: { originalSaleNumber: sale.saleNumber, originalSaleId: saleId },
           tx: prisma,
         });
 

@@ -860,6 +860,17 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
 
       succeeded += 1;
       logger.info(`[EBM-OUTBOX] row ${row.id}: SUCCEEDED — rcptNo=${vsdc.rcptNo}, sdcId=${vsdc.sdcId ?? 'N/A'}, sdcDateTime=${sdcDateTime?.toISOString() ?? 'N/A'}`);
+      // S8 order: the sales invoice is now acked — the linked SALE stock-out
+      // rows (sarTyCd 11) become eligible for /stock/saveStockItems. The stock
+      // worker gates on this ack, but kick it immediately instead of waiting
+      // for the next cron tick.
+      if (row.operation === 'SALE' || row.operation === 'REFUND') {
+        setImmediate(() => {
+          import('./stock-movement-sync.service')
+            .then((m) => m.processStockSyncBatch(25))
+            .catch(() => undefined);
+        });
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'EBM request failed';
       logger.error(`[EBM-OUTBOX] row ${row.id}: EXCEPTION during submission — ${message}`);
