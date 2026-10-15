@@ -3,6 +3,8 @@ import { prisma } from "../lib/prisma"
 import { emailService } from "../services/email.service"
 import { auditLogger } from "../utils/auditLogger"
 import { addStock } from "../services/inventory-ledger.service"
+import { syncProductToRraAsync } from "../services/product-sync.service"
+import { enqueueGoodsReceivedAccountingEvent } from "../services/accounting-outbox.service"
 import NotificationService from "../services/notification.service"
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 import { buildBranchFilter, getBranchIdForOperation } from "../middleware/branchAuth.middleware"
@@ -22,7 +24,7 @@ export const getPurchaseOrders = async (req: BranchAuthRequest, res: Response) =
             include: {
                 supplier: true,
                 user: { select: { name: true, email: true } },
-                items: true,
+                items: { include: { product: { select: { unitPrice: true } } } },
             },
             orderBy: { createdAt: "desc" },
         })
@@ -434,6 +436,7 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
             unitCost: number;
             batchNumber: string;
         }> = []
+        const repricedProductIds: number[] = []
 
         const updatedOrder = await prisma.$transaction(async (tx) => {
             const terminalStatuses: PurchaseOrderStatus[] = ['COMPLETED', 'CANCELLED']
@@ -480,6 +483,22 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
                     const recvUnitCost = receivedMeta?.unitCost ? Number(receivedMeta.unitCost) : Number(item.unitPrice)
                     const recvBatchNumber = receivedMeta?.batchNumber || `PO-${po.id}-P${item.productId}-${Date.now()}`
                     const recvExpiryDate = receivedMeta?.expiryDate ? new Date(receivedMeta.expiryDate) : null
+                    const recvSellingPrice = receivedMeta?.sellingPrice != null ? Number(receivedMeta.sellingPrice) : NaN
+
+                    if (Number.isFinite(recvSellingPrice) && recvSellingPrice > 0) {
+                        const price = Math.round(recvSellingPrice * 100) / 100
+                        const current = await tx.product.findUnique({
+                            where: { id: item.productId },
+                            select: { unitPrice: true },
+                        })
+                        if (current && Number(current.unitPrice) !== price) {
+                            await tx.product.update({
+                                where: { id: item.productId },
+                                data: { unitPrice: price, ebmSyncStatus: 'PENDING' },
+                            })
+                            repricedProductIds.push(item.productId)
+                        }
+                    }
 
                     await tx.batch.upsert({
                         where: {
@@ -543,6 +562,17 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
                     })
                 }
 
+                await enqueueGoodsReceivedAccountingEvent(tx, {
+                    organizationId: order.organizationId,
+                    branchId: effectiveBranchId,
+                    purchaseOrderId: po.id,
+                    purchaseOrderNumber: order.orderNumber,
+                    supplierId: po.supplierId,
+                    supplierName: po.supplier?.name,
+                    receivedAt: new Date(),
+                    lines: receivingHistory.map((r) => ({ productId: r.productId, productName: r.productName, quantity: r.newlyReceivedQty, unitCost: r.unitCost })),
+                })
+
                 // Determine if this should be PARTIALLY_RECEIVED based on received quantities
                 if (status === 'COMPLETED') {
                     const allFullyReceived = receivingHistory.every(r => r.remainingQty <= 0)
@@ -557,6 +587,8 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
 
             return po
         })
+
+        for (const productId of repricedProductIds) syncProductToRraAsync(productId, userId)
 
         // Send emails
         try {

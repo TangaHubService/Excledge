@@ -71,6 +71,8 @@ import {
   vsdcTaxRates,
 } from "../services/vsdc-receipt-parity.service"
 import QRCode from "qrcode"
+import { randomUUID } from "crypto"
+import { enqueueCustomerPaymentAccountingEvent, enqueueSaleRefundedAccountingEvent } from "../services/accounting-outbox.service"
 
 export const createSale = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -524,7 +526,11 @@ export const payDebt = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
-    const { amount } = req.body
+    const amount = Number(req.body?.amount)
+    const paymentMethod = typeof req.body?.paymentMethod === "string" && req.body.paymentMethod.trim() ? req.body.paymentMethod.trim().toUpperCase() : "CASH"
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json(apiError("Amount must be a positive number"))
+    }
     const sale = await prisma.sale.findFirst({
       where: {
         id,
@@ -549,14 +555,18 @@ export const payDebt = async (req: BranchAuthRequest, res: Response) => {
       return res.status(400).json(apiError("Amount exceeds debt"))
     }
 
+    const DEBT_EXCEEDED = "AMOUNT_EXCEEDS_DEBT"
+    try {
     await prisma.$transaction(async (tx) => {
-      await tx.sale.update({
-        where: { id },
+      // Conditional decrement: two payments at once cannot both take the same remaining debt.
+      const updated = await tx.sale.updateMany({
+        where: { id, debtAmount: { gte: amount } },
         data: {
-          debtAmount: remainingDebt,
+          debtAmount: { decrement: amount },
           cashAmount: { increment: amount },
         },
       })
+      if (updated.count !== 1) throw new Error(DEBT_EXCEEDED)
 
       await tx.customer.update({
         where: { id: sale.customerId },
@@ -564,7 +574,22 @@ export const payDebt = async (req: BranchAuthRequest, res: Response) => {
           balance: { decrement: amount },
         },
       })
+
+      await enqueueCustomerPaymentAccountingEvent(tx, {
+        organizationId,
+        branchId: (sale as any).branchId,
+        paymentId: `${id}:${randomUUID()}`,
+        saleId: id,
+        saleNumber: sale.saleNumber,
+        customerId: sale.customerId,
+        amount,
+        paymentMethod,
+      })
     })
+    } catch (e) {
+      if ((e as Error).message === DEBT_EXCEEDED) return res.status(400).json(apiError("Amount exceeds debt"))
+      throw e
+    }
 
     await auditLogger.sales(req, {
       type: 'PAYMENT_RECEIVED',
@@ -670,6 +695,7 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
               select: {
                 id: true,
                 status: true,
+                totalAmount: true,
                 saleItems: {
                   select: { productId: true, quantity: true, serviceName: true },
                 },
@@ -970,6 +996,33 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             data: {
               balance: { decrement: totalRefundAmount }
             }
+          });
+          // Refunds clear outstanding debt on the original sale first (same order as the accounting event).
+          const outstandingDebt = Math.max(0, Number((sale as any).debtAmount ?? 0));
+          const debtCleared = Math.min(totalRefundAmount, outstandingDebt);
+          if (debtCleared > 0) {
+            const reduced = await prisma.sale.updateMany({
+              where: { id, debtAmount: { gte: debtCleared } },
+              data: { debtAmount: { decrement: debtCleared } },
+            });
+            if (!reduced.count) {
+              throw { status: 409, message: "Sale debt changed while the refund was processing; retry" };
+            }
+          }
+          await enqueueSaleRefundedAccountingEvent(prisma, {
+            organizationId: organizationId!,
+            branchId: (sale as any).branchId,
+            refundSaleId: refundSale.id,
+            refundNumber: refundInvoiceNumber || refundSaleNumber,
+            originalSaleId: id,
+            originalSaleNumber: sale.saleNumber,
+            customerId: sale.customerId,
+            paymentType: sale.paymentType,
+            outstandingDebt,
+            gross: totalRefundAmount,
+            net: totalRefundTaxable,
+            tax: totalRefundVat,
+            reason,
           });
         }
 

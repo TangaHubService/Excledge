@@ -19,6 +19,30 @@ import {
   type PluReportData,
 } from "../services/fiscal-report-pdf.service"
 
+/**
+ * On-hand quantity per product as of a cut-off, summed IN − OUT over the
+ * ledger. `runningBalance` is per branch, so it cannot represent an
+ * all-branches view; products with no movement before the cut-off are 0.
+ */
+async function stockOnHandAt(
+  organizationId: number,
+  productIds: number[],
+  createdAt: { lt: Date } | { lte: Date },
+  branchFilter: Record<string, unknown> = {},
+): Promise<Map<number, number>> {
+  const grouped = productIds.length === 0 ? [] : await prisma.inventoryLedger.groupBy({
+    by: ['productId', 'direction'],
+    where: { organizationId, productId: { in: productIds }, ...branchFilter, createdAt },
+    _sum: { quantity: true },
+  })
+  const map = new Map<number, number>()
+  for (const g of grouped) {
+    const qty = Number(g._sum.quantity ?? 0)
+    map.set(g.productId, (map.get(g.productId) ?? 0) + (g.direction === 'IN' ? qty : -qty))
+  }
+  return map
+}
+
 export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -240,7 +264,7 @@ async function buildPluRows(
         ...buildBranchFilter(req),
         ...(dateFilter ?? {}),
       },
-      itemType: 'PRODUCT',
+      itemType: { in: ['PRODUCT', 'RAW_MATERIAL'] },
     },
     select: {
       quantity: true,
@@ -271,7 +295,7 @@ async function buildPluRows(
       quantity: 0,
       revenue: 0,
       taxAmount: 0,
-      remainingQty: Number((line.product as any).quantity ?? 0),
+      remainingQty: 0,
       transactionCount: 0,
     };
     existing.quantity += Number(line.quantity);
@@ -281,11 +305,17 @@ async function buildPluRows(
     // Latest observed catalog price/rate wins for the S4 per-item fields.
     existing.unitPrice = Number((line.product as any).unitPrice ?? line.unitPrice);
     if (Number((line as any).taxRate ?? 0) !== 0) existing.taxRate = Number((line as any).taxRate);
-    existing.remainingQty = Number((line.product as any).quantity ?? existing.remainingQty);
     byItemCode.set(key, existing);
   }
 
   const rows = Array.from(byItemCode.values());
+  const onHand = await stockOnHandAt(
+    organizationId,
+    rows.flatMap((r) => (r.productId != null ? [r.productId] : [])),
+    { lte: new Date() },
+    buildBranchFilter(req),
+  );
+  for (const r of rows) r.remainingQty = r.productId != null ? onHand.get(r.productId) ?? 0 : 0;
   rows.sort((a, b) => {
     const dir = sortOrder === 'asc' ? 1 : -1;
     if (sortBy === 'revenue') return dir * (a.revenue - b.revenue);
@@ -840,44 +870,21 @@ export const exportReport = async (req: BranchAuthRequest, res: Response) => {
 
         const exportProductIds = stockProducts.map(p => p.id);
 
-        const [exportPeriodGrouped, exportOpeningEntries, exportClosingEntries] = await Promise.all([
+        const exportBranchFilter = buildBranchFilter(req);
+        const [exportPeriodGrouped, exportOpeningMap, exportClosingMap] = await Promise.all([
           prisma.inventoryLedger.groupBy({
             by: ['productId', 'direction'],
             where: {
               productId: { in: exportProductIds },
               organizationId,
+              ...exportBranchFilter,
               createdAt: { gte: start, lte: end },
             },
             _sum: { quantity: true },
           }),
-          prisma.inventoryLedger.findMany({
-            where: {
-              productId: { in: exportProductIds },
-              organizationId,
-              createdAt: { lt: start },
-            },
-            select: { productId: true, runningBalance: true },
-            orderBy: { createdAt: 'desc' },
-          }),
-          prisma.inventoryLedger.findMany({
-            where: {
-              productId: { in: exportProductIds },
-              organizationId,
-              createdAt: { lte: end },
-            },
-            select: { productId: true, runningBalance: true },
-            orderBy: { createdAt: 'desc' },
-          }),
+          stockOnHandAt(organizationId, exportProductIds, { lt: start }, exportBranchFilter),
+          stockOnHandAt(organizationId, exportProductIds, { lte: end }, exportBranchFilter),
         ]);
-
-        const exportOpeningMap = new Map<number, number>();
-        for (const e of exportOpeningEntries) {
-          if (!exportOpeningMap.has(e.productId)) exportOpeningMap.set(e.productId, Number(e.runningBalance));
-        }
-        const exportClosingMap = new Map<number, number>();
-        for (const e of exportClosingEntries) {
-          if (!exportClosingMap.has(e.productId)) exportClosingMap.set(e.productId, Number(e.runningBalance));
-        }
         const exportMovementsMap = new Map<number, { in: number; out: number }>();
         for (const m of exportPeriodGrouped) {
           const entry = exportMovementsMap.get(m.productId) ?? { in: 0, out: 0 };
@@ -888,7 +895,7 @@ export const exportReport = async (req: BranchAuthRequest, res: Response) => {
 
         const stockReportData = stockProducts.map((product) => {
           const openingStock = exportOpeningMap.get(product.id) ?? 0;
-          const closingStock = exportClosingMap.get(product.id) ?? Number(product.quantity);
+          const closingStock = exportClosingMap.get(product.id) ?? 0;
           const moves = exportMovementsMap.get(product.id) ?? { in: 0, out: 0 };
           return {
             "Product Name": product.name,
@@ -1434,7 +1441,7 @@ export const getStockReport = async (req: BranchAuthRequest, res: Response) => {
     const branchFilter = buildBranchFilter(req);
 
     // 3 batch queries replace N×3 per-product queries
-    const [periodMovementsGrouped, allOpeningEntries, allClosingEntries] = await Promise.all([
+    const [periodMovementsGrouped, openingMap, closingMap] = await Promise.all([
       // Period movements grouped by product+direction
       prisma.inventoryLedger.groupBy({
         by: ['productId', 'direction'],
@@ -1446,39 +1453,10 @@ export const getStockReport = async (req: BranchAuthRequest, res: Response) => {
         },
         _sum: { quantity: true },
       }),
-      // Last ledger entry before period per product (ordered desc → first hit = latest)
-      prisma.inventoryLedger.findMany({
-        where: {
-          productId: { in: productIds },
-          organizationId,
-          ...branchFilter,
-          createdAt: { lt: start },
-        },
-        select: { productId: true, runningBalance: true, createdAt: true },
-        orderBy: { createdAt: 'desc' },
-      }),
-      // Last ledger entry up to period end per product
-      prisma.inventoryLedger.findMany({
-        where: {
-          productId: { in: productIds },
-          organizationId,
-          ...branchFilter,
-          createdAt: { lte: end },
-        },
-        select: { productId: true, runningBalance: true, createdAt: true },
-        orderBy: { createdAt: 'desc' },
-      }),
+      stockOnHandAt(organizationId, productIds, { lt: start }, branchFilter),
+      stockOnHandAt(organizationId, productIds, { lte: end }, branchFilter),
     ]);
 
-    // Build lookup maps (first entry per productId = latest, since ordered desc)
-    const openingMap = new Map<number, number>();
-    for (const e of allOpeningEntries) {
-      if (!openingMap.has(e.productId)) openingMap.set(e.productId, Number(e.runningBalance));
-    }
-    const closingMap = new Map<number, number>();
-    for (const e of allClosingEntries) {
-      if (!closingMap.has(e.productId)) closingMap.set(e.productId, Number(e.runningBalance));
-    }
     const movementsMap = new Map<number, { in: number; out: number }>();
     for (const m of periodMovementsGrouped) {
       const entry = movementsMap.get(m.productId) ?? { in: 0, out: 0 };
@@ -1489,7 +1467,7 @@ export const getStockReport = async (req: BranchAuthRequest, res: Response) => {
 
     const reportData = products.map((product) => {
       const openingStock = openingMap.get(product.id) ?? 0;
-      const closingStock = closingMap.get(product.id) ?? Number(product.quantity);
+      const closingStock = closingMap.get(product.id) ?? 0;
       const moves = movementsMap.get(product.id) ?? { in: 0, out: 0 };
       return {
         productId: product.id,

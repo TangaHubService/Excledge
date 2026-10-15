@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth.middleware';
 import type { BranchAuthRequest } from '../middleware/branchAuth.middleware';
 import { logManualActivity } from '../middleware/activity-log.middleware';
+import { enqueueCustomerPaymentAccountingEvent } from '../services/accounting-outbox.service';
 
 // DebtPayment has no branchId column of its own — it belongs to a branch via
 // its sale, so filtering goes through that relation.
@@ -41,9 +42,9 @@ export const recordDebtPayment = async (req: BranchAuthRequest, res: Response) =
             // sale must serialize, or two requests can both read the same debt
             // balance and each independently think their payment fits within it.
             const [lockedSale] = await tx.$queryRaw<Array<{
-                id: number; customerId: number; debtAmount: string; status: string;
+                id: number; customerId: number; debtAmount: string; status: string; branchId: number | null; saleNumber: string | null;
             }>>`
-                SELECT id, "customerId", "debtAmount", status FROM sales
+                SELECT id, "customerId", "debtAmount", status, "branchId", "saleNumber" FROM sales
                 WHERE id = ${saleId} AND "organizationId" = ${organizationId}
                   AND (${branchId}::int IS NULL OR "branchId" = ${branchId})
                 FOR UPDATE
@@ -99,6 +100,19 @@ export const recordDebtPayment = async (req: BranchAuthRequest, res: Response) =
                 data: {
                     balance: { decrement: paymentAmount },
                 },
+            });
+
+            await enqueueCustomerPaymentAccountingEvent(tx, {
+                organizationId,
+                branchId: lockedSale.branchId,
+                paymentId: payment.id,
+                saleId,
+                saleNumber: lockedSale.saleNumber,
+                customerId: lockedSale.customerId,
+                amount: paymentAmount,
+                paymentMethod,
+                reference,
+                occurredAt: payment.paymentDate,
             });
 
             return { payment, newDebtAmount: remainingDebt };

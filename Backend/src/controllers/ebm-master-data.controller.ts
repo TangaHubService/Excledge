@@ -21,6 +21,7 @@ import {
   syncCustomerToRra,
   syncUserToRra,
   syncRraStockMoves,
+  applyRraStockMoves,
   syncBomComponentToRra,
   syncInsuranceToRra,
 } from '../services/rra-branch-sync.service';
@@ -31,6 +32,18 @@ import { isEbmEnabled } from '../services/rra-ebm.service';
 const branchOf = (req: BranchAuthRequest): number | null => {
   const b = req.query.branchId ?? req.body?.branchId;
   return b != null && b !== '' ? parseInt(String(b)) : null;
+};
+
+const parsePositiveNumber = (v: unknown): number | undefined => {
+  if (v == null || v === '') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+};
+
+const parseOptionalDate = (v: unknown): Date | undefined => {
+  if (v == null || v === '') return undefined;
+  const d = new Date(String(v));
+  return Number.isNaN(d.getTime()) ? undefined : d;
 };
 
 // ── Codes (§59) ───────────────────────────────────────────────
@@ -245,7 +258,7 @@ export async function stockSyncStatus(req: BranchAuthRequest, res: Response) {
     const organizationId = parseInt(req.params.organizationId);
     const grouped = await prisma.inventoryLedger.groupBy({
       by: ['ebmSyncStatus'],
-      where: { organizationId, movementType: { not: 'SALE' } },
+      where: { organizationId },
       _count: true,
     });
     const counts: Record<string, number> = { PENDING: 0, SYNCED: 0, FAILED: 0, NOT_APPLICABLE: 0 };
@@ -308,6 +321,8 @@ export async function confirmPurchase(req: BranchAuthRequest, res: Response) {
         itemSeq: it?.itemSeq != null ? parseInt(String(it.itemSeq), 10) : undefined,
         itemNm: typeof it?.itemNm === 'string' ? it.itemNm : undefined,
         linkProductId: it?.linkProductId != null ? parseInt(String(it.linkProductId), 10) : undefined,
+        sellingPrice: parsePositiveNumber(it?.sellingPrice),
+        expiryDate: parseOptionalDate(it?.expiryDate),
       }))
       .filter((it: { itemId?: number; itemSeq?: number }) => it.itemId != null || it.itemSeq != null);
     const result = await confirmRraPurchase(organizationId, id, {
@@ -363,7 +378,7 @@ export async function actionImport(req: BranchAuthRequest, res: Response) {
     const organizationId = parseInt(req.params.organizationId);
     const id = parseInt(req.params.id);
     const action = req.params.action === 'reject' ? 'reject' : 'approve';
-    const { itemClsCd, itemCd, linkProductId, remark } = req.body ?? {};
+    const { itemClsCd, itemCd, linkProductId, remark, sellingPrice, expiryDate } = req.body ?? {};
     const result = await actionRraImport(organizationId, id, action, {
       branchId: branchOf(req),
       userId: (req as any).user?.userId,
@@ -371,6 +386,8 @@ export async function actionImport(req: BranchAuthRequest, res: Response) {
       itemCd,
       linkProductId: linkProductId != null ? parseInt(String(linkProductId)) : undefined,
       remark,
+      sellingPrice: parsePositiveNumber(sellingPrice),
+      expiryDate: parseOptionalDate(expiryDate),
     });
     return result.success ? res.json(success(result)) : res.status(502).json(apiError(result.error ?? 'Import action failed'));
   } catch (e: any) {
@@ -461,10 +478,14 @@ export async function syncBranches(req: BranchAuthRequest, res: Response) {
 export async function syncStockMoves(req: BranchAuthRequest, res: Response) {
   try {
     const organizationId = parseInt(req.params.organizationId);
-    const result = await syncRraStockMoves(organizationId, branchOf(req));
-    return result.ok
-      ? res.json(success(result))
-      : res.status(502).json(apiError(result.error ?? 'Stock-move pull failed', undefined, result));
+    const branchId = branchOf(req);
+    const result = await syncRraStockMoves(organizationId, branchId);
+    if (!result.ok) {
+      return res.status(502).json(apiError(result.error ?? 'Stock-move pull failed', undefined, result));
+    }
+    const userId = req.user?.userId != null ? parseInt(String(req.user.userId)) : undefined;
+    const booked = await applyRraStockMoves(organizationId, result.stockList, { branchId, userId });
+    return res.json(success({ ...result, ...booked }));
   } catch (e: any) {
     console.error('[RRA stock moves sync]', e);
     res.status(500).json(apiError('Failed to pull stock movements from RRA'));
