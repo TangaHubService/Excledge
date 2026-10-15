@@ -20,6 +20,7 @@ export interface ISidebarConfig {
     supplierInvoices: boolean;
     scanInvoice: boolean;
     expenses: boolean;
+    payroll: boolean;
     organizations: boolean;
     users: boolean;
     activityLogs: boolean;
@@ -112,6 +113,7 @@ export const SIDEBAR_SECTIONS: { label: string; items: { key: keyof ISidebarConf
         label: 'Finance',
         items: [
             { key: 'expenses', label: 'Expenses', route: '/dashboard/expenses' },
+            { key: 'payroll', label: 'Payroll', route: '/dashboard/payroll' },
         ],
     },
     {

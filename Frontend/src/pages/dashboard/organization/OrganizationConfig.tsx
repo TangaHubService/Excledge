@@ -177,6 +177,9 @@ export function OrganizationConfig() {
         }
     };
 
+    const mrcErrorMessage = (error: any): string | null =>
+        error?.response?.data?.code === 'INVALID_MRC_FORMAT' ? t('companySettings.mrcInvalid') : null;
+
     const handleOrgSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!organization || !isAuthorized) return;
@@ -187,7 +190,7 @@ export function OrganizationConfig() {
             updateGlobalOrg(organization as any);
             toast.success(response.message || t('companySettings.updateSuccess'));
         } catch (error: any) {
-            toast.error(error.message || t('companySettings.updateError'));
+            toast.error(mrcErrorMessage(error) || error.message || t('companySettings.updateError'));
         } finally {
             setIsSavingOrg(false);
         }
@@ -346,7 +349,7 @@ export function OrganizationConfig() {
             await refreshSettings();
             toast.success('Organization settings updated');
         } catch (error: any) {
-            toast.error(error.message || 'Failed to update organization settings');
+            toast.error(mrcErrorMessage(error) || error.message || 'Failed to update organization settings');
         } finally {
             setIsSavingSettings(false);
         }
@@ -579,11 +582,13 @@ export function OrganizationConfig() {
                                         </Label>
                                         <Input
                                             value={organization?.ebmSerialNo ?? ''}
-                                            onChange={(e) => setOrganization(prev => prev ? { ...prev, ebmSerialNo: e.target.value } : null)}
+                                            onChange={(e) => setOrganization(prev => prev ? { ...prev, ebmSerialNo: e.target.value.toUpperCase() } : null)}
                                             disabled={!isAuthorized || isSavingOrg}
                                             placeholder="Device / controller serial from RRA"
-                                            className="rounded-xl"
+                                            className="rounded-xl font-mono"
+                                            maxLength={32}
                                         />
+                                        <p className="text-xs text-gray-400">{t('companySettings.mrcHint')}</p>
                                     </div>
 
                                     <div className="space-y-2 md:col-span-2">
@@ -594,10 +599,11 @@ export function OrganizationConfig() {
                                                     Training Mode
                                                 </Label>
                                                 <p className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-400/80">
-                                                    For staff practice only. While on, every sale/refund prints as a
-                                                    TRAINING receipt (watermarked, "not an official receipt") and is
-                                                    excluded from RRA fiscal submission and sales report totals.
-                                                    Turn off before real business hours.
+                                                    For staff practice only. While on, every sale prints as a Training
+                                                    Sale (TS) and only TS receipts can be refunded (as TR). They go to
+                                                    VSDC as training documents (no signature), print watermarked "not
+                                                    an official receipt", and never change stock, payments, customer
+                                                    balances, accounting or sales reports. Turn off before real business hours.
                                                 </p>
                                             </div>
                                             <Switch

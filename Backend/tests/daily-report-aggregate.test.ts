@@ -61,6 +61,13 @@ describe('splitReportSales — receipt bucketing', () => {
     expect(legs.grossRefundAmt).toBe(1180);
     expect(legs.netSalesAmt).toBe(0);
   });
+
+  it('first download (reprintCount 1) is still the original, not a copy', () => {
+    // Receipt semantics: only reprintCount > 1 renders COPY (composeInvoicePayload
+    // isCopy); the X/Z copy bucket must use the same threshold.
+    expect(splitReportSales([receipt({ reprintCount: 1 })]).copiedSales).toHaveLength(0);
+    expect(splitReportSales([receipt({ reprintCount: 2 })]).copiedSales).toHaveLength(1);
+  });
 });
 
 describe('aggregateSalesLegs — splits and reconciliation', () => {

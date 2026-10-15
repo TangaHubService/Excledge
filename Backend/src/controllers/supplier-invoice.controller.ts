@@ -11,6 +11,7 @@ import { normalizeExtractedData, clampMoney, clampTaxRate } from '../services/oc
 import { analyzeInvoice } from '../services/invoice-analysis.service';
 import { config } from '../config';
 import { getOrderBy } from '../utils/sorting';
+import { enqueueScannedSupplierBillAccountingEvent } from '../services/accounting-outbox.service';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -488,6 +489,7 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
     const actionsMap = new Map(itemActions.map((a) => [a.itemId, a]));
 
     let importedItems = 0;
+    let receivedAtCost = 0;
     let skippedItems = 0;
     let errorItems = 0;
     const importErrors: Array<{ itemId: number; error: string }> = [];
@@ -653,6 +655,8 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
           { timeout: 30000 }
         );
 
+        const merged = { ...item, ...(action.data || {}) };
+        receivedAtCost += (parseInt(String(merged.quantity)) || 0) * clampMoney(parseFloat(String(merged.unitPrice)) || 0);
         importedItems++;
       } catch (itemErr: any) {
         console.error(`[Import Item ${item.id} Error]:`, itemErr);
@@ -691,12 +695,17 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
       }),
     ]);
 
+    const accounting = await enqueueScannedSupplierBillAccountingEvent(id, receivedAtCost).catch((e: Error) => ({
+      queued: false,
+      reason: e.message,
+    }));
+
     await auditLogger.inventory(req, {
       type: 'PRODUCT_CREATE',
       description: `Imported ${importedItems} products from invoice #${invoice.invoiceNumber || id}`,
       entityType: 'supplier_invoice',
       entityId: id,
-      metadata: { importedItems, skippedItems, errorItems },
+      metadata: { importedItems, skippedItems, errorItems, accountingBillQueued: accounting.queued },
     });
 
     res.json(success({
@@ -705,6 +714,7 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
       skippedItems,
       errorItems,
       errors: importErrors,
+      accounting,
     }, `Import complete. ${importedItems} products imported.`));
   } catch (err: any) {
     console.error('[Import Invoice Error]:', err);

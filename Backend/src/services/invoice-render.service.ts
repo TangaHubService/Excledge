@@ -1,9 +1,9 @@
-import { formatInvoiceAmount } from "./invoice-format.service"
+import { formatInvoiceAmount, formatInvoiceDateTime } from "./invoice-format.service"
 import { SYSTEM_FOOTER, SYSTEM_POWERED_BY, NOT_OFFICIAL_RECEIPT_NOTICE, NOT_FISCALIZED_TITLE, NOT_FISCALIZED_NOTICE } from "./system-branding.service"
 // invoice-pdf.service only imports RenderInvoicePayload/RenderInvoiceLineItem
 // as types (`import type`, erased at build time), so importing its runtime
 // helpers here does not create a circular module dependency at runtime.
-import { documentIndicator, isFormalNoticeIndicator, bandSalesLabel, salesBands, taxBandRows } from "./invoice-pdf.service"
+import { documentIndicator, headerIndicator, isCopyDocument, isFormalNoticeIndicator, isProformaDocument, isRefundTransaction, printsQrCode, refundReferenceLine, bandSalesLabel, salesBands, taxBandRows, transactionSubTitle } from "./invoice-pdf.service"
 
 type NullableString = string | null | undefined
 
@@ -146,6 +146,12 @@ export interface RenderInvoicePayload {
     rcptLabelText?: NullableString
     isProforma: boolean
     isCopy: boolean
+    /** CS (copy of an NS) or CR (copy of an NR) — set only on a CS/CR copy. */
+    copyLabel?: "CS" | "CR" | null
+    /** 1 for the first copy after the original, 2 for the next, … */
+    copyNumber?: number | null
+    /** The copied receipt's own VSDC counter (`168/258 NS`). */
+    copyOfReceiptNumber?: NullableString
     /**
      * Set when this document was produced for a real sale that VSDC has not yet
      * confirmed ("pending" — still being submitted/retried, or "failed" —
@@ -155,8 +161,19 @@ export interface RenderInvoicePayload {
      */
     notFiscalized?: "pending" | "failed" | null
     currency: string
-    /** Original sale's invoice number, when this document is a refund (RRA requires the reference printed). */
+    /**
+     * Printed as REF. NORMAL RECEIPT#: the SDC `rcptNo` VSDC returned for the
+     * original sale (spec 14.1 "SDC receipt number", e.g. `201`).
+     */
     originalReceiptNumber?: NullableString
+    /** Original sale's VSDC invcNo — the value submitted as this refund's `orgInvcNo`. */
+    originalInvoiceNumber?: NullableString
+    /** Human justification sent to VSDC as `remark`. */
+    refundReason?: NullableString
+    /** Code class 32 value sent as `rfdRsnCd`. */
+    refundReasonCode?: NullableString
+    /** Person the refund was paid to. */
+    refundRecipient?: NullableString
   }
   items: RenderInvoiceLineItem[]
   totals: RenderInvoiceTotals
@@ -204,17 +221,15 @@ function formatDateShort(iso?: NullableString): string {
   if (!iso) return "—"
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return safeText(iso)
-  const dd = String(date.getDate()).padStart(2, "0")
-  const mm = String(date.getMonth() + 1).padStart(2, "0")
-  // R6: receipt dates are DD/MM/YYYY (slashes, not dashes).
-  return `${dd}/${mm}/${date.getFullYear()}`
+  // Kigali wall date (same clock as the SDC block and VSDC), not the server's zone.
+  return formatInvoiceDateTime(date).date
 }
 
 function formatTime(value?: NullableString): string {
   if (!value) return "—"
   const asDate = new Date(value)
   if (!Number.isNaN(asDate.getTime()) && /T/.test(value)) {
-    return `${String(asDate.getHours()).padStart(2, "0")}:${String(asDate.getMinutes()).padStart(2, "0")}:${String(asDate.getSeconds()).padStart(2, "0")}`
+    return formatInvoiceDateTime(asDate).time
   }
   return safeText(value)
 }
@@ -378,7 +393,7 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
   const cashier = safeText(data.invoice.cashier)
   const poweredBy = safeText(data.branding.poweredBy, SYSTEM_POWERED_BY)
   const footerMessage = safeText(data.footer?.message, "THANK YOU FOR YOUR BUSINESS!")
-  const qrCodeImage = data.verification.qrCodeImage ?? ""
+  const qrCodeImage = printsQrCode(data) ? data.verification.qrCodeImage ?? "" : ""
   const supplyNote = (Number(data.totals.vat) > 0 || Number(data.totals.tax) > 0 || data.items.some((item) => Number(item.vatPct) > 0 || Number(item.taxAmount) > 0))
     ? "Taxable Supplies"
     : "Exempt Supplies"
@@ -400,7 +415,7 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
     invoiceInfoRow("doc", "Receipt No", receiptNo),
     invoiceInfoRow("calendar", "Date", invoiceDate),
     invoiceInfoRow("clock", "Time", invoiceTime),
-    invoiceInfoRow("card", "Payment Method", paymentMethod),
+    isProformaDocument(data) ? "" : invoiceInfoRow("card", "Payment Method", paymentMethod),
     invoiceInfoRow("user", "Cashier", cashier),
   ].join("")
 
@@ -1042,7 +1057,10 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
         <div class="divider">
           <div class="divider-bar"><span class="b1"></span><span class="b2"></span><span class="b3"></span></div>
         </div>
-        <h2 class="title">${escapeHtml(documentIndicator(data) || "INVOICE")}</h2>
+        <h2 class="title">${escapeHtml(headerIndicator(data) || "INVOICE")}</h2>
+        ${transactionSubTitle(data) ? `<h3 class="subtitle" style="margin:6px 0 0;text-align:center;font-size:18px;font-weight:800;letter-spacing:.08em;">${escapeHtml(transactionSubTitle(data))}</h3>` : ""}
+        ${isRefundTransaction(data) ? `<div class="refund-ref" style="margin:8px 0 0;text-align:center;font-size:12px;font-weight:700;letter-spacing:.04em;">
+          ${refundReferenceLine(data) ? `<div>${escapeHtml(refundReferenceLine(data))}</div>` : ""}        </div>` : ""}
 
         <div class="panel">
           <div class="panel-grid">

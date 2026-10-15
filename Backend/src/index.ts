@@ -46,6 +46,7 @@ import ebmOutboxRoutes from "./routes/ebm-outbox.routes";
 import shiftRoutes from "./routes/shift.routes";
 import heldSaleRoutes from "./routes/held-sale.routes";
 import deviceRoutes from "./routes/device.routes";
+import payrollRoutes from "./routes/payroll.routes";
 
 import { errorHandler } from "./middleware/error.middleware";
 import webhookRoutes from "./routes/paypack-webhook.routes";
@@ -177,6 +178,7 @@ app.use("/api/inventory", bomProductionRoutes);
 app.use("/api/shifts", shiftRoutes);
 app.use("/api/held-sales", heldSaleRoutes);
 app.use("/api/devices", deviceRoutes);
+app.use("/api/payroll", payrollRoutes);
 
 // Interactive OpenAPI docs (full API + RRA-focused)
 mountApiDocs(app);

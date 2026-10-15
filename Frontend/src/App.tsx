@@ -62,6 +62,7 @@ import BillingHistoryPage from "./pages/billing/BillingHistoryPage";
 import OrganizationsPage from "./pages/dashboard/organizations/OrganizationsPage";
 import { PesapalCallback } from "./pages/PesapalCallback";
 import ExpensesPage from "./pages/dashboard/expenses/ExpensesPage";
+import PayrollPage from "./pages/dashboard/payroll/PayrollPage";
 import { SupplierInvoicesPage } from "./pages/dashboard/inventory/SupplierInvoicesPage";
 import { ScanInvoicePage } from "./pages/dashboard/inventory/ScanInvoicePage";
 
@@ -167,6 +168,7 @@ function App() {
                       </Route>
                       <Route path="debt" element={<DebtManagement />} />
                       <Route path="expenses" element={<ExpensesPage />} />
+                      <Route path="payroll" element={<PayrollPage />} />
                       <Route path="organizations" element={<OrganizationsPage />} />
                       <Route path="supplier-invoices" element={<SupplierInvoicesPage />} />
                       <Route path="scan-invoice" element={<ScanInvoicePage />} />

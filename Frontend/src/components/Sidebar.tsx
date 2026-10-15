@@ -27,6 +27,7 @@ import {
   Wifi,
   Loader2,
   Wallet,
+  Banknote,
   ScanLine,
   FileText,
   Clock,
@@ -117,6 +118,7 @@ const baseNavigation: NavItem[] = [
 
   { id: "finance-header", name: "nav.financeHeader", href: "", type: "header" },
   { id: "expenses", name: "nav.expenses", href: "expenses", icon: Wallet, moduleKey: "expenses" },
+  { id: "payroll", name: "nav.payroll", href: "payroll", icon: Banknote, restrictedRoles: ["SELLER", "BRANCH_MANAGER"], moduleKey: "payroll" },
 ];
 
 const adminNav: NavItem[] = [

@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowLeft, FileDown, Loader2, Printer, RefreshCw, ReceiptText, Share2 } from "lucide-react"
+import { ArrowLeft, Copy, FileDown, Loader2, Printer, RefreshCw, ReceiptText, Share2 } from "lucide-react"
 import { toast } from "react-toastify"
 import { apiClient } from "../../../lib/api-client"
 import { getInvoiceFilename, unwrapInvoice } from "../../../lib/invoice"
-import { downloadInvoicePdf, getInvoicePdfBlob, shareInvoicePdf, type InvoicePdfFormat } from "../../../lib/invoice-pdf"
+import {
+  canCopyReceipt,
+  downloadInvoicePdf,
+  getInvoicePdfBlob,
+  issueInvoicePdfBlob,
+  printPdfBlob,
+  printReceiptCopy,
+  shareInvoicePdf,
+  type InvoicePdfFormat,
+} from "../../../lib/invoice-pdf"
 import { Button } from "../../../components/ui/button"
 import { Skeleton } from "../../../components/ui/skeleton"
 import { cn } from "../../../lib/utils"
@@ -31,6 +40,8 @@ export default function InvoicePage() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [isPdfGenerating, setIsPdfGenerating] = useState(false)
   const [isSharing, setIsSharing] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
+  const [isPrintingCopy, setIsPrintingCopy] = useState(false)
   const [format, setFormat] = useState<InvoicePdfFormat>("A4")
 
   const invoiceQuery = useQuery({
@@ -102,10 +113,35 @@ export default function InvoicePage() {
     }
   }
 
-  const handlePrint = () => {
-    if (!pdfUrl) return
-    const printWindow = window.open(pdfUrl, "_blank", "noopener,noreferrer")
-    if (!printWindow) toast.error("Allow pop-ups to open the invoice print view")
+  // Printing issues a receipt, so it registers like a download: the preview
+  // above is never printed directly (that would hand out repeat originals).
+  const handlePrint = async () => {
+    if (!id) return
+    try {
+      setIsPrinting(true)
+      if (!printPdfBlob(await issueInvoicePdfBlob(id, format))) toast.error("Allow pop-ups to open the invoice print view")
+      refresh()
+    } catch (error) {
+      console.error("Invoice print failed:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to print the invoice")
+    } finally {
+      setIsPrinting(false)
+    }
+  }
+
+  const handlePrintCopy = async () => {
+    if (!id) return
+    try {
+      setIsPrintingCopy(true)
+      const label = await printReceiptCopy(id, format)
+      toast.success(`${label ?? "Copy"} receipt sent to the printer`)
+      refresh()
+    } catch (error) {
+      console.error("Receipt copy failed:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to print the receipt copy")
+    } finally {
+      setIsPrintingCopy(false)
+    }
   }
 
   const isLoading = invoiceQuery.isLoading || pdfQuery.isLoading
@@ -157,8 +193,20 @@ export default function InvoicePage() {
               {isSharing ? <Loader2 className="size-4 animate-spin" /> : <Share2 className="size-4" />}
               Share
             </Button>
-            <Button size="sm" onClick={handlePrint} disabled={!pdfUrl}>
-              <Printer className="size-4" /> Print
+            {data && canCopyReceipt(data.invoice) ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePrintCopy}
+                disabled={isPrintingCopy}
+                title="Reprint this receipt as a COPY (CS for a sale, CR for a refund) with its original fiscal data"
+              >
+                {isPrintingCopy ? <Loader2 className="size-4 animate-spin" /> : <Copy className="size-4" />}
+                Print copy
+              </Button>
+            ) : null}
+            <Button size="sm" onClick={handlePrint} disabled={!data || isPrinting}>
+              {isPrinting ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />} Print
             </Button>
           </div>
         </div>

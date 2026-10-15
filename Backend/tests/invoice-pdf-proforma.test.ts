@@ -51,7 +51,7 @@ describe("proforma / training slip fiscal block", () => {
   it("A4: prints Date, Time, SDC ID and RECEIPT NUMBER even without a VSDC signature", async () => {
     const drawn = await captureText(() => generateEbmInvoicePdf(proformaFixture(), "A4"))
     const blob = drawn.join("\n")
-    expect(blob).toMatch(/Date: 02\/09\/2026\s+11:38:42/)
+    expect(blob).toMatch(/Date: 02\/09\/2026 Time: 11:38:42/)
     expect(blob).toMatch(/SDC ID\s*:\s*SDC012000250/)
     expect(blob).toMatch(/RECEIPT NUMBER\s*:\s*7\/4 PS/)
   })
@@ -73,6 +73,33 @@ describe("proforma / training slip fiscal block", () => {
     expect(blob).toMatch(/SDC ID\s*:\s*SDC012000250/)
     expect(blob).toMatch(/RECEIPT NUMBER\s*:\s*7\/4 PS/)
     expect(blob).toMatch(/Date: 02\/09\/2026/)
+  })
+
+  it("a proforma prints no payment lines (A4, 80mm, HTML); a normal sale still does", async () => {
+    const { renderSalesInvoiceHtml } = await import("../src/services/invoice-render.service")
+    const a4 = (await captureText(() => generateEbmInvoicePdf(proformaFixture(), "A4"))).join("\n")
+    const roll = (await captureText(() => generateEbmReceiptPdf80mm(proformaFixture()))).join("\n")
+    expect(a4).not.toMatch(/^CASH$|Items Number/m)
+    expect(roll).not.toMatch(/^CASH$|ITEMS NUMBER/m)
+    expect(renderSalesInvoiceHtml(proformaFixture())).not.toMatch(/Payment Method/)
+
+    const sale = proformaFixture()
+    sale.invoice.isProforma = false
+    sale.invoice.rcptLabel = "NS"
+    const saleA4 = (await captureText(() => generateEbmInvoicePdf(sale, "A4"))).join("\n")
+    expect(saleA4).toMatch(/^CASH$/m)
+    expect(saleA4).toMatch(/Items Number/)
+  })
+
+  it("no TAX row for the exempt A band; B tax still prints", async () => {
+    const fixture = proformaFixture()
+    fixture.items.push({ line: 2, code: "RW1NTXU0000002", description: "Exempt", quantity: 1, unit: "PCS", unitPrice: 500, discountPct: 0, discountAmt: 0, taxCode: "A", vatPct: 0, taxAmount: 0, subtotal: 500, net: 500, total: 500 } as any)
+    const a4 = (await captureText(() => generateEbmInvoicePdf(fixture, "A4"))).join("\n")
+    const roll = (await captureText(() => generateEbmReceiptPdf80mm(fixture))).join("\n")
+    expect(a4).not.toMatch(/Total Tax A/)
+    expect(a4).toMatch(/Total Tax B/)
+    expect(roll).not.toMatch(/TOTAL TAX A/)
+    expect(roll).toMatch(/TOTAL TAX B/)
   })
 
   it("a training slip renders the same SDC INFORMATION block as a proforma", async () => {

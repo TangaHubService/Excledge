@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { emailService } from "../services/email.service";
 import { generateStrongPassword } from "../utils/generatePassword";
 import { auditLogger } from "../utils/auditLogger";
+import { lockReceiptModeForChange } from "../services/training-mode.service";
 import { deleteFromCloudinary, uploadToCloudinary } from "../config/cloudinary";
 import { SubscriptionService } from "../services/subscription.service";
 import {
@@ -12,6 +13,7 @@ import {
   upsertOrganizationSettings,
 } from "../services/organization-settings.service";
 import type { OrganizationSettingsPatch } from "../types/organization-settings.types";
+import { checkMrc, MrcFormatError } from "../utils/mrc";
 
 import type { Request, Response } from "express";
 
@@ -271,43 +273,65 @@ export const updateOrganization = async (req: Request, res: Response) => {
     if (ebmSerialNo !== undefined && ebmSerialNo !== null && typeof ebmSerialNo !== "string") {
       return res.status(400).json({ error: "ebmSerialNo must be a string" });
     }
+    if (trainingMode !== undefined && typeof trainingMode !== "boolean") {
+      return res.status(400).json({ error: "trainingMode must be true or false" });
+    }
 
-    const organization = await prisma.organization.update({
+    const existingOrg = await prisma.organization.findUnique({
       where: { id },
-      data: {
-        name,
-        businessType,
-        address,
-        phone,
-        email,
-        TIN,
-        currency,
-        ...(VRN !== undefined
-          ? { VRN: VRN === "" ? null : VRN }
-          : {}),
-        ...(vatRegistered !== undefined
-          ? { vatRegistered: !!vatRegistered }
-          : {}),
-        ...(isTaxExempt !== undefined
-          ? { isTaxExempt: !!isTaxExempt }
-          : {}),
-        ...(taxExemptionReason !== undefined
-          ? { taxExemptionReason: taxExemptionReason === "" ? null : taxExemptionReason }
-          : {}),
-        ...(ebmDeviceId !== undefined
-          ? { ebmDeviceId: ebmDeviceId === "" ? null : ebmDeviceId }
-          : {}),
-        ...(ebmSerialNo !== undefined
-          ? { ebmSerialNo: ebmSerialNo === "" ? null : ebmSerialNo }
-          : {}),
-        // CIS/VSDC spec §16: while on, every new sale/refund is recorded as a
-        // TRAINING receipt (TS/TR) instead of a real NS/NR — excluded from
-        // fiscal submission and the daily report's legal totals. Admin-only,
-        // same as the other fiscal-behavior fields above.
-        ...(trainingMode !== undefined
-          ? { trainingMode: !!trainingMode }
-          : {}),
-      },
+      select: { trainingMode: true, ebmSerialNo: true },
+    });
+    const previousTrainingMode = existingOrg?.trainingMode ?? false;
+
+    // RRA spec §2.1 MRC format (relaxed in sandbox/mock), same rule as branch update.
+    const mrc = checkMrc(ebmSerialNo, { current: [existingOrg?.ebmSerialNo] });
+    if (!mrc.ok) {
+      return res.status(400).json({ error: mrc.error, code: mrc.code });
+    }
+
+    // A mode switch waits for in-flight sales/refunds (they hold the shared
+    // receipt-mode lock) so no receipt commits under a mode it did not read.
+    const organization = await prisma.$transaction(async (tx) => {
+      if (trainingMode !== undefined && trainingMode !== previousTrainingMode) {
+        await lockReceiptModeForChange(tx, id);
+      }
+      return tx.organization.update({
+        where: { id },
+        data: {
+          name,
+          businessType,
+          address,
+          phone,
+          email,
+          TIN,
+          currency,
+          ...(VRN !== undefined
+            ? { VRN: VRN === "" ? null : VRN }
+            : {}),
+          ...(vatRegistered !== undefined
+            ? { vatRegistered: !!vatRegistered }
+            : {}),
+          ...(isTaxExempt !== undefined
+            ? { isTaxExempt: !!isTaxExempt }
+            : {}),
+          ...(taxExemptionReason !== undefined
+            ? { taxExemptionReason: taxExemptionReason === "" ? null : taxExemptionReason }
+            : {}),
+          ...(ebmDeviceId !== undefined
+            ? { ebmDeviceId: ebmDeviceId === "" ? null : ebmDeviceId }
+            : {}),
+          ...(mrc.value !== undefined
+            ? { ebmSerialNo: mrc.value }
+            : {}),
+          // CIS §5.3/§16: while on, every new sale is a Training Sale (TS) and
+          // only TS receipts can be refunded (as TR). Training receipts go to
+          // VSDC as salesTyCd 'T' and never touch stock, debt, payments or
+          // accounting. Admin-only, same as the other fiscal-behavior fields.
+          ...(trainingMode !== undefined
+            ? { trainingMode }
+            : {}),
+        },
+      });
     });
 
     await auditLogger.system(req, {
@@ -317,6 +341,15 @@ export const updateOrganization = async (req: Request, res: Response) => {
       entityId: organization.id,
       metadata: { updates: req.body }
     });
+    if (trainingMode !== undefined && trainingMode !== previousTrainingMode) {
+      await auditLogger.system(req, {
+        type: 'SETTINGS_UPDATE',
+        description: `Training mode ${trainingMode ? 'ENABLED' : 'DISABLED'} for "${organization.name}"`,
+        entityType: 'Organization',
+        entityId: organization.id,
+        metadata: { setting: 'trainingMode', from: previousTrainingMode, to: trainingMode },
+      });
+    }
 
     res.json({
       message: "Organization updated successfully",
@@ -393,6 +426,9 @@ export const updateOrgSettings = async (req: Request, res: Response) => {
 
     res.json({ message: "Organization settings updated successfully", settings });
   } catch (error) {
+    if (error instanceof MrcFormatError) {
+      return res.status(400).json({ error: error.message, code: error.code });
+    }
     console.error("Error updating organization settings:", error);
     res.status(500).json({ error: "Failed to update organization settings" });
   }

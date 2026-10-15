@@ -1,6 +1,6 @@
 import PDFDocument from "pdfkit"
 import type { RenderInvoiceLineItem, RenderInvoicePayload } from "./invoice-render.service"
-import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, groupFiscalValue } from "./invoice-format.service"
+import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, formatItemTaxLabel, formatReceiptQuantity, groupFiscalValue } from "./invoice-format.service"
 import { getOrganizationLogo, getRraCertificationLogo } from "./invoice-logo.service"
 import { NOT_FISCALIZED_NOTICE, NOT_FISCALIZED_TITLE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_DOCUMENT_LABEL, REFUND_NOTICE, SYSTEM_FOOTER, TRAINING_MODE_LABEL } from "./system-branding.service"
 import { TAX_RATE_BY_SLOT } from "./rra-ebm.service"
@@ -25,6 +25,7 @@ const FINAL_TABLE_BOTTOM = 622
 const FULL_TABLE_BOTTOM = 808
 const FONT = "Courier"
 const FONT_BOLD = "Courier-Bold"
+const TRAINING_DESIGNATION_SIZE_A4 = 13
 
 /** The paper sizes a downloaded/printed invoice can be produced in. */
 export type InvoicePdfFormat = "A4" | "A5" | "80mm"
@@ -57,6 +58,10 @@ function filenamePart(value: string): string {
 export function getEbmInvoiceFilename(data: RenderInvoicePayload, format: InvoicePdfFormat = "A4"): string {
   const number = filenamePart(data.invoice.invoiceNumber || data.invoice.saleNumber || "invoice") || "invoice"
   const suffix = format === "80mm" ? "-80mm" : format === "A5" ? "-A5" : ""
+  if (data.invoice.copyLabel) {
+    const copyNo = data.invoice.copyNumber ? `-${data.invoice.copyNumber}` : ""
+    return `EBM-${data.invoice.copyLabel}-Copy${copyNo}-${number}${suffix}.pdf`
+  }
   return `EBM-Invoice-${number}${suffix}.pdf`
 }
 
@@ -77,10 +82,10 @@ export function dataUrlBuffer(value?: string | null): Buffer | null {
  * that designation and start looking like an ordinary copied transaction.
  * COPY (§15) only applies to reprints of a NORMAL receipt in the first place.
  *
- * NOTE: this title is the ONLY designation mark — no translucent diagonal
- * center stamp is drawn anywhere. A fiscalized training/proforma original
- * carries its designation in the title and the "not an official receipt"
- * notice, so no print ever looks stamped over the body.
+ * Every designation is printed as a title at the top and again right before
+ * SDC INFORMATION, plus the "not an official receipt" notice (EBM spec receipt
+ * examples 15.1 CR, 16.1 TS, 17.1 PS). A COPY additionally carries the
+ * diagonal watermark (CIS §7.18).
  */
 export function documentIndicator(data: RenderInvoicePayload): string {
   const label = safe(data.invoice.rcptLabel).toUpperCase()
@@ -103,8 +108,67 @@ export function documentIndicator(data: RenderInvoicePayload): string {
  */
 export function isRefundTransaction(data: RenderInvoicePayload): boolean {
   const label = safe(data.invoice.rcptLabel).toUpperCase()
-  return label === "NR" || (!label && data.invoice.status === "REFUNDED")
+  return label === "NR" || label === "TR" || (!label && data.invoice.status === "REFUNDED")
 }
+
+/** TS/TR — printed purely for practice (CIS §16), never an official receipt. */
+export function isTrainingDocument(data: RenderInvoicePayload): boolean {
+  const label = safe(data.invoice.rcptLabel).toUpperCase()
+  return label === "TS" || label === "TR"
+}
+
+/** Proforma (PS): a quotation, so it carries no payment lines. */
+export function isProformaDocument(data: RenderInvoicePayload): boolean {
+  return !!data.invoice.isProforma || safe(data.invoice.rcptLabel).toUpperCase() === "PS"
+}
+
+/**
+ * Reference from a refund to the receipt it reverses. The spec uses the same
+ * "REF. NORMAL RECEIPT#" wording on every refund sample (NR §14, CR §15); for
+ * a TR the referenced counter itself carries the TS label.
+ */
+export function refundReferenceLine(data: RenderInvoicePayload, separator = ": "): string {
+  const ref = safe(data.invoice.originalReceiptNumber)
+  return ref ? `REF. NORMAL RECEIPT#${separator}${ref}` : ""
+}
+
+/** CS/CR reprint of an original receipt. */
+export function isCopyDocument(data: RenderInvoicePayload): boolean {
+  return documentIndicator(data) === "COPY"
+}
+
+/** Title printed at the top of the receipt (spec 15.1: a copy is titled COPY). */
+export function headerIndicator(data: RenderInvoicePayload): string {
+  return documentIndicator(data)
+}
+
+/**
+ * Designation repeated right before SDC INFORMATION: PROFORMA only (spec
+ * 17.1). COPY and TRAINING MODE print only as the header title; NORMAL
+ * sales/refunds repeat nothing.
+ */
+export function sdcDesignation(data: RenderInvoicePayload): string {
+  return documentIndicator(data) === "PROFORMA" ? "PROFORMA" : ""
+}
+
+/**
+ * QR code only on the receipt types the spec samples show it on (13.1 NS,
+ * 14.1 NR); the CR copy sample (15.1) and TS/PS carry none.
+ */
+export function printsQrCode(data: RenderInvoicePayload): boolean {
+  return !isCopyDocument(data) && !isTrainingDocument(data) && !isProformaDocument(data)
+}
+
+/**
+ * Title printed under a COPY / TRAINING MODE heading: REFUND for a CR or TR
+ * (spec 15.1: COPY, then REFUND). A sale copy/TS has none, like an NS.
+ */
+export function transactionSubTitle(data: RenderInvoicePayload): string {
+  const indicator = documentIndicator(data)
+  if (indicator !== "COPY" && indicator !== TRAINING_MODE_LABEL) return ""
+  return isRefundTransaction(data) ? REFUND_DOCUMENT_LABEL : ""
+}
+
 
 /**
  * CIS/VSDC spec §11: COPY, TRAINING MODE, and PROFORMA must carry the "not an
@@ -160,19 +224,47 @@ function drawHeader(
     companyY += index === 0 ? 10 : 8
   }
 
-  const indicator = documentIndicator(data)
+  const indicator = headerIndicator(data)
   const isRefundDoc = isRefundTransaction(data)
-  if (indicator) {
+  const subTitle = transactionSubTitle(data)
+  const isTraining = isTrainingDocument(data)
+  if (subTitle) {
+    // TR: TRAINING MODE heading, then the REFUND title; every refund keeps
+    // its reference to the original sale.
+    let y = 64
+    doc.font(FONT_BOLD).fontSize(TRAINING_DESIGNATION_SIZE_A4).text(indicator, 225, y, { width: 145, align: "center", characterSpacing: 1.7 })
+    y += 14
+    doc.font(FONT_BOLD).fontSize(6.8).text(subTitle, 225, y, { width: 145, align: "center", characterSpacing: 1.2 })
+    y += 8
+    if (isRefundDoc) {
+      const refLine = refundReferenceLine(data)
+      if (refLine) {
+        doc.font(FONT).fontSize(5.6).text(refLine, LEFT, y, {
+          width: RIGHT - LEFT,
+          align: "center",
+        })
+        y += 7
+      }
+      doc.font(FONT_BOLD).fontSize(5.8).text(REFUND_NOTICE, LEFT, y, { width: RIGHT - LEFT, align: "center" })
+    }
+  } else if (indicator && isTraining) {
+    // CIS §11: at least twice the largest amount text (table lines, 6.1 pt).
+    doc.font(FONT_BOLD).fontSize(TRAINING_DESIGNATION_SIZE_A4).text(indicator, 225, 87, {
+      width: 145,
+      align: "center",
+      characterSpacing: 1.7,
+    })
+  } else if (indicator) {
     doc.font(FONT_BOLD).fontSize(9.5).text(indicator, 225, isRefundDoc ? 76 : 91, {
       width: 145,
       align: "center",
       characterSpacing: 1.7,
     })
   }
-  if (isRefundDoc) {
-    const originalReceiptNumber = safe(data.invoice.originalReceiptNumber)
-    if (originalReceiptNumber) {
-      doc.font(FONT).fontSize(5.6).text(`REF. NORMAL RECEIPT#: ${originalReceiptNumber}`, LEFT, 89, {
+  if (isRefundDoc && !subTitle) {
+    const refLine = refundReferenceLine(data)
+    if (refLine) {
+      doc.font(FONT).fontSize(5.6).text(refLine, LEFT, 89, {
         width: RIGHT - LEFT,
         align: "center",
       })
@@ -212,11 +304,17 @@ function columnPositions(): number[] {
   return positions
 }
 
+/** Item description plus the spec's discount line ("discount -25%"), as on the roll receipt. */
+function itemDescription(item: RenderInvoiceLineItem): string {
+  const name = safe(item.description, "-")
+  return item.discountPct > 0 ? `${name}\ndiscount -${formatInvoiceQuantity(item.discountPct)}%` : name
+}
+
 function measureLines(doc: PDFKit.PDFDocument, items: RenderInvoiceLineItem[]): MeasuredLine[] {
   doc.font(FONT).fontSize(6.2)
   return items.map((item) => {
     const codeHeight = doc.heightOfString(safe(item.code, "-"), { width: COLUMN_WIDTHS[1] - 7 })
-    const descriptionHeight = doc.heightOfString(safe(item.description, "-"), { width: COLUMN_WIDTHS[2] - 7 })
+    const descriptionHeight = doc.heightOfString(itemDescription(item), { width: COLUMN_WIDTHS[2] - 7 })
     return {
       item,
       height: Math.min(120, Math.max(18, Math.ceil(Math.max(codeHeight, descriptionHeight)) + 7)),
@@ -284,12 +382,13 @@ function drawTable(
   let y = TABLE_TOP + TABLE_HEADER_HEIGHT
   doc.font(FONT).fontSize(6.1)
   for (const { item, height } of lines) {
-    const tax = safe(item.taxCode) || (Number(item.vatPct) ? `${formatInvoiceQuantity(item.vatPct)}%` : "-")
+    const tax = formatItemTaxLabel(safe(item.taxCode)) || (Number(item.vatPct) ? `${formatInvoiceQuantity(item.vatPct)}%` : "-")
     const values = [
       formatInvoiceQuantity(item.line),
       safe(item.code, "-"),
-      safe(item.description, "-"),
-      formatInvoiceQuantity(item.quantity),
+      itemDescription(item),
+      // Spec 14.1: on a refund only the total is negative, not the quantity.
+      formatReceiptQuantity(Math.abs(item.quantity)),
       tax,
       formatInvoiceAmount(item.unitPrice),
       formatInvoiceAmount(item.total),
@@ -360,12 +459,12 @@ export function salesBands(data: RenderInvoicePayload): TaxGroup[] {
 }
 
 /**
- * Per-tax-type TAX rows: the same visibility rule as the sales bands, so
- * TOTAL TAX = sum of the printed per-rate taxes (R11) and every programmed
- * rate > 0 shows its tax row on every receipt.
+ * Per-tax-type TAX rows: B plus every band with a rate > 0 or a non-zero
+ * tax. Zero-rate bands (A-EX) carry no tax and get no TAX row, matching the
+ * VSDC printout; TOTAL TAX still equals the sum of the printed rows (R11).
  */
 export function taxBandRows(data: RenderInvoicePayload): TaxGroup[] {
-  return taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.tax) > 0 || Math.abs(g.total) > 0 || g.rate > 0)
+  return taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.tax) > 0 || g.rate > 0)
 }
 
 /** R3 receipt label for a band's sales row: `TOTAL A-EX`, `TOTAL B-18.00%`. */
@@ -425,9 +524,10 @@ export function bandTaxAmounts(
   return out
 }
 
-function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void {
+/** Draws the totals box and returns the y just below it. */
+function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): number {
   const currency = safe(data.invoice.currency || data.company.currency, "RWF")
-  const currencyLabel = currency.toUpperCase() === "RWF" ? "Rwf" : currency.toUpperCase()
+  const currencyLabel = currency.toUpperCase() === "RWF" ? "" : ` ${currency.toUpperCase()}`
   // R2/R3: every programmed rate > 0 prints its sales + tax rows on every
   // receipt; zero-rate bands only when used. Labels: Total A-EX / Total B-18.00%.
   const groups = taxBandRows(data)
@@ -435,22 +535,28 @@ function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void 
   // One authoritative invoice total first, then the grand total sliced by tax
   // band ("Total A-EX / Total B-18.00% …" — the per-type sales totals), then
   // the per-band TAX rows carrying the RRA-required tax breakdown.
-  const rows: Array<[string, number | string]> = [[`Total ${currencyLabel}`, data.totals.grandTotal]]
+  const rows: Array<[string, number | string]> = [[`Total${currencyLabel}`, data.totals.grandTotal]]
   for (const group of salesBands(data)) {
-    rows.push([`Total ${bandSalesSuffix(group.code, group.rate)} ${currencyLabel}`, group.total])
+    rows.push([`Total ${bandSalesSuffix(group.code, group.rate)}${currencyLabel}`, group.total])
   }
   for (const group of groups) {
-    rows.push([`Total Tax ${group.code} ${currencyLabel}`, group.tax])
+    rows.push([`Total Tax ${group.code}${currencyLabel}`, group.tax])
   }
-  rows.push([`Total Tax ${currencyLabel}`, totalTax])
-  rows.push(["Items Number", data.items.length])
-  // R1: every means of payment with its amount; single line legacy otherwise.
-  if (data.payment.lines?.length) {
-    for (const pl of data.payment.lines) {
-      rows.push([safe(pl.label, "-"), pl.amount])
+  rows.push([`Total Tax${currencyLabel}`, totalTax])
+  // Spec order: payment method(s), then ITEMS NUMBER. A proforma (spec 17.1)
+  // prints neither.
+  if (!isProformaDocument(data)) {
+    // R1: every means of payment with its amount; single line legacy otherwise.
+    if (data.payment.lines?.length) {
+      for (const pl of data.payment.lines) {
+        rows.push([safe(pl.label, "-"), pl.amount])
+      }
+    } else {
+      rows.push([safe(data.invoice.paymentMethod, "CASH").toUpperCase(), data.totals.grandTotal])
     }
-  } else {
-    rows.push(["Payment Mode", safe(data.invoice.paymentMethod, "-")])
+    // Item counter is a count, not money — print it as a plain integer ("4",
+    // never "4.00").
+    rows.push(["Items Number", String(data.items.length)])
   }
 
   const x = 341
@@ -472,9 +578,11 @@ function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void 
       ellipsis: true,
     })
   })
+  return y + height
 }
 
-function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void {
+/** Draws the SDC block and returns the y just below its last line. */
+function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): number {
   const sdc = data.sdcInformation
   // Slips still awaiting VSDC confirmation (including proforma/training
   // originals printed via allowPending) carry no VSDC signature yet, but the
@@ -486,9 +594,9 @@ function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePaylo
   const invoiceDate = formatInvoiceDateTime(data.invoice.invoiceDate)
   const indicator = documentIndicator(data)
   const lines = [
-    sdcDate.date || sdcDate.time ? `Date: ${sdcDate.date}   ${sdcDate.time}` : "",
-    sdc.sdcId ? `SDC ID : ${safe(sdc.sdcId)}` : "",
-    sdcReceiptNo ? `RECEIPT NUMBER : ${sdcReceiptNo}` : "",
+    sdcDate.date || sdcDate.time ? `Date: ${sdcDate.date} Time: ${sdcDate.time}` : "",
+    sdc.sdcId ? `SDC ID: ${safe(sdc.sdcId)}` : "",
+    sdcReceiptNo ? `RECEIPT NUMBER: ${sdcReceiptNo}` : "",
     sdc.internalData ? `Internal Data:${groupFiscalValue(sdc.internalData)}` : "",
     sdc.receiptSignature ? `Receipt Signature:${groupFiscalValue(sdc.receiptSignature)}` : "",
   ].filter(Boolean)
@@ -500,7 +608,18 @@ function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePaylo
   const hasNotice = isFormalNoticeIndicator(indicator) || !data.certification.isCertified
   let sdcTop = hasNotice ? 648 : 650
 
-  // RRA sample heading — single divider under it (no COPY reprint above).
+  // Spec 15.1/16.1/17.1: COPY / TRAINING MODE / PROFORMA repeated right
+  // above SDC INFORMATION, followed by a divider.
+  const designation = sdcDesignation(data)
+  if (designation) {
+    const size = 9.5
+    doc.font(FONT_BOLD).fontSize(size).text(designation, LEFT, sdcTop, { width: 230, lineBreak: false, characterSpacing: 1.2 })
+    sdcTop += size + 3
+    doc.moveTo(LEFT, sdcTop).lineTo(176, sdcTop).dash(2, { space: 1.5 }).stroke().undash()
+    sdcTop += 4
+  }
+
+  // RRA sample heading — single divider under it.
   doc.font(FONT_BOLD).fontSize(5.4).text("SDC INFORMATION", LEFT, sdcTop, {
     width: 230,
     height: 10,
@@ -518,9 +637,10 @@ function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePaylo
   // Bottom block: same as RRA sample — "RECEIPT NUMBER:8" (VSDC invcNo),
   // not the SDC A/B counter printed above.
   const extraLines = [
-    `RECEIPT NUMBER:${safe(data.invoice.invoiceNumber, "-")}`,
-    invoiceDate.date ? `Date : ${invoiceDate.date}   ${data.invoice.time ? safe(data.invoice.time) : invoiceDate.time}` : "",
-    (sdc.mrcNo || data.company.mrc) ? `MRC : ${safe(sdc.mrcNo || data.company.mrc)}` : "",
+    `RECEIPT NUMBER: ${safe(data.invoice.invoiceNumber, "-")}`,
+    invoiceDate.date ? `DATE: ${invoiceDate.date} TIME: ${data.invoice.time ? safe(data.invoice.time) : invoiceDate.time}` : "",
+    (sdc.mrcNo || data.company.mrc) ? `MRC: ${safe(sdc.mrcNo || data.company.mrc)}` : "",
+    isRefundTransaction(data) ? refundReferenceLine(data) : "",
   ].filter(Boolean)
   if (extraLines.length) {
     doc.moveTo(LEFT, y + 1).lineTo(176, y + 1).dash(2, { space: 1.5 }).stroke().undash()
@@ -530,6 +650,7 @@ function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePaylo
       y += 9
     }
   }
+  return y
 }
 
 function drawFinalFooter(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void {
@@ -554,15 +675,27 @@ function drawFinalFooter(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): v
     doc.moveTo(LEFT, 642).lineTo(RIGHT, 642).dash(2, { space: 1.5 }).stroke().undash()
   }
 
-  drawFiscalInformation(doc, data)
-  const qr = dataUrlBuffer(data.verification.qrCodeImage)
-  drawImageFit(doc, qr, 267, 655, 62, 62)
-  drawSummary(doc, data)
+  const fiscalBottom = drawFiscalInformation(doc, data)
+  if (printsQrCode(data)) {
+    drawImageFit(doc, dataUrlBuffer(data.verification.qrCodeImage), 267, 655, 62, 62)
+  }
+  const summaryBottom = drawSummary(doc, data)
+
+  // Spec 13.1–17.1 end with the THANK YOU commercial message.
+  let y = Math.min(Math.max(fiscalBottom, summaryBottom) + 5, PAGE_HEIGHT - 40)
+  doc.moveTo(LEFT, y).lineTo(RIGHT, y).dash(2, { space: 1.5 }).stroke().undash()
+  y += 4
+  doc.font(FONT_BOLD).fontSize(6.4).text("THANK YOU", LEFT, y, { width: RIGHT - LEFT, align: "center", lineBreak: false })
+  y += 9
+  if (data.footer?.message) {
+    doc.font(FONT).fontSize(5.8).text(safe(data.footer.message), LEFT, y, { width: RIGHT - LEFT, align: "center", height: 8, ellipsis: true })
+    y += 8
+  }
 
   doc
     .font(FONT)
     .fontSize(5.1)
-    .text(safe(data.sdcInformation.poweredBy, SYSTEM_FOOTER), LEFT, 771, {
+    .text(safe(data.sdcInformation.poweredBy, SYSTEM_FOOTER), LEFT, Math.min(Math.max(771, y + 2), PAGE_HEIGHT - 14), {
       width: 300,
       height: 10,
       ellipsis: true,
@@ -581,7 +714,13 @@ export async function generateEbmInvoicePdf(
   const isA5 = paper === "A5"
   const sheetW = isA5 ? A5_WIDTH : PAGE_WIDTH
   const sheetH = isA5 ? A5_HEIGHT : PAGE_HEIGHT
-  const applyScale = (doc: PDFKit.PDFDocument) => { if (isA5) doc.scale(A5_SCALE, A5_SCALE, { origin: [0, 0] }) }
+  const applyScale = (doc: PDFKit.PDFDocument) => {
+    if (!isA5) return
+    doc.scale(A5_SCALE, A5_SCALE, { origin: [0, 0] })
+    // Layout y is in A4 space: give wrapped text the A4 page bottom, or PDFKit
+    // breaks anything below y≈595 onto a spurious extra page.
+    doc.page.margins.bottom = sheetH - PAGE_HEIGHT
+  }
 
   const [companyLogo, certificationLogo] = await Promise.all([
     getOrganizationLogo(),
@@ -627,9 +766,6 @@ export async function generateEbmInvoicePdf(
     drawTable(doc, lines, finalPage)
     if (finalPage) drawFinalFooter(doc, data)
     doc.restore()
-    // No diagonal center stamp is ever drawn: COPY / NOT FISCALISED /
-    // TRAINING / PROFORMA designations live in the header title plus the
-    // "not an official receipt" notice band, never as a stamp over the body.
   })
 
   doc.end()

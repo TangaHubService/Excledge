@@ -1087,6 +1087,13 @@ export const ScanInvoicePage: React.FC = () => {
                 {importResult.errorItems} items failed. Check activity logs.
               </p>
             )}
+            {importResult?.accounting && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {importResult.accounting.queued
+                  ? 'The supplier bill and scanned copy were sent to Accounting.'
+                  : `Not sent to Accounting: ${importResult.accounting.reason}`}
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-3 w-full">
             <Button onClick={() => navigate('/dashboard/inventory-all')} className={cn('gap-2', primaryBtnClass)}>

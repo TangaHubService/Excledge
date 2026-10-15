@@ -9,16 +9,20 @@ import {
   isEbmEnabled,
   gatewayErrorMessage,
   PurchaseCodeMissingError,
+  clampField,
+  withBranchSellerAddress,
 } from './rra-ebm.service';
 import { getRraPaymentCode, validateRefundReasonCodeForOrg, DEFAULT_RFD_RSN_CD, getTaxRatesBySlot, getTourismTaxRate } from './rra-code.service';
 import {
   buildVsdcEnvelope,
   saveInvc,
-  parseVsdcResponse,
-  vsdcHeartbeat,
+  saveElectronicJournal,
+  decideVsdcReceiptResult,
   validateVsdcEnvelope,
 } from './vsdc-api.service';
 import { buildElectronicJournal } from './electronic-journal.service';
+import { assertNrWirePayload } from './refund-calculation.service';
+import { isTrainingLabel, isUnsignedLabel } from './training-mode.service';
 import logger from '../utils/logger';
 
 export { isEbmEnabled };
@@ -275,44 +279,12 @@ export async function payDebtWithTransaction(
 // ──────────────────────────────────────────────
 
 /**
- * Resolve an orphan outbox entry stuck in PROCESSING state.
- * Queries the VSDC status endpoint; marks SUCCEEDED if already fiscalized.
- */
-async function resolveOrphanedSubmission(outboxEntry: {
-  id: number;
-  idempotencyKey: string;
-  organizationId: number;
-}): Promise<'SUCCEEDED' | 'FAILED' | 'RETRY'> {
-  const statusPath = config.ebm.statusCheckPath;
-  if (!statusPath) return 'RETRY';
-
-  try {
-    const envelope = await buildVsdcEnvelope(outboxEntry.organizationId);
-    const result = await vsdcHeartbeat(envelope);
-    if (result.success && result.data) {
-      const normalized = parseVsdcResponse(result.rawBody);
-      if (normalized.rcptNo) {
-        await prisma.ebmOutbox.update({
-          where: { id: outboxEntry.id },
-          data: {
-            status: 'SUCCEEDED',
-            sdcDateTime: normalized.sdcDateTime ? new Date(normalized.sdcDateTime) : null,
-            lastError: null,
-          },
-        });
-        return 'SUCCEEDED';
-      }
-    }
-    return 'FAILED';
-  } catch {
-    return 'RETRY';
-  }
-}
-
-/**
  * Process pending EBM outbox entries in batch.
  *
- * 1. Orphan reconciliaition: entries in PROCESSING are probed via status endpoint.
+ * 1. Orphan recovery: a stale PROCESSING entry is resent as the SAME document
+ *    (same invcNo). The VSDC API has no receipt lookup, so a heartbeat can
+ *    never prove an earlier attempt was signed; VSDC itself answers 924 if it
+ *    was, and only a complete receipt block is ever accepted as success.
  * 2. Idempotent dispatch: every VSDC payload carries the idempotencyKey.
  * 3. Cursor persistence: on success, saves sdcDateTime and updates organization sync state.
  */
@@ -349,7 +321,9 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
   let succeeded = 0;
   let failed = 0;
 
-  logger.info(`[EBM-OUTBOX] processEbmOutboxBatch: fetched ${rows.length} due row(s) (limit=${limit})`);
+  if (rows.length > 0) {
+    logger.info(`[EBM-OUTBOX] processEbmOutboxBatch: fetched ${rows.length} due row(s) (limit=${limit})`);
+  }
 
   for (const row of rows) {
     // Claim the row before building its payload or calling VSDC. The previous
@@ -369,17 +343,8 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
     processed += 1;
     logger.info(`[EBM-OUTBOX] row ${row.id} (op=${row.operation}, saleId=${row.saleId}, org=${row.organizationId}) claimed — processing (status=${row.status}, retry=${row.retryCount})`);
 
-    // ── Orphan reconciliaition ──
     if (row.status === 'PROCESSING') {
-      const resolution = await resolveOrphanedSubmission(row);
-      if (resolution === 'SUCCEEDED') {
-        succeeded += 1;
-        continue;
-      }
-      if (resolution === 'RETRY') {
-        continue; // leave for next cycle
-      }
-      // resolution === 'FAILED' — fall through to re-submit below
+      logger.warn(`[EBM-OUTBOX] row ${row.id}: stale PROCESSING lease — resending the same document`);
     }
 
     // ── Reload sale & build payload ──
@@ -420,10 +385,11 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       continue;
     }
 
-    const org = await prisma.organization.findUnique({
+    const orgRow = await prisma.organization.findUnique({
       where: { id: row.organizationId },
       select: { TIN: true, name: true, address: true, phone: true },
     });
+    const org = orgRow ? await withBranchSellerAddress(orgRow, sale.branchId) : null;
 
     if (!org) {
       await prisma.ebmOutbox.update({
@@ -525,6 +491,34 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       const originalSale = originalSaleId
         ? await prisma.sale.findFirst({ where: { id: originalSaleId }, select: { invoiceNumber: true, vsdcInvcNo: true, totalAmount: true } })
         : null;
+      // orgInvcNo is the original NS invcNo. 0 is what VSDC rejects with 910,
+      // and it is not a stand-in for "unknown" — refuse the submission.
+      const orgInvcNo = originalSale?.vsdcInvcNo;
+      if (typeof orgInvcNo !== 'number' || !Number.isInteger(orgInvcNo) || orgInvcNo <= 0) {
+        await prisma.ebmOutbox.update({
+          where: { id: row.id },
+          data: {
+            status: 'DEAD_LETTER',
+            lastError: 'Original NS has no VSDC invoice number (orgInvcNo) — NR was not submitted',
+          },
+        });
+        failed += 1;
+        continue;
+      }
+      const justification = String(
+        (row.payload as { reason?: string })?.reason ?? (sale as { refundReason?: string | null }).refundReason ?? '',
+      ).trim();
+      if (!justification) {
+        await prisma.ebmOutbox.update({
+          where: { id: row.id },
+          data: {
+            status: 'DEAD_LETTER',
+            lastError: 'Refund justification is missing — NR was not submitted',
+          },
+        });
+        failed += 1;
+        continue;
+      }
       let rraPaymentCode: string;
       try {
         rraPaymentCode = await getRraPaymentCode(row.organizationId, sale.paymentType);
@@ -560,25 +554,37 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         // so it needs its own unconsumed purchase code for the customer TIN —
         // a code already consumed by the original sale is rejected (883), and
         // a missing/invalid one is rejected (881/882).
-        const refundCustTin = effectiveBuyerTin(sale);
-        const refundCode = await consumeAnyOrgPurchaseCode(
-          row.organizationId,
-          sale.id,
-          prisma,
-          refundCustTin || undefined,
-        );
-        if (refundCode) {
-          await prisma.sale.update({ where: { id: sale.id }, data: { prcOrdCd: refundCode } });
-          (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd = refundCode;
+        // A retry reuses the code already allocated to this refund (the VSDC may
+        // have accepted the earlier attempt); a burned code is replaced by the
+        // 882/883 handler below.
+        const allocatedCode = (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd?.trim();
+        if (!allocatedCode) {
+          const refundCustTin = effectiveBuyerTin(sale);
+          const refundCode = await consumeAnyOrgPurchaseCode(
+            row.organizationId,
+            sale.id,
+            prisma,
+            refundCustTin || undefined,
+          );
+          if (refundCode) {
+            await prisma.sale.update({ where: { id: sale.id }, data: { prcOrdCd: refundCode } });
+            (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd = refundCode;
+          }
         }
         payload = buildRraSendReceiptPayload(sale, org, rraPaymentCode, {
-          orgInvcNo: originalSale?.vsdcInvcNo ?? undefined,
-          rfdDt: new Date(),
+          orgInvcNo,
+          // The refund happened when the NR row was created; retries must
+          // resend the same rfdDt, not the time of the attempt.
+          rfdDt: sale.createdAt,
           rfdRsnCd,
           ...rateOpts,
         });
-        payload.remark = (row.payload as { reason?: string })?.reason ?? '';
+        // VSDC remark is the human justification (max 400). The code travels
+        // separately as rfdRsnCd. Stored sale amounts stay negative; the wire
+        // magnitudes are positive (sandbox 910 on a negative supply amount).
+        payload.remark = clampField(justification, 400);
         payload.idempotencyKey = row.idempotencyKey;
+        assertNrWirePayload(payload, { training: isTrainingLabel(sale.rcptLabel) });
       } catch (e: unknown) {
         await handleBuildError(row, e);
         failed += 1;
@@ -620,18 +626,37 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         // A void is a fresh submission, so it needs a fresh unconsumed
         // purchase code too: reusing the original sale's (already consumed)
         // code is rejected with 883. Allocate a new valid one for the buyer.
-        const voidCustTin = effectiveBuyerTin(sale);
-        const voidCode = await consumeAnyOrgPurchaseCode(
-          row.organizationId,
-          sale.id,
-          prisma,
-          voidCustTin || undefined,
-        );
-        if (voidCode) {
-          await prisma.sale.update({ where: { id: sale.id }, data: { prcOrdCd: voidCode } });
-          (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd = voidCode;
+        //
+        // A retry (timeout, stale lease) must resend the SAME cancellation
+        // document: the invcNo allocated on the first attempt is kept on the
+        // outbox payload, so VSDC can answer 924 instead of receiving a second
+        // cancellation under a new number. Its purchase code stays on the sale
+        // unless the 882/883 handler burned and cleared it.
+        const voidState = (row.payload ?? {}) as { voidInvcNo?: number };
+        const storedVoidInvcNo =
+          Number.isInteger(voidState.voidInvcNo) && (voidState.voidInvcNo as number) > 0 ? (voidState.voidInvcNo as number) : null;
+        const existingVoidCode = storedVoidInvcNo ? (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd?.trim() : '';
+        if (!existingVoidCode) {
+          const voidCustTin = effectiveBuyerTin(sale);
+          const voidCode = await consumeAnyOrgPurchaseCode(
+            row.organizationId,
+            sale.id,
+            prisma,
+            voidCustTin || undefined,
+          );
+          if (voidCode) {
+            await prisma.sale.update({ where: { id: sale.id }, data: { prcOrdCd: voidCode } });
+            (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd = voidCode;
+          }
         }
-        const { vsdcInvcNo: voidInvcNo } = await generateInvoiceNumber(row.organizationId, sale.branchId);
+        let voidInvcNo = storedVoidInvcNo;
+        if (voidInvcNo == null) {
+          voidInvcNo = (await generateInvoiceNumber(row.organizationId, sale.branchId)).vsdcInvcNo;
+          await prisma.ebmOutbox.update({
+            where: { id: row.id },
+            data: { payload: { ...(row.payload as Record<string, unknown>), voidInvcNo } as any },
+          });
+        }
         payload = buildRraSendReceiptPayload(sale, org, rraPaymentCode, { cnclDt: new Date(), invcNoOverride: voidInvcNo, ...rateOpts });
         payload.remark = (row.payload as { reason?: string })?.reason ?? '';
         payload.idempotencyKey = row.idempotencyKey;
@@ -669,10 +694,10 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
     });
 
     try {
-      // Training (TS/TR) and proforma (PS) receipts are fiscalized through
-      // VSDC exactly like normal sales — no skip. Their rcptLabel travels in
-      // the payload (rcptTyCd S/R) and on the printed receipt, so the fiscal
-      // record and the displayed invoice stay identical.
+      // Every receipt type goes through VSDC (CIS §6). Training (TS/TR)
+      // travels as salesTyCd 'T' and proforma (PS) as 'P' (see
+      // buildRraSendReceiptPayload), so VSDC records them under their own
+      // counters without a signature.
       const envelope = await buildVsdcEnvelope(row.organizationId, sale.branchId);
 
       // §22: never submit against a device that is not usable (missing/invalid
@@ -743,77 +768,83 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         logger.info(`[EBM-OUTBOX] row ${row.id}: saveInvc retry returned success=${result.success} error=${result.error ?? 'none'}`);
       }
 
-      if (!result.success || !result.data?.rcptNo) {
+      // Every document type is confirmed only by a complete VSDC receipt block
+      // (rcptNo, totRcptNo, intrlData, rcptSign, sdcId, mrcNo, vsdcRcptPbctDate).
+      // A bare rcptNo, a 924 without the original block, a non-2xx reply or a
+      // timeout is not a receipt. Training (TS/TR) and proforma (PS) get the
+      // same check minus the signature fields VSDC leaves empty for them.
+      const isTraining = isUnsignedLabel(sale.rcptLabel);
+      const decision = decideVsdcReceiptResult(result, {
+        training: isTraining,
+        docLabel: row.operation === 'REFUND' ? 'NR receipt' : row.operation === 'VOID' ? 'cancellation' : `${sale.rcptLabel ?? 'NS'} receipt`,
+      });
+      const forceDeadLetter = !decision.confirmed && !decision.retryable;
+      result = decision.confirmed
+        ? { ...result, success: true, data: decision.data, error: undefined }
+        : { ...result, success: false, data: undefined, error: decision.error };
+
+      if (!decision.confirmed) {
         const msg = result.error ?? 'VSDC gateway error';
+        logger.warn(`[EBM-OUTBOX] row ${row.id}: submission FAILED — ${msg}`);
 
-        // Idempotency: resultCd 924 ("Invoice number already exists.") means
-        // this invcNo was already fiscalized by a prior attempt (or a manual
-        // re-submission) — treat it as a success, not a failure.
-        const raw = result.rawBody as Record<string, unknown> | null;
-        const replayed = raw && String(raw.resultCd) === '924';
-        const replayedVsdc = replayed ? parseVsdcResponse(raw) : null;
-        if (replayedVsdc?.rcptNo) {
-          result = { ...result, success: true, data: replayedVsdc };
-          logger.info(`[EBM-OUTBOX] row ${row.id}: already fiscalized (924) — treating as SUCCEEDED rcptNo=${replayedVsdc.rcptNo}`);
-        } else {
-          logger.warn(`[EBM-OUTBOX] row ${row.id}: submission FAILED — ${msg}`);
-
-          // Final 882/883 burn if retries exhausted without clearing the sale code.
-          if (/VSDC error (882|883):/.test(msg)) {
-            const usedCode = (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd?.trim();
-            if (usedCode) {
-              await prisma.organizationPurchaseCode.updateMany({
-                where: { organizationId: row.organizationId, code: usedCode },
-                data: { consumed: true, consumedSaleId: sale.id, consumedAt: new Date() },
-              });
-              await prisma.sale.update({
-                where: { id: sale.id },
-                data: { prcOrdCd: null },
-              });
-              logger.warn(`[EBM-OUTBOX] row ${row.id}: burned purchase code ${usedCode} (${msg}) — cleared from sale for re-allocation`);
-            }
+        // Final 882/883 burn if retries exhausted without clearing the sale code.
+        if (/VSDC error (882|883):/.test(msg)) {
+          const usedCode = (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd?.trim();
+          if (usedCode) {
+            await prisma.organizationPurchaseCode.updateMany({
+              where: { organizationId: row.organizationId, code: usedCode },
+              data: { consumed: true, consumedSaleId: sale.id, consumedAt: new Date() },
+            });
+            await prisma.sale.update({
+              where: { id: sale.id },
+              data: { prcOrdCd: null },
+            });
+            logger.warn(`[EBM-OUTBOX] row ${row.id}: burned purchase code ${usedCode} (${msg}) — cleared from sale for re-allocation`);
           }
-
-           // 899 = SQLite persistence failure (disk pressure) — transient infrastructure issue
-           if (msg.includes('SQLite') || msg.includes('persistence') || msg.includes('disk pressure')) {
-             logger.warn(`[EBM-OUTBOX] row ${row.id}: submission FAILED — transient infrastructure error, retrying...`);
-             // Re-raise the error to trigger retry mechanism
-             throw new Error(`Transient VSDC error: ${msg}`);
-           }
-
-           await failSubmission(txRow.id, msg);
-
-           const nextRetry = scheduleNextRetry(row.retryCount);
-           const isDead = row.retryCount + 1 >= (config.ebm.maxQueueRetries ?? 10);
-
-           await prisma.ebmOutbox.update({
-             where: { id: row.id },
-             data: {
-               status: isDead ? 'DEAD_LETTER' : 'FAILED',
-               retryCount: { increment: 1 },
-               lastError: msg,
-               nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
-             },
-           });
-
-           failed += 1;
-           continue;
         }
+
+        // 899 = SQLite persistence failure (disk pressure) — transient infrastructure issue
+        if (msg.includes('SQLite') || msg.includes('persistence') || msg.includes('disk pressure')) {
+          logger.warn(`[EBM-OUTBOX] row ${row.id}: submission FAILED — transient infrastructure error, retrying...`);
+          // Re-raise the error to trigger retry mechanism
+          throw new Error(`Transient VSDC error: ${msg}`);
+        }
+
+        await failSubmission(txRow.id, msg);
+
+        const nextRetry = scheduleNextRetry(row.retryCount);
+        const isDead = forceDeadLetter || row.retryCount + 1 >= (config.ebm.maxQueueRetries ?? 10);
+
+        await prisma.ebmOutbox.update({
+          where: { id: row.id },
+          data: {
+            status: isDead ? 'DEAD_LETTER' : 'FAILED',
+            retryCount: { increment: 1 },
+            lastError: msg,
+            nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
+          },
+        });
+
+        failed += 1;
+        continue;
       }
 
-      const vsdc = result.data!;
-      const sdcDateTime: Date | null = vsdc.sdcDateTime ? new Date(vsdc.sdcDateTime) : null;
+      const vsdc = decision.data;
+      const sdcDateTime = new Date(vsdc.sdcDateTime);
 
       // C8: build electronic journal text
       const rcptLabel = (sale as any).rcptLabel ?? (row.operation === 'REFUND' ? 'NR' : 'NS');
       const ejText = row.operation === 'SALE' || row.operation === 'REFUND'
         ? buildElectronicJournal(sale as SaleWithRelations, rcptLabel, {
-            sdcId: envelope.sdcId,
-            mrcNo: envelope.mrcNo,
+            sdcId: vsdc.sdcId || envelope.sdcId,
+            mrcNo: vsdc.mrcNo || envelope.mrcNo,
             sdcRcptNo: vsdc.rcptNo ? parseInt(vsdc.rcptNo, 10) || 0 : 0,
             internalData: vsdc.intrlData,
             receiptSignature: vsdc.vsdcSignature,
-            sdcDateTime: sdcDateTime ?? new Date(),
+            sdcDateTime,
+            orgInvcNo: typeof payload.orgInvcNo === 'number' ? payload.orgInvcNo : null,
+            rfdRsnCd: typeof payload.rfdRsnCd === 'string' ? payload.rfdRsnCd : null,
+            refundReason: typeof payload.remark === 'string' ? payload.remark : null,
           })
         : null;
 
@@ -835,9 +866,13 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
             internalData: vsdc.intrlData || null,
             receiptSignature: vsdc.vsdcSignature || null,
             rcptLabel: rcptLabel as any,
-            // C8 electronic journal
+            // C8 electronic journal: the text is always stored for inspector
+            // comparison. ejSent means TRANSMITTED to the VSDC (2018 Art. 6.5),
+            // not merely stored — it flips to true only when the EJ POST below
+            // is acknowledged. Without EBM_EJ_SYNC_PATH there is no 2023-API
+            // endpoint to send it to, so it stays stored-but-unsent.
             journalText: ejText,
-            ejSent: !!ejText,
+            ejSent: false,
             responseData: { raw: result.rawBody, normalized: vsdc, requestPayload: payload } as any,
           },
         }),
@@ -860,6 +895,30 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
 
       succeeded += 1;
       logger.info(`[EBM-OUTBOX] row ${row.id}: SUCCEEDED — rcptNo=${vsdc.rcptNo}, sdcId=${vsdc.sdcId ?? 'N/A'}, sdcDateTime=${sdcDateTime?.toISOString() ?? 'N/A'}`);
+      // C8 follow-up: transmit the journal text when a device EJ endpoint is
+      // configured. Best-effort — a failure here never un-fiscalizes the sale;
+      // the text is retained and ejSent stays false so it can be resent.
+      if (ejText && config.ebm.ejSyncPath) {
+        try {
+          const ejRes = await saveElectronicJournal(envelope, {
+            saleId: sale.id,
+            invcNo: (payload as any).invcNo ?? sale.vsdcInvcNo ?? 0,
+            rcptLabel,
+            journalText: ejText,
+          });
+          if (ejRes.success) {
+            await prisma.ebmTransaction.update({
+              where: { id: txRow.id },
+              data: { ejSent: true },
+            });
+            logger.info(`[EBM-OUTBOX] row ${row.id}: EJ transmitted`);
+          } else {
+            logger.warn(`[EBM-OUTBOX] row ${row.id}: EJ POST failed — ${ejRes.error} (journal retained, ejSent=false)`);
+          }
+        } catch (e: unknown) {
+          logger.warn(`[EBM-OUTBOX] row ${row.id}: EJ POST threw — ${e instanceof Error ? e.message : e} (journal retained, ejSent=false)`);
+        }
+      }
       // S8 order: the sales invoice is now acked — the linked SALE stock-out
       // rows (sarTyCd 11) become eligible for /stock/saveStockItems. The stock
       // worker gates on this ack, but kick it immediately instead of waiting
@@ -893,7 +952,9 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
     }
   }
 
-  logger.info(`[EBM-OUTBOX] processEbmOutboxBatch done: processed=${processed} succeeded=${succeeded} failed=${failed}`);
+  if (processed > 0) {
+    logger.info(`[EBM-OUTBOX] processEbmOutboxBatch done: processed=${processed} succeeded=${succeeded} failed=${failed}`);
+  }
   return { processed, succeeded, failed };
 }
 

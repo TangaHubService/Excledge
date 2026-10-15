@@ -1105,6 +1105,25 @@ See also \`docs/ebm-vsdc/INTEGRATION.md\` and \`docs/ebm-vsdc/CERTIFICATION-CHEC
         responses: { '200': { description: 'Reprint payload with isCopy=true' } },
       },
     },
+    '/api/sales/{organizationId}/{saleId}/copy': {
+      post: {
+        tags: ['Fiscal Sales'],
+        summary: 'CS/CR copy of an existing NS/NR receipt (PDF, original VSDC fiscal data, marked COPY; not submitted to VSDC)',
+        parameters: [
+          { $ref: '#/components/parameters/organizationId' },
+          { name: 'saleId', in: 'path', required: true, schema: { type: 'integer' } },
+          { name: 'format', in: 'query', required: false, schema: { type: 'string', enum: ['A4', 'A5', '80mm'] } },
+        ],
+        responses: {
+          '200': { description: 'application/pdf; headers X-Receipt-Copy-Label (CS|CR) and X-Receipt-Copy-Number' },
+          '400': { description: 'Invalid receipt id' },
+          '404': { description: 'Receipt not found in this organization/branch' },
+          '409': { description: 'Stored VSDC record missing, incomplete or inconsistent (code FISCAL_RECORD_MISSING | FISCAL_DATA_INCOMPLETE | FISCAL_DATA_MISMATCH)' },
+          '422': { description: 'Not an NS/NR receipt (training, proforma, voided) — code COPY_NOT_ALLOWED' },
+          '425': { description: 'Original receipt not yet confirmed by VSDC' },
+        },
+      },
+    },
 
     // ── Fiscal reports ───────────────────────────────────────────────────
     '/api/reports/daily/{organizationId}': {

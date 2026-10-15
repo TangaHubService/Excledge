@@ -17,15 +17,22 @@ type HeaderData = Pick<EbmInvoice, "company">
  */
 /**
  * Document designation mirroring the backend's documentIndicator: the title
- * must read PROFORMA / TRAINING MODE / COPY / NOT FISCALISED / REFUND exactly
- * when the authoritative PDF does, so the preview can never disagree with the
- * fiscal record sent to RRA.
+ * must read PROFORMA / TRAINING MODE / NOT FISCALISED / REFUND exactly when
+ * the authoritative PDF does, so the preview can never disagree with the
+ * fiscal record sent to RRA. A copy keeps the original's title and carries
+ * the COPY watermark instead (isCopyInvoice).
  */
+export function isCopyInvoice(invoice: EbmInvoice["invoice"]): boolean {
+  const label = String(invoice?.rcptLabel ?? "").toUpperCase()
+  if (invoice?.isProforma || label === "PS" || label === "TS" || label === "TR") return false
+  return Boolean(invoice?.isCopy) || label === "CS" || label === "CR"
+}
+
 export function documentTitle(invoice: EbmInvoice["invoice"]): string {
   const label = String(invoice?.rcptLabel ?? "").toUpperCase()
   if (invoice?.isProforma || label === "PS") return "PROFORMA"
   if (label === "TS" || label === "TR") return "TRAINING MODE"
-  if (invoice?.isCopy || label === "CS" || label === "CR") return "COPY"
+  if (isCopyInvoice(invoice)) return label === "NR" ? "REFUND" : "INVOICE"
   if (invoice?.notFiscalized) return "NOT FISCALISED"
   if (label === "NR" || (!label && invoice?.status === "REFUNDED")) return "REFUND"
   return "INVOICE"

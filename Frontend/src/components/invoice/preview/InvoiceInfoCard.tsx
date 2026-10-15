@@ -13,12 +13,13 @@ import { C } from "./theme"
 
 export function InvoiceInfoCard({ data }: { data: Pick<EbmInvoice, "invoice"> }) {
   const inv = data.invoice
+  const isProforma = !!inv?.isProforma || inv?.rcptLabel === "PS"
   const rows = [
     { icon: FileText, label: "Invoice No", value: safeText(inv?.invoiceNumber) },
     { icon: Hash, label: "Receipt No", value: safeText(inv?.receiptNumber) },
     { icon: CalendarDays, label: "Date", value: formatDateShort(inv?.invoiceDate) },
     { icon: Clock, label: "Time", value: formatTime(inv?.time) },
-    { icon: CreditCard, label: "Payment", value: safeText(inv?.paymentMethod) },
+    { icon: CreditCard, label: "Payment", value: isProforma ? "" : safeText(inv?.paymentMethod) },
     { icon: UserRound, label: "Cashier", value: safeText(inv?.cashier) },
   ].filter((r) => r.value && r.value !== "—")
 

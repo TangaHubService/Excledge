@@ -6,6 +6,8 @@ import { isValidPurchaseCode, generateValidPurchaseCodes } from './purchase-code
 import { deriveQtyUnitCd } from './item-code.service';
 import { getRraPaymentCode, requiresPurchaseCode, resolvePkgUnitCd, resolveQtyUnitCd } from './rra-code.service';
 import { diff2, bandTaxFromNet } from './money.service';
+import { kigaliWallParts } from './invoice-format.service';
+import { vsdcSalesTyCdForLabel } from './training-mode.service';
 
 /** Any Prisma client capable of running queries — the top-level client or a $transaction callback's `tx`. */
 type PrismaClientOrTx = typeof prisma | Prisma.TransactionClient;
@@ -392,18 +394,15 @@ export async function consumeAnyOrgPurchaseCode(
 // ──────────────────────────────────────────────
 
 export function toRraDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}${m}${day}`;
+  // VSDC sales dates are Kigali calendar days, independent of server timezone.
+  const k = kigaliWallParts(d);
+  return `${k.year}${k.month}${k.day}`;
 }
 
 export function toRraTime(d: Date): string {
-  return [
-    String(d.getHours()).padStart(2, '0'),
-    String(d.getMinutes()).padStart(2, '0'),
-    String(d.getSeconds()).padStart(2, '0'),
-  ].join('');
+  // VSDC timestamps are Kigali wall time, independent of server timezone.
+  const k = kigaliWallParts(d);
+  return `${k.hour}${k.minute}${k.second}`;
 }
 
 export function toRraDateTime(d: Date): string {
@@ -469,9 +468,33 @@ export function sanitizeVsdcText(value: unknown): string {
   return String(value ?? '').replace(/[\u0000-\u001F\u007F]/g, '').trim();
 }
 
+/**
+ * Seller identity for `adrs`/`topMsg`: the branch address wins over the
+ * organization address, matching the printed invoice header.
+ */
+export async function withBranchSellerAddress<T extends { address: string | null }>(
+  org: T,
+  branchId: number | null | undefined,
+): Promise<T> {
+  if (!branchId) return org;
+  const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { address: true } });
+  return branch?.address?.trim() ? { ...org, address: branch.address } : org;
+}
+
+/**
+ * Rwanda mobile in the only shape the VSDC accepts in top-level `custTin`:
+ * the 9-digit local number starting with 7 ("788333001"). Live VSDC rejects
+ * "0788333001", "250788333001" and "+250788333001" there with 910, so those
+ * are normalized down; anything else returns null.
+ */
+export function toVsdcCustTinMobile(phone: string | null | undefined): string | null {
+  const digits = (phone ?? '').replace(/[\s-]/g, '').replace(/^\+?250/, '').replace(/^0/, '');
+  return /^7\d{8}$/.test(digits) ? digits : null;
+}
+
 export interface VsdcBuyerIdentity {
-  /** Top-level `custTin`: the valid customer TIN, else the valid customer
-   * mobile (the VSDC API accepts a mobile here), else null. */
+  /** Top-level `custTin`: the valid customer TIN, else the customer mobile
+   * as a 9-digit local number (see toVsdcCustTinMobile), else null. */
   custTin: string | null;
   /** `receipt.custTin`: the valid customer TIN ONLY, else null. Never a phone. */
   receiptCustTin: string | null;
@@ -486,8 +509,8 @@ export interface VsdcBuyerIdentity {
  * - `receipt.custMblNo` carries a valid phone number or null — never a TIN
  *   (a stored phone that itself passes the TIN shape is dropped from both
  *   slots: it is a suspected swap and must leak into neither field).
- * - top-level `custTin` carries the TIN when present, else the phone where
- *   the VSDC API allows a mobile, else null (sent as JSON null, never "").
+ * - top-level `custTin` carries the TIN when present, else the phone as a
+ *   9-digit local mobile, else null (sent as JSON null, never "").
  */
 export function resolveVsdcBuyerIdentity(
   customer: { TIN?: string | null; phone?: string | null } | null | undefined,
@@ -496,12 +519,10 @@ export function resolveVsdcBuyerIdentity(
   const rawPhone = (customer?.phone ?? '').trim();
   const tin = isValidRraTin(rawTin) ? rawTin : null;
   const phone = rawPhone && isValidVsdcPhone(rawPhone) && !isValidRraTin(rawPhone) ? rawPhone : null;
-  // Live VSDC rejects every phone shape in top-level custTin (resultCd 910
-  // observed for +250788111111, 250788111111 and 0788111111) — only a valid
-  // 9-digit TIN passes there (proven: 190000007 accepted, rcpt 178).
-  // No-TIN walk-in buyers submit JSON null (B2C — proven: 4 receipts accepted,
-  // rcpt 185+), with the mobile kept solely in receipt.custMblNo (accepted).
-  return { custTin: tin, receiptCustTin: tin, receiptCustMblNo: phone };
+  // receipt.custTin accepts a real TIN only (910 "Must be a valid TIN" for
+  // every phone shape); top-level custTin accepts a TIN or a 9-digit local
+  // mobile ("Must be a valid TIN or a Rwanda Mobile phone number").
+  return { custTin: tin ?? toVsdcCustTinMobile(phone), receiptCustTin: tin, receiptCustMblNo: phone };
 }
 
 /**
@@ -772,8 +793,8 @@ export function buildRraSendReceiptPayload(
   // Official buyer-field mapping (TrnsSalesSaveWrReq.custTin + receipt block):
   // - receipt.custTin is a valid customer TIN or null — never a phone number.
   // - receipt.custMblNo is a valid customer mobile or null — never a TIN.
-  // - top-level custTin is the TIN when present, else the mobile where the
-  //   VSDC API allows one, else null (sent as JSON null, never "").
+  // - top-level custTin is the TIN when present, else the mobile as a 9-digit
+  //   local number, else null (sent as JSON null, never "").
   // Business buyers without a real TIN still block here with an actionable
   // error instead of submitting a value VSDC will reject. We never fall back
   // to the seller's own TIN — that would silently convert the sale into a B2B
@@ -820,7 +841,12 @@ export function buildRraSendReceiptPayload(
       return code;
     })(),
     custNm: custNm ?? '',
-    salesTyCd: 'N', // spec: "Send only 'N' type"
+    // VSDC API v1.0.5 TrnsSalesSaveWrReq says "Send only 'N' type", but CIS §6
+    // routes TRAINING receipts through VSDC too, and the RRA reference VSDC
+    // (rraVsdcSandbox 3.0.2) handles 'T' as training: own counter, no
+    // intrlData/rcptSign. Sending a TS/TR as 'N' would issue a real signed NS/NR.
+    // Proforma (PS) travels as 'P' for the same reason (CIS §6.3.6).
+    salesTyCd: vsdcSalesTyCdForLabel(sale.rcptLabel),
     rcptTyCd,
     pmtTyCd: rraPaymentCode,
     salesSttsCd: isVoid ? '04' : isRefund ? '05' : '02', // §4.11: 04 Canceled, 05 Refunded, 02 Approved
@@ -867,23 +893,19 @@ export function buildRraSendReceiptPayload(
       // ("length must be between 0 and 20") — clamp the trade name.
       trdeNm: clampField(org.name, 20),
       adrs: clampField(org.address, 200),
-      // Seller company information travels as the receipt's top message
-      // (topMsg prints above the receipt body on the VSDC printout). Same
-      // 20-character contract as trdeNm/btmMsg — longer values are rejected
-      // with 910 — so send the most identifying seller line that fits: the
-      // seller TIN, else the seller phone, else the trade name.
+      // Seller company information, one line each (name, address, phone),
+      // printed above the receipt body on the VSDC printout. VSDC caps
+      // topMsg at 300 characters (910 "size must be between 0 and 300").
       topMsg: clampField(
-        org.TIN?.trim()
-          ? `TIN:${org.TIN.trim()}`
-          : org.phone?.trim()
-            ? `TEL:${org.phone.trim()}`
-            : org.name,
-        20,
+        [
+          sanitizeVsdcText(org.name),
+          sanitizeVsdcText(org.address),
+          org.phone?.trim() ? `Tel:${sanitizeVsdcText(org.phone)}` : '',
+        ].filter(Boolean).join('\n'),
+        300,
       ),
-      // The VSDC request contract limits this to 20 characters. Sending the
-      // longer friendly message caused valid sales to be rejected with 910 by
-      // the local RRA sandbox before fiscalisation could complete.
-      btmMsg: clampField('Thank you for your business', 20),
+      // VSDC caps btmMsg at 100 characters (910 "size must be between 0 and 100").
+      btmMsg: clampField('Thank you for your business', 100),
       prchrAcptcYn: 'N',
     },
     itemList,

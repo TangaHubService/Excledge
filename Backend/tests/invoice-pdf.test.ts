@@ -152,9 +152,10 @@ describe("per-tax-type sales totals (Total A/B/C/D)", () => {
     const drawn = await captureDrawnText(() => generateEbmInvoicePdf(bandFixture(), "A4"))
     const blob = drawn.join("\n")
     // R3 labels: exempt band as A-EX, taxed bands with their rate.
-    for (const label of ["Total A-EX Rwf", "Total B-18.00% Rwf", "Total C-0.00% Rwf", "Total D-0.00% Rwf"]) {
-      expect(blob).toMatch(new RegExp(label.replace(/[.*+%?^${}()|[\]\\]/g, "\\$&")))
+    for (const label of ["Total A-EX", "Total B-18.00%", "Total C-0.00%", "Total D-0.00%"]) {
+      expect(drawn).toContain(label)
     }
+    expect(blob).not.toMatch(/Rwf/i)
   })
 
   it("A4 omits unused bands but keeps B at zero sales", async () => {
@@ -162,8 +163,8 @@ describe("per-tax-type sales totals (Total A/B/C/D)", () => {
     invoice.items = invoice.items.filter((i) => i.taxCode === "B")
     const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))
     const blob = drawn.join("\n")
-    expect(blob).toMatch(/Total B-18\.00% Rwf/)
-    expect(blob).not.toMatch(/Total A-EX Rwf/)
+    expect(drawn).toContain("Total B-18.00%")
+    expect(blob).not.toMatch(/Total A-EX/)
     expect(blob).not.toMatch(/Total C-/)
     expect(blob).not.toMatch(/Total D-/)
   })
@@ -202,7 +203,7 @@ describe("no center stamp (designation lives in the header title only)", () => {
     expect(blob).not.toContain(NOT_FISCALIZED_TITLE)
   })
 
-  it("a COPY reprint prints the designation once (header title, no center stamp)", async () => {
+  it("a COPY reprint: title at the top only (no repeat before SDC INFORMATION), no center watermark", async () => {
     const invoice = normalOriginalFixture()
     invoice.invoice.isCopy = true
     expect(documentIndicator(invoice)).toBe("COPY")
@@ -210,7 +211,7 @@ describe("no center stamp (designation lives in the header title only)", () => {
     expect(drawn.filter((t) => t === "COPY")).toHaveLength(1)
   })
 
-  it("a fiscalized TRAINING original designates in the title only (no center stamp)", async () => {
+  it("a fiscalized TRAINING original: header title only (no repeat below the totals), no center stamp", async () => {
     const invoice = normalOriginalFixture()
     invoice.invoice.rcptLabel = "TS"
     invoice.invoice.receiptNumber = "12/9 TS"
@@ -219,9 +220,10 @@ describe("no center stamp (designation lives in the header title only)", () => {
     expect(documentIndicator(invoice)).toBe("TRAINING MODE")
     const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))
     expect(drawn.filter((t) => t === "TRAINING MODE")).toHaveLength(1)
+    expect(drawn.filter((t) => t === "TRAINING")).toHaveLength(0)
   })
 
-  it("a fiscalized PROFORMA original designates in the title only (no center stamp)", async () => {
+  it("a fiscalized PROFORMA original: title at the top and before SDC INFORMATION (spec 17.1), no center stamp", async () => {
     const invoice = normalOriginalFixture()
     invoice.invoice.isProforma = true
     invoice.invoice.rcptLabel = "PS"
@@ -230,7 +232,7 @@ describe("no center stamp (designation lives in the header title only)", () => {
     invoice.sdcInformation.rcptLabel = "PS"
     expect(documentIndicator(invoice)).toBe("PROFORMA")
     const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))
-    expect(drawn.filter((t) => t === "PROFORMA")).toHaveLength(1)
+    expect(drawn.filter((t) => t === "PROFORMA")).toHaveLength(2)
   })
 
   it("a NOT FISCALISED provisional document designates in the title only (no center stamp)", async () => {

@@ -136,6 +136,7 @@
     },
     "nav": {
         "expenses": "Dépenses",
+        "payroll": "Paie",
         "financeHeader": "FINANCES",
         "getStarted": "COMMENCER",
         "home": "Accueil",
@@ -937,6 +938,8 @@
         "fetchError": "Échec du chargement des paramètres de l'entreprise",
         "updateSuccess": "Paramètres de l'organisation mis à jour avec succès",
         "updateError": "Échec de la mise à jour des paramètres de l'organisation",
+        "mrcInvalid": "MRC (numéro de série EBM/VSDC) invalide. Il doit comporter 11 caractères au format BBBCCNNNNNN : 3 caractères développeur + 2 caractères certificat suivis de 6 chiffres de série.",
+        "mrcHint": "Format : BBBCCNNNNNN (11 caractères, tel que délivré par la RRA).",
         "avatarSuccess": "Avatar mis à jour avec succès",
         "avatarError": "Échec du téléchargement de l'avatar",
         "imageOnly": "Veuillez sélectionner un fichier image",

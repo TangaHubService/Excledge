@@ -140,6 +140,11 @@ export interface InvoiceInvoice {
   rcptLabelText?: string | null
   isProforma: boolean
   isCopy: boolean
+  /** CS (copy of an NS) or CR (copy of an NR) — set only on a CS/CR copy. */
+  copyLabel?: 'CS' | 'CR' | null
+  copyNumber?: number | null
+  /** The copied receipt's own VSDC counter, e.g. `168/258 NS`. */
+  copyOfReceiptNumber?: string | null
   /**
    * Set when this is a real sale downloaded before VSDC confirmed it
    * ("pending" — still syncing, or "failed" — permanently dead-lettered). The
@@ -147,6 +152,13 @@ export interface InvoiceInvoice {
    */
   notFiscalized?: 'pending' | 'failed' | null
   currency: string
+  /** Refunds: printed as REF. NORMAL RECEIPT# — the original sale's SDC `rcptNo` (e.g. `201`). */
+  originalReceiptNumber?: string | null
+  /** Refunds: the original sale's invcNo, submitted to VSDC as `orgInvcNo`. */
+  originalInvoiceNumber?: string | null
+  refundReason?: string | null
+  refundReasonCode?: string | null
+  refundRecipient?: string | null
 }
 
 export interface InvoiceFooterNote {

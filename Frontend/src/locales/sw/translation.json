@@ -136,6 +136,7 @@
     },
     "nav": {
         "expenses": "Matumizi",
+        "payroll": "Mishahara",
         "financeHeader": "FEDHA",
         "getStarted": "ANZA",
         "home": "Nyumbani",
@@ -1159,6 +1160,8 @@
         "fetchError": "Imeshindwa kupakia mipangilio ya kampuni",
         "updateSuccess": "Mipangilio ya shirika imesasishwa kwa mafanikio",
         "updateError": "Imeshindwa kusasisha mipangilio ya shirika",
+        "mrcInvalid": "MRC (nambari ya mfululizo ya EBM/VSDC) si sahihi. Lazima iwe na herufi 11 katika muundo BBBCCNNNNNN: herufi 3 za msanidi + 2 za cheti zikifuatiwa na tarakimu 6 za mfululizo.",
+        "mrcHint": "Muundo: BBBCCNNNNNN (herufi 11, kama ilivyotolewa na RRA).",
         "avatarSuccess": "Avatar imesasishwa kwa mafanikio",
         "avatarError": "Imeshindwa kupakia avatar",
         "imageOnly": "Tafadhali chagua faili ya picha",
