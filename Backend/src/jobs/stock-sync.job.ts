@@ -13,7 +13,7 @@ export const stockSyncJob = cron.schedule('*/5 * * * *', async () => {
   try {
     const result = await processStockSyncBatch(50);
     if (result.processed > 0) {
-      logger.info(`[STOCK-SYNC] processed=${result.processed} succeeded=${result.succeeded} failed=${result.failed}`);
+      logger.info(`[STOCK-SYNC] processed=${result.processed} succeeded=${result.succeeded} failed=${result.failed} deferred=${result.deferred}`);
     }
   } catch (e) {
     logger.error('[STOCK-SYNC] job failed', e);

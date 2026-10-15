@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { enqueueInventoryMovementAccountingEvent } from './accounting-outbox.service';
+import { acquireStockLock, queueStockSync } from './inventory-ledger.service';
 
 export interface CreateBatchParams {
   productId: number;
@@ -73,7 +74,8 @@ export async function createBatch(params: CreateBatchParams) {
     throw new Error(`Batch ${batchNumber} already exists for this product`);
   }
 
-  return await prisma.$transaction(async (tx) => {
+  const { batch, ledgerEntry } = await prisma.$transaction(async (tx) => {
+    await acquireStockLock(tx, organizationId, productId, branchId);
     // Create batch
     const batch = await tx.batch.create({
       data: {
@@ -126,6 +128,7 @@ export async function createBatch(params: CreateBatchParams) {
         batchNumber: batchNumber,
         expiryDate: expiryDate ? new Date(expiryDate) : null,
         note: `Batch ${batchNumber} created`,
+        ebmSyncStatus: 'PENDING',
       },
     });
     await enqueueInventoryMovementAccountingEvent(tx, ledgerEntry);
@@ -138,8 +141,11 @@ export async function createBatch(params: CreateBatchParams) {
       },
     });
 
-    return batch;
+    return { batch, ledgerEntry };
   });
+
+  queueStockSync(ledgerEntry);
+  return batch;
 }
 
 /**

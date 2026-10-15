@@ -15,6 +15,9 @@ import { getOrganizationSettings } from '../services/organization-settings.servi
 
 const STOCK_ADJUSTMENT_APPROVER_ROLES = ['ADMIN', 'BRANCH_MANAGER'];
 
+/** Ledger quantities are Decimal(15,3) — keep kg/litre fractions instead of truncating. */
+const parseStockQty = (v: unknown): number => Math.round(parseFloat(String(v)) * 1000) / 1000;
+
 /**
  * POST /inventory/in
  * Add stock to inventory (Stock IN)
@@ -64,7 +67,7 @@ export const addStockToInventory = async (req: AuthRequest, res: Response) => {
       organizationId,
       productId: parseInt(productId),
       userId,
-      quantity: parseInt(quantity),
+      quantity: parseStockQty(quantity),
       movementType,
       branchId: req.body.branchId ? parseInt(req.body.branchId) : null,
       warehouseId: warehouseId ? parseInt(warehouseId) : null,
@@ -136,7 +139,7 @@ export const removeStockFromInventory = async (req: AuthRequest, res: Response) 
       organizationId,
       productId: parseInt(productId),
       userId,
-      quantity: parseInt(quantity),
+      quantity: parseStockQty(quantity),
       movementType,
       branchId: req.body.branchId ? parseInt(req.body.branchId) : null,
       warehouseId: warehouseId ? parseInt(warehouseId) : null,

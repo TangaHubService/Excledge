@@ -791,11 +791,17 @@ interface CatalogProduct {
   name: string;
   itemCd?: string | null;
   sku?: string | null;
+  unitPrice?: number | string | null;
+  itemType?: string | null;
 }
 interface LineEdit {
   localNm: string;
   linkProductId: string;
+  sellingPrice: string;
+  expiryDate: string;
 }
+
+const priceOf = (p?: CatalogProduct) => (p?.unitPrice != null ? String(Number(p.unitPrice)) : "");
 
 function StockAndPurchasesCard() {
   const [stock, setStock] = useState<{ counts: Record<string, number>; failures: any[] } | null>(null);
@@ -824,7 +830,10 @@ function StockAndPurchasesCard() {
     try {
       const res = await apiClient.syncRraStock();
       const out = (res as any)?.data ?? res;
-      toast.success(`Stock sync: ${out?.succeeded ?? 0} sent, ${out?.failed ?? 0} failed`);
+      toast.success(
+        `Stock sync: ${out?.succeeded ?? 0} sent, ${out?.failed ?? 0} failed`
+          + (out?.deferred ? `, ${out.deferred} waiting for their sale invoice` : ""),
+      );
       await load();
     } catch (e: any) {
       toast.error(e?.message ?? "Stock sync failed");
@@ -836,7 +845,8 @@ function StockAndPurchasesCard() {
     try {
       const res = await apiClient.syncRraStockMoves();
       const out = (res as any)?.data ?? res;
-      toast.success(`Pulled ${out?.fetched ?? 0} stock movement(s) from RRA`);
+      toast.success(`Pulled ${out?.fetched ?? 0} stock movement(s) from RRA — ${out?.applied ?? 0} line(s) added to stock`);
+      await load();
     } catch (e: any) {
       toast.error(e?.message ?? "Stock-move pull failed");
     } finally { setBusy(null); }
@@ -858,8 +868,8 @@ function StockAndPurchasesCard() {
     setSelected(p);
     setRejecting(false);
     setRejectReason("");
-                setLineEdits(Object.fromEntries(
-      p.items.map((it) => [it.id, { localNm: it.itemNm ?? "", linkProductId: "__new__" }]),
+    setLineEdits(Object.fromEntries(
+      p.items.map((it) => [it.id, { localNm: it.itemNm ?? "", linkProductId: "__new__", sellingPrice: "", expiryDate: "" }]),
     ));
     if (p.status === "PENDING") {
       apiClient.getProducts({ page: 1, limit: 500 })
@@ -877,7 +887,12 @@ function StockAndPurchasesCard() {
                 (!!supplierNm && prod.name.trim().toLowerCase() === supplierNm),
               );
               if (match) {
-                next[it.id] = { localNm: cur.localNm || match.name, linkProductId: String(match.id) };
+                next[it.id] = {
+                  ...cur,
+                  localNm: cur.localNm || match.name,
+                  linkProductId: String(match.id),
+                  sellingPrice: cur.sellingPrice || priceOf(match),
+                };
               }
             }
             return next;
@@ -900,11 +915,14 @@ function StockAndPurchasesCard() {
             const linkId = edit?.linkProductId && edit.linkProductId !== "__new__"
               ? Number(edit.linkProductId)
               : undefined;
+            const sellingPrice = Number(edit?.sellingPrice);
             return {
               itemId: it.id,
               itemSeq: it.itemSeq,
               itemNm: edit?.localNm?.trim() || it.itemNm || undefined,
               linkProductId: linkId && Number.isFinite(linkId) ? linkId : undefined,
+              sellingPrice: Number.isFinite(sellingPrice) && sellingPrice > 0 ? sellingPrice : undefined,
+              expiryDate: edit?.expiryDate || undefined,
             };
           })
         : undefined;
@@ -924,7 +942,7 @@ function StockAndPurchasesCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Boxes className="size-4" /> Stock &amp; purchases</CardTitle>
         <CardDescription>
-          Non-sale stock movements are reported to the VSDC as stock in/out; B2B purchases issued to you are pulled from RRA and confirmed here.
+          Every stock movement, sales included, is reported to the VSDC as stock in/out; B2B purchases issued to you are pulled from RRA and confirmed here.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -942,9 +960,14 @@ function StockAndPurchasesCard() {
           </div>
         </div>
         {stock?.failures?.length ? (
-          <div className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
-            {stock.failures.slice(0, 3).map((f) => (
-              <div key={f.id}>{f.product?.name ?? `#${f.id}`} — {f.ebmError}</div>
+          <div className="max-h-48 space-y-1 overflow-auto rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+            <div className="font-medium">Stock movements RRA rejected ({sc.FAILED ?? stock.failures.length}) — fix the cause, then press “Sync stock now”:</div>
+            {stock.failures.map((f) => (
+              <div key={f.id}>
+                <span className="font-medium">{f.product?.name ?? `#${f.id}`}</span>
+                {" · "}{f.movementType} {f.direction === "OUT" ? "−" : "+"}{formatInt(Number(f.quantity))}
+                {" · "}{new Date(f.createdAt).toLocaleString()} — {f.ebmError}
+              </div>
             ))}
           </div>
         ) : null}
@@ -1019,13 +1042,13 @@ function StockAndPurchasesCard() {
 
               {selected.status === "PENDING" && (
                 <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                  You can rename each item to how it should appear in your inventory. The supplier&apos;s name is kept for RRA. Leave unmatched to create a new product, or link an existing one.
+                  You can rename each item to how it should appear in your inventory and set its selling price. The supplier&apos;s name is kept for RRA. Leave unmatched to create a new product, or link an existing one.
                 </p>
               )}
 
               <div className="max-h-[28rem] space-y-3 overflow-auto">
                 {selected.items.map((it) => {
-                  const edit = lineEdits[it.id] ?? { localNm: it.itemNm ?? "", linkProductId: "__new__" };
+                  const edit = lineEdits[it.id] ?? { localNm: it.itemNm ?? "", linkProductId: "__new__", sellingPrice: "", expiryDate: "" };
                   return (
                     <div key={it.id} className="rounded-lg border p-3">
                       <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
@@ -1061,6 +1084,7 @@ function StockAndPurchasesCard() {
                                 setLine(it.id, {
                                   linkProductId: value,
                                   localNm: value !== "__new__" && prod ? prod.name : edit.localNm,
+                                  sellingPrice: value !== "__new__" && prod ? priceOf(prod) : edit.sellingPrice,
                                 });
                               }}
                               placeholder="Create as a new product"
@@ -1068,12 +1092,37 @@ function StockAndPurchasesCard() {
                               emptyText="No matching products."
                               options={[
                                 { value: "__new__", label: "Create as a new product", emphasized: true },
-                                ...catalog.map((p) => ({
+                                ...catalog.filter((p) => p.itemType !== "SERVICE").map((p) => ({
                                   value: String(p.id),
                                   label: p.name,
                                   sublabel: p.itemCd ?? p.sku ?? undefined,
                                 })),
                               ]}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`sell-price-${it.id}`}>Selling price</Label>
+                            <Input
+                              id={`sell-price-${it.id}`}
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              inputMode="decimal"
+                              value={edit.sellingPrice}
+                              onChange={(e) => setLine(it.id, { sellingPrice: e.target.value })}
+                              placeholder={`Cost ${money(Number(it.prc))}`}
+                            />
+                            {Number(edit.sellingPrice) > 0 && Number(edit.sellingPrice) < Number(it.prc) && (
+                              <p className="text-xs text-amber-600">Below the purchase cost of {money(Number(it.prc))}.</p>
+                            )}
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`expiry-${it.id}`}>Expiry date (optional)</Label>
+                            <Input
+                              id={`expiry-${it.id}`}
+                              type="date"
+                              value={edit.expiryDate}
+                              onChange={(e) => setLine(it.id, { expiryDate: e.target.value })}
                             />
                           </div>
                         </div>
@@ -1149,6 +1198,10 @@ function ImportDeclarationsCard() {
   const [clsCd, setClsCd] = useState("");
   const [remark, setRemark] = useState("");
   const [rowBusy, setRowBusy] = useState(false);
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
+  const [linkProductId, setLinkProductId] = useState("");
+  const [sellingPrice, setSellingPrice] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -1179,15 +1232,38 @@ function ImportDeclarationsCard() {
     setAction({ line, kind });
     setClsCd(line.itemClsCd ?? "");
     setRemark("");
+    setLinkProductId("");
+    setSellingPrice("");
+    setExpiryDate("");
+    if (kind === "approve") {
+      apiClient.getProducts({ page: 1, limit: 500 })
+        .then((res) => {
+          const items = parseInventoryGetProductsResponse(res).items as CatalogProduct[];
+          setCatalog(items);
+          const nm = (line.itemNm ?? "").trim().toLowerCase();
+          const match = nm ? items.find((p) => p.name.trim().toLowerCase() === nm) : undefined;
+          if (match) {
+            setLinkProductId(String(match.id));
+            setSellingPrice(priceOf(match));
+          }
+        })
+        .catch(() => setCatalog([]));
+    }
   };
 
   const submitAction = async () => {
     if (!action) return;
+    const approve = action.kind === "approve";
+    const linkId = Number(linkProductId);
+    const price = Number(sellingPrice);
     setRowBusy(true);
     try {
       await apiClient.actionRraImport(action.line.id, action.kind, {
-        itemClsCd: action.kind === "approve" ? clsCd || undefined : undefined,
+        itemClsCd: approve ? clsCd || undefined : undefined,
         remark: remark || undefined,
+        linkProductId: approve && linkId > 0 ? linkId : undefined,
+        sellingPrice: approve && price > 0 ? price : undefined,
+        expiryDate: approve && expiryDate ? expiryDate : undefined,
       });
       toast.success(action.kind === "approve" ? "Import line approved with RRA" : "Import line rejected");
       setImports((prev) => prev.map((x) => (x.id === action.line.id ? { ...x, status: action.kind === "approve" ? "APPROVED" : "REJECTED" } : x)));
@@ -1274,7 +1350,58 @@ function ImportDeclarationsCard() {
                 {action.line.itemNm} — declaration {action.line.dclNo ?? action.line.taskCd}, line {action.line.itemSeq}
               </p>
               {action.kind === "approve" && (
-                <RraItemClassPicker value={clsCd} onChange={setClsCd} />
+                <>
+                  <RraItemClassPicker
+                    value={clsCd}
+                    onChange={setClsCd}
+                    required={!linkProductId && !action.line.itemClsCd}
+                  />
+                  {!clsCd && !!linkProductId && (
+                    <p className="text-xs text-muted-foreground">Left empty, the receiving product's RRA classification is used.</p>
+                  )}
+                  <div className="space-y-1.5">
+                    <Label>Receive into product</Label>
+                    <SearchableSelect
+                      value={linkProductId}
+                      onChange={(value) => {
+                        setLinkProductId(value);
+                        const prod = catalog.find((p) => String(p.id) === value);
+                        if (prod) setSellingPrice(priceOf(prod));
+                      }}
+                      placeholder="Pick the product that receives this stock"
+                      searchPlaceholder="Search your products..."
+                      emptyText="No matching products."
+                      options={catalog.filter((p) => p.itemType !== "SERVICE").map((p) => ({
+                        value: String(p.id),
+                        label: p.name,
+                        sublabel: p.itemCd ?? p.sku ?? undefined,
+                      }))}
+                    />
+                    {!linkProductId && (
+                      <p className="text-xs text-amber-600">Without a product, RRA is updated but no stock is added locally.</p>
+                    )}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="imp-sell-price">Selling price</Label>
+                      <Input
+                        id="imp-sell-price"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        value={sellingPrice}
+                        onChange={(e) => setSellingPrice(e.target.value)}
+                        placeholder="Keep current price"
+                        disabled={!linkProductId}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="imp-expiry">Expiry date <span className="text-muted-foreground">(optional)</span></Label>
+                      <Input id="imp-expiry" type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+                    </div>
+                  </div>
+                </>
               )}
               <div className="space-y-1.5">
                 <Label htmlFor="imp-remark">Remark <span className="text-muted-foreground">(optional)</span></Label>

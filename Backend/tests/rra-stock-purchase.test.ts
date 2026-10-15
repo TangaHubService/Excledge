@@ -6,6 +6,7 @@ let stockMasterArgs: any = null
 let savePurchasePayload: any = null
 const ledgerUpdates: any[] = []
 const addStockCalls: any[] = []
+const sellingPriceCalls: any[] = []
 
 vi.mock("../src/lib/prisma", () => {
   const purchase = {
@@ -26,8 +27,7 @@ vi.mock("../src/lib/prisma", () => {
         dcRt: null, dcAmt: null, taxTyCd: "B", taxblAmt: { toNumber: () => 1000 }, taxAmt: { toNumber: () => 180 }, totAmt: { toNumber: () => 1180 } },
     ],
   }
-  return {
-    prisma: {
+  const prisma: any = {
       rraSyncCursor: { findUnique: vi.fn(async () => null), upsert: vi.fn(async () => ({})) },
       rraPurchase: {
         findFirst: vi.fn(async () => purchase),
@@ -69,9 +69,10 @@ vi.mock("../src/lib/prisma", () => {
         create: vi.fn(async (a: any) => ({ id: 99, name: a.data.name, itemCd: a.data.itemCd })),
         update: vi.fn(async (a: any) => ({ id: a.where.id, name: a.data.name ?? "Widget", itemCd: "RW2CTU0000001" })),
       },
-      $transaction: vi.fn(async (ops: any[]) => Promise.all(ops)),
-    },
+      $executeRaw: vi.fn(async () => 0),
+      $transaction: vi.fn(async (ops: any) => (typeof ops === "function" ? ops(prisma) : Promise.all(ops))),
   }
+  return { prisma }
 })
 
 vi.mock("../src/services/rra-ebm.service", async () => {
@@ -97,6 +98,7 @@ vi.mock("../src/services/item-code.service", async () => {
 
 vi.mock("../src/services/product-sync.service", () => ({
   syncProductToRra: vi.fn(async () => ({ success: true })),
+  applySellingPriceOnReceipt: vi.fn(async (...args: any[]) => { sellingPriceCalls.push(args) }),
 }))
 
 vi.mock("../src/services/vsdc-api.service", async () => {
@@ -120,6 +122,7 @@ beforeEach(() => {
   savePurchasePayload = null
   ledgerUpdates.length = 0
   addStockCalls.length = 0
+  sellingPriceCalls.length = 0
 })
 
 describe("sarTyCdFor (§4.19 stock in/out reason)", () => {
@@ -224,5 +227,24 @@ describe("confirmRraPurchase (§71)", () => {
     })
     expect(r.success).toBe(true)
     expect(addStockCalls[0].productId).toBe(5)
+  })
+
+  it("applies the operator's selling price and expiry date when accepting stock", async () => {
+    const r = await confirmRraPurchase(1, 7, {
+      userId: 3,
+      branchId: 4,
+      items: [{ itemSeq: 1, linkProductId: 5, sellingPrice: 1500, expiryDate: new Date("2027-03-31T00:00:00Z") }],
+    })
+    expect(r.success).toBe(true)
+    expect(sellingPriceCalls).toEqual([[1, 5, 1500, 3]])
+    expect(savePurchasePayload.itemList[0].itemExprDt).toBe("20270331")
+    expect(addStockCalls[0].expiryDate).toEqual(new Date("2027-03-31T00:00:00Z"))
+  })
+
+  it("leaves the selling price alone when none is given", async () => {
+    const r = await confirmRraPurchase(1, 7, { userId: 3, branchId: 4 })
+    expect(r.success).toBe(true)
+    expect(sellingPriceCalls).toEqual([[1, 5, undefined, 3]])
+    expect(savePurchasePayload.itemList[0].itemExprDt).toBeNull()
   })
 })
