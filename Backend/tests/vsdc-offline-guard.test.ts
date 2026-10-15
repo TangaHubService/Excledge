@@ -35,7 +35,7 @@ describe("verifyVsdcOnlineStatus — offline guard", () => {
     await expect(verifyVsdcOnlineStatus(2)).rejects.toThrow(/Receipt generation is blocked/)
   })
 
-  it("does NOT block a training-mode org even with stale contact", async () => {
+  it("blocks a training-mode org with stale contact too (TS/TR go through VSDC)", async () => {
     orgRow = {
       lastSuccessfulVdsContact: new Date(Date.now() - 60 * HOUR),
       trainingMode: true,
@@ -43,7 +43,7 @@ describe("verifyVsdcOnlineStatus — offline guard", () => {
       ebmSerialNo: "MRC1",
       branches: [{ id: 3 }],
     }
-    await expect(verifyVsdcOnlineStatus(2)).resolves.toBe(true)
+    await expect(verifyVsdcOnlineStatus(2)).rejects.toThrow(/Receipt generation is blocked/)
   })
 
   it("does NOT block an org with no VSDC device configured anywhere", async () => {

@@ -6,12 +6,19 @@ import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table';
-import { ArrowLeft, Loader2, Printer, Download, Share2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Printer, Download, Share2, Copy } from 'lucide-react';
 import { apiClient } from '../../../lib/api-client';
 import { toast } from 'react-toastify';
 import { saveAs } from 'file-saver';
 import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice';
-import { getInvoicePdfBlob, shareInvoicePdf, type InvoicePdfFormat } from '../../../lib/invoice-pdf';
+import {
+    canCopyReceipt,
+    downloadReceiptCopy,
+    issueInvoicePdfBlob,
+    printReceiptCopy,
+    shareInvoicePdf,
+    type InvoicePdfFormat,
+} from '../../../lib/invoice-pdf';
 import type { SaleEbmTransaction } from '../../../utils/invoiceFiscal';
 import { Badge } from '../../../components/ui/badge';
 
@@ -36,6 +43,9 @@ type Sale = {
     taxableAmount?: string;
     createdAt: string;
     status: string;
+    rcptLabel?: string | null;
+    isProforma?: boolean;
+    originalSaleId?: number | null;
     saleItems: Array<{
         id: string;
         product: {
@@ -73,6 +83,7 @@ export default function SaleDetailsPage() {
     const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
     const [isPrintingInvoice, setIsPrintingInvoice] = useState(false);
     const [isSharingInvoice, setIsSharingInvoice] = useState(false);
+    const [isCopying, setIsCopying] = useState<'print' | 'download' | null>(null);
     // Named distinctly from date-fns's `format` (imported above) to avoid shadowing it.
     const [invoiceFormat, setInvoiceFormat] = useState<InvoicePdfFormat>('A4');
 
@@ -121,12 +132,27 @@ export default function SaleDetailsPage() {
     const buildInvoicePdfBlob = async () => {
         if (!id) throw new Error('Sale ID is missing');
 
-        await apiClient.reprintSale(id);
+        const blob = await issueInvoicePdfBlob(id, invoiceFormat);
         const invoice = unwrapInvoice(await apiClient.getInvoice(id, { allowPending: true }));
         if (!invoice) throw new Error('Invoice was not returned by the backend.');
-
-        const blob = await getInvoicePdfBlob(id, invoiceFormat);
         return { blob, invoice };
+    };
+
+    /** CS/CR: explicit copy of this NS/NR receipt with its original VSDC fiscal data. */
+    const handleReceiptCopy = async (mode: 'print' | 'download') => {
+        if (!id) return;
+        setIsCopying(mode);
+        try {
+            const label = mode === 'print'
+                ? await printReceiptCopy(id, invoiceFormat)
+                : await downloadReceiptCopy(id, invoiceFormat);
+            toast.success(`${label ?? 'Copy'} receipt ${mode === 'print' ? 'sent to the printer' : 'downloaded'}`);
+        } catch (error) {
+            console.error('Failed to produce receipt copy:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to produce the receipt copy');
+        } finally {
+            setIsCopying(null);
+        }
     };
 
     // Helper function to get payment method translation
@@ -369,6 +395,27 @@ export default function SaleDetailsPage() {
                         )}
                         Share Invoice
                     </Button>
+                    {canCopyReceipt(sale) && (['print', 'download'] as const).map((mode) => (
+                        <Button
+                            key={mode}
+                            onClick={() => handleReceiptCopy(mode)}
+                            disabled={isCopying !== null}
+                            variant="outline"
+                            size="sm"
+                            title="Reprint this receipt as a COPY (CS for a sale, CR for a refund) with its original fiscal data"
+                            className={theme === 'dark'
+                                ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700 hover:text-white'
+                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                            }
+                        >
+                            {isCopying === mode ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                                <Copy className="h-4 w-4 mr-2" />
+                            )}
+                            {mode === 'print' ? 'Print Copy' : 'Download Copy'} ({sale.rcptLabel === 'NR' || (!sale.rcptLabel && sale.originalSaleId != null) ? 'CR' : 'CS'})
+                        </Button>
+                    ))}
                 </div>
             </div>
 

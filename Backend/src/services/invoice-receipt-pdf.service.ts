@@ -1,9 +1,9 @@
 import PDFDocument from "pdfkit"
 import type { RenderInvoicePayload } from "./invoice-render.service"
-import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, groupFiscalValue } from "./invoice-format.service"
+import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, formatItemTaxLabel, formatReceiptQuantity, groupFiscalValue } from "./invoice-format.service"
 import { getOrganizationLogo, getRraCertificationLogo } from "./invoice-logo.service"
 import { NOT_FISCALIZED_NOTICE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_NOTICE, SYSTEM_FOOTER } from "./system-branding.service"
-import { dataUrlBuffer, documentIndicator, isFormalNoticeIndicator, isRefundTransaction, safe, bandSalesLabel, salesBands, taxBandRows, taxGroups } from "./invoice-pdf.service"
+import { dataUrlBuffer, documentIndicator, headerIndicator, isCopyDocument, isFormalNoticeIndicator, isProformaDocument, isRefundTransaction, isTrainingDocument, printsQrCode, refundReferenceLine, safe, bandSalesLabel, salesBands, sdcDesignation, taxBandRows, taxGroups, transactionSubTitle } from "./invoice-pdf.service"
 
 /**
  * Narrow, continuous "thermal roll" layout for 80mm POS printers — the
@@ -25,6 +25,8 @@ const FONT_BOLD = "Courier-Bold"
 // Generous scratch height for the measuring pass; the real page is sized to
 // the exact content height this pass reports.
 const MEASURE_HEIGHT = 4000
+// CIS §11: TRAINING designation/notice at least twice the amount text (6.2 pt).
+const TRAINING_TEXT_SIZE = 13
 
 function dashedLine(doc: PDFKit.PDFDocument, y: number): void {
   doc.moveTo(CONTENT_LEFT, y).lineTo(CONTENT_RIGHT, y).dash(1.5, { space: 1.2 }).stroke().undash()
@@ -36,12 +38,24 @@ function centeredText(doc: PDFKit.PDFDocument, text: string, y: number, bold = f
   return y + doc.heightOfString(text, { width: CONTENT_WIDTH }) + 1
 }
 
-/** Left-aligned label + right-aligned value on the same line, like a receipt column pair. */
+/**
+ * Left-aligned label + right-aligned value on the same line, like a receipt
+ * column pair. When the value is too wide to share the line (very large
+ * totals), the value drops to its own right-aligned line instead of
+ * overprinting the label.
+ */
 function labelValueLine(doc: PDFKit.PDFDocument, label: string, value: string, y: number, bold = false): number {
   doc.font(bold ? FONT_BOLD : FONT).fontSize(6.2)
-  doc.text(label, CONTENT_LEFT, y, { width: CONTENT_WIDTH * 0.55, align: "left" })
+  const labelWidth = CONTENT_WIDTH - doc.widthOfString(value) - 6
+  if (labelWidth >= CONTENT_WIDTH * 0.35) {
+    doc.text(label, CONTENT_LEFT, y, { width: labelWidth, align: "left" })
+    doc.text(value, CONTENT_LEFT, y, { width: CONTENT_WIDTH, align: "right" })
+    return y + Math.max(doc.heightOfString(label, { width: labelWidth }), 8) + 1
+  }
+  doc.text(label, CONTENT_LEFT, y, { width: CONTENT_WIDTH, align: "left" })
+  y += Math.max(doc.heightOfString(label, { width: CONTENT_WIDTH }), 8) + 1
   doc.text(value, CONTENT_LEFT, y, { width: CONTENT_WIDTH, align: "right" })
-  return y + Math.max(doc.heightOfString(label, { width: CONTENT_WIDTH * 0.55 }), 8) + 1
+  return y + Math.max(doc.heightOfString(value, { width: CONTENT_WIDTH }), 8) + 1
 }
 
 function wrappedLine(doc: PDFKit.PDFDocument, text: string, y: number, size = 6.2): number {
@@ -94,28 +108,32 @@ function drawReceipt(
   y = centeredText(doc, `TIN: ${safe(data.company.tin, "-")}`, y)
 
   const indicator = documentIndicator(data)
-  if (indicator) {
+  const title = headerIndicator(data)
+  const isTraining = isTrainingDocument(data)
+  if (title) {
     y += 2
-    // CIS §11: designation COPY/TRAINING/PROFORMA must dominate amount text.
-    y = centeredText(doc, indicator, y, true, 12)
+    // CIS §11: designation TRAINING/PROFORMA must dominate amount text.
+    y = centeredText(doc, title, y, true, isTraining ? TRAINING_TEXT_SIZE : 12)
   }
+  const subTitle = transactionSubTitle(data)
+  if (subTitle) y = centeredText(doc, subTitle, y, true, 8)
   // Real sale printed before VSDC confirmed it — spell out that the slip is
   // provisional right under the NOT FISCALISED title.
   if (data.invoice.notFiscalized) {
     y = centeredText(doc, NOT_FISCALIZED_NOTICE, y, true, 6)
   }
-  // A copied refund (watermark title "COPY") is still a refund and keeps its
+  // A copied refund (COPY watermark) is still a refund and keeps its
   // reference to the original sale, independent of which title printed above.
   if (isRefundTransaction(data)) {
-    if (data.invoice.originalReceiptNumber) {
-      y = centeredText(doc, `REF. NORMAL RECEIPT#: ${safe(data.invoice.originalReceiptNumber)}`, y)
-    }
-    y = centeredText(doc, REFUND_NOTICE, y, true)
+    const refLine = refundReferenceLine(data)
+    if (refLine) y = centeredText(doc, refLine, y)
   }
 
   y += 2
   dashedLine(doc, y)
   y += 5
+  // Spec 14.1/15.1: the approval notice opens the client section.
+  if (isRefundTransaction(data)) y = centeredText(doc, REFUND_NOTICE, y, true)
   // RRA checklist §35: TIN, name, and mobile contact must always be shown,
   // labels included even when a field is blank — never drop the whole line.
   y = centeredText(doc, `Client: ${safe(data.customer.name)}`, y)
@@ -127,8 +145,9 @@ function drawReceipt(
 
   for (const item of data.items) {
     y = wrappedLine(doc, safe(item.description, "-"), y, 6.3)
-    const taxSuffix = safe(item.taxCode)
-    const priceLine = `${formatInvoiceAmount(item.unitPrice)}x ${formatInvoiceQuantity(item.quantity)}`
+    const taxSuffix = formatItemTaxLabel(safe(item.taxCode))
+    // Spec 14.1: on a refund only the total is negative ("9000.00x 5.354 -48186.00B").
+    const priceLine = `${formatInvoiceAmount(item.unitPrice)}x ${formatReceiptQuantity(Math.abs(item.quantity))}`
     const totalLine = `${formatInvoiceAmount(item.subtotal)}${taxSuffix}`
     y = labelValueLine(doc, priceLine, totalLine, y)
     if (item.discountPct > 0) {
@@ -139,6 +158,15 @@ function drawReceipt(
   y += 2
   dashedLine(doc, y)
   y += 5
+  const requiresNotice = isFormalNoticeIndicator(indicator) || !data.certification.isCertified
+  if (requiresNotice) {
+    // Spec 15.1/16.1/17.1: the notice sits between the items and TOTAL.
+    // CIS §11: at least twice the amount-line size (~6.2 pt → ≥ 12.4 pt).
+    y = centeredText(doc, NOT_OFFICIAL_RECEIPT_NOTICE, y, true, isTraining ? TRAINING_TEXT_SIZE : 12.4)
+    y += 2
+    dashedLine(doc, y)
+    y += 5
+  }
 
   const currency = safe(data.invoice.currency || data.company.currency, "RWF")
   const currencyLabel = currency.toUpperCase() === "RWF" ? "" : ` ${currency.toUpperCase()}`
@@ -164,40 +192,43 @@ function drawReceipt(
   y += 5
   // R1: every means of payment prints with its amount. Split tenders print
   // one row each; otherwise the single payment-type line (legacy behavior).
-  const payLines = data.payment.lines?.length
-    ? data.payment.lines.map((l) => ({ label: l.label, amount: l.amount }))
-    : [{ label: safe(data.invoice.paymentMethod, "CASH"), amount: data.totals.grandTotal }]
-  for (const pl of payLines) {
-    y = labelValueLine(doc, safe(pl.label, "CASH").toUpperCase(), formatInvoiceAmount(pl.amount), y)
+  // A proforma (spec 17.1) prints neither payment nor ITEMS NUMBER.
+  if (!isProformaDocument(data)) {
+    const payLines = data.payment.lines?.length
+      ? data.payment.lines.map((l) => ({ label: l.label, amount: l.amount }))
+      : [{ label: safe(data.invoice.paymentMethod, "CASH"), amount: data.totals.grandTotal }]
+    for (const pl of payLines) {
+      y = labelValueLine(doc, safe(pl.label, "CASH").toUpperCase(), formatInvoiceAmount(pl.amount), y)
+    }
+    y = labelValueLine(doc, "ITEMS NUMBER", String(data.items.length), y)
+    y += 2
+    dashedLine(doc, y)
+    y += 6
   }
-  y = labelValueLine(doc, "ITEMS NUMBER", String(data.items.length), y)
-  y += 2
-  dashedLine(doc, y)
-  y += 6
 
-  const requiresNotice = isFormalNoticeIndicator(indicator) || !data.certification.isCertified
-  if (requiresNotice) {
-    // CIS §11: at least twice the amount-line size (~6.2 pt → ≥ 12.4 pt).
-    y = centeredText(doc, NOT_OFFICIAL_RECEIPT_NOTICE, y, true, 12.4)
-    y += 3
+  const designation = sdcDesignation(data)
+  if (designation) {
+    // Spec 15.1/16.1/17.1: COPY / TRAINING MODE / PROFORMA again right
+    // before SDC INFORMATION, then a divider.
+    y = centeredText(doc, designation, y, true, isTraining ? TRAINING_TEXT_SIZE : 12)
+    y += 2
+    dashedLine(doc, y)
+    y += 5
   }
 
   const sdc = data.sdcInformation
-  // RRA sample: "SDC INFORMATION" heading, then one divider, then fiscal fields.
-  // CIS branding (SYSTEM_FOOTER) prints once more at the very bottom.
-  // Do not reprint COPY here — it already appears at the top / as watermark.
+  // Spec samples: "SDC INFORMATION" heading directly followed by the fiscal
+  // fields. CIS branding (SYSTEM_FOOTER) prints once more at the very bottom.
   y = centeredText(doc, "SDC INFORMATION", y, true, 5.6)
   y += 1
-  dashedLine(doc, y)
-  y += 3
 
   const sdcDate = formatInvoiceDateTime(sdc.sdcDateTime || sdc.date || data.invoice.invoiceDate)
   const sdcReceiptNo = safe(sdc.receiptNumber) || safe(data.invoice.receiptNumber)
   if (sdcDate.date || sdcDate.time) {
-    y = wrappedLine(doc, `Date: ${sdcDate.date}   ${sdcDate.time}`, y)
+    y = wrappedLine(doc, `Date: ${sdcDate.date} Time: ${sdcDate.time}`, y)
   }
-  if (sdc.sdcId) y = wrappedLine(doc, `SDC ID : ${safe(sdc.sdcId)}`, y)
-  if (sdcReceiptNo) y = wrappedLine(doc, `RECEIPT NUMBER : ${sdcReceiptNo}`, y)
+  if (sdc.sdcId) y = wrappedLine(doc, `SDC ID: ${safe(sdc.sdcId)}`, y)
+  if (sdcReceiptNo) y = wrappedLine(doc, `RECEIPT NUMBER: ${sdcReceiptNo}`, y)
   if (sdc.internalData) {
     y = wrappedLine(doc, `Internal Data:${groupFiscalValue(sdc.internalData)}`, y)
   }
@@ -205,7 +236,7 @@ function drawReceipt(
     y = wrappedLine(doc, `Receipt Signature:${groupFiscalValue(sdc.receiptSignature)}`, y)
   }
 
-  const qr = dataUrlBuffer(data.verification.qrCodeImage)
+  const qr = printsQrCode(data) ? dataUrlBuffer(data.verification.qrCodeImage) : null
   if (qr) {
     y += 3
     try {
@@ -222,13 +253,13 @@ function drawReceipt(
   // Bottom block matches RRA sample: plain CIS/VSDC sequence under
   // "RECEIPT NUMBER" (e.g. "RECEIPT NUMBER:8"), distinct from the SDC
   // counter pair printed above ("1190/1190 NS").
-  y = wrappedLine(doc, `RECEIPT NUMBER:${safe(data.invoice.invoiceNumber, "-")}`, y)
+  y = wrappedLine(doc, `RECEIPT NUMBER: ${safe(data.invoice.invoiceNumber, "-")}`, y)
   const invoiceDate = formatInvoiceDateTime(data.invoice.invoiceDate)
   if (invoiceDate.date || invoiceDate.time) {
-    y = wrappedLine(doc, `Date : ${invoiceDate.date}   ${invoiceDate.time}`, y)
+    y = wrappedLine(doc, `DATE: ${invoiceDate.date} TIME: ${invoiceDate.time}`, y)
   }
   const mrc = safe(sdc.mrcNo) || safe(data.company.mrc)
-  if (mrc) y = wrappedLine(doc, `MRC : ${mrc}`, y)
+  if (mrc) y = wrappedLine(doc, `MRC: ${mrc}`, y)
 
   y += 3
   dashedLine(doc, y)

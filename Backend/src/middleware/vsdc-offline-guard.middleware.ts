@@ -2,11 +2,15 @@ import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import { error as apiError } from '../utils/apiResponse';
 
-// C11: configurable offline block threshold (default 2h per RRA operational guidance)
-// Set VSDC_OFFLINE_BLOCK_MS in .env to override (e.g. "86400000" for legacy 24h behaviour)
-const VSDC_OFFLINE_BLOCK_MS  = Number(process.env.VSDC_OFFLINE_BLOCK_MS  ?? 2 * 60 * 60 * 1000);
-// Warn at 80% of the block threshold
-const VSDC_OFFLINE_WARN_MS   = Math.floor(VSDC_OFFLINE_BLOCK_MS * 0.8);
+// C11: offline block threshold. The VSDC stops issuing receipt numbers after
+// 24 hours without internet (2023 spec §2.2), so the CIS blocks new receipt
+// generation past the same window — the guard mirrors the device, it does not
+// invent a stricter one. Override with VSDC_OFFLINE_BLOCK_MS in .env.
+// (A previous 2h default was stricter than the spec with no basis in it.)
+// Read lazily (not at module load) so tests and process env changes apply.
+function getOfflineBlockMs(): number {
+  return Number(process.env.VSDC_OFFLINE_BLOCK_MS ?? 24 * 60 * 60 * 1000);
+}
 
 /**
  * Check whether the VSDC has been reachable within the configured window.
@@ -20,7 +24,6 @@ export async function verifyVsdcOnlineStatus(organizationId: number): Promise<bo
     where: { id: organizationId },
     select: {
       lastSuccessfulVdsContact: true,
-      trainingMode: true,
       ebmDeviceId: true,
       ebmSerialNo: true,
       branches: {
@@ -35,10 +38,8 @@ export async function verifyVsdcOnlineStatus(organizationId: number): Promise<bo
     throw Object.assign(new Error('Organization not found'), { statusCode: 404 });
   }
 
-  // Training mode never talks to the VSDC — a stale heartbeat must not block it.
-  if (org.trainingMode) {
-    return true;
-  }
+  // Training receipts (TS/TR) go through the VSDC like every other type
+  // (CIS §6/§22), so training mode gets no exemption here.
 
   // No VSDC device configured anywhere (org or branch) — there is nothing to
   // be "offline" from. Fiscalisation itself still fails/queues per sale; the
@@ -55,6 +56,8 @@ export async function verifyVsdcOnlineStatus(organizationId: number): Promise<bo
   }
 
   const elapsed = Date.now() - lastContact.getTime();
+  const VSDC_OFFLINE_BLOCK_MS = getOfflineBlockMs();
+  const VSDC_OFFLINE_WARN_MS = Math.floor(VSDC_OFFLINE_BLOCK_MS * 0.8);
   const blockHours = Math.round(VSDC_OFFLINE_BLOCK_MS / (60 * 60 * 1000));
 
   if (elapsed >= VSDC_OFFLINE_BLOCK_MS) {

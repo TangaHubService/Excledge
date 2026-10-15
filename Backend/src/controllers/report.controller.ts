@@ -9,6 +9,8 @@ import { buildVsdcEnvelope, checkZReport } from "../services/vsdc-api.service"
 import { isEbmEnabled } from "../services/rra-ebm.service"
 import { getTaxRatesBySlot } from "../services/rra-code.service"
 import { aggregateSalesLegs, splitReportSales } from "../services/daily-report-aggregate.service"
+import { excludeTrainingReceipts } from "../services/training-mode.service"
+import { resolveReportMrc } from "../utils/mrc"
 import {
   renderDailyReportPdf,
   renderPluReportPdf,
@@ -34,6 +36,7 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
     } = req.query;
 
     const where: any = {
+      ...excludeTrainingReceipts({}),
       organizationId,
       ...buildBranchFilter(req),
       ...(startDate && endDate && startDate !== 'undefined' && endDate !== 'undefined' && (() => {
@@ -355,10 +358,16 @@ export const getPluReportPdf = async (req: BranchAuthRequest, res: Response) => 
       where: { id: organizationId },
       select: { name: true, TIN: true, address: true, ebmSerialNo: true, ebmDeviceId: true },
     });
+    const pluBranch = req.selectedBranchId != null && req.selectedBranchId > 0
+      ? await prisma.branch.findFirst({
+          where: { id: req.selectedBranchId, organizationId },
+          select: { ebmSerialNo: true, ebmInitInfo: true },
+        })
+      : null;
     const header: FiscalReportHeader = {
       orgName: org?.name ?? '',
       tin: org?.TIN ?? null,
-      mrcNo: org?.ebmSerialNo ?? null,
+      mrcNo: resolveReportMrc(pluBranch, org),
       sdcId: org?.ebmDeviceId ?? null,
       branchName: null,
       bhfId: null,
@@ -718,7 +727,7 @@ export const exportReport = async (req: BranchAuthRequest, res: Response) => {
     switch (reportType) {
       case "sales":
         const sales = await prisma.sale.findMany({
-          where,
+          where: excludeTrainingReceipts(where),
           include: {
             customer: true,
             saleItems: {
@@ -1028,11 +1037,11 @@ export const getDebtPaymentsReport = async (req: BranchAuthRequest, res: Respons
 
     // Get total remaining debt from Sales (more accurate than Customer balance)
     const salesWithDebt = await prisma.sale.aggregate({
-      where: {
+      where: excludeTrainingReceipts({
         organizationId,
         debtAmount: { gt: 0 },
         status: { not: 'CANCELLED' } // Ensure cancelled sales don't count
-      },
+      }),
       _sum: {
         debtAmount: true
       }
@@ -1204,11 +1213,11 @@ async function calculateOpeningBalance(organizationId: number, startDate: Date):
   const [salesAgg, debtPayAgg, supplierPayAgg, refundedAgg, partialRefundAgg, expenseAgg] =
     await Promise.all([
       prisma.sale.aggregate({
-        where: {
+        where: excludeTrainingReceipts({
           organizationId,
           createdAt: { lt: startDate },
           status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] },
-        },
+        }),
         _sum: { cashAmount: true },
       }),
       prisma.debtPayment.aggregate({
@@ -1220,19 +1229,19 @@ async function calculateOpeningBalance(organizationId: number, startDate: Date):
         _sum: { amount: true },
       }),
       prisma.sale.aggregate({
-        where: {
+        where: excludeTrainingReceipts({
           organizationId,
           status: 'REFUNDED',
           refundedAt: { lt: startDate, not: null },
-        },
+        }),
         _sum: { cashAmount: true },
       }),
       prisma.sale.aggregate({
-        where: {
+        where: excludeTrainingReceipts({
           organizationId,
           status: 'PARTIALLY_REFUNDED',
           refundedAt: { lt: startDate, not: null },
-        },
+        }),
         _sum: { cashAmount: true },
       }),
       prisma.expense.aggregate({
@@ -1262,11 +1271,11 @@ async function getCashInflows(organizationId: number, start: Date, end: Date) {
 
   // 1. Sales (Cash received from customers)
   const sales = await prisma.sale.findMany({
-    where: {
+    where: excludeTrainingReceipts({
       organizationId,
       createdAt: { gte: start, lte: end },
       status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] }
-    },
+    }),
     orderBy: { createdAt: 'asc' }
   });
 
@@ -1345,11 +1354,11 @@ async function getCashOutflows(organizationId: number, start: Date, end: Date) {
 
   // 2. Refunds (Money returned to customers)
   const refundedSales = await prisma.sale.findMany({
-    where: {
+    where: excludeTrainingReceipts({
       organizationId,
       status: { in: ['REFUNDED', 'PARTIALLY_REFUNDED'] },
       refundedAt: { gte: start, lte: end, not: null }
-    },
+    }),
     orderBy: { refundedAt: 'asc' }
   });
 
@@ -1709,7 +1718,7 @@ async function buildDailyReport(
     targetBranchId != null
       ? prisma.branch.findUnique({
           where: { id: targetBranchId },
-          select: { name: true, bhfId: true, ebmSerialNo: true, ebmDeviceId: true, address: true },
+          select: { name: true, bhfId: true, ebmSerialNo: true, ebmDeviceId: true, ebmInitInfo: true, address: true },
         })
       : Promise.resolve(null),
     prisma.sale.findMany({
@@ -1722,7 +1731,7 @@ async function buildDailyReport(
       include: {
         saleItems: { select: { taxCode: true, taxAmount: true, totalPrice: true, quantity: true, dcAmt: true, product: { select: { category: true } } } },
         ebmTransactions: {
-          where: { submissionStatus: 'SUCCESS' },
+          where: { submissionStatus: 'SUCCESS', operation: { not: 'COPY' } },
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
@@ -1759,7 +1768,7 @@ async function buildDailyReport(
   const header: FiscalReportHeader = {
     orgName: org?.name ?? '',
     tin: org?.TIN ?? null,
-    mrcNo: branch?.ebmSerialNo ?? org?.ebmSerialNo ?? null,
+    mrcNo: resolveReportMrc(branch, org),
     sdcId: branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null,
     branchName: branch?.name ?? null,
     bhfId: branch?.bhfId ?? null,
@@ -1935,9 +1944,11 @@ export const getDailyReportPdf = async (req: BranchAuthRequest, res: Response) =
 
 // ──────────────────────────────────────────────
 // CIS Electronic Journal (RRA CIS/VSDC spec §5 / checklist §44)
-// The EJ is issued at the same time as every normal receipt and contains the
-// same data as the printed slip. These endpoints expose it for inspection and
-// for the certification tester's EJ-vs-slip comparison.
+// The EJ text is built at the same time as every normal receipt and contains
+// the same data as the printed slip; `ejSent` reports whether it was actually
+// transmitted to the VSDC (2018 Art. 6.5, requires EBM_EJ_SYNC_PATH).
+// These endpoints expose it for inspection and for the certification tester's
+// EJ-vs-slip comparison.
 // ──────────────────────────────────────────────
 
 export const getElectronicJournal = async (req: BranchAuthRequest, res: Response) => {

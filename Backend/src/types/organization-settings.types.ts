@@ -29,6 +29,7 @@ export interface ISidebarConfig {
   supplierInvoices: boolean;
   scanInvoice: boolean;
   expenses: boolean;
+  payroll: boolean;
   organizations: boolean;
   users: boolean;
   activityLogs: boolean;
@@ -118,6 +119,7 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
     supplierInvoices: true,
     scanInvoice: true,
     expenses: true,
+    payroll: true,
     organizations: true,
     users: true,
     activityLogs: true,

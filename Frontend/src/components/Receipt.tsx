@@ -18,6 +18,8 @@ export interface EbmReceiptData {
   /** VSDC invcNo — printed as bottom "RECEIPT NUMBER:8" */
   vsdcInvcNo?: number | string;
   ebmInvoiceNumber?: string;
+  /** Refunds: the original sale's SDC `rcptNo` (e.g. `201`). */
+  originalReceiptNumber?: string;
 }
 
 interface TaxBandTotal {
@@ -216,10 +218,12 @@ export const Receipt: React.FC<ReceiptProps> = ({
             )}
             <div className="border-b border-dashed border-gray-400 my-1" />
             <p className="font-bold">RECEIPT NUMBER:{ebm.vsdcInvcNo ?? ebm.ebmInvoiceNumber ?? receiptNumber}</p>
-            {ebm.sdcDateTime && (
-              <p>Date : {new Date(ebm.sdcDateTime).toLocaleString()}</p>
-            )}
+            {/* CIS transaction time (cfmDt), not the VSDC publication time printed above. */}
+            <p>Date : {date}</p>
             {ebm.mrcNo && <p>MRC : {ebm.mrcNo}</p>}
+            {ebm.originalReceiptNumber && (ebm.rcptLabel === 'NR' || ebm.rcptLabel === 'CR' || ebm.rcptLabel === 'TR') && (
+              <p>REF. NORMAL RECEIPT#: {ebm.originalReceiptNumber}</p>
+            )}
             <p className="text-center mt-2 text-[10px]">Excledge ERP v1.0.0 Powered by RRA VSDC EBM 2.1.</p>
           </div>
         </>

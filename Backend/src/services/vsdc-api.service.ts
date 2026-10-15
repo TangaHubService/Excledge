@@ -1,14 +1,15 @@
 import { prisma } from '../lib/prisma';
 import { config } from '../config';
 import logger from '../utils/logger';
+import { kigaliWallParts } from './invoice-format.service';
 
 /** RRA EBM API may require a security_key header for authentication. */
 const RRA_SECURITY_KEY: string = config.ebm.securityKey || '';
 
 /** Safe JSON stringify for RRA request/response logs (handles circular refs / BigInt). */
-function stringifyRraLog(value: unknown): string {
+function stringifyRraLog(value: unknown, indent?: number): string {
   try {
-    return JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
+    return JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v), indent);
   } catch {
     return String(value);
   }
@@ -287,7 +288,7 @@ async function postToEndpoint(
   }
 
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
-  logger.info(`[RRA][REQ] POST ${url} payload=${stringifyRraLog(body)}`);
+  logger.info(`[RRA][REQ] POST ${url} payload:\n${stringifyRraLog(body, 2)}`);
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), config.ebm.requestTimeoutMs);
 
@@ -368,12 +369,16 @@ async function postToEndpoint(
 // Response parser (RRA canonical fields)
 // ──────────────────────────────────────────────
 
-/** Parse VSDC's compact `yyyyMMddhhmmss` timestamp into an ISO string `new Date()` can read. */
+/**
+ * Parse VSDC's compact `yyyyMMddHHmmss` timestamp into an ISO string `new Date()` can read.
+ * VSDC stamps Kigali wall time (UTC+02:00, no DST); the offset is explicit so the
+ * stored instant does not depend on the server's timezone.
+ */
 function parseRraCompactDateTime(s: string): string {
-  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(s);
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(s);
   if (!m) return s;
   const [, y, mo, d, h, mi, se] = m;
-  return `${y}-${mo}-${d}T${h}:${mi}:${se}`;
+  return `${y}-${mo}-${d}T${h}:${mi}:${se}+02:00`;
 }
 
 /**
@@ -423,6 +428,147 @@ export function parseVsdcResponse(raw: unknown): VsdcResponse {
   };
 }
 
+function receiptDataBlock(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const o = raw as Record<string, unknown>;
+  const data = o.data;
+  if (data && typeof data === 'object' && !Array.isArray(data)) return data as Record<string, unknown>;
+  return o;
+}
+
+/**
+ * Fields a `/trnsSales/saveSales` success body must carry before an NR (or any
+ * receipt) may be treated as fiscally confirmed. Missing any of them is not a
+ * receipt — counters and signatures are never filled in locally.
+ *
+ * `training`: a TS/TR (`salesTyCd: "T"`) is confirmed by the same block minus
+ * `intrlData`/`rcptSign`, which VSDC leaves empty for training (CIS §6).
+ */
+export function vsdcReceiptFieldErrors(raw: unknown, opts: { training?: boolean } = {}): string[] {
+  const parsed = parseVsdcResponse(raw);
+  const missing: string[] = [];
+  if (!/^\d+$/.test(parsed.rcptNo) || Number(parsed.rcptNo) <= 0) missing.push('data.rcptNo');
+  if (!opts.training && !parsed.intrlData.trim()) missing.push('data.intrlData');
+  if (!opts.training && !parsed.vsdcSignature.trim()) missing.push('data.rcptSign');
+  if (!/^\d+$/.test(parsed.totRcptNo) || Number(parsed.totRcptNo) <= 0) missing.push('data.totRcptNo');
+  if (!parsed.sdcId.trim()) missing.push('data.sdcId');
+  if (!parsed.mrcNo.trim()) missing.push('data.mrcNo');
+  const rawDt = String(receiptDataBlock(raw).vsdcRcptPbctDate ?? '');
+  if (!/^\d{14}$/.test(rawDt)) missing.push('data.vsdcRcptPbctDate');
+  else if (!isRealKigaliTimestamp(rawDt, parsed.sdcDateTime)) {
+    missing.push('data.vsdcRcptPbctDate');
+  }
+  return missing;
+}
+
+/** True when `iso` parses and lands on exactly the Kigali wall time spelled by `compact` (no calendar rollover). */
+function isRealKigaliTimestamp(compact: string, iso: string): boolean {
+  const d = new Date(iso);
+  if (!iso || Number.isNaN(d.getTime())) return false;
+  const k = kigaliWallParts(d);
+  return `${k.year}${k.month}${k.day}${k.hour}${k.minute}${k.second}` === compact;
+}
+
+/** `resultCd` 000 plus a complete receipt block. Anything else is not a confirmation. */
+export function assessVsdcReceiptConfirmation(
+  raw: unknown,
+  opts: { training?: boolean } = {},
+): { ok: true; data: VsdcResponse } | { ok: false; error: string } {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, error: 'VSDC response is not a JSON object' };
+  }
+  const status = parseVsdcStatusCode(raw);
+  if (status.code !== '000') {
+    return { ok: false, error: `VSDC error ${status.code}: ${status.message}` };
+  }
+  const missing = vsdcReceiptFieldErrors(raw, opts);
+  if (missing.length) {
+    return {
+      ok: false,
+      error: `VSDC resultCd 000 but required receipt fields are missing or malformed: ${missing.join(', ')}`,
+    };
+  }
+  return { ok: true, data: parseVsdcResponse(raw) };
+}
+
+export type NrFiscalDecision =
+  | { confirmed: true; data: VsdcResponse }
+  | { confirmed: false; retryable: boolean; error: string };
+
+/**
+ * Decide whether a `/trnsSales/saveSales` submission (NS, NR, TS/TR, PS or a
+ * cancellation) produced a printable receipt.
+ * Timeouts, non-2xx HTTP replies, malformed bodies, business rejections, and
+ * resultCd 924 without the original receipt block are not confirmations. 924
+ * with a complete block is the only accepted replay — the signature still
+ * comes from VSDC.
+ *
+ * `training`: the same decision for TS/TR/PS documents, which VSDC confirms
+ * without intrlData/rcptSign (see `vsdcReceiptFieldErrors`).
+ */
+export function decideVsdcReceiptResult(result: {
+  success: boolean;
+  error?: string;
+  rawStatus?: number;
+  rawBody: unknown;
+}, opts: { training?: boolean; docLabel?: string } = {}): NrFiscalDecision {
+  const err = result.error ?? '';
+  const raw = result.rawBody;
+  const noBody = raw == null || raw === '';
+  const docLabel = opts.docLabel ?? (opts.training ? 'training receipt' : 'NR receipt');
+  const timedOut =
+    result.rawStatus === 0 &&
+    (noBody || /abort|timeout|timed out|ECONN|ENOTFOUND|fetch failed|network|socket/i.test(err));
+  if (timedOut) {
+    return {
+      confirmed: false,
+      retryable: true,
+      error: err || `VSDC request timed out — ${docLabel} not confirmed`,
+    };
+  }
+  if (typeof result.rawStatus === 'number' && result.rawStatus !== 0 && (result.rawStatus < 200 || result.rawStatus >= 300)) {
+    return {
+      confirmed: false,
+      retryable: true,
+      error: err || `Gateway HTTP ${result.rawStatus} — ${docLabel} not confirmed`,
+    };
+  }
+  if (typeof raw !== 'object' || raw == null || Array.isArray(raw)) {
+    return {
+      confirmed: false,
+      retryable: true,
+      error: err || `Malformed VSDC response — ${docLabel} not confirmed`,
+    };
+  }
+  const code = String((raw as Record<string, unknown>).resultCd ?? '');
+  if (code === '924') {
+    const missing = vsdcReceiptFieldErrors(raw, opts);
+    if (!missing.length) return { confirmed: true, data: parseVsdcResponse(raw) };
+    return {
+      confirmed: false,
+      retryable: false,
+      error:
+        `VSDC resultCd 924 (invoice number already exists) without the complete receipt block (missing ${missing.join(', ')}). ` +
+        `The ${docLabel} was not issued and will not be resent under a new invoice number.`,
+    };
+  }
+  const assessed = assessVsdcReceiptConfirmation(raw, opts);
+  if (assessed.ok && opts.training && (assessed.data.intrlData.trim() || assessed.data.vsdcSignature.trim())) {
+    return {
+      confirmed: false,
+      retryable: false,
+      error:
+        `VSDC returned intrlData/rcptSign for a ${docLabel} (rcptNo ${assessed.data.rcptNo}): it was recorded as a signed ` +
+        `normal receipt, not training/proforma (CIS §6.3.6). It will not be printed or resent.`,
+    };
+  }
+  if (assessed.ok) return { confirmed: true, data: assessed.data };
+  const permanent = code === '910' || code === '884' || code === '921' || code === '922';
+  return { confirmed: false, retryable: !permanent, error: err || assessed.error };
+}
+
+export const decideNrFiscalResult = decideVsdcReceiptResult;
+
 // ──────────────────────────────────────────────
 // Endpoint-specific API methods
 // ──────────────────────────────────────────────
@@ -438,12 +584,33 @@ export async function saveInvc(
   if (config.ebm.useMock) {
     return mockResult('INVC', envelope.sdcId);
   }
+  // idempotencyKey is the outbox's own dedupe key, not a TrnsSalesSaveWrReq field.
+  const { idempotencyKey: _idempotencyKey, ...wirePayload } = payload;
   return postToEndpoint(
     config.ebm.salePath || '/trnsSales/saveSales',
-    vsdcRequestBody(envelope, payload),
+    vsdcRequestBody(envelope, wirePayload),
     envelope.vsdcUrl,
     { requiresReceiptNumber: true },
   );
+}
+
+/**
+ * POST the Electronic Journal text after a fiscalized sale (2018 spec Art. 6.5
+ * EJ_DATA). The 2023 VSDC API defines no EJ endpoint, so this is used only when
+ * EBM_EJ_SYNC_PATH is configured; otherwise the journal stays stored locally
+ * (EbmTransaction.journalText) for inspector comparison. Best-effort: a failed
+ * POST never fails the fiscalization — the journal text is retained and the
+ * caller keeps ejSent=false so a later retry/inspection can resend it.
+ */
+export async function saveElectronicJournal(
+  envelope: VsdcEnvelope,
+  payload: { saleId: number; invcNo: number; rcptLabel: string; journalText: string },
+): Promise<VsdcApiResult> {
+  if (config.ebm.useMock) {
+    return mockResult('EJ', envelope.sdcId);
+  }
+  const path = config.ebm.ejSyncPath || '/ej/saveEj';
+  return postToEndpoint(path, vsdcRequestBody(envelope, payload as unknown as Record<string, unknown>), envelope.vsdcUrl);
 }
 
 // ──────────────────────────────────────────────
@@ -477,7 +644,7 @@ async function postLookup<T = unknown>(
     return { success: false, resultCd: '?', resultMsg: 'EBM_API_URL is not configured', data: null, raw: null }
   }
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`
-  logger.info(`[RRA][REQ] POST ${url} payload=${stringifyRraLog(body)}`)
+  logger.info(`[RRA][REQ] POST ${url} payload:\n${stringifyRraLog(body, 2)}`)
   const controller = new AbortController()
   const t = setTimeout(() => controller.abort(), config.ebm.requestTimeoutMs)
   try {
@@ -1100,18 +1267,22 @@ function mockResult(prefix: string, sdcId?: string): VsdcApiResult {
   // response shape rather than the old free-text ref.
   const rcptNo = String(Math.floor(Date.now() / 1000) % 100000);
   const totRcptNo = String(Math.floor(Date.now() / 1000) % 1000000);
+  const k = kigaliWallParts(new Date());
+  const published = `${k.year}${k.month}${k.day}${k.hour}${k.minute}${k.second}`;
+  const block = {
+    rcptNo: Number(rcptNo),
+    intrlData: `MOCK-INTERNAL-${ref}`,
+    rcptSign: `MOCK-SIG-${ref}`,
+    totRcptNo: Number(totRcptNo),
+    vsdcRcptPbctDate: published,
+    sdcId: sdcId || 'SDC000000000',
+    mrcNo: 'MOCKMRC0001',
+  };
+  const rawBody = { resultCd: '000', resultMsg: 'It is succeeded', resultDt: published, mock: true, data: block };
   return {
     success: true,
-      data: {
-        rcptNo,
-        intrlData: `MOCK-INTERNAL-${ref}`,
-        vsdcSignature: `MOCK-SIG-${ref}`,
-        totRcptNo,
-        sdcId: sdcId || 'SDC000000000',
-        sdcDateTime: new Date().toISOString(),
-        mrcNo: 'MOCKMRC0001',
-      },
+    data: parseVsdcResponse(rawBody),
     rawStatus: 200,
-    rawBody: { resultCd: '000', resultMsg: 'It is succeeded', mock: true, data: { rcptNo, totRcptNo } },
+    rawBody,
   };
 }

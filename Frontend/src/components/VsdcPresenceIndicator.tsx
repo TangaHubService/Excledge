@@ -71,7 +71,8 @@ export function VsdcPresenceIndicator() {
           setLastContact(null);
           return;
         }
-        setState(payload.trainingMode ? 'training' : payload.online ? 'online' : 'offline');
+        // Training receipts need VSDC too, so offline wins over the training badge.
+        setState(!payload.online ? 'offline' : payload.trainingMode ? 'training' : 'online');
         setLastContact(payload.lastContact ? new Date(payload.lastContact) : null);
       } catch {
         if (cancelled) return;

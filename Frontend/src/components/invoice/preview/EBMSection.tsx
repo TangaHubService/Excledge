@@ -6,6 +6,12 @@ import { C } from "./theme"
 
 type EbmSectionProps = Pick<EbmInvoice, "sdcInformation" | "verification" | "invoice" | "branding">
 
+/** Mirrors the backend isRefundTransaction: an NR/TR (copied or not) keeps its reference to the original. */
+function isRefundInvoice(invoice: EbmInvoice["invoice"] | undefined): boolean {
+  const label = String(invoice?.rcptLabel ?? "").toUpperCase()
+  return label === "NR" || label === "TR" || (!label && invoice?.status === "REFUNDED")
+}
+
 function QrCanvas({ payload }: { payload: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -36,14 +42,17 @@ function QrCanvas({ payload }: { payload: string }) {
  */
 export function EBMSection({ data }: { data: EbmSectionProps }) {
   const sdc = data.sdcInformation
-  const qrImage = data.verification?.qrCodeImage
-  const qrPayload = data.verification?.qrPayload
   const rcptLabel = (data.invoice?.rcptLabel ?? "").toUpperCase()
   const isTraining = rcptLabel === "TS" || rcptLabel === "TR"
   const isProforma = Boolean(data.invoice?.isProforma) || rcptLabel === "PS"
+  const isCopy = !isTraining && !isProforma && (Boolean(data.invoice?.isCopy) || rcptLabel === "CS" || rcptLabel === "CR")
+  // QR only on NS/NR, like the EBM spec samples (13.1/14.1).
+  const showQr = !isCopy && !isTraining && !isProforma
+  const qrImage = showQr ? data.verification?.qrCodeImage : null
+  const qrPayload = showQr ? data.verification?.qrPayload : null
   const signature = safeText(sdc?.receiptSignature)
   const internalData = safeText(sdc?.internalData)
-  const hasSdc = Boolean(qrImage || qrPayload || isTraining || isProforma || (sdc?.receiptNumber && sdc?.internalData && sdc?.receiptSignature))
+  const hasSdc = Boolean(qrImage || qrPayload || isTraining || isProforma || isCopy || (sdc?.receiptNumber && sdc?.internalData && sdc?.receiptSignature))
 
   if (!hasSdc) return null
 
@@ -52,10 +61,15 @@ export function EBMSection({ data }: { data: EbmSectionProps }) {
       ? safeText(sdc?.poweredBy)
       : "Excledge ERP v1.0.0 Powered by RRA VSDC EBM 2.1."
 
+  // SDC block: the VSDC publication time (vsdcRcptPbctDate). Bottom block: the
+  // CIS transaction time (cfmDt) — the same split as the backend PDF.
   const dateStr = formatDateShort(sdc?.date ?? data.invoice?.invoiceDate)
   const timeStr = formatTime(sdc?.time ?? data.invoice?.time)
+  const cisDateStr = formatDateShort(data.invoice?.invoiceDate)
+  const cisTimeStr = formatTime(data.invoice?.time ?? data.invoice?.invoiceDate)
   const receiptNo = safeText(sdc?.receiptNumber ?? data.invoice?.receiptNumber)
   const invoiceNo = safeText(data.invoice?.invoiceNumber)
+  const refundRef = isRefundInvoice(data.invoice) ? (data.invoice?.originalReceiptNumber ?? "").trim() : ""
   const internalDataDisplay = internalData !== "—" ? dashEvery4(internalData) : "—"
   const signatureDisplay = signature !== "—" ? dashEvery4(signature) : "—"
   const mrc = safeText(sdc?.mrcNo)
@@ -95,15 +109,21 @@ export function EBMSection({ data }: { data: EbmSectionProps }) {
         <p style={lineStyle}>Date: {dateStr}   {timeStr}</p>
         <p style={lineStyle}>SDC ID : {safeText(sdc?.sdcId)}</p>
         <p style={lineStyle}>RECEIPT NUMBER : {receiptNo}</p>
-        <p style={{ ...lineStyle, overflowWrap: "anywhere" }}>Internal Data:{internalDataDisplay}</p>
-        <p style={{ ...lineStyle, overflowWrap: "anywhere" }}>Receipt Signature:{signatureDisplay}</p>
+        {/* Spec 16.1/17.1: TS/TR/PS carry no Internal Data or Receipt Signature. */}
+        {!isTraining && !isProforma && (
+          <>
+            <p style={{ ...lineStyle, overflowWrap: "anywhere" }}>Internal Data:{internalDataDisplay}</p>
+            <p style={{ ...lineStyle, overflowWrap: "anywhere" }}>Receipt Signature:{signatureDisplay}</p>
+          </>
+        )}
 
         <div style={{ borderTop: `1px dashed ${C.borderStrong}`, margin: "8px 0 6px" }} />
 
         {/* Bottom block — RRA sample style: RECEIPT NUMBER:{vsdcInvcNo} */}
         <p style={{ ...lineStyle, fontWeight: 800 }}>RECEIPT NUMBER:{invoiceNo}</p>
-        <p style={lineStyle}>Date : {dateStr}   {timeStr}</p>
+        <p style={lineStyle}>Date : {cisDateStr}   {cisTimeStr}</p>
         <p style={lineStyle}>MRC : {mrc}</p>
+        {refundRef && <p style={lineStyle}>REF. NORMAL RECEIPT#: {refundRef}</p>}
 
         <p style={{ ...lineStyle, marginTop: 8, textAlign: "center", fontSize: 9, color: C.green, fontWeight: 700 }}>
           {branding}

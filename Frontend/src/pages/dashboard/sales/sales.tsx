@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import {
   ChevronLeft, ChevronRight, Loader2, Search, Download, Eye,
   RefreshCw, X, Plus, TrendingUp, Users, Package, Receipt,
-  ArrowUpRight, MoreHorizontal, UserCircle,
+  ArrowUpRight, MoreHorizontal, UserCircle, Copy,
 } from 'lucide-react';
 import { TableSkeleton } from '../../../components/ui/TableSkeleton';
 import { apiClient } from '../../../lib/api-client';
@@ -15,7 +15,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, Dr
 import { Label } from '../../../components/ui/label';
 import { toast } from 'react-toastify';
 import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice';
-import { downloadInvoicePdf, type InvoicePdfFormat } from '../../../lib/invoice-pdf';
+import { canCopyReceipt, downloadInvoicePdf, downloadReceiptCopy, printReceiptCopy, type InvoicePdfFormat } from '../../../lib/invoice-pdf';
 import type { SaleEbmTransaction } from '../../../utils/invoiceFiscal';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import ProformaConvertDialog from '../../../components/sales/ProformaConvertDialog';
@@ -163,6 +163,13 @@ export default function SalesPage() {
   const [refundRsnCd, setRefundRsnCd] = useState('');
   const [refundReasons, setRefundReasons] = useState<Array<{ code: string; name: string }>>([]);
   const [isRefunding, setIsRefunding] = useState(false);
+  // Refundable detail (original + per-line remaining + prior refunds) loaded
+  // from GET .../refundable when the drawer opens; per-line qty inputs are
+  // kept as strings and parsed on submit.
+  const [refundDetail, setRefundDetail] = useState<any>(null);
+  const [refundDetailLoading, setRefundDetailLoading] = useState(false);
+  const [refundLineQty, setRefundLineQty] = useState<Record<string, string>>({});
+  const [refundRecipient, setRefundRecipient] = useState('');
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [saleToCancel, setSaleToCancel] = useState<Sale | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -217,7 +224,7 @@ export default function SalesPage() {
       // compute KPIs from current response
       const totalSalesAmt = list.reduce((s: number, sale: Sale) => s + parseFloat(sale.totalAmount || '0'), 0);
       const uniqueCustomers = new Set(list.map((s: Sale) => s.customer?.name)).size;
-      const itemsSold = list.reduce((s: number, sale: Sale) => s + sale.saleItems.reduce((ss, i) => ss + i.quantity, 0), 0);
+      const itemsSold = list.reduce((s: number, sale: Sale) => s + sale.saleItems.reduce((ss, i) => ss + Number(i.quantity ?? 0), 0), 0);
       setStats({
         totalSales: totalSalesAmt,
         totalCustomers: uniqueCustomers,
@@ -263,7 +270,24 @@ export default function SalesPage() {
     setSaleToRefund(sale);
     setRefundReason('');
     setRefundRsnCd('');
+    setRefundRecipient(sale.customer?.name ?? '');
+    setRefundLineQty({});
+    setRefundDetail(null);
     setIsRefundModalOpen(true);
+    // What is still refundable (remaining per line, prior refunds). The inputs
+    // default to the full remaining quantity; the operator lowers them for a
+    // partial refund. The backend re-validates everything on submit.
+    setRefundDetailLoading(true);
+    apiClient.getRefundable(sale.id)
+      .then((res: any) => {
+        const d = res?.data ?? res;
+        setRefundDetail(d);
+        const init: Record<string, string> = {};
+        for (const l of d?.lines ?? []) init[String(l.saleItemId)] = String(l.remaining ?? 0);
+        setRefundLineQty(init);
+      })
+      .catch(() => { /* drawer still allows a full refund; backend validates */ })
+      .finally(() => setRefundDetailLoading(false));
     // RRA refund reason codes (code class 32) — same list the backend
     // enforces, so the operator can never pick a code VSDC rejects.
     apiClient.getRraRefundReasons()
@@ -277,13 +301,48 @@ export default function SalesPage() {
       .catch(() => { /* keep the last-resort list below */ });
   };
 
+  const refundPreviewTotal = (refundDetail?.lines ?? []).reduce((s: number, l: any) => {
+    const q = Number(refundLineQty[String(l.saleItemId)] ?? 0);
+    return s + (Number.isFinite(q) && q > 0 ? q * Number(l.unitPrice || 0) : 0);
+  }, 0);
+
   const handleRefundSubmit = async () => {
     if (!saleToRefund) return;
     if (!refundReason.trim()) { toast.error(t('sales.reasonRequired') || 'Refund reason is required'); return; }
+    if (refundRsnCd === '13' && refundReason.trim().length < 5) {
+      toast.error(t('sales.otherReasonHint') || 'Code 13 (Other reason) needs an explanation of at least 5 characters');
+      return;
+    }
+    const selectedItems = (refundDetail?.lines ?? [])
+      .map((l: any) => ({ saleItemId: l.saleItemId, quantity: Number(refundLineQty[String(l.saleItemId)] ?? 0) }))
+      .filter((r: { quantity: number }) => Number.isFinite(r.quantity) && r.quantity > 0);
+    if (refundDetail && selectedItems.length === 0) {
+      toast.error(t('sales.refundNoItems') || 'Select at least one item quantity to refund');
+      return;
+    }
     try {
       setIsRefunding(true);
-      await apiClient.refundSale(saleToRefund.id, { reason: refundReason, rfdRsnCd: refundRsnCd });
-      toast.success(t('sales.refundSuccess'));
+      const refundRes: any = await apiClient.refundSale(saleToRefund.id, {
+        reason: refundReason.trim(),
+        rfdRsnCd: refundRsnCd || undefined,
+        // Omit items when the detail failed to load: backend treats it as a
+        // full refund of every remaining line (and still validates).
+        items: refundDetail ? selectedItems : undefined,
+        recipientName: refundRecipient.trim() || undefined,
+        // The mode this drawer was opened in; the backend refuses if it changed since.
+        receiptMode: typeof refundDetail?.trainingMode === 'boolean'
+          ? (refundDetail.trainingMode ? 'TRAINING' : 'NORMAL')
+          : undefined,
+      });
+      const fiscalStatus = refundRes?.data?.fiscalization?.status;
+      const refundLabel = refundDetail?.refundLabel === 'TR' ? 'TR' : 'NR';
+      if (fiscalStatus === 'failed') {
+        toast.error(t('sales.refundFiscalFailed', { label: refundLabel }));
+      } else if (fiscalStatus === 'pending') {
+        toast.success(t('sales.refundFiscalPending', { label: refundLabel }));
+      } else {
+        toast.success(t('sales.refundSuccess'));
+      }
       await fetchSales();
       setIsRefundModalOpen(false);
     } catch (error: unknown) {
@@ -338,6 +397,33 @@ export default function SalesPage() {
     } catch (error) {
       console.error('Failed to download invoice:', error);
       toast.error(t('sales.invoiceGenerationError'));
+    } finally {
+      setIsDownloadingInvoice(null);
+    }
+  };
+
+  /** CS/CR: explicit copy of an existing NS/NR receipt with its original fiscal data. */
+  const handlePrintReceiptCopy = async (sale: Sale, copyFormat: InvoicePdfFormat) => {
+    setIsDownloadingInvoice(sale.id);
+    try {
+      const label = await printReceiptCopy(sale.id, copyFormat);
+      toast.success(`${label ?? 'Copy'} receipt sent to the printer`);
+    } catch (error) {
+      console.error('Failed to print receipt copy:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to print the receipt copy');
+    } finally {
+      setIsDownloadingInvoice(null);
+    }
+  };
+
+  const handleDownloadReceiptCopy = async (sale: Sale, copyFormat: InvoicePdfFormat) => {
+    setIsDownloadingInvoice(sale.id);
+    try {
+      const label = await downloadReceiptCopy(sale.id, copyFormat);
+      toast.success(`${label ?? 'Copy'} receipt downloaded`);
+    } catch (error) {
+      console.error('Failed to download receipt copy:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to download the receipt copy');
     } finally {
       setIsDownloadingInvoice(null);
     }
@@ -522,8 +608,6 @@ export default function SalesPage() {
               <option value="">All Types</option>
               <option value="NS">Normal Sale</option>
               <option value="NR">Normal Refund</option>
-              <option value="CS">Copy Sale</option>
-              <option value="CR">Copy Refund</option>
               <option value="TS">Training Sale</option>
               <option value="TR">Training Refund</option>
               <option value="PS">Proforma</option>
@@ -597,7 +681,7 @@ export default function SalesPage() {
             </TableHeader>
             <TableBody>
               {sales.map(sale => {
-                const itemCount = sale.saleItems.reduce((s, i) => s + i.quantity, 0);
+                const itemCount = sale.saleItems.reduce((s, i) => s + Number(i.quantity ?? 0), 0);
                 const paid = parseFloat(sale.cashAmount) + parseFloat(sale.insuranceAmount);
                 const debt = parseFloat(sale.debtAmount);
                 const vat = parseFloat(sale.vatAmount ?? '0');
@@ -764,6 +848,18 @@ export default function SalesPage() {
                                   : <Download className="h-3.5 w-3.5" />}
                                 Download 80mm
                               </button>
+                              {canCopyReceipt(sale) && (['A4', '80mm'] as const).map((copyFormat) => (
+                                <button
+                                  key={copyFormat}
+                                  onClick={() => { handlePrintReceiptCopy(sale, copyFormat); setOpenRowMenu(null); }}
+                                  disabled={isDownloadingInvoice === sale.id}
+                                  title="Reprint as a COPY (CS for a sale, CR for a refund) with the original fiscal data"
+                                  className="w-full text-left px-3 py-2 flex items-center gap-2 text-blue-700 hover:bg-blue-50 transition-colors"
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                  Print copy {copyFormat}
+                                </button>
+                              ))}
                               {sale.rcptLabel === 'PS' && sale.status !== 'CONVERTED' && !sale.convertedSale && (
                                 <button
                                   onClick={() => { setProformaToConvert(sale); setOpenRowMenu(null); }}
@@ -773,7 +869,7 @@ export default function SalesPage() {
                                   Convert to sale
                                 </button>
                               )}
-                              {sale.status === 'COMPLETED' && sale.rcptLabel !== 'PS' && (
+                              {(sale.status === 'COMPLETED' || sale.status === 'PARTIALLY_REFUNDED') && (sale.rcptLabel === 'NS' || sale.rcptLabel === 'TS' || sale.rcptLabel == null) && !sale.isProforma && (
                                 <button
                                   onClick={() => { handleOpenRefundModal(sale); setOpenRowMenu(null); }}
                                   className="w-full text-left px-3 py-2 flex items-center gap-2 text-amber-600 hover:bg-amber-50 transition-colors"
@@ -988,6 +1084,17 @@ export default function SalesPage() {
                 {t('sales.downloadInvoice') || 'Download PDF'}
               </button>
             )}
+            {selectedSale && canCopyReceipt(selectedSale) && (
+              <button
+                onClick={() => handleDownloadReceiptCopy(selectedSale, invoiceFormat)}
+                disabled={isDownloadingInvoice === selectedSale.id}
+                title="Reprint as a COPY (CS for a sale, CR for a refund) with the original fiscal data"
+                className="h-10 flex items-center justify-center gap-2 rounded-xl border border-[#1d57c8] px-4 text-sm font-semibold text-[#1d57c8] transition-colors hover:bg-blue-50"
+              >
+                <Copy className="h-4 w-4" />
+                Download Copy ({selectedSale.rcptLabel === 'NR' ? 'CR' : 'CS'})
+              </button>
+            )}
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
@@ -1023,10 +1130,74 @@ export default function SalesPage() {
             <DrawerTitle>{t('sales.processRefund', { number: saleToRefund?.saleNumber })}</DrawerTitle>
             <DrawerDescription>{t('sales.refundDesc')}</DrawerDescription>
           </DrawerHeader>
-          <div className="space-y-4 px-5 py-4">
-            <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
-              <p className="text-sm text-amber-800 font-medium">{t('sales.fullRefundOnlyNote')}</p>
-            </div>
+          <div className="space-y-4 px-5 py-4 max-h-[65vh] overflow-y-auto">
+            {refundDetailLoading && (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {t('sales.refundLoading') || 'Loading refundable details…'}
+              </div>
+            )}
+            {!refundDetailLoading && Array.isArray(refundDetail?.errors) && refundDetail.errors.length > 0 && (
+              <div className="p-4 bg-red-50 border border-red-100 rounded-xl space-y-1">
+                {refundDetail.errors.map((e: string, i: number) => (
+                  <p key={i} className="text-sm text-red-800 font-medium">{e}</p>
+                ))}
+              </div>
+            )}
+            {refundDetail?.refundLabel === 'TR' && (
+              <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl text-sm font-semibold text-orange-800">
+                TRAINING REFUND (TR) — not an official receipt. No stock, customer balance or accounting record changes.
+              </div>
+            )}
+            {refundDetail?.original && (
+              <div className="p-4 bg-gray-50 border border-gray-100 rounded-xl text-sm space-y-1">
+                <p className="font-semibold text-gray-800">{t('sales.refundOriginal') || 'Original transaction (being refunded)'}</p>
+                <p className="text-gray-600">#{refundDetail.original.saleNumber} · INV {refundDetail.original.invoiceNumber ?? '—'}{refundDetail.original.vsdcInvcNo != null ? ` · VSDC ${refundDetail.original.vsdcInvcNo}` : ''}</p>
+                <p className="text-gray-600">{refundDetail.original.customer?.name ?? ''}{refundDetail.original.customer?.TIN ? ` · TIN ${refundDetail.original.customer.TIN}` : ''}</p>
+                <p className="text-gray-600">{t('sales.refundOriginalTotal') || 'Original total'}: RF {Number(refundDetail.original.totalAmount || 0).toLocaleString('en-RW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              </div>
+            )}
+            {Array.isArray(refundDetail?.lines) && refundDetail.lines.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-gray-800">{t('sales.refundSelectItems') || 'Select items and quantities to refund'}</p>
+                {refundDetail.lines.map((l: any) => (
+                  <div key={l.saleItemId} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{l.productName ?? l.serviceName ?? `#${l.saleItemId}`}</p>
+                      <p className="text-xs text-gray-500">
+                        {t('sales.refundSold') || 'Sold'}: {l.quantity} · {t('sales.refunded') || 'Refunded'}: {l.refunded} · {t('sales.refundRemaining') || 'Remaining'}: {l.remaining}{l.taxCode ? ` · ${l.taxCode}` : ''}
+                      </p>
+                    </div>
+                    <div className="w-24">
+                      <Label className="text-xs text-gray-500">{t('sales.refundQtyToRefund') || 'Qty'}</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={l.remaining}
+                        step="any"
+                        disabled={l.remaining <= 0}
+                        value={refundLineQty[String(l.saleItemId)] ?? ''}
+                        onChange={e => setRefundLineQty(prev => ({ ...prev, [String(l.saleItemId)]: e.target.value }))}
+                        className="h-9 text-right"
+                      />
+                    </div>
+                  </div>
+                ))}
+                <p className="text-sm text-gray-700 text-right">
+                  {t('sales.refundTotalPreview') || 'Refund total'}: <span className="font-semibold">RF {refundPreviewTotal.toLocaleString('en-RW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </p>
+              </div>
+            )}
+            {Array.isArray(refundDetail?.priorRefunds) && refundDetail.priorRefunds.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-gray-800">{t('sales.refundPriorRefunds') || 'Prior refunds'}</p>
+                {refundDetail.priorRefunds.map((r: any) => (
+                  <p key={r.id} className="text-xs text-gray-600">
+                    #{r.saleNumber} · RF {Number(r.totalAmount || 0).toLocaleString('en-RW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {r.fiscalStatus ?? r.status}
+                  </p>
+                ))}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="refundRsnCd">{t('sales.refundReasonCode') || 'RRA refund reason'}</Label>
               <select
@@ -1053,6 +1224,9 @@ export default function SalesPage() {
                   <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
                 ))}
               </select>
+              {refundRsnCd === '13' && (
+                <p className="text-xs text-amber-700">{t('sales.otherReasonHint') || 'Code 13 (Other reason) needs an explanation of at least 5 characters below.'}</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="refundReason">{t('sales.refundReason')}</Label>
@@ -1061,6 +1235,16 @@ export default function SalesPage() {
                 placeholder={t('sales.refundReasonPlaceholder')}
                 value={refundReason}
                 onChange={e => setRefundReason(e.target.value)}
+                className="focus:ring-amber-500 border-amber-200"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="refundRecipient">{t('sales.refundRecipient') || 'Refund recipient'}</Label>
+              <Input
+                id="refundRecipient"
+                placeholder={t('sales.refundRecipientPlaceholder') || 'Person receiving the refund'}
+                value={refundRecipient}
+                onChange={e => setRefundRecipient(e.target.value)}
                 className="focus:ring-amber-500 border-amber-200"
               />
             </div>
@@ -1074,8 +1258,8 @@ export default function SalesPage() {
             </button>
             <button
               onClick={handleRefundSubmit}
-              disabled={isRefunding}
-              className="flex-1 h-10 flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition-colors"
+              disabled={isRefunding || refundDetailLoading || (refundDetail != null && !refundDetail.eligible)}
+              className="flex-1 h-10 flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
             >
               {isRefunding ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               {t('sales.processRefund') || 'Process Refund'}

@@ -73,6 +73,20 @@ export const config = {
     requestTimeoutMs: Number.parseInt(process.env.EBM_REQUEST_TIMEOUT_MS || "1000", 10),
     useMock: process.env.EBM_USE_MOCK === "true",
     maxQueueRetries: Number.parseInt(process.env.EBM_MAX_QUEUE_RETRIES || "10", 10),
+    // Strict fiscal mode (2018 spec Art. 10, strict reading): when "true", a
+    // sale is not created at all unless the VSDC is reachable and the receipt
+    // is confirmed within the inline wait. Default "false" keeps the
+    // transactional-outbox behavior (sale completes, official receipt withheld
+    // with HTTP 425 until VSDC confirms). Strict mode has a real availability
+    // cost — every checkout gains a VSDC round-trip — so it is opt-in.
+    strictMode: process.env.EBM_STRICT_MODE === "true",
+    // Optional Electronic Journal transmission (2018 spec Art. 6.5 EJ_DATA).
+    // The 2023 VSDC API (§3.3.6.1) defines no EJ endpoint, so the journal is
+    // stored locally and exposed for inspection by default. Set
+    // EBM_EJ_SYNC_PATH to the device path that accepts the journal text
+    // (e.g. "/ej/saveEj") to POST it after every fiscalized sale; EbmTransaction
+    // .ejSent is true only when that POST is acknowledged.
+    ejSyncPath: process.env.EBM_EJ_SYNC_PATH || "",
     // "/status" is not a real VSDC route (verified 404 against the RRA sandbox)
     // — there is no dedicated heartbeat endpoint in the spec. /code/selectCodes
     // is a real, side-effect-free lookup, so a successful response from it is

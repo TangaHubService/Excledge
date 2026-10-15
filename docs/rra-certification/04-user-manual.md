@@ -186,9 +186,9 @@ Excledge ERP/POS produces seven different types of receipts. Each type has a two
 
 - **CR — Copy Refund:** This receipt is issued when you reprint an NR (refund) receipt. It works the same way as a CS — it is a copy of an existing refund receipt, marked "COPY."
 
-- **TS — Training Sale:** This receipt is issued during Training Mode. It looks like a Normal Sale receipt but is clearly marked "TRAINING MODE." Training receipts are NOT sent to the RRA and are NOT legally valid. They are only for practice purposes.
+- **TS — Training Sale:** This receipt is issued during Training Mode. It looks like a Normal Sale receipt but is clearly marked "TRAINING MODE." It goes through the VSDC as a training document (it receives a training receipt number but no digital signature) and is NOT legally valid. It is only for practice purposes.
 
-- **TR — Training Refund:** This receipt is issued when you process a test refund during Training Mode. Like TS, it is clearly marked "TRAINING MODE" and has no legal validity.
+- **TR — Training Refund:** This receipt is issued when you refund a TS receipt during Training Mode. Like TS, it is clearly marked "TRAINING MODE" and has no legal validity.
 
 - **PS — Proforma Sale:** This is a quote or estimate issued to a customer before a sale is completed. A proforma is NOT a tax invoice. Customers cannot use a PS receipt for VAT claims. A proforma can be converted into a real NS receipt when the customer is ready to pay.
 
@@ -226,7 +226,7 @@ The Z Report is the official end-of-day sales record. Unlike the X Report, the Z
 
 **Training Mode**
 
-Training Mode is a special setting in Excledge ERP/POS that allows staff to practice making sales without sending any real data to the RRA. When Training Mode is turned on, the system generates TS (Training Sale) and TR (Training Refund) receipts that look almost identical to real receipts, but are clearly watermarked "TRAINING MODE" and are not sent to the VSDC. Training Mode is used to teach new cashiers how to use the system before they start handling real customer transactions. Only administrators can turn Training Mode on or off. Training Mode must NEVER be used during real business hours when serving real customers — this would mean real sales go unrecorded by the RRA, which is a serious violation of Rwandan tax law.
+Training Mode is a special setting in Excledge ERP/POS that allows staff to practice making sales without creating any real sale. When Training Mode is turned on, the system generates TS (Training Sale) and TR (Training Refund) receipts that look almost identical to real receipts, but are clearly marked "TRAINING MODE" and submitted to the VSDC as training documents only (no digital signature). Training Mode is used to teach new cashiers how to use the system before they start handling real customer transactions. Only administrators can turn Training Mode on or off. Training Mode must NEVER be used during real business hours when serving real customers — this would mean real sales go unrecorded by the RRA, which is a serious violation of Rwandan tax law.
 
 ---
 
@@ -640,7 +640,7 @@ A refund is processed when a customer wants to return goods they previously purc
 Before processing a refund, make sure these conditions are met:
 
 - **Original receipt required:** The customer must have the original NS receipt number. Without this number, the refund cannot be processed.
-- **NS receipts only:** Refunds can only be processed for completed Normal Sales (NS receipts). You cannot refund a proforma invoice (PS), a copy (CS), or a training receipt (TS).
+- **NS receipts only:** Refunds can only be processed for completed Normal Sales (NS receipts). You cannot refund a proforma invoice (PS) or a copy (CS). A training receipt (TS) can only be refunded — as a TR — while Training Mode is on, and an NS cannot be refunded while Training Mode is on.
 - **One refund per original sale:** Once an NS receipt has been refunded (NR issued), it cannot be refunded again. The system will reject a second refund attempt.
 - **Same organization and branch:** The refund must be processed at the same branch that made the original sale.
 - **Manager approval:** Depending on your organization's settings, refunds over a certain amount may require a manager to enter their approval PIN before the refund can proceed.
@@ -686,7 +686,7 @@ If you are unsure whether a refund should be processed, always check with your m
 The NR receipt is similar to an NS receipt in format but has several key differences:
 
 - **"REFUND" heading:** The word REFUND appears prominently at the top of the receipt to make it clear this is a refund, not a sale.
-- **"REF. NORMAL RECEIPT#: [original number]":** This line shows the receipt number of the original NS sale that is being refunded. This links the refund to the original sale.
+- **"REF. NORMAL RECEIPT#: [original SDC receipt number]":** This line shows the SDC receipt number of the original NS sale that is being refunded — the first number of the `RECEIPT NUMBER: n/m NS` line in the SDC INFORMATION block of the original receipt (e.g. `REF. NORMAL RECEIPT#: 201` for an original printed `201/216 NS`), exactly as in the RRA EBM receipt example 14.1. It is read from the VSDC response stored for the original sale. (The VSDC request of the refund separately carries the original's invoice number as `orgInvcNo`.)
 - **Negative amounts:** All item prices and totals appear as negative numbers, because money is flowing back to the customer. For example, if the original item cost RWF 5,000, the NR receipt will show -RWF 5,000.
 - **Tax amounts are negative:** The tax portion is also shown as negative — the VAT that was collected in the original sale is now being "uncollected" and returned.
 - **Payment returned:** The payment section shows the refund amount as negative — for example, "CASH: -RWF 5,000" meaning RWF 5,000 was returned to the customer in cash.
@@ -731,7 +731,9 @@ There are several legitimate reasons to reprint a receipt:
 - The business needs to file a copy of a receipt and cannot find the original printout
 - A customer's accountant or tax consultant needs a copy for a VAT claim
 
-Every reprint is tracked by the system. When you reprint an NS receipt, the system generates a CS (Copy Sale) receipt, and when you reprint an NR receipt, the system generates a CR (Copy Refund) receipt. These copy receipts are sent to the VSDC and counted in the daily reports, just like any other receipt type. This is a legal requirement — the RRA tracks how many copy receipts each business generates.
+Every reprint is tracked by the system. When you reprint an NS receipt, the system produces a CS (Copy Sale) receipt, and when you reprint an NR receipt, it produces a CR (Copy Refund) receipt. A copy is not a new transaction: it is not sent to the VSDC (the VSDC sales API accepts only normal "N" transactions), and it creates no new sale, refund, stock movement, payment, tax or accounting entry. Each copy is recorded in the audit log and in the sale's reprint count, which feeds the "Copy receipts" line of the X and Z reports.
+
+Only one original is ever issued: the first print/download of a sale is the original, and any later print, download or share of the same receipt automatically comes out as its CS/CR copy.
 
 ### 5.2 Step-by-Step Reprint Process
 
@@ -743,36 +745,31 @@ Every reprint is tracked by the system. When you reprint an NS receipt, the syst
 - Customer name or TIN
 - Original receipt number
 
-**Step 3:** Once you find the sale in the list, click on it to open the receipt details.
+**Step 3:** Open the row's **⋯** menu and choose **"Print copy A4"** or **"Print copy 80mm"** — or open the sale's details, select the A4, A5 or 80mm format and click **"Download Copy (CS)"** (for a sale) or **"Download Copy (CR)"** (for a refund).
 
-**Step 4:** Click the **"Reprint"** button. The system will ask you to confirm that you want to generate a copy receipt.
+**Step 4:** The system checks that the receipt is an NS or NR of your organization and branch and that its VSDC confirmation is complete, then opens the copy in the print dialog (or downloads it as a PDF).
 
-**Step 5:** Click **"Confirm"** (or "Yes, Generate Copy").
+**Step 5:** Hand the printed copy to the customer or send them the PDF.
 
-**Step 6:** The system generates the CS or CR receipt and sends it to the VSDC for certification.
-
-**Step 7:** The copy receipt appears on screen. Click "Print" to print it, or "Share" to email it to the customer.
-
-**Step 8:** Hand the printed copy to the customer or send them the email copy.
+Training (TS/TR) and proforma (PS) documents cannot be copied as CS/CR. If the original sale's VSDC confirmation is still pending or incomplete, the copy is refused with an explanation instead of printing an invalid receipt.
 
 ### 5.3 Understanding the COPY Receipt
 
-The CS receipt (copy of a Normal Sale) looks almost identical to the original NS receipt but with several important differences:
+The CS receipt (copy of a Normal Sale) reproduces the original NS receipt exactly, with these differences:
 
-- **"COPY" label:** The word "COPY" appears in large text at the top of the receipt, and also in a watermark across the middle.
-- **"THIS IS NOT AN ORIGINAL RECEIPT" notice:** A bold disclaimer that clearly states this is a copy document.
-- **Original receipt date shown:** The date and time of the original NS sale is shown, so the customer can see when the purchase was actually made.
-- **Own SDC receipt counter:** Even though it is a copy, the CS receipt gets its own entry in the VSDC counter. For example, if the original NS had counter "168/258 NS," the copy might show "45/259 CS" — it is copy number 45, and this is receipt number 259 from this terminal overall.
-- **New SDC Information Block:** The CS receipt has its own digital signature from the VSDC, certifying that it is a genuine authorized copy.
+- **"COPY" heading** at the top (a CR adds the **REFUND** title under it), again right above **SDC INFORMATION**, and as a light diagonal watermark across the page (RRA receipt example 15.1).
+- **Reference to the original:** `ORIGINAL RECEIPT#: 168/258 NS` (the copied receipt's own VSDC counter). A CR additionally keeps the refund's `REF. NORMAL RECEIPT#` (the refunded sale's SDC receipt number, e.g. `201`), its refund reason and recipient.
+- **"THIS IS NOT AN OFFICIAL RECEIPT"** printed in large bold text between the items and the totals.
+- **Original SDC Information Block, unchanged:** the original date and time, SDC ID, receipt counter (e.g. "168/258 NS"), internal data, receipt signature and MRC are reproduced exactly as VSDC issued them for the original. A copy never receives a new counter or signature. Like the RRA example 15.1, a copy prints no QR code.
+- **Original amounts:** items, quantities, unit prices, discounts, tax rates, per-band tax, totals, customer and payment details are those of the original. A CR keeps the refund's negative amounts.
 
 **Important limitation:** A CS receipt cannot be used for VAT input tax claims. Only the original NS receipt is a valid VAT invoice. If a customer needs a receipt for VAT purposes, the CS copy is proof of the original transaction, but technically the original NS receipt is the VAT invoice. For most purposes (proof of purchase, returns, record keeping), the CS copy is perfectly adequate.
 
 ### 5.4 Important Rules About Reprints
 
-- **Every copy is tracked:** Each reprint appears in the daily X and Z reports under the CS or CR receipt count. This is how the RRA tracks all copies issued.
-- **Copies are certified by VSDC:** Like all other receipt types, CS and CR receipts go to the VSDC and are recorded.
-- **Unlimited reprints:** There is technically no limit on how many times you can reprint a receipt, but note that each reprint generates a new CS receipt counted in your daily totals.
-- **VSDC must be online:** If the VSDC is offline, the CS receipt will be queued, just like other receipt types.
+- **Every copy is tracked:** Each copy is written to the audit log (user, time, CS/CR, copy number, format) and counted in the sale's reprint count used by the X and Z reports.
+- **Copies are not sent to VSDC:** A copy reproduces the original's VSDC confirmation; it is not a new fiscal transaction, so it works even while the VSDC is offline.
+- **Unlimited reprints:** There is no limit on how many copies you can print; each one is numbered and audited.
 
 ---
 
@@ -784,9 +781,11 @@ Training Mode is a special operational mode in Excledge ERP/POS designed to allo
 
 When Training Mode is active, the system behaves exactly like it does in normal operation — you can make test sales, process test refunds, search for products, and complete all the steps you would in a real transaction. However, two critical things are different:
 
-1. **No data is sent to the RRA VSDC.** Training receipts are generated locally by the system but are never transmitted to the RRA's servers. This means training transactions are completely invisible to the RRA.
+1. **Nothing real changes.** Training sales and refunds never change stock, batches, customer balances, payments, shifts or accounting, and they are left out of sales, cash-flow, debtor and dashboard reports. They are still kept in the electronic journal and audit log, and counted separately (TS/TR) on the X and Z reports.
 
-2. **Receipts are clearly marked as training receipts.** Every receipt generated in Training Mode has a large "TRAINING MODE" watermark and the text "THIS IS NOT AN OFFICIAL RECEIPT." There is no digital signature in the SDC block.
+2. **They go to the VSDC as training documents.** As the RRA specification requires for every receipt type, a TS/TR is sent to the VSDC (as a training transaction) before it prints. The VSDC returns a training receipt number but no Internal Data and no Receipt Signature. If the VSDC is unreachable, the training receipt waits — exactly like a real one.
+
+3. **Receipts are clearly marked as training receipts.** Every receipt generated in Training Mode has "TRAINING MODE" under the header and again after the totals, and the text "THIS IS NOT AN OFFICIAL RECEIPT." There is no digital signature and no QR code.
 
 Training Mode is perfect for:
 - Teaching new cashiers how to make sales, process refunds, and search for receipts
@@ -808,7 +807,7 @@ To activate Training Mode:
 
 **Step 4:** Scroll down to find the **"Training Mode"** section. You will see a toggle switch.
 
-**Step 5:** Click the toggle to turn Training Mode **ON.** A confirmation warning message will appear: "You are about to activate Training Mode. All receipts generated will be marked as Training receipts and will NOT be sent to the RRA VSDC. Are you sure?" Click **"Confirm."**
+**Step 5:** Click the toggle to turn Training Mode **ON** and save. The change waits for any sale or refund that is being recorded at that moment, so no receipt is ever half normal, half training. Any POS screen that was opened before the switch must be reloaded: a sale or refund sent from a screen still showing the old mode is refused with "Receipt mode changed … Nothing was recorded — reload the page and try again." The switch is recorded in the audit log.
 
 **Step 6:** The VSDC Status Indicator at the top of the dashboard will change from a green "Connected" dot to an orange/yellow "TRAINING" status. All users logged in across all terminals at this branch will see that Training Mode is now active.
 
@@ -816,12 +815,12 @@ To activate Training Mode:
 
 Training receipts are designed to be obviously different from real receipts so they can never be confused with genuine certified receipts:
 
-- **"TRAINING MODE"** printed in large bold text at the very top of the receipt
-- **Watermark:** "TRAINING — NOT VALID" printed diagonally across the middle of the receipt
-- **"THIS IS NOT AN OFFICIAL RECEIPT"** printed in bold text
-- **"TRAINING" in the receipt type field** of the SDC block (instead of NS, NR, etc.)
-- **No digital signature in the SDC block:** The Receipt Signature and Internal Data fields will either be blank or say "TRAINING — NO SIGNATURE"
-- **No QR code,** or the QR code leads to a training receipt indicator on the RRA website
+- **"TRAINING MODE"** printed in large bold text below the header (above the items) and again right above SDC INFORMATION — at least twice the size of the amounts
+- **"THIS IS NOT AN OFFICIAL RECEIPT"** printed in large bold text between the items and the totals
+- **TS / TR in the receipt number** of the SDC block, e.g. `RECEIPT NUMBER : 6/207 TS` — the VSDC's training counter
+- **No digital signature in the SDC block:** the Internal Data and Receipt Signature lines are not printed
+- **No QR code**
+- A TR shows a **REFUND** title and `REF. NORMAL RECEIPT#:` followed by the SDC receipt number of the TS it refunds (e.g. `6` for an original printed `6/207 TS`)
 
 ### 6.4 CRITICAL WARNING — NEVER ISSUE TRAINING RECEIPTS TO REAL CUSTOMERS
 

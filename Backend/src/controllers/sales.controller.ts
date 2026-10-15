@@ -10,6 +10,7 @@ import {
   consumeOrgPurchaseCode,
   isEbmEnabled,
   allocateLocalReceiptSequence,
+  resolveVsdcBuyerIdentity,
 } from "../services/rra-ebm.service"
 import { processEbmOutboxBatch } from "../services/ebm-outbox.service"
 import { selectBatchesForSale, updateBatchQuantity } from "../services/batch.service"
@@ -17,22 +18,63 @@ import { calculateProfit } from "../services/profit.service"
 import { getAverageCost } from "../services/cost-price.service"
 import { buildBranchFilter, getBranchIdForOperation, resolveBranchIdForWrite } from "../middleware/branchAuth.middleware"
 import { success, error as apiError } from "../utils/apiResponse"
+import { resolveReportMrc } from "../utils/mrc"
 import { TaxService } from "../services/tax.service"
 import { round2 } from "../services/money.service"
 import { getOrganizationSettings } from "../services/organization-settings.service"
 import { renderSalesInvoiceHtml, type RenderInvoicePayload } from "../services/invoice-render.service"
+import { kigaliWallParts } from "../services/invoice-format.service"
 import { generateEbmInvoicePdf, getEbmInvoiceFilename, type InvoicePdfFormat, bandTaxAmounts } from "../services/invoice-pdf.service"
 import { generateEbmReceiptPdf80mm } from "../services/invoice-receipt-pdf.service"
 import { commitSale, CommitSaleError } from "../services/sale-commit.service"
+import {
+  assertOriginalConfirmed,
+  assertOriginalRefundable,
+  assertRefundReason,
+  formatOriginalReceiptReference,
+  planRefundLines,
+  remainingByLine,
+  summarizeRefund,
+  RefundRuleError,
+} from "../services/refund-calculation.service"
 import { getTaxRatesBySlot } from "../services/rra-code.service"
 import { validateRefundReasonCodeForOrg, DEFAULT_RFD_RSN_CD } from "../services/rra-code.service"
 import { SYSTEM_FOOTER, SYSTEM_POWERED_BY, CIS_VERSION_LABEL } from "../services/system-branding.service"
 import { getOrganizationLogo } from "../services/invoice-logo.service"
+import {
+  ReceiptCopyError,
+  applyCopyDesignation,
+  assertCopyableFiscalRecord,
+  copyLabelFor,
+  nextReprintCountForCopy,
+  resolveCopyLabel,
+} from "../services/receipt-copy.service"
+import {
+  ReceiptModeMismatchError,
+  assertExpectedReceiptMode,
+  isTrainingLabel,
+  isUnsignedLabel,
+  parseExpectedReceiptMode,
+  readReceiptModeLocked,
+  refundLabelForOriginal,
+} from "../services/training-mode.service"
+import {
+  readVsdcRecord,
+  vsdcBuyer,
+  vsdcInvoiceNumber,
+  vsdcItemForLine,
+  vsdcItems,
+  vsdcMrcNo,
+  vsdcOriginalInvoiceNumber,
+  vsdcReceiptNumber,
+  vsdcSdcId,
+  vsdcTaxRates,
+} from "../services/vsdc-receipt-parity.service"
 import QRCode from "qrcode"
 
 export const createSale = async (req: BranchAuthRequest, res: Response) => {
   try {
-    const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma, payments: splitPayments, shiftId, inventoryMethod } = req.body
+    const { customerId, items, paymentType, cashAmount, debtAmount, insuranceAmount, isProforma, payments: splitPayments, shiftId, inventoryMethod, receiptMode } = req.body
     // @ts-ignore
     const userId = parseInt(req.user?.userId as string)
     const organizationId = parseInt(req.params.organizationId)
@@ -52,6 +94,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       shiftId,
       isProforma: !!isProforma,
       inventoryMethod,
+      expectedReceiptMode: parseExpectedReceiptMode(receiptMode),
       req,
     })
 
@@ -377,6 +420,7 @@ export const getSales = async (req: BranchAuthRequest, res: Response) => {
             include: { product: true },
           },
           ebmTransactions: {
+            where: { operation: { not: "COPY" } },
             orderBy: { createdAt: "desc" },
             take: 1,
           },
@@ -459,6 +503,7 @@ export const getSaleById = async (req: BranchAuthRequest, res: Response) => {
         convertedSale: { select: { id: true, saleNumber: true, invoiceNumber: true, createdAt: true } },
         proformaSource: { select: { id: true, saleNumber: true, invoiceNumber: true, createdAt: true } },
         ebmTransactions: {
+          where: { operation: { not: "COPY" } },
           orderBy: { createdAt: "desc" },
         },
       },
@@ -565,8 +610,21 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
     const orgSettings = await getOrganizationSettings(organizationId);
     const result = await executeWithRetry(async () => {
       return await prisma.$transaction(async (prisma) => {
-        const { reason, items: refundItems, rfdRsnCd: rfdRsnCdRaw } = req.body;
+        const { reason, items: refundItems, rfdRsnCd: rfdRsnCdRaw, recipientName, receiptMode } = req.body;
         const userId = req.user?.userId;
+        // Serialize concurrent refunds of the same NS so two requests cannot
+        // both pass the remaining-quantity check and issue two NR documents.
+        await prisma.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`nr-refund:${organizationId}:${id}`}))`;
+
+        // NR vs TR: the mode is read under a shared lock (no toggle can land
+        // before this refund commits) and must match what the screen showed.
+        const trainingMode = await readReceiptModeLocked(prisma, organizationId);
+        try {
+          assertExpectedReceiptMode(parseExpectedReceiptMode(receiptMode), trainingMode);
+        } catch (e: unknown) {
+          if (e instanceof ReceiptModeMismatchError) throw { status: e.status, message: e.message, code: e.code };
+          throw e;
+        }
 
         // RRA refund reason (code class 32): the operator's selection, validated
         // now so a bad code is a 400 instead of a dead-lettered fiscal refund.
@@ -582,7 +640,18 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           throw { status: 400, message: e instanceof Error ? e.message : 'Invalid refund reason code' };
         }
 
-        // Get the sale with items
+        // Justification is always required; code 13 ("Other reason") needs a
+        // real explanation. (The zod schema already requires a non-empty
+        // reason; this enforces the code-13 rule with a precise message.)
+        try {
+          assertRefundReason(rfdRsnCd, reason);
+        } catch (e: unknown) {
+          if (e instanceof RefundRuleError) throw { status: e.status, message: e.message };
+          throw e;
+        }
+
+        // Get the sale with items + every prior refund linked to it (for
+        // remaining-quantity enforcement and the in-progress guard below).
         const sale = await prisma.sale.findFirst({
           where: {
             id,
@@ -596,7 +665,16 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
                 batch: true
               }
             },
-            customer: true
+            customer: true,
+            refunds: {
+              select: {
+                id: true,
+                status: true,
+                saleItems: {
+                  select: { productId: true, quantity: true, serviceName: true },
+                },
+              },
+            },
           } as any
         });
 
@@ -604,12 +682,54 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           throw { status: 404, message: "Sale not found" };
         }
 
-        if (sale.status === 'REFUNDED') {
-          throw { status: 400, message: "Sale already refunded" };
+        // The original must be a genuine Normal Sale: never an NR (or any
+        // other label), never a proforma, never already refunded/cancelled,
+        // and carrying the VSDC invoice number the refund will reference.
+        try {
+          assertOriginalRefundable({
+            id,
+            status: sale.status,
+            rcptLabel: (sale as any).rcptLabel ?? null,
+            isProforma: !!(sale as any).isProforma,
+            originalSaleId: (sale as any).originalSaleId ?? null,
+            vsdcInvcNo: (sale as any).vsdcInvcNo ?? null,
+          }, { trainingMode });
+        } catch (e: unknown) {
+          if (e instanceof RefundRuleError) throw { status: e.status, message: e.message };
+          throw e;
         }
 
-        if (sale.status === 'CANCELLED') {
-          throw { status: 400, message: "Cannot refund a cancelled sale" };
+        // A number allocated at checkout is not a receipt. When EBM is on, the
+        // NS must already have VSDC's rcptNo, signature, internal data and
+        // timestamp — otherwise the refund would mark the original REFUNDED,
+        // the pending SALE submission would be dead-lettered, and the NR
+        // would never be confirmed.
+        if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+          const confirmed = await prisma.ebmTransaction.findFirst({
+            where: { saleId: id, operation: 'SALE', submissionStatus: 'SUCCESS' },
+            orderBy: { createdAt: 'desc' },
+            select: {
+              sdcRcptNo: true,
+              ebmInvoiceNumber: true,
+              internalData: true,
+              receiptSignature: true,
+              sdcId: true,
+              sdcDateTime: true,
+            },
+          });
+          try {
+            assertOriginalConfirmed(confirmed ? {
+              submissionStatus: 'SUCCESS',
+              rcptNo: confirmed.sdcRcptNo ?? confirmed.ebmInvoiceNumber,
+              internalData: confirmed.internalData,
+              receiptSignature: confirmed.receiptSignature,
+              sdcId: confirmed.sdcId,
+              publishedAt: confirmed.sdcDateTime,
+            } : null, { training: trainingMode });
+          } catch (e: unknown) {
+            if (e instanceof RefundRuleError) throw { status: e.status, message: e.message };
+            throw e;
+          }
         }
 
         // Ensure sale has items
@@ -617,22 +737,13 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           throw { status: 400, message: "Sale has no items to refund" };
         }
 
-        // Strict Rule: Partial refunds are not allowed
-        if (refundItems && refundItems.length > 0 && refundItems.length < sale.saleItems.length) {
-          throw { status: 400, message: "Partial refunds are not allowed. Only full refunds are permitted." };
-        }
-
-        // Get all sale items for full refund — include batchId to restore batch quantities.
-        // Tax code / rate / amount and any line discount are carried over from the
-        // original line so the refund is fiscalised (and printed) as a true mirror
-        // of the original — otherwise a refund of an 18% VAT sale would be reported
-        // to RRA as a tax-exempt, zero-VAT refund (RRA checklist §9/§56).
-        const itemsToRefund = ((sale as any).saleItems || []).map((item: any) => ({
+        // Normalize the original lines once (SaleItem.quantity is
+        // Decimal(15,3) — every consumer below needs plain numbers).
+        const originalLines = ((sale as any).saleItems || []).map((item: any) => ({
           saleItemId: item.id,
-          productId: item.productId,
-          // SaleItem.quantity is Decimal(15,3) — normalize to number once here;
-          // every consumer below (negation, stock restore, batch restock) needs
-          // a plain number (unary minus / + on a Decimal would yield NaN).
+          productId: item.productId ?? null,
+          serviceName: item.serviceName || null,
+          serviceDescription: item.serviceDescription || null,
           quantity: Number(item.quantity),
           unitPrice: item.unitPrice.toNumber(),
           totalPrice: item.totalPrice.toNumber(),
@@ -644,42 +755,81 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           measurementUnit: item.measurementUnit ?? 'PCS',
           batchId: item.batchId || item.batch?.id || null,
           itemType: item.itemType || 'PRODUCT',
-          serviceName: item.serviceName || null,
-          serviceDescription: item.serviceDescription || null,
         }));
 
-        // Calculate total refund amount
-        const totalRefundAmount = itemsToRefund.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
-        const totalRefundVat = itemsToRefund.reduce((sum: number, item: any) => sum + item.taxAmount, 0);
-        const totalRefundTaxable = totalRefundAmount - totalRefundVat;
+        // Already-refunded legs from every prior refund linked to this sale
+        // (refund rows store negated quantities — take abs). Linked refunds
+        // can never be cancelled (cancelSale refuses REFUNDED rows), so every
+        // linked row counts as consumed: conservative by design, re-refunding
+        // the same quantity is impossible.
+        const priorLegs = ((sale as any).refunds || []).flatMap((r: any) =>
+          (r.saleItems || []).map((si: any) => ({
+            productId: si.productId ?? null,
+            serviceName: si.serviceName || null,
+            absQuantity: Math.abs(Number(si.quantity)),
+          })),
+        );
 
-        // R9: per-rate legs mirror the original lines with the sign flipped,
-        // rounded once per band like the VSDC payload. RRA `taxblAmt` is the
-        // VAT-inclusive band base (band NET), not the VAT-exclusive figure.
-        const refundBands: Record<string, { net: number; tax: number }> = {};
-        for (const item of itemsToRefund) {
-          const code = String(item.taxCode ?? 'A').toUpperCase();
-          const slot = refundBands[code] ?? { net: 0, tax: 0 };
-          slot.net = round2(slot.net + item.totalPrice);
-          slot.tax = round2(slot.tax + item.taxAmount);
-          refundBands[code] = slot;
+        // Duplicate-submission guard: a refund for this original that is still
+        // being fiscalized (or waiting to retry) blocks a new one. Without
+        // this, a double-click / retry-after-timeout would create a second
+        // refund record and restore the same stock twice.
+        const linkedRefundIds = ((sale as any).refunds || []).map((r: any) => r.id);
+        if (linkedRefundIds.length > 0) {
+          const inFlight = await prisma.ebmOutbox.findFirst({
+            where: {
+              saleId: { in: linkedRefundIds },
+              operation: 'REFUND',
+              status: { in: ['PENDING', 'PROCESSING', 'FAILED'] },
+            },
+            select: { id: true },
+          });
+          if (inFlight) {
+            throw {
+              status: 409,
+              message: 'A refund for this sale is already being processed — wait for it to complete before creating another',
+            };
+          }
         }
-        const refundBand = (code: string) => refundBands[code] ?? { net: 0, tax: 0 };
 
-        // ── MODULE 2.3: Reject if refund exceeds original total (defense-in-depth) ──
-        const originalTotal = Number((sale as any).totalAmount);
-        if (totalRefundAmount > originalTotal + 0.01) {
-          throw {
-            status: 400,
-            message: `Refund total ${totalRefundAmount.toFixed(2)} exceeds original invoice total ${originalTotal.toFixed(2)}`,
-          };
+        // Plan the negated legs. No `items` (or an empty list) = full refund
+        // of every remaining line; otherwise each entry refunds part of one
+        // original line within its remaining quantity. Over-refunds throw.
+        const requested = Array.isArray(refundItems) && refundItems.length > 0
+          ? refundItems.map((r: any) => ({ saleItemId: Number(r.saleItemId), quantity: Number(r.quantity) }))
+          : null;
+        let planned: ReturnType<typeof planRefundLines>;
+        try {
+          planned = planRefundLines(originalLines, priorLegs, requested);
+        } catch (e: unknown) {
+          if (e instanceof RefundRuleError) throw { status: e.status, message: e.message };
+          throw e;
         }
+        const refundTotals = summarizeRefund(planned);
+        const totalRefundAmount = refundTotals.totalRefundAmount;
+        const totalRefundVat = refundTotals.totalRefundVat;
+        const totalRefundTaxable = refundTotals.totalRefundTaxable;
+        const refundBand = (code: string) => refundTotals.bands[code] ?? { net: 0, tax: 0 };
+
+        // Original receipt status after THIS refund: REFUNDED only when
+        // nothing remains refundable, otherwise PARTIALLY_REFUNDED.
+        const consumedAfter = [...priorLegs];
+        for (const leg of planned) {
+          const orig = originalLines.find((l: any) => l.saleItemId === leg.saleItemId)!;
+          consumedAfter.push({
+            productId: orig.productId,
+            serviceName: orig.serviceName,
+            absQuantity: Math.abs(leg.quantity),
+          });
+        }
+        const anythingLeft = remainingByLine(originalLines, consumedAfter).some((r) => r.remaining > 0);
+        const newOriginalStatus = anythingLeft ? 'PARTIALLY_REFUNDED' : 'REFUNDED';
 
         // Update original sale status
         await prisma.sale.update({
           where: { id },
           data: {
-            status: 'REFUNDED',
+            status: newOriginalStatus as any,
             refundedAt: new Date(),
             refundedById: parseInt(userId as string),
             refundReason: reason
@@ -689,12 +839,10 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
         // Create a new REFUND sale record with negative amounts
         const refundSaleNumber = `REFUND-${sale.saleNumber}-${Date.now()}`;
 
-        // C6: determine NR vs TR based on training mode
-        const refundOrg = await prisma.organization.findUnique({
-          where: { id: organizationId! },
-          select: { trainingMode: true },
-        });
-        const refundRcptLabel = refundOrg?.trainingMode ? 'TR' : 'NR';
+        // C6: a TS is refunded as TR, an NS as NR (assertOriginalRefundable
+        // already tied the original's label to the current mode).
+        const refundRcptLabel = refundLabelForOriginal((sale as any).rcptLabel ?? 'NS');
+        const isTrainingRefund = refundRcptLabel === 'TR';
 
         // A fiscal refund is a NEW sales-transaction document: allocate a fresh
         // VSDC invoice number for it (the sandbox rejects a resubmitted invcNo
@@ -730,28 +878,34 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             status: 'REFUNDED',
             refundReason: reason,
             rfdRsnCd,
+            // Person receiving the refund — explicit operator input, else the
+            // original customer (the RRA refund record must name a recipient).
+            refundRecipient: (typeof recipientName === 'string' && recipientName.trim())
+              ? recipientName.trim()
+              : ((sale as any).customer?.name ?? null),
             rcptLabel: refundRcptLabel as any,
             originalSaleId: id, // Link to original sale
-            shiftId: (sale as any).shiftId ?? undefined, // Refund belongs to the original sale's shift
+            // Refund belongs to the original sale's shift (a TS never has one).
+            shiftId: isTrainingRefund ? undefined : (sale as any).shiftId ?? undefined,
             saleItems: {
-              create: itemsToRefund.map((item: any) => ({
+              create: planned.map((item) => ({
                 productId: item.productId || undefined,
                 // quantity negative x unitPrice positive = totalPrice negative;
                 // unitPrice itself stays positive here so that identity holds —
                 // the printed minus sign on the per-unit price (RRA checklist
                 // §56) is applied at render time (composeInvoicePayload), not
                 // stored, to avoid double-negating the line total.
-                quantity: -item.quantity,
+                quantity: item.quantity,
                 unitPrice: item.unitPrice,
-                totalPrice: -item.totalPrice,
+                totalPrice: item.totalPrice,
                 // Tax + discount mirror the original line with the sign flipped so
                 // the refund fiscalises with the correct tax code/amount and the
                 // printed receipt shows every amount negative (RRA checklist §56).
                 taxRate: item.taxRate,
-                taxAmount: -item.taxAmount,
+                taxAmount: item.taxAmount,
                 taxCode: item.taxCode ?? undefined,
                 dcRate: item.dcRate,
-                dcAmt: -item.dcAmt,
+                dcAmt: item.dcAmt,
                 measurementUnit: item.measurementUnit,
                 itemType: item.itemType,
                 serviceName: item.serviceName,
@@ -766,33 +920,42 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
         });
 
         // Update product quantities (restore inventory) and record movements in ledger (Stock IN)
-        // Only restore stock for PRODUCT items; SERVICE items have no inventory
-        for (const item of itemsToRefund) {
+        // Only restore stock for PRODUCT items; SERVICE items have no inventory.
+        // Exactly the refunded quantity is restored, once, against this refund
+        // record — retrying the fiscal submission never touches stock again, so
+        // a retry can neither duplicate nor miss the restoration.
+        const batchBySaleItemId = new Map<number, number | null>(
+          originalLines.map((l: any) => [l.saleItemId, l.batchId ?? null] as [number, number | null]),
+        );
+        // A TR restores nothing: its TS never took real stock or batches.
+        for (const item of isTrainingRefund ? [] : planned) {
           if (item.itemType === 'SERVICE' || !item.productId) continue;
+          const restoredQty = Math.abs(item.quantity);
 
           await addStock({
             organizationId: organizationId!,
             productId: item.productId,
             userId: parseInt(userId as string),
-            quantity: item.quantity,
+            quantity: restoredQty,
             movementType: 'RETURN_CUSTOMER',
             branchId: (sale as any).branchId,
             reference: refundSaleNumber,
             referenceType: 'SALE_REFUND',
-            note: `Refund for Sale #${sale.saleNumber} (Full)`,
+            note: `Refund for Sale #${sale.saleNumber} (Partial)`,
             metadata: { originalSaleNumber: sale.saleNumber, originalSaleId: id },
             tx: prisma,
           });
 
-          if (item.batchId) {
+          const batchId = batchBySaleItemId.get(item.saleItemId);
+          if (batchId) {
             const existingBatch = await prisma.batch.findFirst({
-              where: { id: item.batchId, organizationId: organizationId! },
+              where: { id: batchId, organizationId: organizationId! },
             });
             if (existingBatch) {
               await prisma.batch.update({
-                where: { id: item.batchId },
+                where: { id: batchId },
                 data: {
-                  quantity: Number(existingBatch.quantity) + item.quantity,
+                  quantity: Number(existingBatch.quantity) + restoredQty,
                   isActive: true,
                 },
               });
@@ -800,24 +963,33 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           }
         }
 
-        // Update customer balance
-        await prisma.customer.update({
-          where: { id: sale.customerId },
-          data: {
-            balance: { decrement: totalRefundAmount }
-          }
-        });
+        // Update customer balance (a TS never booked a real receivable)
+        if (!isTrainingRefund) {
+          await prisma.customer.update({
+            where: { id: sale.customerId },
+            data: {
+              balance: { decrement: totalRefundAmount }
+            }
+          });
+        }
 
         // Log the activity
         await auditLogger.sales(req, {
           type: 'SALE_REFUNDED',
-          description: `Full refund issued for Sale #${sale.saleNumber}${reason ? `: ${reason}` : ''}`,
+          description: `${anythingLeft ? 'Partial' : 'Full'} ${isTrainingRefund ? 'training refund (TR)' : 'refund'} issued for Sale #${sale.saleNumber}${reason ? `: ${reason}` : ''}`,
           entityType: 'Sale',
           entityId: id,
           metadata: {
+            rcptLabel: refundRcptLabel,
             refundSaleId: refundSale.id,
+            refundSaleNumber: refundSaleNumber,
             refundAmount: totalRefundAmount,
+            originalStatus: newOriginalStatus,
             reason,
+            rfdRsnCd,
+            recipient: (refundSale as any).refundRecipient ?? null,
+            orgInvcNo: (sale as any).vsdcInvcNo ?? null,
+            refundedLineCount: planned.length,
           }
         });
 
@@ -838,6 +1010,7 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
                 operation: 'REFUND',
                 originalSaleId: id,
                 rfdRsnCd,
+                reason: typeof reason === 'string' ? reason.trim() : '',
               } as any,
               status: 'PENDING',
               nextAttemptAt: new Date(),
@@ -850,7 +1023,8 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           message: 'Refund transaction created successfully',
           refundAmount: totalRefundAmount,
           refundSale: refundSale,
-          refundedItems: itemsToRefund
+          refundedItems: planned,
+          originalStatus: newOriginalStatus,
         };
       }, {
         maxWait: 30000,   // 30 seconds
@@ -893,6 +1067,177 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
 
 
 /**
+ * What can still be refunded on a sale — drives the refund UI (original
+ * detail + per-line remaining + prior refunds + fiscal state).
+ *
+ * GET /:organizationId/:saleId/refundable
+ *
+ * Always 200 (except 404/500): `eligible` tells the UI whether a refund may
+ * start, with machine-readable `errors` when not. Never exposes a path to
+ * refund an ineligible receipt — `refundSale` re-enforces every rule.
+ */
+export const getRefundable = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const saleId = parseInt(req.params.saleId);
+    const organizationId = parseInt(req.params.organizationId);
+
+    const sale = await prisma.sale.findFirst({
+      where: { id: saleId, organizationId, ...buildBranchFilter(req) },
+      include: {
+        customer: { select: { id: true, name: true, phone: true, TIN: true } },
+        saleItems: { include: { product: { select: { id: true, name: true, itemCd: true } } } },
+        refunds: {
+          select: {
+            id: true,
+            saleNumber: true,
+            invoiceNumber: true,
+            status: true,
+            totalAmount: true,
+            createdAt: true,
+            saleItems: { select: { productId: true, quantity: true, serviceName: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!sale) {
+      return res.status(404).json(apiError("Sale not found"));
+    }
+
+    const orgSettings = await getOrganizationSettings(organizationId);
+    const trainingMode = (await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { trainingMode: true },
+    }))?.trainingMode === true;
+    const errors: string[] = [];
+    try {
+      assertOriginalRefundable({
+        id: saleId,
+        status: sale.status,
+        rcptLabel: (sale as any).rcptLabel ?? null,
+        isProforma: !!(sale as any).isProforma,
+        originalSaleId: (sale as any).originalSaleId ?? null,
+        vsdcInvcNo: (sale as any).vsdcInvcNo ?? null,
+      }, { trainingMode });
+    } catch (e: unknown) {
+      errors.push(e instanceof RefundRuleError ? e.message : 'This sale cannot be refunded');
+    }
+    if (errors.length === 0 && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+      const confirmed = await prisma.ebmTransaction.findFirst({
+        where: { saleId, operation: 'SALE', submissionStatus: 'SUCCESS' },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          sdcRcptNo: true,
+          ebmInvoiceNumber: true,
+          internalData: true,
+          receiptSignature: true,
+          sdcId: true,
+          sdcDateTime: true,
+        },
+      });
+      try {
+        assertOriginalConfirmed(confirmed ? {
+          submissionStatus: 'SUCCESS',
+          rcptNo: confirmed.sdcRcptNo ?? confirmed.ebmInvoiceNumber,
+          internalData: confirmed.internalData,
+          receiptSignature: confirmed.receiptSignature,
+          sdcId: confirmed.sdcId,
+          publishedAt: confirmed.sdcDateTime,
+        } : null, { training: trainingMode });
+      } catch (e: unknown) {
+        errors.push(e instanceof RefundRuleError ? e.message : 'Original receipt is not confirmed by VSDC');
+      }
+    }
+
+    const originalLines = ((sale as any).saleItems || []).map((item: any) => ({
+      saleItemId: item.id,
+      productId: item.productId ?? null,
+      productName: item.product?.name ?? null,
+      serviceName: item.serviceName || null,
+      serviceDescription: item.serviceDescription || null,
+      quantity: Number(item.quantity),
+      unitPrice: Number(item.unitPrice),
+      totalPrice: Number(item.totalPrice),
+      taxRate: Number(item.taxRate ?? 0),
+      taxAmount: Number(item.taxAmount ?? 0),
+      taxCode: item.taxCode ?? null,
+      dcRate: Number(item.dcRate ?? 0),
+      dcAmt: Number(item.dcAmt ?? 0),
+      measurementUnit: item.measurementUnit ?? 'PCS',
+      itemType: item.itemType || 'PRODUCT',
+    }));
+    const priorLegs = ((sale as any).refunds || []).flatMap((r: any) =>
+      (r.saleItems || []).map((si: any) => ({
+        productId: si.productId ?? null,
+        serviceName: si.serviceName || null,
+        absQuantity: Math.abs(Number(si.quantity)),
+      })),
+    );
+    const remaining = new Map(remainingByLine(originalLines, priorLegs).map((r) => [r.saleItemId, r.remaining]));
+    const lines = originalLines.map((l: any) => ({
+      ...l,
+      refunded: round2(l.quantity - (remaining.get(l.saleItemId) ?? l.quantity)),
+      remaining: remaining.get(l.saleItemId) ?? 0,
+    }));
+    if (errors.length === 0 && !lines.some((l: any) => l.remaining > 0)) {
+      errors.push('Nothing left to refund — every line was already fully refunded');
+    }
+
+    // Fiscal state of prior refunds (pending vs confirmed) for honest UI status.
+    const refundIds = ((sale as any).refunds || []).map((r: any) => r.id);
+    const outboxStates = refundIds.length
+      ? await prisma.ebmOutbox.findMany({
+          where: { saleId: { in: refundIds }, operation: 'REFUND' },
+          select: { saleId: true, status: true },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+    const fiscalByRefund = new Map<number, string>();
+    for (const row of outboxStates) {
+      if (!fiscalByRefund.has(row.saleId)) fiscalByRefund.set(row.saleId, row.status);
+    }
+    const priorRefunds = ((sale as any).refunds || []).map((r: any) => ({
+      id: r.id,
+      saleNumber: r.saleNumber,
+      invoiceNumber: r.invoiceNumber,
+      status: r.status,
+      totalAmount: Number(r.totalAmount),
+      createdAt: r.createdAt,
+      fiscalStatus: fiscalByRefund.get(r.id) ?? (r.status === 'REFUNDED' ? 'UNKNOWN' : r.status),
+    }));
+    const inProgress = priorRefunds.some((r: any) => ['PENDING', 'PROCESSING', 'FAILED'].includes(r.fiscalStatus));
+
+    return res.json(success({
+      eligible: errors.length === 0 && !inProgress,
+      refundLabel: refundLabelForOriginal((sale as any).rcptLabel ?? 'NS'),
+      trainingMode,
+      errors: inProgress
+        ? [...errors, 'A refund for this sale is already being processed — wait for it to complete']
+        : errors,
+      original: {
+        id: sale.id,
+        saleNumber: (sale as any).saleNumber,
+        invoiceNumber: (sale as any).invoiceNumber,
+        vsdcInvcNo: (sale as any).vsdcInvcNo ?? null,
+        rcptLabel: (sale as any).rcptLabel ?? null,
+        status: sale.status,
+        createdAt: (sale as any).createdAt,
+        totalAmount: Number((sale as any).totalAmount),
+        customer: (sale as any).customer,
+      },
+      lines,
+      priorRefunds,
+      inProgress,
+    }));
+  } catch (error: any) {
+    console.error("[Refundable Error]:", error);
+    res.status(500).json(apiError("Failed to load refundable details"));
+  }
+};
+
+
+/**
  * Registers one download/print of this sale's invoice PDF — called by the
  * frontend right before it fetches the actual PDF for every deliberate
  * download. CIS/VSDC spec §7.18: "print only one original receipt. Reprint
@@ -900,51 +1245,78 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
  * action: the FIRST registered download stays the original (reprintCount
  * reaches 1, isCopy stays false in getSaleInvoiceData); every one after that
  * is automatically rendered as a COPY (CS/CR) receipt.
+ *
+ * The explicit copy action is printReceiptCopy (POST .../copy), which renders
+ * and records the copy in one request.
  */
 export const reprintSaleReceipt = async (req: BranchAuthRequest, res: Response) => {
   try {
     const saleId = parseInt(req.params.saleId);
     const organizationId = parseInt(req.params.organizationId);
+    if (!Number.isInteger(saleId) || saleId <= 0) {
+      return res.status(400).json(apiError("Invalid sale id"));
+    }
 
     const sale = await prisma.sale.findFirst({
       where: { id: saleId, organizationId, ...buildBranchFilter(req) },
-      select: { id: true, saleNumber: true, status: true, rcptLabel: true },
+      select: { id: true, saleNumber: true, invoiceNumber: true, totalAmount: true, status: true, rcptLabel: true, isProforma: true, originalSaleId: true, reprintCount: true },
     });
 
     if (!sale) {
       return res.status(404).json(apiError("Sale not found"));
     }
 
-    // C6: CS = copy of a sale, CR = copy of a refund. This is a display-only
-    // label for the printout being produced right now — it must NOT overwrite
-    // the sale's own rcptLabel (NS/NR/TS/TR), which is the fiscal record of
-    // what the original receipt actually was. Persisting CS/CR onto the sale
-    // previously made reprinted TRAINING receipts (TS/TR) look like normal
-    // sales/refunds everywhere the sale's rcptLabel is read from, including
-    // the daily X/Z report's training exclusion filter.
-    const copyLabel = (sale.status === 'REFUNDED' || sale.rcptLabel === 'NR' || sale.rcptLabel === 'TR')
-      ? 'CR'
-      : 'CS';
+    // C6: CS = copy of a Normal Sale, CR = copy of a Normal Refund — derived
+    // from the receipt's own label (an NS that was later refunded is still a
+    // sale receipt). Display-only: the sale's rcptLabel (NS/NR/TS/TR) stays
+    // the fiscal record of what the original receipt was. Training/proforma
+    // reprints are not CS/CR.
+    const copyLabel = copyLabelFor({
+      rcptLabel: sale.rcptLabel ?? null,
+      isProforma: sale.isProforma,
+      originalSaleId: sale.originalSaleId ?? null,
+      status: sale.status,
+    });
+    const willBeCopy = (sale.reprintCount ?? 0) + 1 > 1;
+
+    // Validate that the document this registration unlocks can actually be
+    // produced before counting it — a failed registration must never inflate
+    // the count. A CS/CR reprints the original's VSDC data under a COPY
+    // watermark; nothing is sent to VSDC.
+    await composeInvoicePayload(req, { copy: copyLabel && willBeCopy ? "force" : "auto" });
 
     const updated = await prisma.sale.update({
       where: { id: saleId },
       data: { reprintCount: { increment: 1 } },
+      select: { reprintCount: true },
     });
+    const isCopy = updated.reprintCount > 1;
 
     await auditLogger.sales(req, {
       type: 'SALE_REPRINTED',
-      description: `Invoice downloaded for Sale #${sale.saleNumber} (download #${updated.reprintCount})`,
+      description: isCopy && copyLabel
+        ? `${copyLabel} copy #${updated.reprintCount - 1} registered for Sale #${sale.saleNumber}`
+        : `Invoice downloaded for Sale #${sale.saleNumber} (download #${updated.reprintCount})`,
       entityType: 'Sale',
       entityId: saleId,
-      metadata: { reprintCount: updated.reprintCount, copyLabel },
+      metadata: { reprintCount: updated.reprintCount, copyLabel: isCopy ? copyLabel : null },
     });
 
     res.json(success({
-      isCopy: updated.reprintCount > 1,
+      id: sale.id,
+      saleNumber: sale.saleNumber,
+      invoiceNumber: sale.invoiceNumber,
+      totalAmount: Number(sale.totalAmount),
+      isCopy,
       reprintCount: updated.reprintCount,
-      rcptLabel: copyLabel,
+      rcptLabel: isCopy ? copyLabel : null,
+      copyLabel: isCopy ? copyLabel : null,
     }));
   } catch (error: any) {
+    if (error instanceof FiscalizationPendingError) {
+      return res.status(425).json({ success: false, status: "pending_fiscalization", reason: error.reason, error: error.message });
+    }
+    if (error instanceof ReceiptCopyError) return sendReceiptCopyError(res, error);
     console.error("[Reprint Sale Error]:", error);
     res.status(500).json(apiError("Failed to reprint receipt"));
   }
@@ -1099,7 +1471,7 @@ export const getEbmReceipt = async (req: BranchAuthRequest, res: Response) => {
 
     const sale = await prisma.sale.findFirst({
       where: { id: saleId, organizationId },
-      select: { rcptLabel: true, invoiceNumber: true, saleNumber: true },
+      select: { rcptLabel: true, invoiceNumber: true, saleNumber: true, branchId: true },
     });
 
     const org = await prisma.organization.findUnique({
@@ -1107,14 +1479,15 @@ export const getEbmReceipt = async (req: BranchAuthRequest, res: Response) => {
       select: { TIN: true, ebmDeviceId: true, ebmSerialNo: true },
     });
 
-    const branch = sale
+    const branch = sale?.branchId != null
       ? await prisma.branch.findFirst({
-          where: { id: (sale as any).branchId },
-          select: { bhfId: true, ebmDeviceId: true, ebmSerialNo: true },
+          where: { id: sale.branchId, organizationId },
+          select: { bhfId: true, ebmDeviceId: true, ebmSerialNo: true, ebmInitInfo: true },
         })
       : null;
 
-    const mrcNo = branch?.ebmSerialNo ?? org?.ebmSerialNo ?? null;
+    const signedMrc = (tx.responseData as { normalized?: { mrcNo?: string } } | null)?.normalized?.mrcNo;
+    const mrcNo = signedMrc || resolveReportMrc(branch, org);
     // `tx` is this sale's own successful VSDC response — prefer the ID it was
     // actually stamped with over the (possibly still-unconfigured) device
     // setting, same precedence composeInvoicePayload uses.
@@ -1306,23 +1679,218 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
   }
 };
 
-/** Build the RRA QR string per CIS/VSDC spec (§4.2): ddmmyyyy#hhmmss#sdcId#sdcRcptNo#internalData#receiptSignature */
+/**
+ * Pre-approval correction (2018 spec Art. 12): replace a COMPLETED sale that
+ * the VSDC has NOT yet confirmed with a corrected sale.
+ *
+ * Rules enforced:
+ * - Only unfiscalized sales qualify: no SUCCEEDED outbox row and no SUCCESS
+ *   fiscal transaction. An approved (VSDC-signed) receipt is immutable — issue
+ *   a refund instead (409 otherwise).
+ * - The original is cancelled first and referenced by the correction
+ *   (cancellationReason carries the new sale number); a CANCELLED/REFUNDED
+ *   sale cannot be corrected again (cancel-once rule).
+ * - The original's VSDC invoice number was never submitted, so no VOID
+ *   document is owed to RRA for it; a VOID outbox row is still recorded for
+ *   the audit trail and the worker skips it as never-fiscalized.
+ * - Proformas have their own edit endpoint (updateProforma).
+ *
+ * POST /:organizationId/:saleId/correct
+ */
+export const correctSale = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const saleId = parseInt(req.params.saleId);
+    const organizationId = parseInt(req.params.organizationId);
+    const userId = req.user?.userId;
+    const branchId = await resolveBranchIdForWrite(req);
+    const orgSettings = await getOrganizationSettings(organizationId);
+    const { reason, items, customerId, paymentType, cashAmount, debtAmount, insuranceAmount, payments: splitPayments, shiftId } = req.body;
+
+    const sale = await prisma.sale.findFirst({
+      where: { id: saleId, organizationId, ...buildBranchFilter(req) },
+      include: {
+        saleItems: { include: { product: true, batch: true } },
+        customer: true,
+      },
+    });
+
+    if (!sale) {
+      return res.status(404).json(apiError("Sale not found"));
+    }
+    if (sale.isProforma) {
+      return res.status(400).json(apiError("A proforma is corrected with the proforma edit endpoint, not here"));
+    }
+    if (sale.status === 'CANCELLED') {
+      return res.status(400).json(apiError("Sale already cancelled — an original can be cancelled only once"));
+    }
+    if (sale.status === 'REFUNDED' || sale.status === 'PARTIALLY_REFUNDED') {
+      return res.status(400).json(apiError(`Cannot correct a ${sale.status.toLowerCase()} sale — issue a new sale instead`));
+    }
+    if (sale.status !== 'COMPLETED') {
+      return res.status(400).json(apiError(`Only a completed sale can be corrected (status is ${sale.status})`));
+    }
+
+    // VSDC approval check: any SUCCEEDED fiscal record makes the receipt
+    // immutable. (Outbox SUCCEEDED and fiscal SUCCESS are written together, so
+    // either one blocks; checking both covers legacy rows.)
+    const [outboxSuccess, fiscalSuccess] = await Promise.all([
+      prisma.ebmOutbox.findFirst({ where: { saleId, status: 'SUCCEEDED' }, select: { id: true } }),
+      prisma.ebmTransaction.findFirst({ where: { saleId, submissionStatus: 'SUCCESS' }, select: { id: true } }),
+    ]);
+    if (outboxSuccess || fiscalSuccess) {
+      return res.status(409).json(apiError("Sale already confirmed by RRA VSDC and can no longer be corrected — issue a refund instead"));
+    }
+
+    // Pre-validate the corrected totals BEFORE cancelling the original, so a
+    // correctable sale is never stranded by a correctable typo: the same
+    // payment-identity gate commitSale enforces.
+    const correctedTotal = (items as any[]).reduce((s: number, i: any) => s + Number(i.quantity) * Number(i.unitPrice), 0);
+    if (Math.abs(correctedTotal - (cashAmount || 0) - (insuranceAmount || 0) - (debtAmount || 0)) > 0.01) {
+      return res.status(400).json(apiError("Payment amounts do not match total. Total must equal cashAmount + insuranceAmount + debtAmount"));
+    }
+
+    // Cancel the original first (stock restore + debt revert mirror cancelSale).
+    await prisma.$transaction(async (prisma) => {
+      await prisma.sale.update({
+        where: { id: saleId },
+        data: {
+          status: 'CANCELLED',
+          cancelledAt: new Date(),
+          cancelledById: parseInt(userId as string),
+          cancellationReason: `Pre-approval correction: ${reason}`,
+        },
+      });
+
+      const deducted = await prisma.inventoryLedger.findMany({
+        where: { organizationId: organizationId!, movementType: 'SALE', reference: sale.saleNumber },
+        select: { productId: true },
+      });
+      const deductedIds = new Set(deducted.map((d: any) => d.productId));
+      for (const item of sale.saleItems) {
+        const isService = (item as any).itemType === 'SERVICE' || !item.productId;
+        if (isService) continue;
+        if (!deductedIds.has(item.productId)) continue;
+        await addStock({
+          organizationId: organizationId!,
+          productId: item.productId!,
+          userId: parseInt(userId as string),
+          quantity: Number(item.quantity),
+          movementType: 'RETURN_CUSTOMER',
+          branchId: (sale as any).branchId,
+          reference: sale.saleNumber,
+          referenceType: 'SALE_CORRECTION',
+          note: `Pre-approval correction of Sale #${sale.saleNumber}`,
+          metadata: { originalSaleNumber: sale.saleNumber, originalSaleId: saleId },
+          tx: prisma,
+        });
+      }
+
+      const debtAmount = (sale as any).debtAmount?.toNumber?.() || 0;
+      if (debtAmount > 0) {
+        await prisma.customer.update({
+          where: { id: sale.customerId },
+          data: { balance: { decrement: debtAmount } },
+        });
+      }
+
+      // VOID outbox row for the audit trail. The original was never
+      // fiscalized, so the worker marks this SUCCEEDED-skipped without
+      // submitting anything to RRA.
+      if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+        await prisma.ebmOutbox.create({
+          data: {
+            organizationId,
+            saleId,
+            operation: 'VOID',
+            idempotencyKey: `ebm-VOID-${organizationId}-${saleId}`,
+            payload: { version: 1, saleId, organizationId, operation: 'VOID', reason: `Pre-approval correction: ${reason}` } as any,
+            status: 'PENDING',
+            nextAttemptAt: new Date(),
+          },
+        });
+      }
+    });
+
+    // Create the corrected sale through the standard pipeline (stock, tax,
+    // numbering, fiscalization all apply exactly as for a new NS sale).
+    let committed;
+    try {
+      committed = await commitSale({
+        organizationId,
+        branchId: branchId as number,
+        userId: parseInt(userId as string),
+        customerId: customerId ? Number(customerId) : sale.customerId,
+        items,
+        paymentType,
+        cashAmount,
+        debtAmount,
+        insuranceAmount,
+        payments: splitPayments,
+        shiftId,
+        isProforma: false,
+        inventoryMethod: req.body?.inventoryMethod,
+        req,
+      });
+    } catch (e: any) {
+      // The original is already cancelled at this point (cancel-once rule), so
+      // a failed correction must be re-entered as a brand-new sale — say so
+      // explicitly instead of leaving the operator guessing.
+      const status = e instanceof CommitSaleError ? e.statusCode : 500;
+      return res.status(status).json(apiError(
+        `Original sale #${sale.saleNumber} was cancelled, but the corrected sale could not be created: ${e.message}. Re-enter the corrected sale as a new sale.`,
+      ));
+    }
+
+    await prisma.sale.update({
+      where: { id: saleId },
+      data: { cancellationReason: `Pre-approval correction: ${reason} [Corrected by ${committed.sale.saleNumber} (sale #${committed.sale.id})]` },
+    });
+
+    if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+      void processEbmOutboxBatch(50).catch((e) => {
+        console.error('[EBM] immediate void fiscalization error:', e);
+      });
+    }
+
+    await auditLogger.sales(req, {
+      type: 'SALE_CORRECTED',
+      description: `Sale #${sale.saleNumber} corrected before VSDC approval: ${reason}`,
+      entityType: 'Sale',
+      entityId: saleId,
+      metadata: { correctionReason: reason, correctedSaleId: committed.sale.id, correctedSaleNumber: committed.sale.saleNumber },
+    });
+
+    res.status(201).json(success({ ...(committed.completeSale ?? committed.sale), fiscalization: committed.fiscalization, correctedFromSaleId: saleId }));
+  } catch (error: any) {
+    console.error("[Correct Sale Error]:", error);
+    res.status(500).json(apiError("Failed to correct sale"));
+  }
+};
+
+/**
+ * Build the RRA QR string per CIS/VSDC spec (§4.2):
+ * ddmmyyyy#hhmmss#sdcId#rcptNo/totRcptNo+label#internalData#receiptSignature,
+ * the receipt number exactly as printed in RECEIPT NUMBER (e.g. 212/237NS).
+ */
 function buildRraQrString(p: {
   sdcDateTime?: string | Date | null
   sdcId?: string | null
   sdcRcptNo?: number | string | null
+  totalRcptNo?: number | string | null
+  rcptLabel?: string | null
   internalData?: string | null
   receiptSignature?: string | null
 }): string | null {
   if (!p.sdcDateTime || !p.sdcId || p.sdcRcptNo == null || !p.internalData || !p.receiptSignature) return null
   const dt = p.sdcDateTime instanceof Date ? p.sdcDateTime : new Date(p.sdcDateTime)
   if (Number.isNaN(dt.getTime())) return null
-  const p2 = (x: number) => String(x).padStart(2, "0")
+  // QR date/time are Kigali wall time, same clock as the printed SDC block.
+  const k = kigaliWallParts(dt)
   return [
-    `${p2(dt.getDate())}${p2(dt.getMonth() + 1)}${dt.getFullYear()}`,
-    `${p2(dt.getHours())}${p2(dt.getMinutes())}${p2(dt.getSeconds())}`,
+    `${k.day}${k.month}${k.year}`,
+    `${k.hour}${k.minute}${k.second}`,
     p.sdcId,
-    String(p.sdcRcptNo),
+    `${p.sdcRcptNo}${p.totalRcptNo != null ? `/${p.totalRcptNo}` : ""}${p.rcptLabel ?? ""}`,
     p.internalData,
     p.receiptSignature,
   ].join("#")
@@ -1375,9 +1943,18 @@ export class FiscalizationPendingError extends Error {
   }
 }
 
+/**
+ * `copy`:
+ *  - "auto" (default): a sale whose original was already issued and then
+ *    registered again (reprintCount > 1, see reprintSaleReceipt) renders as
+ *    its CS/CR copy.
+ *  - "force": always render the CS/CR copy (explicit copy request); throws
+ *    ReceiptCopyError when the receipt is not an NS/NR or its stored VSDC
+ *    record is incomplete.
+ */
 export async function composeInvoicePayload(
   req: BranchAuthRequest,
-  opts: { allowUnfiscalized?: boolean } = {},
+  opts: { allowUnfiscalized?: boolean; copy?: "auto" | "force" } = {},
 ): Promise<RenderInvoicePayload | null> {
   const saleId = parseInt(req.params.saleId ?? req.params.id)
   const organizationId = parseInt(req.params.organizationId)
@@ -1390,7 +1967,19 @@ export async function composeInvoicePayload(
         saleItems: { include: { product: true } },
         salePayments: { select: { paymentMethod: true, amount: true } },
         ebmTransactions: { orderBy: { createdAt: "desc" } },
-        originalSale: { select: { vsdcInvcNo: true, invoiceNumber: true, saleNumber: true } },
+        originalSale: {
+          select: {
+            vsdcInvcNo: true,
+            invoiceNumber: true,
+            saleNumber: true,
+            rcptLabel: true,
+            ebmTransactions: {
+              where: { submissionStatus: "SUCCESS", sdcRcptNo: { not: null } },
+              orderBy: { createdAt: "desc" },
+              select: { sdcRcptNo: true, operation: true, responseData: true },
+            },
+          },
+        },
       },
     })
 
@@ -1416,10 +2005,18 @@ export async function composeInvoicePayload(
       const outboxRow = await prisma.ebmOutbox.findFirst({
         where: { saleId: sale.id },
         orderBy: { createdAt: "desc" },
-        select: { status: true },
+        select: { status: true, operation: true },
       })
-      if (outboxRow && outboxRow.status !== "SUCCEEDED") {
-        const reason = outboxRow.status === "DEAD_LETTER" ? "failed" : "pending"
+      // A SALE/REFUND row is only "done" when the VSDC receipt it produced is
+      // on record; a SUCCEEDED row without one has no fiscal data to print.
+      // A forced copy is validated field by field by assertCopyableFiscalRecord.
+      const confirmedReceipt = (sale.ebmTransactions ?? []).some(
+        (t) => t.submissionStatus === "SUCCESS" && t.sdcRcptNo != null && (!t.operation || t.operation === "SALE" || t.operation === "REFUND"),
+      )
+      const missingReceipt =
+        opts.copy !== "force" && outboxRow?.status === "SUCCEEDED" && outboxRow.operation !== "VOID" && !confirmedReceipt
+      if (outboxRow && (outboxRow.status !== "SUCCEEDED" || missingReceipt)) {
+        const reason = outboxRow.status === "DEAD_LETTER" || missingReceipt ? "failed" : "pending"
         if (!opts.allowUnfiscalized) throw new FiscalizationPendingError(reason)
         notFiscalized = reason
       }
@@ -1448,14 +2045,18 @@ export async function composeInvoicePayload(
     const fiscalTx = (sale.ebmTransactions ?? []).find((t) => t.submissionStatus === "SUCCESS" && (!t.operation || t.operation === "SALE" || t.operation === "REFUND"))
     const responseData = fiscalTx?.responseData as { normalized?: { ebmInvoiceNumber?: string; verificationCode?: string; sdcDateTime?: string; intrlData?: string; vsdcSignature?: string; mrcNo?: string } } | null | undefined
     const norm = responseData?.normalized
+    // The request/response actually exchanged with VSDC. Printed fiscal values
+    // come from here first so a reprint/copy still matches VSDC after the
+    // catalog, customer or tax settings change.
+    const vsdcRecord = readVsdcRecord(fiscalTx?.responseData)
 
-    // MRC: device-serial configured on branch/org, falling back to the serial
-    // the VSDC itself echoed back on the successful response.
-    const mrcNo = branch?.ebmSerialNo ?? org?.ebmSerialNo ?? norm?.mrcNo ?? null
+    // MRC: the value the VSDC returned on the signed receipt; the configured
+    // device serial is only a fallback for receipts without one.
+    const mrcNo = vsdcMrcNo(vsdcRecord) || norm?.mrcNo || branch?.ebmSerialNo || org?.ebmSerialNo || null
     // Prefer the ID stamped in the successful RRA response. Configured device
     // values are a fallback only; this keeps the printed SDC identifier aligned
     // with the actual fiscal receipt.
-    let sdcId = fiscalTx?.sdcId ?? branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null
+    let sdcId = fiscalTx?.sdcId ?? vsdcSdcId(vsdcRecord) ?? branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null
     // Proforma/training documents never get their own fiscalTx (never
     // submitted to VSDC), and the device may not have its ebmDeviceId
     // backfilled in Organization/Branch settings — but the SDC ID is a fixed
@@ -1471,8 +2072,12 @@ export async function composeInvoicePayload(
     }
     const sdcRcptNo = fiscalTx?.sdcRcptNo ?? null
     const totalRcptNo = fiscalTx?.totalRcptNo ?? null
-    const internalData = fiscalTx?.internalData ?? norm?.intrlData ?? null
-    const receiptSignature = fiscalTx?.receiptSignature ?? norm?.vsdcSignature ?? norm?.verificationCode ?? null
+    // CIS §6.3.6/§16: training and proforma receipts print no Internal Data, no
+    // signature and no QR — even legacy TS/PS rows that VSDC once signed as 'N'.
+    const isTrainingReceipt = isTrainingLabel(fiscalTx?.rcptLabel ?? sale.rcptLabel ?? null)
+    const isUnsignedReceipt = isUnsignedLabel(fiscalTx?.rcptLabel ?? sale.rcptLabel ?? null) || !!sale.isProforma
+    const internalData = isUnsignedReceipt ? null : fiscalTx?.internalData ?? norm?.intrlData ?? null
+    const receiptSignature = isUnsignedReceipt ? null : fiscalTx?.receiptSignature ?? norm?.vsdcSignature ?? norm?.verificationCode ?? null
     // A receipt with no fiscalTx yet (still pending VSDC confirmation, or a
     // proforma/training sale created before all receipt types were fiscalized)
     // has no VSDC-stamped time either — fall back to the CIS's own creation
@@ -1487,26 +2092,31 @@ export async function composeInvoicePayload(
     // locally-numbered type combined), the same distinct-A/B shape as a real
     // VSDC counter (spec §7.25's own example: "168/258 NS" — two different numbers).
     const fiscalReceiptNumber = sdcRcptNo != null
-      ? `${sdcRcptNo}/${totalRcptNo ?? sdcRcptNo}${rcptLabel ? ` ${rcptLabel}` : ""}`
-      : sale.localReceiptSeq != null
+      ? `${sdcRcptNo}${totalRcptNo != null ? `/${totalRcptNo}` : ""}${rcptLabel ? ` ${rcptLabel}` : ""}`
+      : sale.localReceiptSeq != null && !isTrainingReceipt
         ? `${sale.localReceiptSeq}/${sale.localReceiptTotalSeq ?? sale.localReceiptSeq}${rcptLabel ? ` ${rcptLabel}` : ""}`
         : sale.saleNumber
     // The invoice number is the sequence submitted to VSDC (invcNo), not the
     // SDC device identifier. SDC ID and receipt counters are printed separately.
-    const fiscalInvoiceNumber = sale.vsdcInvcNo != null
-      ? String(sale.vsdcInvcNo)
+    const sentInvcNo = vsdcInvoiceNumber(vsdcRecord) ?? sale.vsdcInvcNo
+    const fiscalInvoiceNumber = sentInvcNo != null
+      ? String(sentInvcNo)
       : ebmInvoiceNumber ?? sale.invoiceNumber ?? sale.saleNumber
-    const originalReceiptNumber = sale.originalSale
-      ? (sale.originalSale.vsdcInvcNo != null
-          ? String(sale.originalSale.vsdcInvcNo)
-          : sale.originalSale.invoiceNumber ?? sale.originalSale.saleNumber)
-      : null
+    // The orgInvcNo this refund was submitted with (falls back to the linked
+    // original before VSDC has confirmed the refund).
+    const originalInvoiceNumber = vsdcOriginalInvoiceNumber(vsdcRecord) ?? sale.originalSale?.vsdcInvcNo ?? null
+    // REF. NORMAL RECEIPT# prints the orgInvcNo the refund references — the
+    // same value VSDC prints on its own NR journal (e.g. 149), not the
+    // original's SDC rcptNo.
+    const originalReceiptNumber = formatOriginalReceiptReference(originalInvoiceNumber)
 
     const currency = org?.currency ?? "RWF"
     const toNumber = (v: unknown): number => (v == null ? 0 : typeof v === "number" ? v : Number(String(v)))
-    // R2: renderers print every programmed rate > 0 on every receipt.
-    const [rateA, rateB, rateC, rateD] = await getTaxRatesBySlot(organizationId)
-    const programmedRates: [number, number, number, number] = [rateA, rateB, rateC, rateD]
+    // R2: renderers print every programmed rate > 0 on every receipt — the
+    // rates VSDC received for this receipt, else the currently programmed ones.
+    const programmedRates: [number, number, number, number] = vsdcTaxRates(vsdcRecord) ?? await getTaxRatesBySlot(organizationId)
+    const sentItems = vsdcItems(vsdcRecord)
+    const saleLineCount = (sale.saleItems ?? []).length
     const totalAmount = toNumber(sale.totalAmount)
     const cashAmount = toNumber(sale.cashAmount)
     const debtAmount = toNumber(sale.debtAmount)
@@ -1534,18 +2144,20 @@ export async function composeInvoicePayload(
       // Line money legs are 2 dp (DB columns are Decimal(15,2)); rounding here
       // keeps float dust out of every downstream band derivation.
       const net = round2(gross - dcAmt)
+      const sent = vsdcItemForLine(sentItems, saleLineCount, index)
       return {
         id: String(line.id),
         line: index + 1,
-        // Item code must be EXACTLY what buildRraSendReceiptPayload submits to
-        // VSDC (registered itemCd, or SVC-n for ad-hoc service lines). Never
-        // substitute sku/barcode/name here — those values are never sent to
-        // RRA, so printing them would make the invoice disagree with the
-        // fiscal record. A catalog line still missing its itemCd prints blank
-        // (the submission then dead-letters with an actionable message instead
-        // of fiscalizing a code RRA never saw).
-        code: line.product?.itemCd ?? ((line as any).productId != null ? "" : `SVC-${index + 1}`),
-        description: line.serviceName ?? line.product?.name ?? line.serviceDescription ?? "",
+        // Item code and name must be EXACTLY what was submitted to VSDC
+        // (itemList[].itemCd / itemNm). Before submission the same values
+        // buildRraSendReceiptPayload would send are used: registered itemCd
+        // (or SVC-n for ad-hoc service lines) and product name before service
+        // name. Never substitute sku/barcode here — those are never sent to
+        // RRA. A catalog line still missing its itemCd prints blank (the
+        // submission then dead-letters with an actionable message instead of
+        // fiscalizing a code RRA never saw).
+        code: sent?.itemCd ?? line.product?.itemCd ?? ((line as any).productId != null ? "" : `SVC-${index + 1}`),
+        description: sent?.itemNm ?? line.product?.name ?? line.serviceName ?? line.serviceDescription ?? "",
         quantity: qty,
         unit: line.measurementUnit ?? "PCS",
         // Per-unit price always prints positive, refund or not — only qty and
@@ -1583,7 +2195,9 @@ export async function composeInvoicePayload(
     const balance = round2(debtAmount)
 
     // QR image is generated server-side — the frontend only renders the image returned by the API.
-    const qrRaw = fiscalTx?.qrPayload ?? buildRraQrString({ sdcDateTime, sdcId, sdcRcptNo, internalData, receiptSignature })
+    const qrRaw = isUnsignedReceipt
+      ? null
+      : buildRraQrString({ sdcDateTime, sdcId, sdcRcptNo, totalRcptNo, rcptLabel, internalData, receiptSignature }) ?? fiscalTx?.qrPayload ?? null
     // CIS §7.29 — official RRA logo on every receipt type.
     const rraLogoBuf = await getOrganizationLogo()
     const rraLogo = rraLogoBuf
@@ -1593,12 +2207,14 @@ export async function composeInvoicePayload(
       ? await QRCode.toDataURL(qrRaw, { errorCorrectionLevel: "M", margin: 1, width: 220, color: { dark: "#000000", light: "#FFFFFF" } })
       : null
 
-    const isCertified = !!fiscalTx
+    // A VSDC-confirmed training or proforma receipt is still not a certified tax receipt.
+    const isCertified = !!fiscalTx && !isUnsignedReceipt
     const verificationUrl = isCertified && sdcId ? `https://esbm.rra.gov.rw/tax-invoice/verification?sdcId=${encodeURIComponent(sdcId)}&receipt=${encodeURIComponent(String(sdcRcptNo))}` : null
 
     const dateObj = new Date(sale.createdAt)
-    const p2 = (x: number) => String(x).padStart(2, "0")
-    const time = `${p2(dateObj.getHours())}:${p2(dateObj.getMinutes())}:${p2(dateObj.getSeconds())}`
+    // CIS receipt clock is Kigali wall time, matching the SDC block and QR.
+    const kigaliNow = kigaliWallParts(dateObj)
+    const time = `${kigaliNow.hour}:${kigaliNow.minute}:${kigaliNow.second}`
     const invoiceDate = dateObj.toISOString()
 
     const paymentMethodLabel = PAYMENT_METHOD_LABEL[sale.paymentType] ?? sale.paymentType ?? ""
@@ -1616,6 +2232,7 @@ export async function composeInvoicePayload(
       })
       .filter((l) => l.method && l.amount !== 0)
 
+    const sentBuyer = vsdcBuyer(vsdcRecord)
     const invoiceData: RenderInvoicePayload = {
       company: {
         logo: org?.avatar ?? null,
@@ -1633,8 +2250,10 @@ export async function composeInvoicePayload(
         ebmLinked: isEbmLinked,
       },
       customer: {
-        name: sale.customer?.name ?? "",
-        tin: sale.customer?.TIN?.trim() || sale.customer?.phone?.trim() || null,
+        name: sentBuyer?.name ?? sale.customer?.name ?? "",
+        // The buyer TIN the VSDC payload carries (receipt.custTin) — blank
+        // for a buyer without a TIN; the phone prints on its own line.
+        tin: sentBuyer?.hasTin ? sentBuyer.tin : resolveVsdcBuyerIdentity(sale.customer).receiptCustTin,
         phone: sale.customer?.phone ?? null,
         email: sale.customer?.email ?? null,
         // Free-text legacy address first, then the structured RRA buyer
@@ -1669,6 +2288,10 @@ export async function composeInvoicePayload(
         isCopy: (sale.reprintCount ?? 0) > 1,
         currency,
         originalReceiptNumber,
+        originalInvoiceNumber: originalInvoiceNumber != null ? String(originalInvoiceNumber) : null,
+        refundReason: (sale as { refundReason?: string | null }).refundReason ?? null,
+        refundReasonCode: (sale as { rfdRsnCd?: string | null }).rfdRsnCd ?? null,
+        refundRecipient: (sale as { refundRecipient?: string | null }).refundRecipient ?? null,
       },
       items,
       totals: {
@@ -1711,7 +2334,7 @@ export async function composeInvoicePayload(
         internalData,
         sdcDateTime: sdcDateTime ? String(sdcDateTime) : null,
         date: sdcDateTime ? new Date(sdcDateTime).toISOString() : null,
-        time: sdcDateTime ? `${p2(new Date(sdcDateTime).getHours())}:${p2(new Date(sdcDateTime).getMinutes())}:${p2(new Date(sdcDateTime).getSeconds())}` : null,
+        time: sdcDateTime ? (() => { const k = kigaliWallParts(new Date(sdcDateTime)); return `${k.hour}:${k.minute}:${k.second}` })() : null,
         ebmInvoiceNumber: ebmInvoiceNumber,
         rcptLabel,
         poweredBy: SYSTEM_FOOTER,
@@ -1738,6 +2361,33 @@ export async function composeInvoicePayload(
       },
     }
 
+    const copySource = {
+      rcptLabel: sale.rcptLabel ?? null,
+      isProforma: sale.isProforma,
+      originalSaleId: sale.originalSaleId ?? null,
+      status: sale.status,
+    }
+    const forceCopy = opts.copy === "force"
+    const autoCopy = !forceCopy && !notFiscalized && (sale.reprintCount ?? 0) > 1 && copyLabelFor(copySource) !== null
+    if (forceCopy || autoCopy) {
+      const copyLabel = resolveCopyLabel(copySource)
+      assertCopyableFiscalRecord(fiscalTx ? {
+        submissionStatus: fiscalTx.submissionStatus,
+        operation: fiscalTx.operation ?? null,
+        sdcId: fiscalTx.sdcId,
+        sdcRcptNo: fiscalTx.sdcRcptNo,
+        totalRcptNo: fiscalTx.totalRcptNo,
+        internalData: fiscalTx.internalData,
+        receiptSignature: fiscalTx.receiptSignature,
+        sdcDateTime: fiscalTx.sdcDateTime,
+        rcptLabel: fiscalTx.rcptLabel ?? null,
+      } : null, copyLabel)
+      const copyNumber = forceCopy
+        ? nextReprintCountForCopy(sale.reprintCount) - 1
+        : (sale.reprintCount ?? 0) - 1
+      return applyCopyDesignation(invoiceData, { label: copyLabel, copyNumber })
+    }
+
     return invoiceData
 }
 
@@ -1759,8 +2409,92 @@ export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
     if (error instanceof FiscalizationPendingError) {
       return res.status(425).json({ success: false, status: "pending_fiscalization", reason: error.reason, error: error.message })
     }
+    if (error instanceof ReceiptCopyError) return sendReceiptCopyError(res, error)
     console.error("[Get Invoice Error]:", error)
     return res.status(500).json(apiError("Failed to get invoice"))
+  }
+}
+
+function sendReceiptCopyError(res: Response, error: ReceiptCopyError) {
+  return res.status(error.status).json({ success: false, code: error.code, error: error.message })
+}
+
+function parsePdfFormat(value: unknown): InvoicePdfFormat {
+  const q = String(value ?? "").toUpperCase()
+  return q === "80MM" ? "80mm" : q === "A5" ? "A5" : "A4"
+}
+
+/**
+ * CS/CR — print a copy of an existing NS/NR receipt.
+ * POST /api/sales/:organizationId/:saleId/copy?format=A4|A5|80mm
+ *
+ * The copy reprints the original receipt's VSDC data (counter, timestamp,
+ * internal data, signature, QR) under a diagonal COPY watermark. Nothing is
+ * sent to VSDC and no sale, refund, stock, payment, tax or accounting record
+ * is created.
+ */
+export const printReceiptCopy = async (req: BranchAuthRequest, res: Response) => {
+  try {
+    const saleIdParam = Number(req.params.saleId)
+    if (!Number.isInteger(saleIdParam) || saleIdParam <= 0) {
+      return res.status(400).json(apiError("Invalid receipt id"))
+    }
+    const format = parsePdfFormat(req.query.format ?? req.body?.format)
+    const visible = await prisma.sale.findFirst({
+      where: { id: saleIdParam, organizationId: parseInt(req.params.organizationId), ...buildBranchFilter(req) },
+      select: { id: true },
+    })
+    if (!visible) return res.status(404).json(apiError("Receipt not found"))
+    const invoiceData = await composeInvoicePayload(req, { copy: "force" })
+    if (!invoiceData) return res.status(404).json(apiError("Receipt not found"))
+
+    const pdf = format === "80mm"
+      ? await generateEbmReceiptPdf80mm(invoiceData)
+      : await generateEbmInvoicePdf(invoiceData, format === "A5" ? "A5" : "A4")
+
+    // Counted only after the copy rendered. Two atomic steps keep concurrent
+    // copies from losing an increment: the original always counts as issued
+    // (count >= 1), then this copy adds one.
+    const saleId = Number(invoiceData.invoice.id)
+    await prisma.sale.updateMany({ where: { id: saleId, reprintCount: { lt: 1 } }, data: { reprintCount: 1 } })
+    const updated = await prisma.sale.update({
+      where: { id: saleId },
+      data: { reprintCount: { increment: 1 } },
+      select: { reprintCount: true },
+    })
+    const copyNumber = updated.reprintCount - 1
+    const copyData = { ...invoiceData, invoice: { ...invoiceData.invoice, copyNumber } }
+
+    await auditLogger.sales(req, {
+      type: 'SALE_REPRINTED',
+      description: `${invoiceData.invoice.copyLabel} copy #${copyNumber} printed for Sale #${invoiceData.invoice.saleNumber} (original ${invoiceData.invoice.copyOfReceiptNumber ?? invoiceData.invoice.invoiceNumber})`,
+      entityType: 'Sale',
+      entityId: saleId,
+      metadata: {
+        copyLabel: invoiceData.invoice.copyLabel,
+        copyNumber,
+        reprintCount: updated.reprintCount,
+        format,
+        sourceRcptLabel: invoiceData.invoice.rcptLabel ?? null,
+        copyOfReceiptNumber: invoiceData.invoice.copyOfReceiptNumber ?? null,
+      },
+    })
+
+    res.setHeader("Content-Type", "application/pdf")
+    res.setHeader("Content-Length", String(pdf.length))
+    res.setHeader("Content-Disposition", `inline; filename="${getEbmInvoiceFilename(copyData, format)}"`)
+    res.setHeader("Cache-Control", "private, no-store")
+    res.setHeader("X-Receipt-Copy-Label", String(invoiceData.invoice.copyLabel))
+    res.setHeader("X-Receipt-Copy-Number", String(copyNumber))
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, X-Receipt-Copy-Label, X-Receipt-Copy-Number")
+    return res.status(200).send(pdf)
+  } catch (error: any) {
+    if (error instanceof FiscalizationPendingError) {
+      return res.status(425).json({ success: false, status: "pending_fiscalization", reason: error.reason, error: "The original receipt has not been confirmed by VSDC yet — there is no original to copy" })
+    }
+    if (error instanceof ReceiptCopyError) return sendReceiptCopyError(res, error)
+    console.error("[Print Receipt Copy Error]:", error)
+    return res.status(500).json(apiError("Failed to print receipt copy"))
   }
 }
 
@@ -1773,8 +2507,7 @@ export const getInvoicePdf = async (req: BranchAuthRequest, res: Response) => {
     const invoiceData = await composeInvoicePayload(req)
     if (!invoiceData) return res.status(404).json(apiError("Sale not found"))
 
-    const q = String(req.query.format ?? "").toUpperCase()
-    const format: InvoicePdfFormat = q === "80MM" ? "80mm" : q === "A5" ? "A5" : "A4"
+    const format = parsePdfFormat(req.query.format)
     const pdf = format === "80mm"
       ? await generateEbmReceiptPdf80mm(invoiceData)
       : await generateEbmInvoicePdf(invoiceData, format === "A5" ? "A5" : "A4")
@@ -1788,6 +2521,7 @@ export const getInvoicePdf = async (req: BranchAuthRequest, res: Response) => {
     if (error instanceof FiscalizationPendingError) {
       return res.status(425).json({ success: false, status: "pending_fiscalization", reason: error.reason, error: error.message })
     }
+    if (error instanceof ReceiptCopyError) return sendReceiptCopyError(res, error)
     console.error("[Get Invoice PDF Error]:", error)
     return res.status(500).json(apiError("Failed to generate invoice PDF"))
   }

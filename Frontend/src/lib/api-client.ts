@@ -563,12 +563,17 @@ class ApiClient {
   }
 
   // Add to api-client.ts
-  async refundSale(saleId: string, data: { reason?: string; rfdRsnCd?: string; items?: Array<{ saleItemId: string; quantity: number }> }) {
+  async refundSale(saleId: string, data: { reason?: string; rfdRsnCd?: string; recipientName?: string; items?: Array<{ saleItemId: string | number; quantity: number }>; receiptMode?: 'TRAINING' | 'NORMAL' }) {
     const organizationId = this.getOrganizationId();
     return this.request(`/sales/${saleId}/refund/${organizationId}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  /** What can still be refunded on a sale (original detail + per-line remaining + prior refunds). */
+  async getRefundable(saleId: string | number) {
+    return this.request(`/sales/${this.getOrganizationId()}/${saleId}/refundable`);
   }
 
   /** RRA refund reason codes (code class 32) for the refund-reason dropdown. */
@@ -701,6 +706,18 @@ class ApiClient {
   async reprintSale(saleId: string | number) {
     return this.request(`/sales/${this.getOrganizationId()}/${saleId}/reprint`, {
       method: "POST",
+    })
+  }
+
+  /**
+   * CS/CR: PDF copy of an existing NS (Copy Sale) or NR (Copy Refund) receipt,
+   * carrying the original receipt's VSDC fiscal data and marked COPY. The
+   * backend records the copy; it never creates a new sale/refund.
+   */
+  async printReceiptCopy(saleId: string | number, format: "A4" | "A5" | "80mm" = "A4") {
+    return this.requestFile(`/sales/${this.getOrganizationId()}/${saleId}/copy?format=${format}`, {
+      method: "POST",
+      headers: { Accept: "application/pdf" },
     })
   }
 
@@ -2114,6 +2131,43 @@ class ApiClient {
   async deleteExpense(id: string | number) {
     return this.request(`/expenses/${this.getOrganizationId()}/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  // ==================== Payroll ====================
+
+  async getEmployees(status?: 'ACTIVE' | 'INACTIVE') {
+    return this.request(`/payroll/${this.getOrganizationId()}/employees${status ? `?status=${status}` : ''}`);
+  }
+
+  async createEmployee(data: any) {
+    return this.request(`/payroll/${this.getOrganizationId()}/employees`, { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async updateEmployee(id: number, data: any) {
+    return this.request(`/payroll/${this.getOrganizationId()}/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  }
+
+  async previewPayslip(data: { basicSalary: number; housingAllowance?: number; transportAllowance?: number; otherAllowance?: number }) {
+    return this.request(`/payroll/${this.getOrganizationId()}/preview`, { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async getPayrollRuns() {
+    return this.request(`/payroll/${this.getOrganizationId()}/runs`);
+  }
+
+  async getPayrollRun(id: number) {
+    return this.request(`/payroll/${this.getOrganizationId()}/runs/${id}`);
+  }
+
+  async createPayrollRun(data: { year: number; month: number; notes?: string }) {
+    return this.request(`/payroll/${this.getOrganizationId()}/runs`, { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async payrollRunAction(id: number, action: 'recalculate' | 'cancel' | 'approve' | 'pay', data?: { paymentMethod: string }) {
+    return this.request(`/payroll/${this.getOrganizationId()}/runs/${id}/${action}`, {
+      method: 'POST',
+      body: JSON.stringify(data ?? {}),
     });
   }
 

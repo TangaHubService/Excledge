@@ -77,8 +77,118 @@ model Organization {
   rraImportItems           RraImportItem[]
   BomComponent             BomComponent[]
   ProductionRun            ProductionRun[]
+  employees                Employee[]
+  payrollRuns              PayrollRun[]
 
   @@map("organizations")
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+enum PayrollPaymentMethod {
+  BANK
+  CASH
+  MOBILE_MONEY
+}
+
+model Employee {
+  id                 Int                  @id @default(autoincrement())
+  organizationId     Int
+  branchId           Int?
+  employeeNumber     String
+  fullName           String
+  nationalId         String?
+  rssbNumber         String?
+  jobTitle           String?
+  email              String?
+  phone              String?
+  hireDate           DateTime?
+  basicSalary        Decimal              @db.Decimal(15, 2)
+  housingAllowance   Decimal              @default(0) @db.Decimal(15, 2)
+  transportAllowance Decimal              @default(0) @db.Decimal(15, 2)
+  otherAllowance     Decimal              @default(0) @db.Decimal(15, 2)
+  paymentMethod      PayrollPaymentMethod @default(BANK)
+  bankName           String?
+  bankAccount        String?
+  status             EmployeeStatus       @default(ACTIVE)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payslips     Payslip[]
+
+  @@unique([organizationId, employeeNumber])
+  @@index([organizationId, status])
+  @@map("employees")
+}
+
+model PayrollRun {
+  id                 Int                   @id @default(autoincrement())
+  organizationId     Int
+  periodYear         Int
+  periodMonth        Int
+  status             PayrollRunStatus      @default(DRAFT)
+  employeeCount      Int                   @default(0)
+  grossPay           Decimal               @default(0) @db.Decimal(15, 2)
+  paye               Decimal               @default(0) @db.Decimal(15, 2)
+  employeeRssb       Decimal               @default(0) @db.Decimal(15, 2)
+  employerRssb       Decimal               @default(0) @db.Decimal(15, 2)
+  cbhi               Decimal               @default(0) @db.Decimal(15, 2)
+  netPay             Decimal               @default(0) @db.Decimal(15, 2)
+  employerCost       Decimal               @default(0) @db.Decimal(15, 2)
+  rulesVersion       String
+  notes              String?
+  createdById        Int
+  approvedById       Int?
+  approvedAt         DateTime?
+  paidById           Int?
+  paidAt             DateTime?
+  paymentMethod      PayrollPaymentMethod?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payslips     Payslip[]
+
+  @@index([organizationId, periodYear, periodMonth])
+  @@map("payroll_runs")
+}
+
+model Payslip {
+  id                 Int        @id @default(autoincrement())
+  payrollRunId       Int
+  employeeId         Int
+  basicSalary        Decimal    @db.Decimal(15, 2)
+  housingAllowance   Decimal    @db.Decimal(15, 2)
+  transportAllowance Decimal    @db.Decimal(15, 2)
+  otherAllowance     Decimal    @db.Decimal(15, 2)
+  grossPay           Decimal    @db.Decimal(15, 2)
+  contributionBase   Decimal    @db.Decimal(15, 2)
+  paye               Decimal    @db.Decimal(15, 2)
+  employeePension    Decimal    @db.Decimal(15, 2)
+  employerPension    Decimal    @db.Decimal(15, 2)
+  occupationalHazard Decimal    @db.Decimal(15, 2)
+  employeeMaternity  Decimal    @db.Decimal(15, 2)
+  employerMaternity  Decimal    @db.Decimal(15, 2)
+  cbhi               Decimal    @db.Decimal(15, 2)
+  netPay             Decimal    @db.Decimal(15, 2)
+  employerCost       Decimal    @db.Decimal(15, 2)
+
+  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([payrollRunId, employeeId])
+  @@map("payslips")
 }
 
 /// Per-organization workspace customization: sidebar visibility, feature flags, and
@@ -645,6 +755,9 @@ model Sale {
   // RRA refund reason code (VSDC code class 32, sent as rfdRsnCd on the fiscal
   // refund document). Free-text `refundReason` stays the human note (remark).
   rfdRsnCd             String?          @map("rfd_rsn_cd")
+  // Person who received the refund (defaults to the original customer name).
+  // Required on refund (NR) rows by the RRA refund record.
+  refundRecipient      String?          @map("refund_recipient")
   cancelledAt          DateTime?        @map("cancelled_at")
   cancellationReason   String?          @map("cancellation_reason")
   createdAt            DateTime         @default(now())
@@ -714,6 +827,7 @@ model Sale {
 
   @@index([organizationId, status, createdAt])
   @@index([invoiceNumber])
+  @@index([originalSaleId])
   @@index([branchId]) // NEW
   @@index([branchId, createdAt]) // NEW
   @@index([branchId, status]) // NEW
@@ -1954,6 +2068,7 @@ enum EbmOperation {
   SALE
   REFUND
   VOID
+  COPY // CS/CR copy submitted to VSDC as salesTyCd "C"
 }
 
 enum EbmOutboxStatus {

@@ -267,6 +267,139 @@ export async function enqueueInventoryOpeningSnapshot(organizationId: number) {
   return { queued: true, lines: lines.length, uncosted };
 }
 
+/**
+ * A scanned supplier invoice becomes a supplier bill in Accounting once it is imported. Stock
+ * imported from it is already on Goods Received Not Invoiced at cost (`receivedAtCost`), which the
+ * bill clears; the rest of the invoice goes to purchases.
+ */
+export async function enqueueScannedSupplierBillAccountingEvent(
+  invoiceId: number,
+  receivedAtCost: number,
+): Promise<{ queued: boolean; reason?: string }> {
+  if (!isAccountingIntegrationEnabled()) return { queued: false, reason: "Accounting integration is off" };
+  const invoice = await prisma.supplierInvoice.findUnique({
+    where: { id: invoiceId },
+    include: { files: { orderBy: { createdAt: "asc" }, take: 1 }, supplier: true },
+  });
+  if (!invoice) return { queued: false, reason: "Invoice not found" };
+  if (!invoice.supplierId) return { queued: false, reason: "The invoice has no supplier" };
+  const tax = Number(invoice.taxAmount ?? 0);
+  const total = Number(invoice.totalAmount ?? 0);
+  const net = invoice.subtotal != null ? Number(invoice.subtotal) - Number(invoice.discount ?? 0) : total - tax;
+  if (!(net > 0)) return { queued: false, reason: "The invoice has no amount to bill" };
+
+  const idempotencyKey = [invoice.organizationId, "PURCHASES", "SupplierInvoice", invoice.id, "SUPPLIER_BILL_APPROVED", "1"].join("|");
+  const file = invoice.files[0];
+  const payload = {
+    eventId: randomUUID(),
+    idempotencyKey,
+    externalOrganizationId: String(invoice.organizationId),
+    externalBranchId: String(invoice.branchId),
+    eventType: "SUPPLIER_BILL_APPROVED",
+    occurredAt: (invoice.invoiceDate ?? invoice.importedAt ?? new Date()).toISOString(),
+    sourceModule: "PURCHASES",
+    sourceDocumentType: "SupplierInvoice",
+    sourceDocumentId: String(invoice.id),
+    sourceDocumentNumber: invoice.invoiceNumber || `SCAN-${invoice.id}`,
+    currencyCode: invoice.currency || "RWF",
+    amountTotals: { gross: String(net + tax), net: String(net), tax: String(tax) },
+    parties: { externalSupplierId: String(invoice.supplierId) },
+    metadata: {
+      supplierName: invoice.supplier?.name ?? invoice.supplierName,
+      supplierTin: invoice.vendorTIN,
+      supplierInvoiceNumber: invoice.invoiceNumber,
+      dueDate: invoice.dueDate?.toISOString(),
+      poReference: invoice.poNumber,
+      receivedAtCost: Math.round(receivedAtCost * 100) / 100,
+      capturedBy: "OCR",
+      fraudRiskScore: invoice.fraudRiskScore,
+      mathVerified: invoice.mathVerified,
+      document: file ? { fileName: file.originalName, path: `/uploads/invoices/${file.storedName}`, mimeType: file.mimeType } : undefined,
+    },
+  };
+  await prisma.erpAccountingOutbox.upsert({
+    where: { idempotencyKey },
+    create: {
+      organizationId: invoice.organizationId,
+      eventType: "SUPPLIER_BILL_APPROVED",
+      idempotencyKey,
+      payload: payload as Prisma.InputJsonValue,
+      status: AccountingOutboxStatus.PENDING,
+      nextAttemptAt: new Date(),
+    },
+    update: {},
+  });
+  return { queued: true };
+}
+
+type PayrollRunForAccounting = {
+  id: number;
+  organizationId: number;
+  periodYear: number;
+  periodMonth: number;
+  employeeCount: number;
+  grossPay: Prisma.Decimal | number;
+  paye: Prisma.Decimal | number;
+  employeeRssb: Prisma.Decimal | number;
+  employerRssb: Prisma.Decimal | number;
+  cbhi: Prisma.Decimal | number;
+  netPay: Prisma.Decimal | number;
+  paymentMethod?: string | null;
+};
+
+/**
+ * Approval accrues the payroll (expense against PAYE, RSSB and net salaries payable); payment
+ * clears net salaries payable. Both are queued in the caller's transaction.
+ */
+export async function enqueuePayrollAccountingEvent(
+  tx: Prisma.TransactionClient,
+  run: PayrollRunForAccounting,
+  kind: "PAYROLL_APPROVED" | "PAYROLL_PAID",
+  occurredAt: Date,
+): Promise<void> {
+  if (!isAccountingIntegrationEnabled()) return;
+  const period = `${run.periodYear}-${String(run.periodMonth).padStart(2, "0")}`;
+  const idempotencyKey = [run.organizationId, "PAYROLL", "PayrollRun", run.id, kind, "1"].join("|");
+  const figures = {
+    grossPay: Number(run.grossPay),
+    paye: Number(run.paye),
+    employeeRssb: Number(run.employeeRssb),
+    employerRssb: Number(run.employerRssb),
+    cbhi: Number(run.cbhi),
+    netPay: Number(run.netPay),
+  };
+  const payload = {
+    eventId: randomUUID(),
+    idempotencyKey,
+    externalOrganizationId: String(run.organizationId),
+    eventType: kind,
+    occurredAt: occurredAt.toISOString(),
+    sourceModule: "PAYROLL",
+    sourceDocumentType: "PayrollRun",
+    sourceDocumentId: String(run.id),
+    sourceDocumentNumber: `PAYROLL-${period}`,
+    currencyCode: "RWF",
+    amountTotals:
+      kind === "PAYROLL_APPROVED"
+        ? { gross: String(figures.grossPay), net: String(figures.netPay), tax: String(figures.paye) }
+        : { gross: String(figures.netPay), net: String(figures.netPay), tax: "0" },
+    paymentSplits: kind === "PAYROLL_PAID" ? [{ paymentMethod: run.paymentMethod ?? "BANK", amount: figures.netPay }] : undefined,
+    metadata: { period, employeeCount: run.employeeCount, ...figures, paymentMethod: run.paymentMethod ?? undefined },
+  };
+  await tx.erpAccountingOutbox.upsert({
+    where: { idempotencyKey },
+    create: {
+      organizationId: run.organizationId,
+      eventType: kind,
+      idempotencyKey,
+      payload: payload as Prisma.InputJsonValue,
+      status: AccountingOutboxStatus.PENDING,
+      nextAttemptAt: new Date(),
+    },
+    update: {},
+  });
+}
+
 export async function processAccountingOutboxBatch(limit = 40): Promise<{
   processed: number;
   succeeded: number;

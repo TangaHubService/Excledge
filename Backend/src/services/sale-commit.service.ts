@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma"
 import { EbmOperation } from "@prisma/client"
 import { Decimal } from "@prisma/client/runtime/library"
+import { config } from "../config"
 import { round2 } from "./money.service"
 import { auditLogger } from "../utils/auditLogger"
 import { removeStock } from "./inventory-ledger.service"
@@ -11,11 +12,18 @@ import {
   allocateLocalReceiptSequence,
   isValidRraTin,
 } from "./rra-ebm.service"
+import { buildVsdcEnvelope, vsdcHeartbeat, validateVsdcEnvelope } from "./vsdc-api.service"
 import { processEbmOutboxBatch } from "./ebm-outbox.service"
 import { selectBatchesForSale, updateBatchQuantity } from "./batch.service"
 import { getAverageCost } from "./cost-price.service"
 import { TaxService } from "./tax.service"
 import { getOrganizationSettings } from "./organization-settings.service"
+import {
+  type ReceiptMode,
+  ReceiptModeMismatchError,
+  assertExpectedReceiptMode,
+  readReceiptModeLocked,
+} from "./training-mode.service"
 
 /**
  * Shared "commit a sale" pipeline used by both the POS checkout
@@ -66,6 +74,8 @@ export interface CommitSaleParams {
   /** Set when this NS sale is the conversion result of a proforma. */
   proformaSourceId?: number
   inventoryMethod?: "FIFO" | "LIFO" | "AVERAGE"
+  /** Mode the client screen was in (TRAINING/NORMAL); a mismatch is refused. */
+  expectedReceiptMode?: ReceiptMode | null
   /** Express request — used only for audit-log request context. */
   req: any
 }
@@ -101,6 +111,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
     shiftId,
     isProforma,
     proformaSourceId,
+    expectedReceiptMode,
     req,
   } = params
 
@@ -186,15 +197,48 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
   const catalogTypes = catalogIds.length > 0
     ? await prisma.product.findMany({
         where: { id: { in: catalogIds }, organizationId },
-        select: { id: true, itemType: true },
+        select: { id: true, itemType: true, itemCd: true, itemClsCd: true, name: true },
       })
     : []
   const catalogTypeMap = new Map(catalogTypes.map((p) => [p.id, p.itemType]))
+  const catalogMetaMap = new Map(catalogTypes.map((p) => [p.id, p]))
   for (const item of items) {
     if (item.itemType) continue
     const pid = parseInt(String(item.productId))
     const fromCatalog = catalogTypeMap.get(pid)
     if (fromCatalog) item.itemType = fromCatalog
+  }
+
+  // ── Fail-fast fiscal readiness ──
+  // A sale whose lines lack an RRA itemCd/itemClsCd can never be fiscalized:
+  // without this gate the checkout would commit (stock, payment) and only the
+  // outbox worker would dead-letter afterwards. When fiscal submission is on,
+  // reject such sales here with an actionable 400 instead. Ad-hoc service
+  // lines (no catalog product) are likewise unfiscalizable — services must be
+  // registered in the catalog with an RRA classification first.
+  if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
+    for (const item of items) {
+      const pid = parseInt(String(item.productId))
+      const meta = Number.isSafeInteger(pid) ? catalogMetaMap.get(pid) : undefined
+      const label = (item.serviceName || (meta as any)?.name || `line (product #${item.productId ?? "?"})`) as string
+      if (item.itemType === "SERVICE" && !meta) {
+        throw new CommitSaleError(
+          400,
+          `Service "${label}" is not registered in the product catalog. Register it with an RRA item classification (itemClsCd) and sync it to RRA before selling — ad-hoc service lines cannot be fiscalized.`,
+        )
+      }
+      if (meta && (!(meta as any).itemCd || !(meta as any).itemClsCd?.trim())) {
+        const missing = !(meta as any).itemCd && !(meta as any).itemClsCd?.trim()
+          ? "RRA item code (itemCd) and item classification (itemClsCd)"
+          : !(meta as any).itemCd
+            ? "RRA item code (itemCd)"
+            : "RRA item classification (itemClsCd)"
+        throw new CommitSaleError(
+          400,
+          `Cannot fiscalize: "${(meta as any).name ?? `product #${pid}`}" has no ${missing}. Open the product, save it so the code is allocated, sync it via POST /rra/items/:productId/sync, then retry the sale.`,
+        )
+      }
+    }
   }
 
   // Separate product items from service items
@@ -268,18 +312,50 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
   // that a rollback also rolls back the sequence increment.
   const saleNumber = `SALE-${Date.now()}`
 
-  // C6: determine receipt type label (NS/TS/PS)
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { trainingMode: true, vatRegistered: true, isTaxExempt: true },
+    select: { vatRegistered: true, isTaxExempt: true },
   })
-  const rcptLabel = isProforma ? "PS" : org?.trainingMode ? "TS" : "NS"
+
+  // ── Strict fiscal mode (2018 spec Art. 10, strict reading) ──
+  // When EBM_STRICT_MODE is on, the sale is not created at all unless the VSDC
+  // is provably reachable: the device envelope is validated and the device is
+  // probed with a live heartbeat BEFORE anything commits (stock, payments,
+  // numbering). Default mode keeps the transactional-outbox behavior instead
+  // (sale completes, official receipt withheld with HTTP 425 until confirmed).
+  // Training receipts go through VSDC too (CIS §6/§10), so they are not exempt.
+  if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled && config.ebm.strictMode) {
+    const envelope = await buildVsdcEnvelope(organizationId, branchId)
+    const envelopeError = validateVsdcEnvelope(envelope)
+    if (envelopeError) {
+      throw new CommitSaleError(503, `VSDC not ready (strict fiscal mode): ${envelopeError} Sale not created.`)
+    }
+    const probe = await vsdcHeartbeat(envelope)
+    if (!probe.success) {
+      throw new CommitSaleError(
+        503,
+        `VSDC unreachable (strict fiscal mode): ${probe.error ?? "no response"}. Sale not created — restore connectivity and retry.`,
+      )
+    }
+  }
 
   const inventoryMethod = params.inventoryMethod || "FIFO"
 
   // ── Atomic transaction ──
+  let trainingMode = false
   const sale = await prisma.$transaction(
     async (tx) => {
+      // C6: receipt type label (NS/TS/PS). The mode is read under a shared
+      // lock so an admin toggle cannot land between this read and the commit.
+      trainingMode = await readReceiptModeLocked(tx, organizationId)
+      try {
+        assertExpectedReceiptMode(expectedReceiptMode ?? null, trainingMode)
+      } catch (e) {
+        if (e instanceof ReceiptModeMismatchError) throw new CommitSaleError(e.status, e.message)
+        throw e
+      }
+      const rcptLabel = isProforma ? "PS" : trainingMode ? "TS" : "NS"
+
       // 1. Validate stock availability for PRODUCT items only
       for (const item of productItems) {
         const product = productMap.get(parseInt(String(item.productId)))
@@ -305,7 +381,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         if (
           currentStock < item.quantity
           && !orgSettings.featureFlags.allowNegativeStock
-          && !org?.trainingMode
+          && !trainingMode
           && !isProforma
         ) {
           throw new Error(
@@ -405,7 +481,8 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         let costPrice = 0
 
         try {
-          const selectedBatches = await selectBatchesForSale(
+          // Training and proforma never deplete real batches (cost falls back to average).
+          const selectedBatches = trainingMode || isProforma ? [] : await selectBatchesForSale(
             {
               productId,
               organizationId: organizationId,
@@ -458,17 +535,17 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
       // EVERY receipt type — normal (NS), training (TS/TR) and proforma (PS) —
       // is submitted to RRA VSDC, so every sale draws from the real gapless
       // per-device sequence: the invoice number printed on the receipt is
-      // exactly the invcNo sent to VSDC. Proforma/training additionally keep
-      // their local non-fiscal counter pair (localReceiptSeq /
-      // localReceiptTotalSeq) as the fallback receipt number until VSDC
-      // confirms the submission.
+      // exactly the invcNo sent to VSDC. Proforma additionally keeps its local
+      // non-fiscal counter pair (localReceiptSeq / localReceiptTotalSeq) as the
+      // fallback receipt number until VSDC confirms the submission. Training
+      // does not: its TS/TR counter is issued by VSDC and never invented here.
       const generated = await generateInvoiceNumber(organizationId, branchId, tx)
       const invoiceNumber: string = generated.invoiceNumber
       const vsdcInvcNo: number = generated.vsdcInvcNo
       let localReceiptSeq: number | null = null
       let localReceiptTotalSeq: number | null = null
-      if (isProforma || org?.trainingMode) {
-        const localSeq = await allocateLocalReceiptSequence(branchId, isProforma ? "PS" : "TS", tx)
+      if (isProforma) {
+        const localSeq = await allocateLocalReceiptSequence(branchId, "PS", tx)
         localReceiptSeq = localSeq.typeSeq
         localReceiptTotalSeq = localSeq.totalSeq
       }
@@ -488,7 +565,8 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
           cashAmount: cashAmount || 0,
           insuranceAmount: insuranceAmount || 0,
           debtAmount: debtAmount || 0,
-          shiftId: resolvedShiftId,
+          // A training sale takes no real money, so it never joins a till shift.
+          shiftId: trainingMode && !isProforma ? undefined : resolvedShiftId,
           totalAmount: computedTotal,
           vatAmount: taxSummary.vatAmount,
           taxableAmount: taxSummary.taxableAmount,
@@ -532,7 +610,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
       // 5. Record stock movements for PRODUCT items only. Skipped for
       // proforma and training mode — neither is a real sale, so neither
       // may consume (or fail on) real stock.
-      if (!isProforma && !org?.trainingMode) {
+      if (!isProforma && !trainingMode) {
         for (const item of productItems) {
           const saleItem = (newSale as any).saleItems?.find(
             (si: any) => si.productId === parseInt(String(item.productId)),
@@ -557,8 +635,9 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         }
       }
 
-      // 6. Update customer balance if debt (atomic with sale). Skipped for proforma.
-      if (!isProforma) {
+      // 6. Update customer balance if debt (atomic with sale). Skipped for
+      // proforma and training — neither creates a real receivable.
+      if (!isProforma && !trainingMode) {
         const remainingDebt = computedTotal - (cashAmount || 0) - (insuranceAmount || 0)
         if (remainingDebt > 0) {
           await tx.customer.update({
@@ -625,17 +704,20 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
       }),
     ])
 
-    if (outboxRow?.status === "SUCCEEDED") {
-      fiscalization = { status: "success", sdcRcptNo: fiscalTx?.sdcRcptNo ?? null, isCertified: !!fiscalTx }
-    } else if (outboxRow?.status === "DEAD_LETTER") {
+    if (outboxRow?.status === "SUCCEEDED" && fiscalTx?.sdcRcptNo != null) {
+      fiscalization = { status: "success", sdcRcptNo: fiscalTx.sdcRcptNo, isCertified: true }
+    } else if (outboxRow?.status === "DEAD_LETTER" || outboxRow?.status === "SUCCEEDED") {
       fiscalization = { status: "failed", sdcRcptNo: null, isCertified: false }
     } else {
       fiscalization = { status: "pending", sdcRcptNo: null, isCertified: false }
     }
   }
 
-  // Record split payments if provided
-  if (splitPayments && Array.isArray(splitPayments) && splitPayments.length > 0) {
+  const isTrainingSale = (sale as any).rcptLabel === "TS"
+  const isProformaSale = !!isProforma || (sale as any).rcptLabel === "PS"
+
+  // Record split payments if provided. Training and proforma move no real money.
+  if (!isTrainingSale && !isProformaSale && splitPayments && Array.isArray(splitPayments) && splitPayments.length > 0) {
     const validPaymentMethods = [
       "CASH", "BANK", "BANK_CHECK", "CARD", "PAYPACK", "MTN_MOMO", "AIRTEL_MONEY", "WALLET", "GIFT_CARD", "STORE_CREDIT",
     ]
@@ -663,10 +745,11 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
   // Log activity (after successful sale)
   await auditLogger.sales(req, {
     type: "SALE_COMPLETED",
-    description: `Sale completed (Invoice #${sale.invoiceNumber || saleNumber})`,
+    description: `${isTrainingSale ? "Training sale (TS)" : isProformaSale ? "Proforma (PS)" : "Sale"} completed (Invoice #${sale.invoiceNumber || saleNumber})`,
     entityType: "Sale",
     entityId: sale.id,
     metadata: {
+      rcptLabel: (sale as any).rcptLabel ?? null,
       invoiceNumber: sale.invoiceNumber,
       totalAmount: sale.totalAmount,
       paymentType: sale.paymentType,
@@ -676,35 +759,38 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
   })
 
   // Thin Accounting integration — enqueue only; Accounting owns journal posting.
-  try {
-    const { enqueueSaleCompletedAccountingEvent } = await import("./accounting-outbox.service")
-    const saleItemsForCogs = await prisma.saleItem.findMany({
-      where: { saleId: sale.id },
-      select: { quantity: true, costPrice: true },
-    })
-    const cogs = saleItemsForCogs.reduce(
-      (sum, item) => sum + Number(item.costPrice || 0) * Number(item.quantity || 0),
-      0,
-    )
-    await enqueueSaleCompletedAccountingEvent({
-      organizationId,
-      branchId,
-      saleId: sale.id,
-      saleNumber: sale.saleNumber,
-      invoiceNumber: sale.invoiceNumber,
-      customerId: sale.customerId,
-      totalAmount: Number(sale.totalAmount),
-      taxableAmount: Number(sale.taxableAmount),
-      vatAmount: Number(sale.vatAmount),
-      paymentType: sale.paymentType,
-      splitPayments: splitPayments?.map((p) => ({
-        paymentMethod: p.paymentMethod,
-        amount: Number(p.amount) || 0,
-      })),
-      cogs,
-    })
-  } catch (e) {
-    console.error("[Accounting outbox] enqueue failed:", e)
+  // Training and proforma sales are never posted to the books.
+  if (!isTrainingSale && !isProformaSale) {
+    try {
+      const { enqueueSaleCompletedAccountingEvent } = await import("./accounting-outbox.service")
+      const saleItemsForCogs = await prisma.saleItem.findMany({
+        where: { saleId: sale.id },
+        select: { quantity: true, costPrice: true },
+      })
+      const cogs = saleItemsForCogs.reduce(
+        (sum, item) => sum + Number(item.costPrice || 0) * Number(item.quantity || 0),
+        0,
+      )
+      await enqueueSaleCompletedAccountingEvent({
+        organizationId,
+        branchId,
+        saleId: sale.id,
+        saleNumber: sale.saleNumber,
+        invoiceNumber: sale.invoiceNumber,
+        customerId: sale.customerId,
+        totalAmount: Number(sale.totalAmount),
+        taxableAmount: Number(sale.taxableAmount),
+        vatAmount: Number(sale.vatAmount),
+        paymentType: sale.paymentType,
+        splitPayments: splitPayments?.map((p) => ({
+          paymentMethod: p.paymentMethod,
+          amount: Number(p.amount) || 0,
+        })),
+        cogs,
+      })
+    } catch (e) {
+      console.error("[Accounting outbox] enqueue failed:", e)
+    }
   }
 
   const completeSale = await prisma.sale.findUnique({

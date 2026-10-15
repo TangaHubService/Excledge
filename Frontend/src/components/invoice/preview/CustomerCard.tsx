@@ -36,12 +36,13 @@ export function CustomerCard({ data }: { data: Pick<EbmInvoice, "customer" | "in
     { label: "Phone", value: safeText(customer?.phone), required: true },
     { label: "Address", value: safeText(customer?.address) },
   ]
+  const isProforma = !!invoice?.isProforma || invoice?.rcptLabel === "PS"
   const invoiceRows: Detail[] = [
     { label: "Invoice No", value: safeText(invoice?.invoiceNumber), Icon: FileText },
     { label: "Receipt No", value: safeText(invoice?.receiptNumber), Icon: Hash },
     { label: "Date", value: formatDateShort(invoice?.invoiceDate), Icon: CalendarDays },
     { label: "Time", value: formatTime(invoice?.time), Icon: Receipt },
-    { label: "Payment Method", value: safeText(invoice?.paymentMethod), Icon: CreditCard },
+    ...(isProforma ? [] : [{ label: "Payment Method", value: safeText(invoice?.paymentMethod), Icon: CreditCard }]),
     { label: "Cashier", value: safeText(invoice?.cashier), Icon: UserRound },
   ]
 

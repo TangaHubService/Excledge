@@ -9,7 +9,7 @@ import {
   toRraDateTime,
   type SaleWithRelations,
 } from './rra-ebm.service';
-import { buildVsdcEnvelope, saveInvc } from './vsdc-api.service';
+import { buildVsdcEnvelope, saveInvc, decideVsdcReceiptResult } from './vsdc-api.service';
 import { submitSalesToOsdc } from './rra-osdc.service';
 import { getRraPaymentCode } from './rra-code.service';
 
@@ -270,22 +270,22 @@ export async function fiscalizeSubscriptionPayment(params: {
 
     const envelope = await buildVsdcEnvelope(params.organizationId, branchId);
     const result = await saveInvc(envelope, payload);
-    if (!result.success || !result.data?.rcptNo) {
-      const msg = result.error ?? 'VSDC gateway error';
-      await markPaymentFailed(params.paymentId, msg);
-      return { success: false, error: msg };
+    const decision = decideVsdcReceiptResult(result, { docLabel: 'billing receipt' });
+    if (!decision.confirmed) {
+      await markPaymentFailed(params.paymentId, decision.error);
+      return { success: false, error: decision.error };
     }
 
-    const vsdc = result.data;
+    const vsdc = decision.data;
     await persistPaymentFiscalSuccess(params.paymentId, {
       ebmInvoiceNumber: vsdc.rcptNo,
       sale,
-      sdcDateTime: vsdc.sdcDateTime ? new Date(vsdc.sdcDateTime) : new Date(),
-      sdcRcptNo: vsdc.rcptNo ? parseInt(vsdc.rcptNo, 10) || null : null,
-      totalRcptNo: vsdc.totRcptNo ? parseInt(vsdc.totRcptNo, 10) || null : null,
-      sdcId: vsdc.sdcId || null,
-      internalData: vsdc.intrlData || null,
-      receiptSignature: vsdc.vsdcSignature || null,
+      sdcDateTime: new Date(vsdc.sdcDateTime),
+      sdcRcptNo: parseInt(vsdc.rcptNo, 10),
+      totalRcptNo: parseInt(vsdc.totRcptNo, 10),
+      sdcId: vsdc.sdcId,
+      internalData: vsdc.intrlData,
+      receiptSignature: vsdc.vsdcSignature,
     });
     return { success: true, ebmInvoiceNumber: vsdc.rcptNo };
   } catch (e: unknown) {

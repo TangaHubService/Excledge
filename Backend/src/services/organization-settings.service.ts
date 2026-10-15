@@ -8,6 +8,7 @@ import {
   IPreferences,
   OrganizationSettingsPatch,
 } from "../types/organization-settings.types";
+import { normalizeMrcOrThrow } from "../utils/mrc";
 
 /** Shallow-merges a possibly-partial/legacy JSON blob onto its typed default.
  *  Keeps records created before a key existed (or written by an older app
@@ -58,11 +59,21 @@ export async function upsertOrganizationSettings(
   const featureFlagsPatch = patch.featureFlags ?? {};
   const preferencesPatch = patch.preferences ?? {};
   const ebmConfigPatch = patch.ebmConfig ?? {};
+  let mrc: string | null | undefined;
+  if (ebmConfigPatch.dvcSrlNo !== undefined) {
+    const [currentOrg, currentBranch] = await Promise.all([
+      prisma.organization.findUnique({ where: { id: organizationId }, select: { ebmSerialNo: true } }),
+      prisma.branch.findFirst({ where: { organizationId, isDefault: true }, select: { ebmSerialNo: true } }),
+    ]);
+    mrc = normalizeMrcOrThrow(ebmConfigPatch.dvcSrlNo, {
+      current: [currentOrg?.ebmSerialNo, currentBranch?.ebmSerialNo],
+    });
+  }
 
   const updateData: Record<string, unknown> = {};
   if (ebmConfigPatch.tin !== undefined) updateData.TIN = ebmConfigPatch.tin === "" ? null : ebmConfigPatch.tin;
   if (ebmConfigPatch.ebmDeviceId !== undefined) updateData.ebmDeviceId = ebmConfigPatch.ebmDeviceId === "" ? null : ebmConfigPatch.ebmDeviceId;
-  if (ebmConfigPatch.dvcSrlNo !== undefined) updateData.ebmSerialNo = ebmConfigPatch.dvcSrlNo === "" ? null : ebmConfigPatch.dvcSrlNo;
+  if (mrc !== undefined) updateData.ebmSerialNo = mrc;
 
   if (Object.keys(updateData).length > 0) {
     await prisma.organization.update({ where: { id: organizationId }, data: updateData });
@@ -70,7 +81,7 @@ export async function upsertOrganizationSettings(
 
   const branchUpdateData: Record<string, unknown> = {};
   if (ebmConfigPatch.bhfId !== undefined) branchUpdateData.bhfId = ebmConfigPatch.bhfId === "" ? null : ebmConfigPatch.bhfId;
-  if (ebmConfigPatch.dvcSrlNo !== undefined) branchUpdateData.ebmSerialNo = ebmConfigPatch.dvcSrlNo === "" ? null : ebmConfigPatch.dvcSrlNo;
+  if (mrc !== undefined) branchUpdateData.ebmSerialNo = mrc;
 
   if (Object.keys(branchUpdateData).length > 0) {
     await prisma.branch.updateMany({

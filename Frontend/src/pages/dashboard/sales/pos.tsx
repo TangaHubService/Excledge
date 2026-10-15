@@ -25,7 +25,7 @@ import { offlineQueue } from '../../../utils/offlineQueue'
 import { PaymentModal } from '../../../components/pos/PaymentModal'
 import SaleSuccessModal, { type SaleSuccessData } from '../../../components/pos/SaleSuccessModal'
 import { getInvoiceFilename, round2, unwrapInvoice } from '../../../lib/invoice'
-import { getInvoicePdfBlob } from '../../../lib/invoice-pdf'
+import { issueInvoicePdfBlob } from '../../../lib/invoice-pdf'
 import { useVsdcOnlineStatus } from '../../../hooks/useVsdcOnlineStatus'
 import { useBranch } from '../../../context/BranchContext'
 import { useOrganizationSettings } from '../../../context/OrganizationSettingsContext'
@@ -482,7 +482,8 @@ export default function SalesForm() {
             autoClose: 12_000,
             onClick: async () => {
               try {
-                await apiClient.reprintSale(sale.id)
+                // Printing from the modal registers the issuance itself, so a
+                // receipt already issued comes back as its CS/CR copy.
                 setSuccessSale({
                   id: sale.id,
                   invoiceNumber: sale.invoiceNumber,
@@ -824,6 +825,7 @@ export default function SalesForm() {
         debtAmount,
         payments: splitPayments,
         branchId: selectedBranchId,
+        receiptMode: trainingMode ? 'TRAINING' : 'NORMAL',
       }
 
       if (!isOnline) {
@@ -878,7 +880,7 @@ export default function SalesForm() {
       const res = await apiClient.getProducts({ page: 1, limit: 10000, search: '', branchId: selectedBranchId })
       setProducts(productsFromInventoryResponse(res).filter(p => isSellable(p, trainingMode)))
     } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || t('pos.paymentError')
+      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.response?.data?.errors?.[0]?.message || error?.message || t('pos.paymentError')
       toast.error(msg)
       if (msg.includes('stock')) {
         try {
@@ -954,7 +956,7 @@ export default function SalesForm() {
       setIsSuccessOpen(true)
       setCart([])
     } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || t('pos.paymentError')
+      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.response?.data?.errors?.[0]?.message || error?.message || t('pos.paymentError')
       toast.error(msg)
     } finally {
       setIsSubmitting(false)
@@ -967,7 +969,9 @@ export default function SalesForm() {
     if (!base?.id) return null
     try {
       const invoice = unwrapInvoice(await apiClient.getInvoice(base.id, { allowPending: true }))
-      const blob = await getInvoicePdfBlob(base.id)
+      // The first issuance from the success modal is the original; a second
+      // print/download/share of the same sale comes back as its CS/CR copy.
+      const blob = await issueInvoicePdfBlob(base.id)
       return {
         blob,
         filename: getInvoiceFilename(invoice, base.invoiceNumber ?? base.saleNumber ?? base.id),
@@ -1063,7 +1067,7 @@ export default function SalesForm() {
       )}
       {isOnline && trainingMode && (
         <div className="fixed top-14 inset-x-0 z-40 flex items-center justify-center gap-2 bg-orange-500 px-4 py-2 text-sm font-medium text-white">
-          Training mode — zero-stock products are included. Receipts are not sent to RRA.
+          TRAINING MODE — sales print as Training Sale (TS) receipts: not official, no stock, payment or accounting changes.
         </div>
       )}
 

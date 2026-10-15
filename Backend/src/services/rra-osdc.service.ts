@@ -4,6 +4,7 @@ import logger from '../utils/logger';
 import {
   buildRraSendReceiptPayload,
   toRraDateTime,
+  withBranchSellerAddress,
   type SaleWithRelations,
 } from './rra-ebm.service';
 import { getRraPaymentCode } from './rra-code.service';
@@ -240,13 +241,14 @@ export async function submitSalesToOsdc(params: {
     };
   }
 
-  const org = await prisma.organization.findUnique({
+  const orgRow = await prisma.organization.findUnique({
     where: { id: params.organizationId },
-    select: { TIN: true, name: true, address: true },
+    select: { TIN: true, name: true, address: true, phone: true },
   });
-  if (!org) {
+  if (!orgRow) {
     return { success: false, error: 'Organization not found' };
   }
+  const org = await withBranchSellerAddress(orgRow, params.sale.branchId ?? params.branchId);
 
   const { cmcKey, error } = await ensureCmcKey(params.organizationId, params.branchId);
   if (error && !cmcKey) {

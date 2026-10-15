@@ -160,6 +160,7 @@
     },
     "nav": {
         "expenses": "Amafaranga yasohotse",
+        "payroll": "Imishahara",
         "financeHeader": "IMARI",
         "getStarted": "TANGIRA",
         "home": "Ahabanza",
@@ -914,6 +915,8 @@
         "fetchError": "Gushaka igenamiterere rya sosiyete ntibyagenze neza",
         "updateSuccess": "Igenamiterere ry'umuryango ryavuguruwe neza",
         "updateError": "Kuvugurura igenamiterere ry'umuryango ntibyagenze neza",
+        "mrcInvalid": "MRC (nimero y'uruhererekane ya EBM/VSDC) ntiyemewe. Igomba kugira inyuguti 11 mu buryo BBBCCNNNNNN: inyuguti 3 z'uwakoze porogaramu + 2 z'icyemezo zikurikiwe n'imibare 6.",
+        "mrcHint": "Uburyo: BBBCCNNNNNN (inyuguti 11, nk'uko yatanzwe na RRA).",
         "avatarSuccess": "Ifoto yavuguruwe neza",
         "avatarError": "Gushyiraho ifoto ntibyagenze neza",
         "imageOnly": "Hitamo ifoto",

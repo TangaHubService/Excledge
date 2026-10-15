@@ -4,9 +4,12 @@ import {
   getSales,
   getSaleById,
   payDebt,
-  refundSale,
+ refundSale,
   cancelSale,
+  correctSale,
+  getRefundable,
   reprintSaleReceipt,
+  printReceiptCopy,
   regenerateInvoice,
   getEbmReceipt,
   getInvoice,
@@ -21,7 +24,7 @@ import { requireOrganizationAccess } from "../middleware/organizationAccess.midd
 import { requireActiveSubscription } from '../middleware/feature-access.middleware';
 import { vsdcOnlineGuard } from "../middleware/vsdc-offline-guard.middleware";
 import { validate } from "../middleware/validate.middleware";
-import { createSaleSchema, cancelSaleSchema, refundSaleSchema, updateProformaSchema, convertProformaSchema } from "../validations/sales.validation";
+import { createSaleSchema, cancelSaleSchema, correctSaleSchema, refundSaleSchema, updateProformaSchema, convertProformaSchema } from "../validations/sales.validation";
 import {
   initiateMobileMoneyPayment,
   getMobileMoneyPaymentStatus,
@@ -148,6 +151,18 @@ router.post(
   refundSale
 );
 
+// What can still be refunded on a sale (original detail + per-line
+// remaining + prior refunds). Drives the refund UI; refundSale re-enforces
+// every rule, so this is read-only.
+router.get(
+  "/:organizationId/:saleId/refundable",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  getRefundable
+);
+
 // Cancel a sale
 router.post(
   "/:organizationId/:saleId/cancel",
@@ -159,6 +174,18 @@ router.post(
   cancelSale
 );
 
+// Pre-approval correction (Art. 12): replace an unfiscalized sale with a
+// corrected one. Blocked once VSDC has confirmed (use refund instead).
+router.post(
+  "/:organizationId/:saleId/correct",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  validate(correctSaleSchema),
+  correctSale
+);
+
 // Reprint a sale receipt (increments reprintCount, returns isCopy=true)
 router.post(
   "/:organizationId/:saleId/reprint",
@@ -167,6 +194,17 @@ router.post(
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   reprintSaleReceipt
+);
+
+// CS/CR — print a copy of an existing NS/NR receipt (PDF). Accepts
+// ?format=A4|A5|80mm. Never submits to VSDC, so no vsdcOnlineGuard.
+router.post(
+  "/:organizationId/:saleId/copy",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  printReceiptCopy
 );
 
 // Regenerate invoice (new invoice number, preserves history)

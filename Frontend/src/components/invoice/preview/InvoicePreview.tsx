@@ -17,9 +17,6 @@ export interface InvoicePreviewProps {
  *  the off-screen html2canvas capture stage (Tailwind classes are not applied there). */
 export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(
   function InvoicePreview({ data, children }, ref) {
-    // No center stamp is ever rendered (mirrors the backend PDF): COPY /
-    // NOT FISCALISED / TRAINING / PROFORMA designations live in the header
-    // title, never as a stamp over the body.
     return (
       <div
         ref={ref}

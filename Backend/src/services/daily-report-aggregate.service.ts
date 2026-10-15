@@ -221,7 +221,11 @@ export function splitReportSales(sales: ReportSaleBucket[]): SplitReportSales {
   );
   const trainingSales = fiscalSales.filter((s) => s.rcptLabel === 'TS' || s.rcptLabel === 'TR');
   const proformaSales = sales.filter((s) => s.isProforma || s.rcptLabel === 'PS');
-  const copiedSales = fiscalSales.filter((s) => (s.reprintCount ?? 0) > 0);
+  // Copies are tracked via reprintCount rather than as fiscal records. The
+  // threshold is > 1, matching receipt semantics: the first download
+  // (reprintCount reaches 1) is still the original; only later downloads
+  // render as COPY (see composeInvoicePayload isCopy).
+  const copiedSales = fiscalSales.filter((s) => (s.reprintCount ?? 0) > 1);
   const incompleteDrafts = sales.filter((s) => s.status === 'DRAFT' || s.status === 'PENDING').length;
   return { fiscalSales, normalSales, normalRefunds, trainingSales, proformaSales, copiedSales, incompleteDrafts };
 }
