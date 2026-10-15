@@ -837,7 +837,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       const ejText = row.operation === 'SALE' || row.operation === 'REFUND'
         ? buildElectronicJournal(sale as SaleWithRelations, rcptLabel, {
             sdcId: vsdc.sdcId || envelope.sdcId,
-            mrcNo: vsdc.mrcNo || envelope.mrcNo,
+            mrcNo: envelope.mrcNo || vsdc.mrcNo,
             sdcRcptNo: vsdc.rcptNo ? parseInt(vsdc.rcptNo, 10) || 0 : 0,
             internalData: vsdc.intrlData,
             receiptSignature: vsdc.vsdcSignature,

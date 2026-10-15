@@ -18,7 +18,7 @@ import { calculateProfit } from "../services/profit.service"
 import { getAverageCost } from "../services/cost-price.service"
 import { buildBranchFilter, getBranchIdForOperation, resolveBranchIdForWrite } from "../middleware/branchAuth.middleware"
 import { success, error as apiError } from "../utils/apiResponse"
-import { resolveReportMrc } from "../utils/mrc"
+import { configuredMrc, resolveReportMrc } from "../utils/mrc"
 import { TaxService } from "../services/tax.service"
 import { round2 } from "../services/money.service"
 import { getOrganizationSettings } from "../services/organization-settings.service"
@@ -1476,18 +1476,18 @@ export const getEbmReceipt = async (req: BranchAuthRequest, res: Response) => {
 
     const org = await prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { TIN: true, ebmDeviceId: true, ebmSerialNo: true },
+      select: { TIN: true, ebmDeviceId: true, ebmSerialNo: true, mrcNo: true },
     });
 
     const branch = sale?.branchId != null
       ? await prisma.branch.findFirst({
           where: { id: sale.branchId, organizationId },
-          select: { bhfId: true, ebmDeviceId: true, ebmSerialNo: true, ebmInitInfo: true },
+          select: { bhfId: true, ebmDeviceId: true, ebmSerialNo: true, mrcNo: true, ebmInitInfo: true },
         })
       : null;
 
     const signedMrc = (tx.responseData as { normalized?: { mrcNo?: string } } | null)?.normalized?.mrcNo;
-    const mrcNo = signedMrc || resolveReportMrc(branch, org);
+    const mrcNo = configuredMrc(branch, org) || signedMrc || resolveReportMrc(branch, org);
     // `tx` is this sale's own successful VSDC response — prefer the ID it was
     // actually stamped with over the (possibly still-unconfigured) device
     // setting, same precedence composeInvoicePayload uses.
@@ -2025,11 +2025,11 @@ export async function composeInvoicePayload(
     const [org, branch] = await Promise.all([
       prisma.organization.findUnique({
         where: { id: organizationId },
-        select: { name: true, avatar: true, address: true, phone: true, email: true, TIN: true, VRN: true, currency: true, ebmDeviceId: true, ebmSerialNo: true },
+        select: { name: true, avatar: true, address: true, phone: true, email: true, TIN: true, VRN: true, currency: true, ebmDeviceId: true, ebmSerialNo: true, mrcNo: true },
       }),
       prisma.branch.findUnique({
         where: { id: sale.branchId },
-        select: { name: true, bhfId: true, ebmDeviceId: true, ebmSerialNo: true, address: true },
+        select: { name: true, bhfId: true, ebmDeviceId: true, ebmSerialNo: true, mrcNo: true, ebmInitInfo: true, address: true },
       }),
     ])
 
@@ -2050,9 +2050,9 @@ export async function composeInvoicePayload(
     // catalog, customer or tax settings change.
     const vsdcRecord = readVsdcRecord(fiscalTx?.responseData)
 
-    // MRC: the value the VSDC returned on the signed receipt; the configured
-    // device serial is only a fallback for receipts without one.
-    const mrcNo = vsdcMrcNo(vsdcRecord) || norm?.mrcNo || branch?.ebmSerialNo || org?.ebmSerialNo || null
+    // MRC: the device MRC configured in the CIS (spec Art. 3.2.1); the value
+    // VSDC returned on the signed receipt is the fallback for unconfigured devices.
+    const mrcNo = configuredMrc(branch, org) || vsdcMrcNo(vsdcRecord) || norm?.mrcNo || resolveReportMrc(branch, org)
     // Prefer the ID stamped in the successful RRA response. Configured device
     // values are a fallback only; this keeps the printed SDC identifier aligned
     // with the actual fiscal receipt.
@@ -2429,7 +2429,7 @@ function parsePdfFormat(value: unknown): InvoicePdfFormat {
  * POST /api/sales/:organizationId/:saleId/copy?format=A4|A5|80mm
  *
  * The copy reprints the original receipt's VSDC data (counter, timestamp,
- * internal data, signature, QR) under a diagonal COPY watermark. Nothing is
+ * internal data, signature, QR) under a COPY header title. Nothing is
  * sent to VSDC and no sale, refund, stock, payment, tax or accounting record
  * is created.
  */

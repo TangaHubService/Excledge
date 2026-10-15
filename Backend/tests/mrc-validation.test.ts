@@ -12,11 +12,11 @@ vi.mock("../src/lib/prisma", () => ({
   prisma: {
     organization: {
       update: (...a: any[]) => (orgUpdate as any)(...a),
-      findUnique: vi.fn(async () => ({ ebmSerialNo: stored.org, vatRegistered: true, TIN: "100000000", ebmDeviceId: null })),
+      findUnique: vi.fn(async () => ({ mrcNo: stored.org, ebmSerialNo: null, vatRegistered: true, TIN: "100000000", ebmDeviceId: null })),
     },
     branch: {
       updateMany: (...a: any[]) => (branchUpdateMany as any)(...a),
-      findFirst: vi.fn(async () => ({ bhfId: "00", ebmSerialNo: stored.branch })),
+      findFirst: vi.fn(async () => ({ bhfId: "00", ebmSerialNo: null, mrcNo: stored.branch })),
     },
     $queryRaw: vi.fn(async () => [{ sidebarConfig: {}, featureFlags: {}, preferences: {} }]),
   },
@@ -29,6 +29,8 @@ import {
   MrcFormatError,
   normalizeMrcOrThrow,
   resolveReportMrc,
+  configuredMrc,
+  mrcMismatch,
 } from "../src/utils/mrc"
 import { upsertOrganizationSettings } from "../src/services/organization-settings.service"
 
@@ -61,23 +63,31 @@ describe("checkMrc", () => {
     expect(checkMrc("   ", { relaxed: false })).toEqual({ ok: true, value: null })
   })
 
-  it("is relaxed in sandbox or mock mode (still normalized)", () => {
+  it("relaxes only the BBBCCNNNNNN layout in sandbox or mock mode (still normalized)", () => {
     ebmConfig.environment = "sandbox"
     expect(isMrcValidationRelaxed()).toBe(true)
-    expect(checkMrc(" test-serial ")).toEqual({ ok: true, value: "TEST-SERIAL" })
+    expect(checkMrc(" testmrc0001 ")).toEqual({ ok: true, value: "TESTMRC0001" })
 
     ebmConfig.environment = "production"
     ebmConfig.useMock = true
-    expect(checkMrc("anything")).toEqual({ ok: true, value: "ANYTHING" })
+    expect(checkMrc("abcdefghijk")).toEqual({ ok: true, value: "ABCDEFGHIJK" })
 
     ebmConfig.useMock = false
     expect(isMrcValidationRelaxed()).toBe(false)
-    expect(checkMrc("anything").ok).toBe(false)
+    expect(checkMrc("TESTMRC0001").ok).toBe(false)
   })
 
-  it("lets an unchanged stored value through so unrelated edits are not blocked", () => {
-    expect(checkMrc("mrc012000250", { relaxed: false, current: [null, "MRC012000250"] }).ok).toBe(true)
-    expect(checkMrc("MRC012000251", { relaxed: false, current: ["MRC012000250"] }).ok).toBe(false)
+  it.each(["WIS0102946", "WIS010294670", "MRC012000250", "excelwartest", "TEST-SERIAL", "WIS 1029467"])(
+    "rejects %s in every environment — an MRC is exactly 11 letters/digits",
+    (v) => {
+      expect(checkMrc(v, { relaxed: true }).ok).toBe(false)
+      expect(checkMrc(v, { relaxed: true, current: [v] }).ok).toBe(false)
+    },
+  )
+
+  it("lets an unchanged stored layout through so unrelated edits are not blocked", () => {
+    expect(checkMrc("testmrc0001", { relaxed: false, current: [null, "TESTMRC0001"] }).ok).toBe(true)
+    expect(checkMrc("TESTMRC0002", { relaxed: false, current: ["TESTMRC0001"] }).ok).toBe(false)
   })
 
   it("normalizeMrcOrThrow throws a 400 MrcFormatError", () => {
@@ -92,16 +102,17 @@ describe("checkMrc", () => {
 })
 
 describe("resolveReportMrc precedence", () => {
-  const org = { ebmSerialNo: "ORG01000001" }
+  const org = { mrcNo: "ORG01000003", ebmSerialNo: "orgserial" }
 
-  it("prefers the VSDC-returned ebmInitInfo.mrcNo", () => {
-    expect(resolveReportMrc({ ebmInitInfo: { mrcNo: "WIS01000999" }, ebmSerialNo: "BRA01000002" }, org)).toBe("WIS01000999")
+  it("prefers the configured device MRC over the VSDC-reported one", () => {
+    expect(resolveReportMrc({ mrcNo: "BRA01000001", ebmInitInfo: { mrcNo: "WIS01000999" }, ebmSerialNo: "excelwartest" }, org)).toBe("BRA01000001")
   })
 
-  it("falls back to branch.ebmSerialNo, then org.ebmSerialNo", () => {
-    expect(resolveReportMrc({ ebmInitInfo: null, ebmSerialNo: "BRA01000002" }, org)).toBe("BRA01000002")
-    expect(resolveReportMrc({ ebmInitInfo: { mrcNo: "  " }, ebmSerialNo: null }, org)).toBe("ORG01000001")
-    expect(resolveReportMrc(null, org)).toBe("ORG01000001")
+  it("falls back to ebmInitInfo.mrcNo, then org.mrcNo, then the legacy serials", () => {
+    expect(resolveReportMrc({ mrcNo: null, ebmInitInfo: { mrcNo: "WIS01000999" }, ebmSerialNo: "x" }, org)).toBe("WIS01000999")
+    expect(resolveReportMrc({ mrcNo: " ", ebmInitInfo: { mrcNo: "  " }, ebmSerialNo: "branchserial" }, org)).toBe("ORG01000003")
+    expect(resolveReportMrc({ ebmInitInfo: null, ebmSerialNo: "branchserial" }, { ebmSerialNo: "orgserial" })).toBe("branchserial")
+    expect(resolveReportMrc(null, { ebmSerialNo: "orgserial" })).toBe("orgserial")
   })
 
   it("ignores malformed init payloads and returns null when nothing is configured", () => {
@@ -110,32 +121,56 @@ describe("resolveReportMrc precedence", () => {
   })
 })
 
-describe("upsertOrganizationSettings ebmConfig.dvcSrlNo", () => {
-  it("writes the normalized MRC to the org and default branch", async () => {
-    await upsertOrganizationSettings(1, { ebmConfig: { dvcSrlNo: " wis01000123 " } } as any)
-    expect(orgUpdate).toHaveBeenCalledWith({ where: { id: 1 }, data: { ebmSerialNo: "WIS01000123" } })
+describe("configuredMrc / mrcMismatch", () => {
+  it("takes the branch MRC, then the org fallback", () => {
+    expect(configuredMrc({ mrcNo: "BRA01000001" }, { mrcNo: "ORG01000003" })).toBe("BRA01000001")
+    expect(configuredMrc({ mrcNo: "" }, { mrcNo: "ORG01000003" })).toBe("ORG01000003")
+    expect(configuredMrc(null, null)).toBeNull()
+  })
+
+  it("flags only a configured MRC that disagrees with the VSDC-reported one", () => {
+    expect(mrcMismatch("WIS01029467", "wis01029467")).toBeNull()
+    expect(mrcMismatch(null, "WIS01029467")).toBeNull()
+    expect(mrcMismatch("WIS01029467", null)).toBeNull()
+    expect(mrcMismatch("WIS01029468", "WIS01029467")).toContain("WIS01029467")
+  })
+})
+
+describe("upsertOrganizationSettings ebmConfig", () => {
+  it("writes the normalized MRC to mrcNo on the org and default branch", async () => {
+    await upsertOrganizationSettings(1, { ebmConfig: { mrcNo: " wis01000123 " } } as any)
+    expect(orgUpdate).toHaveBeenCalledWith({ where: { id: 1 }, data: { mrcNo: "WIS01000123" } })
     expect(branchUpdateMany).toHaveBeenCalledWith({
       where: { organizationId: 1, isDefault: true },
-      data: { ebmSerialNo: "WIS01000123" },
+      data: { mrcNo: "WIS01000123" },
+    })
+  })
+
+  it("stores the device serial as entered, without MRC validation", async () => {
+    await upsertOrganizationSettings(1, { ebmConfig: { dvcSrlNo: " excelwartest " } } as any)
+    expect(orgUpdate).toHaveBeenCalledWith({ where: { id: 1 }, data: { ebmSerialNo: "excelwartest" } })
+    expect(branchUpdateMany).toHaveBeenCalledWith({
+      where: { organizationId: 1, isDefault: true },
+      data: { ebmSerialNo: "excelwartest" },
     })
   })
 
   it("rejects a malformed MRC before writing anything", async () => {
     await expect(
-      upsertOrganizationSettings(1, { ebmConfig: { tin: "100000000", dvcSrlNo: "BAD" } } as any),
+      upsertOrganizationSettings(1, { ebmConfig: { tin: "100000000", mrcNo: "BAD" } } as any),
     ).rejects.toBeInstanceOf(MrcFormatError)
     expect(orgUpdate).not.toHaveBeenCalled()
     expect(branchUpdateMany).not.toHaveBeenCalled()
   })
 
   it("accepts the echoed-back stored value even if it predates validation", async () => {
-    stored.branch = "MRC012000250"
-    await upsertOrganizationSettings(1, { ebmConfig: { dvcSrlNo: "MRC012000250" } } as any)
+    stored.branch = "TESTMRC0001"
+    await upsertOrganizationSettings(1, { ebmConfig: { mrcNo: "TESTMRC0001" } } as any)
     expect(branchUpdateMany).toHaveBeenCalledTimes(1)
   })
 
   it("clears the MRC on blank input", async () => {
-    await upsertOrganizationSettings(1, { ebmConfig: { dvcSrlNo: "" } } as any)
-    expect(orgUpdate).toHaveBeenCalledWith({ where: { id: 1 }, data: { ebmSerialNo: null } })
+    await upsertOrganizationSettings(1, { ebmConfig: { mrcNo: "" } } as any)
+    expect(orgUpdate).toHaveBeenCalledWith({ where: { id: 1 }, data: { mrcNo: null } })
   })
 })

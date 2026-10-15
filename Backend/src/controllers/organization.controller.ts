@@ -248,6 +248,7 @@ export const updateOrganization = async (req: Request, res: Response) => {
       currency,
       ebmDeviceId,
       ebmSerialNo,
+      mrcNo,
       trainingMode,
     } = req.body;
     //@ts-ignore
@@ -273,18 +274,21 @@ export const updateOrganization = async (req: Request, res: Response) => {
     if (ebmSerialNo !== undefined && ebmSerialNo !== null && typeof ebmSerialNo !== "string") {
       return res.status(400).json({ error: "ebmSerialNo must be a string" });
     }
+    if (mrcNo !== undefined && mrcNo !== null && typeof mrcNo !== "string") {
+      return res.status(400).json({ error: "mrcNo must be a string" });
+    }
     if (trainingMode !== undefined && typeof trainingMode !== "boolean") {
       return res.status(400).json({ error: "trainingMode must be true or false" });
     }
 
     const existingOrg = await prisma.organization.findUnique({
       where: { id },
-      select: { trainingMode: true, ebmSerialNo: true },
+      select: { trainingMode: true, mrcNo: true },
     });
     const previousTrainingMode = existingOrg?.trainingMode ?? false;
 
-    // RRA spec §2.1 MRC format (relaxed in sandbox/mock), same rule as branch update.
-    const mrc = checkMrc(ebmSerialNo, { current: [existingOrg?.ebmSerialNo] });
+    // CIS spec Art. 3.2.1 MRC format (relaxed in sandbox/mock), same rule as branch update.
+    const mrc = checkMrc(mrcNo, { current: [existingOrg?.mrcNo] });
     if (!mrc.ok) {
       return res.status(400).json({ error: mrc.error, code: mrc.code });
     }
@@ -320,8 +324,11 @@ export const updateOrganization = async (req: Request, res: Response) => {
           ...(ebmDeviceId !== undefined
             ? { ebmDeviceId: ebmDeviceId === "" ? null : ebmDeviceId }
             : {}),
+          ...(ebmSerialNo !== undefined
+            ? { ebmSerialNo: ebmSerialNo == null || ebmSerialNo.trim() === "" ? null : ebmSerialNo.trim() }
+            : {}),
           ...(mrc.value !== undefined
-            ? { ebmSerialNo: mrc.value }
+            ? { mrcNo: mrc.value }
             : {}),
           // CIS §5.3/§16: while on, every new sale is a Training Sale (TS) and
           // only TS receipts can be refunded (as TR). Training receipts go to

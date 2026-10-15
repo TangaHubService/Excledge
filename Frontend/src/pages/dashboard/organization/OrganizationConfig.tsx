@@ -63,6 +63,7 @@ type OrganizationData = {
     taxExemptionReason?: string | null;
     ebmDeviceId?: string | null;
     ebmSerialNo?: string | null;
+    mrcNo?: string | null;
     trainingMode?: boolean;
     currency?: string;
     isActive: boolean;
@@ -183,6 +184,11 @@ export function OrganizationConfig() {
     const handleOrgSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!organization || !isAuthorized) return;
+        const mrc = (organization.mrcNo ?? '').trim();
+        if (mrc && !/^[A-Za-z0-9]{11}$/.test(mrc)) {
+            toast.error(t('companySettings.mrcInvalid'));
+            return;
+        }
 
         setIsSavingOrg(true);
         try {
@@ -575,18 +581,34 @@ export function OrganizationConfig() {
                                         />
                                     </div>
 
-                                    <div className="space-y-2 md:col-span-2">
+                                    <div className="space-y-2">
                                         <Label className="flex items-center gap-2">
                                             <ShieldCheck className="h-4 w-4 text-gray-400" />
-                                            RRA EBM / VSDC — serial number
+                                            RRA EBM / VSDC — device serial (dvcSrlNo)
                                         </Label>
                                         <Input
                                             value={organization?.ebmSerialNo ?? ''}
-                                            onChange={(e) => setOrganization(prev => prev ? { ...prev, ebmSerialNo: e.target.value.toUpperCase() } : null)}
+                                            onChange={(e) => setOrganization(prev => prev ? { ...prev, ebmSerialNo: e.target.value } : null)}
                                             disabled={!isAuthorized || isSavingOrg}
                                             placeholder="Device / controller serial from RRA"
                                             className="rounded-xl font-mono"
                                             maxLength={32}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label className="flex items-center gap-2">
+                                            <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                            MRC (Machine Registration Code)
+                                        </Label>
+                                        <Input
+                                            value={organization?.mrcNo ?? ''}
+                                            onChange={(e) => setOrganization(prev => prev ? { ...prev, mrcNo: e.target.value.toUpperCase() } : null)}
+                                            disabled={!isAuthorized || isSavingOrg}
+                                            placeholder="e.g. WIS01029467"
+                                            className="rounded-xl font-mono"
+                                            minLength={11}
+                                            maxLength={11}
                                         />
                                         <p className="text-xs text-gray-400">{t('companySettings.mrcHint')}</p>
                                     </div>

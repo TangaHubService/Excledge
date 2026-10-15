@@ -1960,6 +1960,7 @@ class ApiClient {
     bhfId?: string;
     ebmDeviceId?: string;
     ebmSerialNo?: string;
+    mrcNo?: string;
     vsdcUrl?: string;
   }) {
     return this.request(`/branches/${this.getOrganizationId()}/${branchId}`, {

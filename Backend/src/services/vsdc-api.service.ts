@@ -81,7 +81,9 @@ export interface VsdcEnvelope {
   tin: string;
   bhfId: string;
   sdcId: string;
+  /** Configured CIS Machine Registration Code of the device (CIS spec Art. 3.2.1). */
   mrcNo: string;
+  /** VSDC device serial registered with RRA, sent to /initializer/selectInitInfo. */
   dvcSrlNo: string;
   env: string;
   /** C3: per-branch VSDC endpoint; falls back to config.ebm.apiUrl if absent */
@@ -124,6 +126,7 @@ export async function buildVsdcEnvelope(
       TIN: true,
       ebmDeviceId: true,
       ebmSerialNo: true,
+      mrcNo: true,
       name: true,
     },
   });
@@ -136,19 +139,21 @@ export async function buildVsdcEnvelope(
   // Fall back to org-level credentials for single-branch setups not yet migrated.
   let bhfId = config.ebm.defaultBhfId;
   let sdcId = org.ebmDeviceId ?? '';
-  let mrcNo = org.ebmSerialNo ?? '';
+  let dvcSrlNo = org.ebmSerialNo ?? '';
+  let mrcNo = org.mrcNo ?? '';
 
   let vsdcUrl: string | undefined;
 
   if (branchId != null) {
     const branch = await prisma.branch.findUnique({
       where: { id: branchId },
-      select: { bhfId: true, ebmDeviceId: true, ebmSerialNo: true, vsdcUrl: true },
+      select: { bhfId: true, ebmDeviceId: true, ebmSerialNo: true, mrcNo: true, vsdcUrl: true },
     });
     if (branch) {
       if (branch.bhfId) bhfId = branch.bhfId;
       if (branch.ebmDeviceId) sdcId = branch.ebmDeviceId;
-      if (branch.ebmSerialNo) mrcNo = branch.ebmSerialNo;
+      if (branch.ebmSerialNo) dvcSrlNo = branch.ebmSerialNo;
+      if (branch.mrcNo) mrcNo = branch.mrcNo;
       if (branch.vsdcUrl) vsdcUrl = branch.vsdcUrl.replace(/\/$/, '');
     }
   }
@@ -158,7 +163,7 @@ export async function buildVsdcEnvelope(
     bhfId,
     sdcId,
     mrcNo,
-    dvcSrlNo: mrcNo,
+    dvcSrlNo,
     env: config.ebm.environment,
     vsdcUrl,
   };

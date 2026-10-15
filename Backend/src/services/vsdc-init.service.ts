@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { isEbmEnabled } from './rra-ebm.service';
 import { buildVsdcEnvelope, selectInitInfo, validateVsdcEnvelope, type RraInitInfo } from './vsdc-api.service';
 import logger from '../utils/logger';
+import { hasMrcLength, mrcMismatch } from '../utils/mrc';
 
 /**
  * RRA VSDC device initialization (RRA checklist §58).
@@ -11,8 +12,9 @@ import logger from '../utils/logger';
  * success it:
  *   - confirms the device is registered with RRA under this TIN (also satisfies
  *     the "same TIN" half of §22),
- *   - stores the returned SDC id / MRC number and the full init payload on the
- *     branch,
+ *   - stores the returned SDC id and the full init payload on the branch, fills
+ *     a blank device MRC from the reported one and flags a configured MRC that
+ *     disagrees with it,
  *   - seeds the local VSDC invoice counter past the last invoice number RRA
  *     already has on record, so the CIS never re-emits a used number.
  */
@@ -22,6 +24,10 @@ export interface VsdcInitResult {
   error?: string;
   info?: RraInitInfo;
   seededCounterTo?: number;
+  /** The device MRC in effect after init (configured, else the one VSDC reported). */
+  mrcNo?: string;
+  /** Set when the configured MRC disagrees with the one VSDC reports. */
+  mrcWarning?: string;
 }
 
 export async function initializeVsdcDevice(
@@ -49,13 +55,17 @@ export async function initializeVsdcDevice(
     };
   }
 
-  // Persist the returned identifiers + full payload on the branch.
+  // Persist the returned identifiers + full payload. The device serial
+  // (dvcSrlNo) is what we asked with and stays as configured; the MRC VSDC
+  // reports only fills a device MRC that was never configured.
+  const reportedMrc = info.mrcNo?.trim() || undefined;
+  const mrcFill = reportedMrc && !envelope.mrcNo && hasMrcLength(reportedMrc) ? reportedMrc.toUpperCase() : undefined;
   if (branchId != null) {
     await prisma.branch.update({
       where: { id: branchId },
       data: {
         ebmDeviceId: info.sdcId ?? undefined,
-        ebmSerialNo: info.mrcNo ?? undefined,
+        mrcNo: mrcFill,
         bhfId: info.bhfId ?? undefined,
         ebmInitializedAt: new Date(),
         ebmInitInfo: info as unknown as Prisma.InputJsonValue,
@@ -66,10 +76,12 @@ export async function initializeVsdcDevice(
       where: { id: organizationId },
       data: {
         ebmDeviceId: info.sdcId ?? undefined,
-        ebmSerialNo: info.mrcNo ?? undefined,
+        mrcNo: mrcFill,
       },
     });
   }
+  const mrcWarning = mrcMismatch(envelope.mrcNo, reportedMrc);
+  if (mrcWarning) logger.warn(`[VSDC-INIT] org ${organizationId} branch ${branchId ?? '-'}: ${mrcWarning}`);
 
   // Seed the invoice counter past RRA's last known number so the next sale
   // never collides (resultCd 924).
@@ -95,5 +107,5 @@ export async function initializeVsdcDevice(
 
   logger.info(`[VSDC-INIT] org ${organizationId} branch ${branchId ?? '-'}: sdcId=${info.sdcId} mrcNo=${info.mrcNo} lastRraInvcNo=${lastRraInvcNo} seededTo=${seededCounterTo ?? 'n/a'}`);
 
-  return { success: true, info, seededCounterTo };
+  return { success: true, info, seededCounterTo, mrcNo: envelope.mrcNo || reportedMrc, mrcWarning: mrcWarning ?? undefined };
 }

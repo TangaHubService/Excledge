@@ -37,7 +37,7 @@ export async function getOrganizationSettings(
     }),
     prisma.branch.findFirst({
       where: { organizationId, isDefault: true },
-      select: { bhfId: true, ebmSerialNo: true },
+      select: { bhfId: true, ebmSerialNo: true, mrcNo: true },
     }),
   ]);
 
@@ -60,20 +60,23 @@ export async function upsertOrganizationSettings(
   const preferencesPatch = patch.preferences ?? {};
   const ebmConfigPatch = patch.ebmConfig ?? {};
   let mrc: string | null | undefined;
-  if (ebmConfigPatch.dvcSrlNo !== undefined) {
+  if (ebmConfigPatch.mrcNo !== undefined) {
     const [currentOrg, currentBranch] = await Promise.all([
-      prisma.organization.findUnique({ where: { id: organizationId }, select: { ebmSerialNo: true } }),
-      prisma.branch.findFirst({ where: { organizationId, isDefault: true }, select: { ebmSerialNo: true } }),
+      prisma.organization.findUnique({ where: { id: organizationId }, select: { mrcNo: true } }),
+      prisma.branch.findFirst({ where: { organizationId, isDefault: true }, select: { mrcNo: true } }),
     ]);
-    mrc = normalizeMrcOrThrow(ebmConfigPatch.dvcSrlNo, {
-      current: [currentOrg?.ebmSerialNo, currentBranch?.ebmSerialNo],
+    mrc = normalizeMrcOrThrow(ebmConfigPatch.mrcNo, {
+      current: [currentOrg?.mrcNo, currentBranch?.mrcNo],
     });
   }
+  const dvcSrlNo =
+    ebmConfigPatch.dvcSrlNo === undefined ? undefined : ebmConfigPatch.dvcSrlNo.trim() || null;
 
   const updateData: Record<string, unknown> = {};
   if (ebmConfigPatch.tin !== undefined) updateData.TIN = ebmConfigPatch.tin === "" ? null : ebmConfigPatch.tin;
   if (ebmConfigPatch.ebmDeviceId !== undefined) updateData.ebmDeviceId = ebmConfigPatch.ebmDeviceId === "" ? null : ebmConfigPatch.ebmDeviceId;
-  if (mrc !== undefined) updateData.ebmSerialNo = mrc;
+  if (dvcSrlNo !== undefined) updateData.ebmSerialNo = dvcSrlNo;
+  if (mrc !== undefined) updateData.mrcNo = mrc;
 
   if (Object.keys(updateData).length > 0) {
     await prisma.organization.update({ where: { id: organizationId }, data: updateData });
@@ -81,7 +84,8 @@ export async function upsertOrganizationSettings(
 
   const branchUpdateData: Record<string, unknown> = {};
   if (ebmConfigPatch.bhfId !== undefined) branchUpdateData.bhfId = ebmConfigPatch.bhfId === "" ? null : ebmConfigPatch.bhfId;
-  if (mrc !== undefined) branchUpdateData.ebmSerialNo = mrc;
+  if (dvcSrlNo !== undefined) branchUpdateData.ebmSerialNo = dvcSrlNo;
+  if (mrc !== undefined) branchUpdateData.mrcNo = mrc;
 
   if (Object.keys(branchUpdateData).length > 0) {
     await prisma.branch.updateMany({
@@ -121,7 +125,7 @@ export async function upsertOrganizationSettings(
 
   const branch = await prisma.branch.findFirst({
     where: { organizationId, isDefault: true },
-    select: { bhfId: true, ebmSerialNo: true },
+    select: { bhfId: true, ebmSerialNo: true, mrcNo: true },
   });
 
   return toTypedSettings(
@@ -136,8 +140,8 @@ function toTypedSettings(row: {
   sidebarConfig: Prisma.JsonValue;
   featureFlags: Prisma.JsonValue;
   preferences: Prisma.JsonValue;
-} | null, vatRegistered: boolean, org?: { TIN?: string | null; ebmDeviceId?: string | null }, branch?: { bhfId?: string | null; ebmSerialNo?: string | null }): IOrganizationSettings {
-  if (!row) return { ...DEFAULT_SETTINGS, vatRegistered, ebmConfig: { tin: org?.TIN ?? "", bhfId: branch?.bhfId ?? "", dvcSrlNo: branch?.ebmSerialNo ?? "", ebmDeviceId: org?.ebmDeviceId ?? "" } };
+} | null, vatRegistered: boolean, org?: { TIN?: string | null; ebmDeviceId?: string | null }, branch?: { bhfId?: string | null; ebmSerialNo?: string | null; mrcNo?: string | null }): IOrganizationSettings {
+  if (!row) return { ...DEFAULT_SETTINGS, vatRegistered, ebmConfig: { tin: org?.TIN ?? "", bhfId: branch?.bhfId ?? "", dvcSrlNo: branch?.ebmSerialNo ?? "", mrcNo: branch?.mrcNo ?? "", ebmDeviceId: org?.ebmDeviceId ?? "" } };
 
   return {
     sidebarConfig: withDefaults<ISidebarConfig>(DEFAULT_SETTINGS.sidebarConfig, row.sidebarConfig),
@@ -148,6 +152,7 @@ function toTypedSettings(row: {
       tin: org?.TIN ?? "",
       bhfId: branch?.bhfId ?? "",
       dvcSrlNo: branch?.ebmSerialNo ?? "",
+      mrcNo: branch?.mrcNo ?? "",
       ebmDeviceId: org?.ebmDeviceId ?? "",
     },
   };

@@ -15,6 +15,8 @@ type Row = Record<string, any>
 const db: { sales: Map<number, Row> } = { sales: new Map() }
 let catalogRates: [number, number, number, number] = [0, 18, 0, 0]
 
+const device = vi.hoisted(() => ({ mrcNo: null as string | null }))
+
 vi.mock("../src/lib/prisma", () => ({
   prisma: new Proxy({}, {
     get(_t, model: string) {
@@ -28,7 +30,7 @@ vi.mock("../src/lib/prisma", () => ({
           })),
         },
         branch: {
-          findUnique: vi.fn(async () => ({ name: "Main", bhfId: "00", ebmDeviceId: "TESTSDC-CONFIGURED", ebmSerialNo: "TESTMRC-CONFIGURED", address: null })),
+          findUnique: vi.fn(async () => ({ name: "Main", bhfId: "00", ebmDeviceId: "TESTSDC-CONFIGURED", ebmSerialNo: "TESTMRC-CONFIGURED", mrcNo: device.mrcNo, address: null })),
         },
       }
       if (model in models) return models[model]
@@ -177,6 +179,7 @@ async function renderedTexts(payload: RenderInvoicePayload): Promise<Record<stri
 }
 
 beforeEach(() => {
+  device.mrcNo = null
   db.sales.clear()
   catalogRates = [0, 18, 0, 0]
 })
@@ -285,6 +288,29 @@ describe("NR — refund references the original sale consistently", () => {
   })
 })
 
+describe("device MRC (CIS spec Art. 3.2.1)", () => {
+  it("prints the MRC configured for the device instead of the one VSDC echoes, in every format", async () => {
+    device.mrcNo = "ABC01000123"
+    const { ns } = fiscalizeAll()
+    const p = (await composeInvoicePayload(req(68)))!
+    expect(p.sdcInformation.mrcNo).toBe("ABC01000123")
+    const record = readVsdcRecord(ns.ebmTransactions[0].responseData)
+    expect(vsdcReceiptParityErrors(p, record)).toEqual([])
+    const t = await renderedTexts(p)
+    for (const fmt of ["80mm", "A4", "A5", "html"]) {
+      expect(t[fmt]).toContain("ABC01000123")
+      expect(t[fmt]).not.toContain("TESTWIS0102946")
+    }
+    expect(vsdcPrintedTextErrors(t["80mm"], p, record)).toEqual([])
+  })
+
+  it("falls back to the MRC VSDC returned when the device has none configured", async () => {
+    const { ns } = fiscalizeAll()
+    const p = (await composeInvoicePayload(req(68)))!
+    expect(p.sdcInformation.mrcNo).toBe("TESTWIS0102946")
+  })
+})
+
 describe("parity checker flags every kind of drift", () => {
   it("reports wrong counters, MRC, clocks, items, taxes, sign and orgInvcNo", async () => {
     const { ns, nr } = fiscalize()
@@ -293,7 +319,6 @@ describe("parity checker flags every kind of drift", () => {
     const original = readVsdcRecord(ns.ebmTransactions[0].responseData)
     const bad: RenderInvoicePayload = structuredClone(good)
     bad.sdcInformation.receiptNumber = "73 NR"
-    bad.sdcInformation.mrcNo = "TESTMRC-CONFIGURED"
     bad.invoice.invoiceNumber = "202"
     bad.invoice.time = "00:00:00"
     bad.invoice.originalInvoiceNumber = "201"
@@ -302,7 +327,7 @@ describe("parity checker flags every kind of drift", () => {
     bad.items[1].total = 2500
     bad.totals.grandTotal = 11000
     const errors = vsdcReceiptParityErrors(bad, record, original).join("\n")
-    for (const needle of ["rcptNo/totRcptNo", "mrcNo", "invcNo 73", "cfmDt 16:04:09", "orgInvcNo 72", `REF. NORMAL RECEIPT# printed "201" ≠ orgInvcNo 72`, "itemNm", "item 2 total prints positive", "taxblAmtA 8000", "refund total prints positive"]) {
+    for (const needle of ["rcptNo/totRcptNo", "invcNo 73", "cfmDt 16:04:09", "orgInvcNo 72", `REF. NORMAL RECEIPT# printed "201" ≠ orgInvcNo 72`, "itemNm", "item 2 total prints positive", "taxblAmtA 8000", "refund total prints positive"]) {
       expect(errors).toContain(needle)
     }
   })

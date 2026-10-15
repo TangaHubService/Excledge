@@ -133,6 +133,9 @@ export const Receipt: React.FC<ReceiptProps> = ({
           {ebm.rcptLabel} — {RCPT_LABEL_DISPLAY[ebm.rcptLabel] ?? ebm.rcptLabel}
         </div>
       )}
+      {ebm?.originalReceiptNumber && (ebm.rcptLabel === 'NR' || ebm.rcptLabel === 'CR' || ebm.rcptLabel === 'TR') && (
+        <p className="text-center mb-1">REF. NORMAL RECEIPT#: {ebm.originalReceiptNumber}</p>
+      )}
 
       {/* Transaction info */}
       <div className="mb-2">
@@ -221,9 +224,6 @@ export const Receipt: React.FC<ReceiptProps> = ({
             {/* CIS transaction time (cfmDt), not the VSDC publication time printed above. */}
             <p>Date : {date}</p>
             {ebm.mrcNo && <p>MRC : {ebm.mrcNo}</p>}
-            {ebm.originalReceiptNumber && (ebm.rcptLabel === 'NR' || ebm.rcptLabel === 'CR' || ebm.rcptLabel === 'TR') && (
-              <p>REF. NORMAL RECEIPT#: {ebm.originalReceiptNumber}</p>
-            )}
             <p className="text-center mt-2 text-[10px]">Excledge ERP v1.0.0 Powered by RRA VSDC EBM 2.1.</p>
           </div>
         </>

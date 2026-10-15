@@ -141,11 +141,11 @@ export function headerIndicator(data: RenderInvoicePayload): string {
 }
 
 /**
- * QR code only on the receipt types the spec samples show it on (13.1 NS,
- * 14.1 NR); the CR copy sample (15.1) and TS/PS carry none.
+ * QR code on signed receipts: NS/NR and their CS/CR reprints, which carry the
+ * original's QR unchanged. TS/PS are unsigned and carry none.
  */
 export function printsQrCode(data: RenderInvoicePayload): boolean {
-  return !isCopyDocument(data) && !isTrainingDocument(data) && !isProformaDocument(data)
+  return !isTrainingDocument(data) && !isProformaDocument(data)
 }
 
 /**
@@ -160,13 +160,12 @@ export function transactionSubTitle(data: RenderInvoicePayload): string {
 
 
 /**
- * CIS/VSDC spec §11: COPY, TRAINING MODE, and PROFORMA must carry the "not an
- * official receipt" notice. Title/watermark still print at the top of the
- * document — they are not repeated immediately above SDC INFORMATION.
- * A genuine NORMAL sale/refund (label "" or REFUND) must not carry the notice.
+ * TRAINING MODE and PROFORMA carry the "not an official receipt" notice
+ * between the items and TOTAL. A COPY is marked only by its header title, and
+ * a genuine NORMAL sale/refund (label "" or REFUND) carries no notice.
  */
 export function isFormalNoticeIndicator(indicator: string): boolean {
-  return indicator !== "" && indicator !== REFUND_DOCUMENT_LABEL
+  return indicator !== "" && indicator !== REFUND_DOCUMENT_LABEL && indicator !== "COPY"
 }
 
 function drawImageFit(
@@ -618,7 +617,6 @@ function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePaylo
     `RECEIPT NUMBER: ${safe(data.invoice.invoiceNumber, "-")}`,
     invoiceDate.date ? `DATE: ${invoiceDate.date} TIME: ${data.invoice.time ? safe(data.invoice.time) : invoiceDate.time}` : "",
     (sdc.mrcNo || data.company.mrc) ? `MRC: ${safe(sdc.mrcNo || data.company.mrc)}` : "",
-    isRefundTransaction(data) ? refundReferenceLine(data) : "",
   ].filter(Boolean)
   if (extraLines.length) {
     doc.moveTo(LEFT, y + 1).lineTo(176, y + 1).dash(2, { space: 1.5 }).stroke().undash()
@@ -632,7 +630,7 @@ function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePaylo
 }
 
 function drawFinalFooter(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void {
-  // §11: COPY/TRAINING MODE/PROFORMA always carry this notice; an uncertified
+  // §11: TRAINING MODE/PROFORMA always carry this notice; an uncertified
   // NORMAL sale/refund falls back to it too since it isn't official yet either.
   if (isFormalNoticeIndicator(documentIndicator(data)) || !data.certification.isCertified) {
     doc.moveTo(LEFT, 625).lineTo(RIGHT, 625).dash(2, { space: 1.5 }).stroke().undash()
