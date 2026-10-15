@@ -223,7 +223,7 @@ describe("no center stamp (designation lives in the header title only)", () => {
     expect(drawn.filter((t) => t === "TRAINING")).toHaveLength(0)
   })
 
-  it("a fiscalized PROFORMA original: title at the top and before SDC INFORMATION (spec 17.1), no center stamp", async () => {
+  it("a fiscalized PROFORMA original: title at the top only (no repeat before SDC INFORMATION), no center stamp", async () => {
     const invoice = normalOriginalFixture()
     invoice.invoice.isProforma = true
     invoice.invoice.rcptLabel = "PS"
@@ -232,7 +232,7 @@ describe("no center stamp (designation lives in the header title only)", () => {
     invoice.sdcInformation.rcptLabel = "PS"
     expect(documentIndicator(invoice)).toBe("PROFORMA")
     const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))
-    expect(drawn.filter((t) => t === "PROFORMA")).toHaveLength(2)
+    expect(drawn.filter((t) => t === "PROFORMA")).toHaveLength(1)
   })
 
   it("a NOT FISCALISED provisional document designates in the title only (no center stamp)", async () => {
