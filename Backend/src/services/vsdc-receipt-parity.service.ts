@@ -353,14 +353,8 @@ export function vsdcPrintedTextErrors(
   const designation = copy ? "COPY" : training ? "TRAINING MODE" : proforma ? "PROFORMA" : null
   if (designation) {
     const n = text.split("\n").filter((l) => l.trim() === designation).length
-    // PROFORMA: title at the top + again before SDC INFORMATION.
-    // COPY / TRAINING MODE: header title only.
-    const expected = proforma ? 2 : 1
-    if (n < expected) {
-      errors.push(proforma
-        ? `${designation} printed ${n}× — the spec prints it at the top and before SDC INFORMATION`
-        : `${designation} printed ${n}× — it must print as the header title`)
-    }
+    // COPY / TRAINING MODE / PROFORMA: header title only.
+    if (n < 1) errors.push(`${designation} printed ${n}× — it must print as the header title`)
   }
   return errors
 }

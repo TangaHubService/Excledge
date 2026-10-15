@@ -82,10 +82,8 @@ export function dataUrlBuffer(value?: string | null): Buffer | null {
  * that designation and start looking like an ordinary copied transaction.
  * COPY (§15) only applies to reprints of a NORMAL receipt in the first place.
  *
- * Every designation is printed as a title at the top and again right before
- * SDC INFORMATION, plus the "not an official receipt" notice (EBM spec receipt
- * examples 15.1 CR, 16.1 TS, 17.1 PS). A COPY additionally carries the
- * diagonal watermark (CIS §7.18).
+ * Every designation is printed once, as the title at the top, plus the "not an
+ * official receipt" notice (EBM spec receipt examples 15.1 CR, 16.1 TS, 17.1 PS).
  */
 export function documentIndicator(data: RenderInvoicePayload): string {
   const label = safe(data.invoice.rcptLabel).toUpperCase()
@@ -140,15 +138,6 @@ export function isCopyDocument(data: RenderInvoicePayload): boolean {
 /** Title printed at the top of the receipt (spec 15.1: a copy is titled COPY). */
 export function headerIndicator(data: RenderInvoicePayload): string {
   return documentIndicator(data)
-}
-
-/**
- * Designation repeated right before SDC INFORMATION: PROFORMA only (spec
- * 17.1). COPY and TRAINING MODE print only as the header title; NORMAL
- * sales/refunds repeat nothing.
- */
-export function sdcDesignation(data: RenderInvoicePayload): string {
-  return documentIndicator(data) === "PROFORMA" ? "PROFORMA" : ""
 }
 
 /**
@@ -606,18 +595,7 @@ function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePaylo
   // Start below the "not official" notice block when present so we don't
   // stack a second divider on top of the notice's closing line.
   const hasNotice = isFormalNoticeIndicator(indicator) || !data.certification.isCertified
-  let sdcTop = hasNotice ? 648 : 650
-
-  // Spec 15.1/16.1/17.1: COPY / TRAINING MODE / PROFORMA repeated right
-  // above SDC INFORMATION, followed by a divider.
-  const designation = sdcDesignation(data)
-  if (designation) {
-    const size = 9.5
-    doc.font(FONT_BOLD).fontSize(size).text(designation, LEFT, sdcTop, { width: 230, lineBreak: false, characterSpacing: 1.2 })
-    sdcTop += size + 3
-    doc.moveTo(LEFT, sdcTop).lineTo(176, sdcTop).dash(2, { space: 1.5 }).stroke().undash()
-    sdcTop += 4
-  }
+  const sdcTop = hasNotice ? 648 : 650
 
   // RRA sample heading — single divider under it.
   doc.font(FONT_BOLD).fontSize(5.4).text("SDC INFORMATION", LEFT, sdcTop, {

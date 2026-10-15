@@ -3,7 +3,7 @@ import type { RenderInvoicePayload } from "./invoice-render.service"
 import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, formatItemTaxLabel, formatReceiptQuantity, groupFiscalValue } from "./invoice-format.service"
 import { getOrganizationLogo, getRraCertificationLogo } from "./invoice-logo.service"
 import { NOT_FISCALIZED_NOTICE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_NOTICE, SYSTEM_FOOTER } from "./system-branding.service"
-import { dataUrlBuffer, documentIndicator, headerIndicator, isCopyDocument, isFormalNoticeIndicator, isProformaDocument, isRefundTransaction, isTrainingDocument, printsQrCode, refundReferenceLine, safe, bandSalesLabel, salesBands, sdcDesignation, taxBandRows, taxGroups, transactionSubTitle } from "./invoice-pdf.service"
+import { dataUrlBuffer, documentIndicator, headerIndicator, isCopyDocument, isFormalNoticeIndicator, isProformaDocument, isRefundTransaction, isTrainingDocument, printsQrCode, refundReferenceLine, safe, bandSalesLabel, salesBands, taxBandRows, taxGroups, transactionSubTitle } from "./invoice-pdf.service"
 
 /**
  * Narrow, continuous "thermal roll" layout for 80mm POS printers — the
@@ -204,16 +204,6 @@ function drawReceipt(
     y += 2
     dashedLine(doc, y)
     y += 6
-  }
-
-  const designation = sdcDesignation(data)
-  if (designation) {
-    // Spec 15.1/16.1/17.1: COPY / TRAINING MODE / PROFORMA again right
-    // before SDC INFORMATION, then a divider.
-    y = centeredText(doc, designation, y, true, isTraining ? TRAINING_TEXT_SIZE : 12)
-    y += 2
-    dashedLine(doc, y)
-    y += 5
   }
 
   const sdc = data.sdcInformation
