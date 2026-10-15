@@ -78,11 +78,16 @@ export const createBatchController = async (req: BranchAuthRequest, res: Respons
       });
     }
 
+    const qty = Math.round(parseFloat(String(quantity)) * 1000) / 1000;
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return res.status(400).json({ error: 'quantity must be a positive number' });
+    }
+
     const batch = await createBatch({
       productId: parseInt(productId),
       organizationId,
       batchNumber,
-      quantity: parseInt(quantity),
+      quantity: qty,
       unitCost: parseFloat(unitCost),
       expiryDate: expiryDate ? new Date(expiryDate) : undefined,
       branchId: getBranchIdForOperation(req)!,
@@ -102,7 +107,7 @@ export const createBatchController = async (req: BranchAuthRequest, res: Respons
       metadata: {
         batchNumber,
         productId: parseInt(productId),
-        quantity: parseInt(quantity),
+        quantity: qty,
       },
     });
 
@@ -136,7 +141,7 @@ export const selectBatches = async (req: BranchAuthRequest, res: Response) => {
     const selectedBatches = await selectBatchesForSale({
       productId: parseInt(productId),
       organizationId,
-      quantity: parseInt(quantity),
+      quantity: Math.round(parseFloat(String(quantity)) * 1000) / 1000,
       method: method as 'FIFO' | 'LIFO' | 'AVERAGE',
       branchId: getBranchIdForOperation(req),
     });

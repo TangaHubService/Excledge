@@ -4,6 +4,7 @@ import type { BranchAuthRequest } from '../middleware/branchAuth.middleware';
 import { logManualActivity } from '../middleware/activity-log.middleware';
 import { ActivityType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import { enqueueSupplierPaymentAccountingEvent, withdrawSupplierPaymentAccountingEvent } from '../services/accounting-outbox.service';
 
 // SupplierPayment has no branchId column of its own — it belongs to a branch
 // via its purchase order, so filtering goes through that relation.
@@ -42,6 +43,12 @@ export const recordSupplierPayment = async (req: BranchAuthRequest, res: Respons
                 message: 'Missing required fields: purchaseOrderId, amount, paymentMethod, paymentDate'
             });
         }
+        if (!(parseFloat(amount) > 0) || Number.isNaN(new Date(paymentDate).getTime())) {
+            return res.status(400).json({
+                success: false,
+                message: 'Amount must be a positive number and paymentDate a valid date'
+            });
+        }
 
         // Verify purchase order exists, belongs to the organization, and — for a
         // branch-restricted user — belongs to a branch they actually have access to.
@@ -54,7 +61,8 @@ export const recordSupplierPayment = async (req: BranchAuthRequest, res: Respons
                     : req.selectedBranchIds && req.selectedBranchIds.length > 0
                         ? { branchId: { in: req.selectedBranchIds } }
                         : {})
-            }
+            },
+            include: { supplier: { select: { name: true } } }
         });
 
         if (!purchaseOrder) {
@@ -96,7 +104,7 @@ export const recordSupplierPayment = async (req: BranchAuthRequest, res: Respons
                 throw new Error(`Payment exceeds purchase order total. Remaining: ${orderTotal - totalPaid}`);
             }
 
-            return tx.supplierPayment.create({
+            const created = await tx.supplierPayment.create({
                 data: {
                     purchaseOrderId: Number(purchaseOrderId),
                     organizationId: Number(organizationId),
@@ -116,6 +124,19 @@ export const recordSupplierPayment = async (req: BranchAuthRequest, res: Respons
                     }
                 }
             });
+            await enqueueSupplierPaymentAccountingEvent(tx, {
+                organizationId: Number(organizationId),
+                branchId: purchaseOrder.branchId,
+                paymentId: created.id,
+                supplierId: purchaseOrder.supplierId,
+                supplierName: purchaseOrder.supplier?.name,
+                purchaseOrderNumber: purchaseOrder.orderNumber,
+                amount: Number(created.amount),
+                paymentMethod: String(paymentMethod),
+                paymentDate: created.paymentDate,
+                reference,
+            });
+            return created;
         });
 
         // Log activity
@@ -356,10 +377,26 @@ export const deleteSupplierPayment = async (req: AuthRequest, res: Response) => 
             });
         }
 
-        // Delete payment
-        await prisma.supplierPayment.delete({
-            where: { id: Number(paymentId) }
-        });
+        // Delete payment, unless Accounting may already have posted it
+        const PAYMENT_IN_BOOKS = 'PAYMENT_IN_BOOKS';
+        try {
+            await prisma.$transaction(async (tx) => {
+                const withdrawn = await withdrawSupplierPaymentAccountingEvent(tx, {
+                    organizationId: Number(organizationId),
+                    paymentId: Number(paymentId),
+                });
+                if (!withdrawn) throw new Error(PAYMENT_IN_BOOKS);
+                await tx.supplierPayment.delete({
+                    where: { id: Number(paymentId) }
+                });
+            });
+        } catch (e) {
+            if ((e as Error).message !== PAYMENT_IN_BOOKS) throw e;
+            return res.status(409).json({
+                success: false,
+                message: 'This payment has already been sent to Accounting and cannot be deleted; record a correction there instead'
+            });
+        }
 
         // Log activity
         await logManualActivity({

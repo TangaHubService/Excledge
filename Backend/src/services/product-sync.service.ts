@@ -182,6 +182,31 @@ export async function syncProductToRra(
 }
 
 /**
+ * Set a product's selling price while stock is being accepted (purchase
+ * confirmation / import approval). A changed price is re-registered with RRA
+ * so `dftPrc` on /items/saveItems stays current.
+ */
+export async function applySellingPriceOnReceipt(
+  organizationId: number,
+  productId: number,
+  sellingPrice: number | null | undefined,
+  userId?: number,
+): Promise<void> {
+  if (sellingPrice == null || !Number.isFinite(sellingPrice) || sellingPrice <= 0) return;
+  const price = Math.round(sellingPrice * 100) / 100;
+  const product = await prisma.product.findFirst({
+    where: { id: productId, organizationId },
+    select: { unitPrice: true },
+  });
+  if (!product || Number(product.unitPrice) === price) return;
+  await prisma.product.update({
+    where: { id: productId },
+    data: { unitPrice: price, ebmSyncStatus: 'PENDING' },
+  });
+  syncProductToRraAsync(productId, userId);
+}
+
+/**
  * Async fire-and-forget wrapper for product sync.
  * Called from controller routes — never blocks the response.
  */

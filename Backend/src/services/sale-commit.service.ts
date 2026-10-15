@@ -189,8 +189,8 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
     }
   }
 
-  // Resolve itemType from the product catalog when the client omits it
-  // (legacy POS payloads). Services must never go through stock checks.
+  // The catalog itemType is authoritative for catalog lines: a client-supplied
+  // "SERVICE" must never let goods skip the stock check (RRA CIS spec 7.30).
   const catalogIds = items
     .map((i: any) => parseInt(String(i.productId)))
     .filter((id: number) => !isNaN(id))
@@ -203,7 +203,6 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
   const catalogTypeMap = new Map(catalogTypes.map((p) => [p.id, p.itemType]))
   const catalogMetaMap = new Map(catalogTypes.map((p) => [p.id, p]))
   for (const item of items) {
-    if (item.itemType) continue
     const pid = parseInt(String(item.productId))
     const fromCatalog = catalogTypeMap.get(pid)
     if (fromCatalog) item.itemType = fromCatalog
@@ -771,6 +770,27 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         (sum, item) => sum + Number(item.costPrice || 0) * Number(item.quantity || 0),
         0,
       )
+      // Accounting needs every part of the total: what was paid (by method), what is owed, and what insurance covers.
+      const total = Number(sale.totalAmount)
+      const debtPart = Number((sale as any).debtAmount ?? debtAmount ?? 0) || 0
+      const insurancePart = Number((sale as any).insuranceAmount ?? insuranceAmount ?? 0) || 0
+      const paidPart = Math.max(0, total - debtPart - insurancePart)
+      const paidSplits = (splitPayments ?? [])
+        .map((p) => ({ paymentMethod: String(p.paymentMethod), amount: Number(p.amount) || 0 }))
+        .filter((p) => p.amount > 0)
+      const paidSplitsTotal = paidSplits.reduce((sum, p) => sum + p.amount, 0)
+      const paidMethod = ["MOBILE_MONEY", "CREDIT_CARD", "CARD", "BANK", "BANK_TRANSFER", "MTN_MOMO", "AIRTEL_MONEY"].includes(String(sale.paymentType))
+        ? String(sale.paymentType)
+        : "CASH"
+      const accountingSplits = [
+        ...(paidSplits.length && Math.abs(paidSplitsTotal - paidPart) <= 0.5
+          ? paidSplits
+          : paidPart > 0
+            ? [{ paymentMethod: paidMethod, amount: paidPart }]
+            : []),
+        ...(debtPart > 0 ? [{ paymentMethod: "DEBT", amount: debtPart }] : []),
+        ...(insurancePart > 0 ? [{ paymentMethod: "INSURANCE", amount: insurancePart }] : []),
+      ]
       await enqueueSaleCompletedAccountingEvent({
         organizationId,
         branchId,
@@ -782,10 +802,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         taxableAmount: Number(sale.taxableAmount),
         vatAmount: Number(sale.vatAmount),
         paymentType: sale.paymentType,
-        splitPayments: splitPayments?.map((p) => ({
-          paymentMethod: p.paymentMethod,
-          amount: Number(p.amount) || 0,
-        })),
+        splitPayments: accountingSplits,
         cogs,
       })
     } catch (e) {

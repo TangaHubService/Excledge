@@ -1202,7 +1202,14 @@ class ApiClient {
     reject = false,
     body: {
       prcOrdCd?: string;
-      items?: Array<{ itemId?: number; itemSeq?: number; itemNm?: string; linkProductId?: number }>;
+      items?: Array<{
+        itemId?: number;
+        itemSeq?: number;
+        itemNm?: string;
+        linkProductId?: number;
+        sellingPrice?: number;
+        expiryDate?: string;
+      }>;
     } = {},
   ) {
     return this.request(`${this.rraBase()}/purchases/${id}/confirm${reject ? "?reject=true" : ""}`, {
@@ -1224,7 +1231,14 @@ class ApiClient {
   async actionRraImport(
     id: number,
     action: "approve" | "reject",
-    body: { itemClsCd?: string; itemCd?: string; linkProductId?: number; remark?: string } = {},
+    body: {
+      itemClsCd?: string;
+      itemCd?: string;
+      linkProductId?: number;
+      remark?: string;
+      sellingPrice?: number;
+      expiryDate?: string;
+    } = {},
   ) {
     return this.request(`${this.rraBase()}/imports/${id}/${action}`, { method: "POST", body: JSON.stringify(body) });
   }
@@ -1427,6 +1441,7 @@ class ApiClient {
         unitCost?: number;
         batchNumber?: string;
         expiryDate?: string;
+        sellingPrice?: number;
       }>;
     }
   ) {
