@@ -400,6 +400,238 @@ export async function enqueuePayrollAccountingEvent(
   });
 }
 
+type OutboxWriter = Pick<Prisma.TransactionClient, "erpAccountingOutbox">;
+
+/** Queues one event in the caller's transaction; the idempotency key keeps a retried request from queuing it twice. */
+async function enqueueEvent(
+  db: OutboxWriter,
+  input: {
+    organizationId: number;
+    branchId?: number | null;
+    eventType: string;
+    sourceModule: string;
+    sourceDocumentType: string;
+    sourceDocumentId: string | number;
+    sourceDocumentNumber?: string | null;
+    occurredAt?: Date;
+    amountTotals: { gross: number; net: number; tax: number };
+    parties?: { externalCustomerId?: string; externalSupplierId?: string };
+    paymentSplits?: Array<{ paymentMethod: string; amount: number }>;
+    lines?: unknown[];
+    metadata?: Record<string, unknown>;
+    saleId?: number;
+  },
+) {
+  if (!isAccountingIntegrationEnabled()) return;
+  const idempotencyKey = [input.organizationId, input.sourceModule, input.sourceDocumentType, input.sourceDocumentId, input.eventType, "1"].join("|");
+  const payload = {
+    eventId: randomUUID(),
+    idempotencyKey,
+    externalOrganizationId: String(input.organizationId),
+    externalBranchId: input.branchId ? String(input.branchId) : undefined,
+    eventType: input.eventType,
+    occurredAt: (input.occurredAt ?? new Date()).toISOString(),
+    sourceModule: input.sourceModule,
+    sourceDocumentType: input.sourceDocumentType,
+    sourceDocumentId: String(input.sourceDocumentId),
+    sourceDocumentNumber: input.sourceDocumentNumber || undefined,
+    currencyCode: "RWF",
+    amountTotals: {
+      gross: String(input.amountTotals.gross),
+      net: String(input.amountTotals.net),
+      tax: String(input.amountTotals.tax),
+    },
+    parties: input.parties,
+    paymentSplits: input.paymentSplits,
+    lines: input.lines,
+    metadata: input.metadata,
+  };
+  await db.erpAccountingOutbox.upsert({
+    where: { idempotencyKey },
+    create: {
+      organizationId: input.organizationId,
+      saleId: input.saleId,
+      eventType: input.eventType,
+      idempotencyKey,
+      payload: payload as Prisma.InputJsonValue,
+      status: AccountingOutboxStatus.PENDING,
+      nextAttemptAt: new Date(),
+    },
+    update: {},
+  });
+}
+
+/**
+ * A refund reverses the sale's revenue and VAT in Accounting and credits the customer's invoice;
+ * the returned stock arrives separately as RETURN_CUSTOMER movements, valued by Accounting.
+ */
+export async function enqueueSaleRefundedAccountingEvent(
+  tx: OutboxWriter,
+  input: {
+    organizationId: number;
+    branchId: number;
+    refundSaleId: number;
+    refundNumber?: string | null;
+    originalSaleId: number;
+    originalSaleNumber?: string | null;
+    customerId?: number | null;
+    paymentType?: string | null;
+    /** Debt still owed on the original sale; the refund clears that first and pays back the rest. */
+    outstandingDebt?: number | null;
+    gross: number;
+    net: number;
+    tax: number;
+    reason?: string | null;
+  },
+) {
+  const onAccount = Math.min(input.gross, Math.max(0, Number(input.outstandingDebt ?? 0) || 0));
+  const paidBack = Math.round((input.gross - onAccount) * 100) / 100;
+  const paidMethod = ["DEBT", "INSURANCE", "MIXED", "SPLIT", "", undefined, null].includes(input.paymentType as string)
+    ? "CASH"
+    : String(input.paymentType);
+  await enqueueEvent(tx, {
+    organizationId: input.organizationId,
+    branchId: input.branchId,
+    eventType: "SALE_REFUNDED",
+    sourceModule: "POS",
+    sourceDocumentType: "SaleRefund",
+    sourceDocumentId: input.refundSaleId,
+    sourceDocumentNumber: input.refundNumber,
+    amountTotals: { gross: input.gross, net: input.net, tax: input.tax },
+    parties: input.customerId ? { externalCustomerId: String(input.customerId) } : undefined,
+    paymentSplits: [
+      ...(onAccount > 0 ? [{ paymentMethod: "DEBT", amount: onAccount }] : []),
+      ...(paidBack > 0 ? [{ paymentMethod: paidMethod, amount: paidBack }] : []),
+    ],
+    metadata: {
+      originalSaleId: String(input.originalSaleId),
+      originalSaleNumber: input.originalSaleNumber,
+      paymentType: input.paymentType,
+      reason: input.reason,
+    },
+    saleId: input.originalSaleId,
+  });
+}
+
+/** A customer paying off a credit sale. `paymentId` identifies the payment record (or a unique token when there is none). */
+export async function enqueueCustomerPaymentAccountingEvent(
+  tx: OutboxWriter,
+  input: {
+    organizationId: number;
+    branchId?: number | null;
+    paymentId: string | number;
+    saleId: number;
+    saleNumber?: string | null;
+    customerId: number;
+    amount: number;
+    paymentMethod?: string | null;
+    reference?: string | null;
+    occurredAt?: Date;
+  },
+) {
+  await enqueueEvent(tx, {
+    organizationId: input.organizationId,
+    branchId: input.branchId,
+    eventType: "CUSTOMER_PAYMENT_RECEIVED",
+    sourceModule: "POS",
+    sourceDocumentType: "DebtPayment",
+    sourceDocumentId: input.paymentId,
+    sourceDocumentNumber: input.reference || (input.saleNumber ? `DEBT-${input.saleNumber}` : undefined),
+    occurredAt: input.occurredAt,
+    amountTotals: { gross: input.amount, net: input.amount, tax: 0 },
+    parties: { externalCustomerId: String(input.customerId) },
+    paymentSplits: [{ paymentMethod: input.paymentMethod || "CASH", amount: input.amount }],
+    metadata: { saleId: String(input.saleId), saleNumber: input.saleNumber, paymentMethod: input.paymentMethod },
+    saleId: input.saleId,
+  });
+}
+
+const SUPPLIER_PAYMENT_EVENT = "SUPPLIER_PAYMENT_MADE";
+
+/**
+ * Takes a supplier payment's event back off the queue so the payment can be deleted. Returns false once the
+ * event may have reached Accounting (it was picked up for sending); the payment then stays in the books.
+ */
+export async function withdrawSupplierPaymentAccountingEvent(
+  tx: OutboxWriter,
+  input: { organizationId: number; paymentId: number },
+): Promise<boolean> {
+  const idempotencyKey = [input.organizationId, "PURCHASES", "SupplierPayment", input.paymentId, SUPPLIER_PAYMENT_EVENT, "1"].join("|");
+  const queued = await tx.erpAccountingOutbox.findUnique({ where: { idempotencyKey }, select: { id: true } });
+  if (!queued) return true;
+  const removed = await tx.erpAccountingOutbox.deleteMany({
+    where: { idempotencyKey, status: AccountingOutboxStatus.PENDING, retryCount: 0 },
+  });
+  return removed.count === 1;
+}
+
+export async function enqueueSupplierPaymentAccountingEvent(
+  tx: OutboxWriter,
+  input: {
+    organizationId: number;
+    branchId?: number | null;
+    paymentId: number;
+    supplierId: number;
+    supplierName?: string | null;
+    purchaseOrderNumber?: string | null;
+    amount: number;
+    paymentMethod: string;
+    paymentDate: Date;
+    reference?: string | null;
+  },
+) {
+  await enqueueEvent(tx, {
+    organizationId: input.organizationId,
+    branchId: input.branchId,
+    eventType: SUPPLIER_PAYMENT_EVENT,
+    sourceModule: "PURCHASES",
+    sourceDocumentType: "SupplierPayment",
+    sourceDocumentId: input.paymentId,
+    sourceDocumentNumber: input.reference || `SPAY-${input.paymentId}`,
+    occurredAt: input.paymentDate,
+    amountTotals: { gross: input.amount, net: input.amount, tax: 0 },
+    parties: { externalSupplierId: String(input.supplierId) },
+    paymentSplits: [{ paymentMethod: input.paymentMethod, amount: input.amount }],
+    metadata: { supplierName: input.supplierName, poReference: input.purchaseOrderNumber, paymentMethod: input.paymentMethod },
+  });
+}
+
+/**
+ * Goods received against a purchase order. The stock value itself reaches Accounting through the
+ * PURCHASE inventory movements; this event records the receipt so a later supplier bill for the same
+ * order clears goods received not invoiced instead of booking the purchase twice.
+ */
+export async function enqueueGoodsReceivedAccountingEvent(
+  tx: OutboxWriter,
+  input: {
+    organizationId: number;
+    branchId: number;
+    purchaseOrderId: number;
+    purchaseOrderNumber: string;
+    supplierId: number;
+    supplierName?: string | null;
+    receivedAt: Date;
+    lines: Array<{ productId: number | null; productName: string; quantity: number; unitCost: number }>;
+  },
+) {
+  const net = Math.round(input.lines.reduce((s, l) => s + l.quantity * l.unitCost, 0) * 100) / 100;
+  if (!(net > 0)) return;
+  await enqueueEvent(tx, {
+    organizationId: input.organizationId,
+    branchId: input.branchId,
+    eventType: "GOODS_RECEIVED",
+    sourceModule: "PURCHASES",
+    sourceDocumentType: "PurchaseOrderReceipt",
+    sourceDocumentId: `${input.purchaseOrderId}:${input.receivedAt.getTime()}`,
+    sourceDocumentNumber: input.purchaseOrderNumber,
+    occurredAt: input.receivedAt,
+    amountTotals: { gross: net, net, tax: 0 },
+    parties: { externalSupplierId: String(input.supplierId) },
+    lines: input.lines,
+    metadata: { supplierName: input.supplierName, poReference: input.purchaseOrderNumber, purchaseOrderId: input.purchaseOrderId },
+  });
+}
+
 export async function processAccountingOutboxBatch(limit = 40): Promise<{
   processed: number;
   succeeded: number;
@@ -422,10 +654,11 @@ export async function processAccountingOutboxBatch(limit = 40): Promise<{
   let failed = 0;
 
   for (const row of rows) {
-    await prisma.erpAccountingOutbox.update({
-      where: { id: row.id },
+    const claimed = await prisma.erpAccountingOutbox.updateMany({
+      where: { id: row.id, status: row.status },
       data: { status: AccountingOutboxStatus.PROCESSING },
     });
+    if (claimed.count !== 1) continue;
 
     try {
       const res = await fetch(`${ACCOUNTING_API_URL}/api/v1/integration/events`, {

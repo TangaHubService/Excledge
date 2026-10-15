@@ -9,6 +9,7 @@ import {
   toRraReqDt,
 } from './vsdc-api.service';
 import { receiveStockOnBranch, resolveActiveBranchId } from './inventory-ledger.service';
+import { applySellingPriceOnReceipt } from './product-sync.service';
 import logger from '../utils/logger';
 
 /**
@@ -143,6 +144,8 @@ export async function actionRraImport(
     itemCd?: string;
     linkProductId?: number;
     remark?: string;
+    sellingPrice?: number;
+    expiryDate?: Date;
   } = {},
 ): Promise<{ success: boolean; error?: string }> {
   const line = await prisma.rraImportItem.findFirst({ where: { id: importItemId, organizationId } });
@@ -159,11 +162,24 @@ export async function actionRraImport(
     : null;
   const modr = { id: String(user?.id ?? 'system'), name: user?.name ?? 'System' };
 
-  const itemClsCd = (opts.itemClsCd ?? line.itemClsCd ?? '').trim();
+  const linked = action === 'approve' && opts.linkProductId
+    ? await prisma.product.findFirst({
+        where: { id: opts.linkProductId, organizationId, deletedAt: null },
+        select: { itemClsCd: true, itemCd: true, itemType: true },
+      })
+    : null;
+  if (action === 'approve' && opts.linkProductId && !linked) {
+    return { success: false, error: `Product ${opts.linkProductId} was not found` };
+  }
+  if (linked?.itemType === 'SERVICE') {
+    return { success: false, error: 'An import cannot be received into a service — pick a stocked product' };
+  }
+
+  const itemClsCd = (opts.itemClsCd || line.itemClsCd || linked?.itemClsCd || '').trim();
   if (action === 'approve' && !itemClsCd) {
     return { success: false, error: 'itemClsCd is required to approve an import — pick an RRA item classification' };
   }
-  const itemCd = opts.itemCd ?? line.itemCd ?? undefined;
+  const itemCd = opts.itemCd || line.itemCd || linked?.itemCd || undefined;
 
   const payload: Record<string, unknown> = {
     taskCd: line.taskCd,
@@ -199,8 +215,11 @@ export async function actionRraImport(
     // reads — the stock-sync batch then reports it to RRA as an Import
     // (sarTyCd 01) via /stock/saveStockItems + /stockMaster.
     const stockBranchId = await resolveActiveBranchId(organizationId, opts.branchId);
+    if (action === 'approve' && opts.linkProductId) {
+      await applySellingPriceOnReceipt(organizationId, opts.linkProductId, opts.sellingPrice, opts.userId);
+    }
     if (action === 'approve' && opts.linkProductId && stockBranchId != null && line.qty) {
-      const qty = Math.round(line.qty.toNumber());
+      const qty = Math.round(line.qty.toNumber() * 1000) / 1000;
       if (qty > 0) {
         const reference = `IMPORT-${line.taskCd}-${line.dclNo ?? line.dclDe}`;
         await receiveStockOnBranch({
@@ -213,6 +232,7 @@ export async function actionRraImport(
           reference,
           referenceType: 'RRA_IMPORT',
           batchNumber: reference,
+          expiryDate: opts.expiryDate,
           note: `Approved import declaration ${line.dclNo ?? line.taskCd} line ${line.itemSeq}`,
         });
       }

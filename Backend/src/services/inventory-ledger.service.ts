@@ -14,7 +14,7 @@ function ebmSyncStatusFor(movementType: InventoryMovementType): 'PENDING' | null
   return 'PENDING';
 }
 
-function queueStockSync(entry: { id?: number; ebmSyncStatus?: string | null } | null | undefined) {
+export function queueStockSync(entry: { id?: number; ebmSyncStatus?: string | null } | null | undefined) {
   if (!entry?.id || entry.ebmSyncStatus !== 'PENDING') return;
   const ledgerId = entry.id;
   setImmediate(() => {
@@ -31,7 +31,7 @@ function queueStockSync(entry: { id?: number; ebmSyncStatus?: string | null } | 
  * below does not serialize the aggregate read. A transaction-scoped advisory
  * lock on the stock key closes the race; it is released at commit/rollback.
  */
-async function acquireStockLock(
+export async function acquireStockLock(
   tx: any,
   organizationId: number,
   productId: number,
@@ -269,7 +269,7 @@ export async function addStock(params: AddStockParams) {
   } = params;
 
   // Validate quantity
-  if (quantity < 0) {
+  if (!Number.isFinite(quantity) || quantity < 0) {
     throw new Error('Quantity must be non-negative for stock IN operations');
   }
 
@@ -413,6 +413,7 @@ export async function receiveStockOnBranch(params: AddStockParams) {
 
   const batchNumber = params.batchNumber || params.reference || `RCV-${params.productId}`;
   const unitCost = params.unitCost ?? 0;
+  const expiryDate = params.expiryDate ? new Date(params.expiryDate) : null;
 
   const run = async (tx: any) => {
     await tx.batch.upsert({
@@ -427,6 +428,7 @@ export async function receiveStockOnBranch(params: AddStockParams) {
         quantity: { increment: params.quantity },
         unitCost,
         isActive: true,
+        ...(expiryDate ? { expiryDate } : {}),
       },
       create: {
         productId: params.productId,
@@ -436,6 +438,7 @@ export async function receiveStockOnBranch(params: AddStockParams) {
         quantity: params.quantity,
         unitCost,
         isActive: true,
+        expiryDate,
       },
     });
     return addStock({ ...params, branchId, batchNumber, unitCost, tx });
@@ -468,7 +471,7 @@ export async function removeStock(params: RemoveStockParams) {
   } = params;
 
   // Validate quantity
-  if (quantity <= 0) {
+  if (!Number.isFinite(quantity) || quantity <= 0) {
     throw new Error('Quantity must be positive for stock OUT operations');
   }
 

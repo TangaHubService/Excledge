@@ -832,6 +832,32 @@ class EmailService {
       `,
     });
   }
+
+  async sendAccountingNotification(
+    email: string,
+    name: string,
+    organizationName: string,
+    notice: { title: string; body: string; severity: string; link?: string },
+  ) {
+    const escape = (v: string) => v.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+    const colour = notice.severity === "CRITICAL" ? "#b91c1c" : notice.severity === "WARNING" ? "#b45309" : "#1e40af";
+    await this.sendMail({
+      from: config.email.from,
+      to: email,
+      subject: `[${organizationName}] ${notice.title}`,
+      text: `${notice.title}\n\n${notice.body}${notice.link ? `\n\nOpen in Accounting: ${notice.link}` : ""}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+          <p style="margin: 0 0 4px; color: ${colour}; font-weight: bold; font-size: 12px; letter-spacing: 0.05em;">${escape(notice.severity)} · ${escape(organizationName)}</p>
+          <h2 style="margin: 0 0 16px;">${escape(notice.title)}</h2>
+          <p>Hello ${escape(name)},</p>
+          <p style="white-space: pre-line;">${escape(notice.body)}</p>
+          ${notice.link ? `<p><a href="${escape(notice.link)}" style="background-color: #1e40af; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block;">Open in Accounting</a></p>` : ""}
+          <p style="font-size: 12px; color: #9ca3af;">You receive this because email notifications are turned on in Accounting for ${escape(organizationName)}.</p>
+        </div>
+      `,
+    });
+  }
 }
 
 export const emailService = new EmailService();

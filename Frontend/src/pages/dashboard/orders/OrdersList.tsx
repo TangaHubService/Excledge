@@ -64,6 +64,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
     const [receiveModalOpen, setReceiveModalOpen] = useState(false);
     const [receivingOrder, setReceivingOrder] = useState<Order | null>(null);
     const [receivingQuantities, setReceivingQuantities] = useState<Record<number, number>>({});
+    const [receivingPrices, setReceivingPrices] = useState<Record<number, string>>({});
     const [isReceiving, setIsReceiving] = useState(false);
 
     useEffect(() => {
@@ -177,11 +178,15 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
     const handleReceiveOpen = (order: Order) => {
         setReceivingOrder(order);
         const initial: Record<number, number> = {};
+        const prices: Record<number, string> = {};
         order.items.forEach(item => {
             const alreadyReceived = item.quantityReceived || 0;
             initial[item.id] = Math.max(0, item.quantity - alreadyReceived);
+            const current = (item as any).product?.unitPrice;
+            prices[item.id] = current != null ? String(Number(current)) : '';
         });
         setReceivingQuantities(initial);
+        setReceivingPrices(prices);
         setReceiveModalOpen(true);
     };
 
@@ -190,10 +195,14 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
         setIsReceiving(true);
         try {
             const branchIdForReceive = selectedBranchId ?? primaryBranch?.id ?? null;
-            const receivedItems = receivingOrder.items.map(item => ({
-                productId: (item as any).productId!,
-                quantity: receivingQuantities[item.id] ?? (item.quantity - (item.quantityReceived || 0)),
-            })).filter(ri => ri.quantity > 0);
+            const receivedItems = receivingOrder.items.map(item => {
+                const sellingPrice = Number(receivingPrices[item.id]);
+                return {
+                    productId: (item as any).productId!,
+                    quantity: receivingQuantities[item.id] ?? (item.quantity - (item.quantityReceived || 0)),
+                    sellingPrice: Number.isFinite(sellingPrice) && sellingPrice > 0 ? sellingPrice : undefined,
+                };
+            }).filter(ri => ri.quantity > 0);
 
             if (receivedItems.length === 0) {
                 toast.error(t('purchaseOrders.noItemsToReceive') || 'No items to receive');
@@ -786,6 +795,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                             <th className="px-4 py-2.5 text-right">{t('purchaseOrders.orderedQty') || 'Ordered'}</th>
                                             <th className="px-4 py-2.5 text-right">{t('purchaseOrders.previouslyReceived') || 'Received'}</th>
                                             <th className="px-4 py-2.5 text-right">{t('purchaseOrders.quantityToReceive') || 'To Receive'}</th>
+                                            <th className="px-4 py-2.5 text-right">{t('purchaseOrders.sellingPrice') || 'Selling Price'}</th>
                                         </tr>
                                     </thead>
                                     <tbody className={`divide-y ${theme === 'dark' ? 'divide-gray-700' : 'divide-gray-100'}`}>
@@ -809,6 +819,22 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                                             }}
                                                             className="w-20 text-right px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                         />
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            inputMode="decimal"
+                                                            value={receivingPrices[item.id] ?? ''}
+                                                            onChange={(e) => setReceivingPrices(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                                            placeholder={t('purchaseOrders.keepCurrentPrice') || 'Keep current'}
+                                                            disabled={!(item as any).productId}
+                                                            className="w-28 text-right px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                                                        />
+                                                        {Number(receivingPrices[item.id]) > 0 && Number(receivingPrices[item.id]) < Number(item.unitPrice) && (
+                                                            <div className="mt-1 text-[10px] text-amber-600">{t('purchaseOrders.belowCost') || 'Below cost'}</div>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             );

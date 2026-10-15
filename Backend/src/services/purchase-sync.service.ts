@@ -6,7 +6,7 @@ import { receiveStockOnBranch, resolveActiveBranchId } from './inventory-ledger.
 import { allocateItemCd, getOriginNationCode, DEFAULT_PKG_UNIT_CD } from './item-code.service';
 import { TaxService } from './tax.service';
 import { getTaxationTypes } from './rra-code.service';
-import { syncProductToRra } from './product-sync.service';
+import { syncProductToRra, applySellingPriceOnReceipt } from './product-sync.service';
 import logger from '../utils/logger';
 
 /**
@@ -134,6 +134,10 @@ export type PurchaseItemOverride = {
   itemNm?: string;
   /** Existing local product to receive this line's stock. */
   linkProductId?: number;
+  /** New selling price for the receiving product (supplier `prc` is the cost). */
+  sellingPrice?: number;
+  /** Expiry date of the received goods — sent to VSDC as `itemExprDt`. */
+  expiryDate?: Date;
 };
 
 type PurchaseLine = {
@@ -167,10 +171,14 @@ async function createProductFromPurchaseLine(
   organizationId: number,
   it: PurchaseLine,
   localNm: string,
+  sellingPrice?: number,
 ): Promise<ResolvedProduct> {
   const pkgUnitCd = it.pkgUnitCd?.trim() || DEFAULT_PKG_UNIT_CD;
   const qtyUnitCd = it.qtyUnitCd?.trim() || 'U';
-  const origin = await getOriginNationCode(organizationId);
+  // §4.17: an itemCd starts with its 2-letter origin, so the supplier's RRA
+  // code is a documented source when the organization has no default origin.
+  const supplierOrigin = /^[A-Z]{2}(?=\d)/.exec(it.itemCd?.trim().toUpperCase() ?? '')?.[0] ?? null;
+  const origin = (await getOriginNationCode(organizationId)) ?? supplierOrigin;
   const taxTyCd = (it.taxTyCd ?? '').trim().toUpperCase();
   const types = await getTaxationTypes(organizationId);
   const cachedTax = types.find((t) => t.code.toUpperCase() === taxTyCd);
@@ -186,7 +194,7 @@ async function createProductFromPurchaseLine(
     data: {
       name: localNm,
       organizationId,
-      unitPrice: prc,
+      unitPrice: sellingPrice && sellingPrice > 0 ? sellingPrice : prc,
       purchasePrice: prc,
       quantity: 0,
       taxCode,
@@ -248,7 +256,7 @@ async function resolvePurchaseLineProduct(
   }
 
   if (!product) {
-    product = await createProductFromPurchaseLine(organizationId, it, localNm);
+    product = await createProductFromPurchaseLine(organizationId, it, localNm, ov?.sellingPrice);
   } else if (localNm !== product.name) {
     product = await prisma.product.update({
       where: { id: product.id },
@@ -318,6 +326,7 @@ export async function confirmRraPurchase(
     taxblByBand[slot] = fix2(taxblByBand[slot] + taxblAmt);
     taxByBand[slot] = fix2(taxByBand[slot] + taxAmt);
     const local = resolved[idx];
+    const expiry = overrideFor(it, opts.items)?.expiryDate;
     // `itemNm` / `itemCd` are the buyer's catalog values; `spplr*` keep the
     // supplier's original name and code from the pulled sale.
     return {
@@ -341,7 +350,7 @@ export async function confirmRraPurchase(
       taxTyCd: slot,
       taxAmt,
       totAmt: taxblAmt,
-      itemExprDt: null,
+      itemExprDt: expiry ? toRraDate(expiry) : null,
     };
   });
 
@@ -417,7 +426,9 @@ export async function confirmRraPurchase(
     if (stockBranchId != null) {
       for (let i = 0; i < rp.items.length; i++) {
         const it = rp.items[i];
-        const qty = Math.round(Math.abs(it.qty.toNumber()));
+        const ov = overrideFor(it, opts.items);
+        await applySellingPriceOnReceipt(organizationId, resolved[i].product.id, ov?.sellingPrice, opts.userId);
+        const qty = Math.round(Math.abs(it.qty.toNumber()) * 1000) / 1000;
         if (qty <= 0) continue;
         const reference = `RRA-PURCHASE-${rp.spplrTin}-${rp.spplrInvcNo}`;
         await receiveStockOnBranch({
@@ -431,6 +442,7 @@ export async function confirmRraPurchase(
           reference,
           referenceType: 'RRA_PURCHASE',
           batchNumber: reference,
+          expiryDate: ov?.expiryDate,
           note: `Confirmed RRA purchase from ${rp.spplrNm ?? rp.spplrTin}`,
           skipEbmSync: true,
         });

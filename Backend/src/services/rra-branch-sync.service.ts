@@ -422,6 +422,13 @@ export async function applyRraStockMoves(
   }
   if (userId == null) return { applied: 0, skipped: stockList.length };
   for (const move of stockList) {
+    // Transfers between this org's own branches are already booked locally
+    // (TRANSFER_OUT + TRANSFER_IN); RRA echoes them back with our own sarNo.
+    const ownMove = await prisma.inventoryLedger.findFirst({
+      where: { organizationId, ebmSarNo: move.sarNo, movementType: 'TRANSFER_OUT' },
+      select: { id: true },
+    });
+    if (ownMove) { skipped += (move.itemList ?? []).length; continue; }
     const ref = `RRA-SAR-${move.sarNo}`;
     for (const line of move.itemList ?? []) {
       if (!line.itemCd || !(line.qty > 0)) { skipped += 1; continue; }

@@ -56,12 +56,49 @@ export function stockMovementNeedsEbm(movementType: InventoryMovementType): bool
   return true;
 }
 
-async function allocateSarNo(organizationId: number): Promise<number> {
-  const row = await prisma.inventoryLedger.aggregate({
-    where: { organizationId, ebmSarNo: { not: null } },
-    _max: { ebmSarNo: true },
+async function resolveTransferCounterparty(entry: {
+  organizationId: number;
+  movementType: InventoryMovementType;
+  reference: string | null;
+  referenceType: string | null;
+}): Promise<{ tin: string | null; name: string; bhfId: string | null } | null> {
+  if (entry.movementType !== 'TRANSFER_IN' && entry.movementType !== 'TRANSFER_OUT') return null;
+  if (entry.referenceType !== 'STOCK_TRANSFER' || !entry.reference?.startsWith('ST-')) return null;
+  const transferId = parseInt(entry.reference.slice(3), 10);
+  if (!Number.isSafeInteger(transferId)) return null;
+
+  const transfer = await prisma.stockTransfer.findFirst({
+    where: { id: transferId, organizationId: entry.organizationId },
+    select: {
+      fromBranch: { select: { name: true, bhfId: true } },
+      toBranch: { select: { name: true, bhfId: true } },
+      organization: { select: { TIN: true } },
+    },
   });
-  return (row._max.ebmSarNo ?? 0) + 1;
+  if (!transfer) return null;
+  const other = entry.movementType === 'TRANSFER_OUT' ? transfer.toBranch : transfer.fromBranch;
+  return { tin: transfer.organization?.TIN ?? null, name: other.name, bhfId: other.bhfId ?? null };
+}
+
+/**
+ * Reserve the next SAR number for a ledger row and persist it in the same
+ * transaction. The org-scoped advisory lock serializes concurrent submitters
+ * (fire-and-forget per movement + the cron batch), so two rows can never be
+ * handed the same max+1.
+ */
+async function reserveSarNo(organizationId: number, ledgerId: number): Promise<number> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`sar:${organizationId}`}))`;
+    const current = await tx.inventoryLedger.findUnique({ where: { id: ledgerId }, select: { ebmSarNo: true } });
+    if (current?.ebmSarNo != null) return current.ebmSarNo;
+    const row = await tx.inventoryLedger.aggregate({
+      where: { organizationId, ebmSarNo: { not: null } },
+      _max: { ebmSarNo: true },
+    });
+    const sarNo = (row._max.ebmSarNo ?? 0) + 1;
+    await tx.inventoryLedger.update({ where: { id: ledgerId }, data: { ebmSarNo: sarNo } });
+    return sarNo;
+  });
 }
 
 /**
@@ -70,14 +107,28 @@ async function allocateSarNo(organizationId: number): Promise<number> {
  * Idempotent: a row already SYNCED is skipped; a persisted `ebmSarNo` is reused
  * on retry so RRA does not reject a duplicate SAR number.
  */
-export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ success: boolean; error?: string }> {
-  if (!isEbmEnabled()) return { success: true };
+const inFlight = new Set<number>();
 
+export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ success: boolean; error?: string; deferred?: boolean }> {
+  if (!isEbmEnabled()) return { success: true };
+  // The per-movement trigger and the cron batch can race on the same row;
+  // only one may talk to the VSDC at a time or the SAR would be sent twice.
+  if (inFlight.has(ledgerId)) return { success: false, deferred: true, error: 'Already being submitted' };
+  inFlight.add(ledgerId);
+  try {
+    return await submitOne(ledgerId);
+  } finally {
+    inFlight.delete(ledgerId);
+  }
+}
+
+async function submitOne(ledgerId: number): Promise<{ success: boolean; error?: string; deferred?: boolean }> {
   const entry = await prisma.inventoryLedger.findUnique({
     where: { id: ledgerId },
     include: {
-      product: { select: { id: true, name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true, barcode: true, taxCode: true, unitPrice: true } },
+      product: { select: { id: true, name: true, itemCd: true, itemClsCd: true, pkgUnitCd: true, qtyUnitCd: true, packagingQty: true, barcode: true, taxCode: true, unitPrice: true } },
       user: { select: { id: true, name: true } },
+      batch: { select: { expiryDate: true } },
     },
   });
   if (!entry) return { success: false, error: 'Ledger entry not found' };
@@ -108,7 +159,7 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
         select: { id: true },
       });
       if (!invoiced) {
-        return { success: false, error: 'Original invoice not yet fiscalized — deferring stock 11' };
+        return { success: false, deferred: true, error: 'Original invoice not yet fiscalized — deferring stock 11' };
       }
     }
   }
@@ -151,7 +202,7 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
   const taxAmt = sarTyCd === '02' && rate > 0 ? fix2(splyAmt - splyAmt / (1 + rate / 100)) : 0;
   const taxblAmt = fix2(splyAmt - taxAmt);
 
-  const sarNo = entry.ebmSarNo ?? (await allocateSarNo(entry.organizationId));
+  const sarNo = entry.ebmSarNo ?? (await reserveSarNo(entry.organizationId, ledgerId));
   // orgSarNo: original SAR number for refund/return rows (new sarNo + link to
   // the original 11). Resolved from the original SALE ledger row for the same
   // product/branch. Live VSDC rejects null orgSarNo (910), and accepts 0 for
@@ -184,15 +235,21 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
   const regr = { id: String(entry.user?.id ?? 'system'), name: entry.user?.name ?? 'System' };
   const now = entry.createdAt;
 
+  // StockIOSaveReq uses null customer fields for non-transfer movements; only
+  // inter-branch transfers (04 / 13) carry the counterparty TIN/bhfId.
+  const counterparty = await resolveTransferCounterparty(entry);
+
+  const expiry = entry.expiryDate ?? entry.batch?.expiryDate ?? null;
+  const packSize = product.packagingQty && product.packagingQty > 0 ? product.packagingQty : 1;
+  const pkg = Math.ceil(qty / packSize);
+
   const payload = {
     sarNo,
     orgSarNo: orgSarNo ?? 0,
     regTyCd: 'M', // Manual
-    // StockIOSaveReq sample uses null customer fields for non-transfer movements.
-    // Only inter-branch transfers should populate the counterparty TIN/bhfId.
-    custTin: null as string | null,
-    custNm: null as string | null,
-    custBhfId: null as string | null,
+    custTin: counterparty?.tin ?? null,
+    custNm: counterparty?.name ?? null,
+    custBhfId: counterparty?.bhfId ?? null,
     sarTyCd,
     ocrnDt: toRraDate(now),
     totItemCnt: 1,
@@ -212,10 +269,10 @@ export async function submitStockLedgerEntryToEbm(ledgerId: number): Promise<{ s
         itemNm: product.name,
         bcd: product.barcode ?? null,
         pkgUnitCd: product.pkgUnitCd ?? 'CT',
-        pkg: qty,
+        pkg,
         qtyUnitCd: product.qtyUnitCd ?? 'U',
         qty,
-        itemExprDt: null,
+        itemExprDt: expiry ? toRraDate(expiry) : null,
         prc,
         splyAmt,
         totDcAmt: 0,
@@ -299,37 +356,59 @@ export function submitStockLedgerEntryToEbmAsync(ledgerId: number): void {
   );
 }
 
-/** Process PENDING/FAILED stock ledger rows in batch (cron job). */
-export async function processStockSyncBatch(limit = 25): Promise<{ processed: number; succeeded: number; failed: number }> {
-  if (!isEbmEnabled()) return { processed: 0, succeeded: 0, failed: 0 };
+/**
+ * Process PENDING/FAILED stock ledger rows in batch (cron job). PENDING and
+ * FAILED rows are drained as separate slices so rows that keep failing (e.g. a
+ * product without itemCd) can never starve new movements of their slot.
+ */
+export async function processStockSyncBatch(
+  limit = 25,
+): Promise<{ processed: number; succeeded: number; failed: number; deferred: number }> {
+  if (!isEbmEnabled()) return { processed: 0, succeeded: 0, failed: 0, deferred: 0 };
 
-  const rows = await prisma.inventoryLedger.findMany({
-    where: { ebmSyncStatus: { in: ['PENDING', 'FAILED'] } },
-    orderBy: { createdAt: 'asc' },
-    take: limit,
-    select: { id: true },
-  });
+  const retryLimit = Math.max(1, Math.floor(limit / 5));
+  // Start the retry slice at a random offset so every FAILED row is retried
+  // eventually even when more rows keep failing than fit in one slice.
+  const failedCount = await prisma.inventoryLedger.count({ where: { ebmSyncStatus: 'FAILED' } });
+  const retrySkip = failedCount > retryLimit ? Math.floor(Math.random() * (failedCount - retryLimit + 1)) : 0;
+  const [pending, retries] = await Promise.all([
+    prisma.inventoryLedger.findMany({
+      where: { ebmSyncStatus: 'PENDING' },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+      select: { id: true },
+    }),
+    prisma.inventoryLedger.findMany({
+      where: { ebmSyncStatus: 'FAILED' },
+      orderBy: { createdAt: 'asc' },
+      skip: retrySkip,
+      take: retryLimit,
+      select: { id: true },
+    }),
+  ]);
+  const rows = [...pending, ...retries];
 
   let succeeded = 0;
   let failed = 0;
+  let deferred = 0;
   for (const row of rows) {
     const r = await submitStockLedgerEntryToEbm(row.id);
     if (r.success) succeeded += 1;
+    else if (r.deferred) deferred += 1;
     else failed += 1;
   }
-  return { processed: rows.length, succeeded, failed };
+  return { processed: rows.length, succeeded, failed, deferred };
 }
 
 /**
- * Mark every not-yet-synced ledger row for this org PENDING so the
- * next batch picks them up. Used by the "sync stock now" endpoint.
+ * Re-queue this org's FAILED ledger rows so the next batch retries them. Used
+ * by the "sync stock now" endpoint. A NULL status means "not reported" by
+ * design (e.g. confirmed RRA purchases, whose stock-in RRA already booked via
+ * savePurchases) and must never be queued — that would double-count at RRA.
  */
 export async function queuePendingStockForOrg(organizationId: number): Promise<number> {
   const res = await prisma.inventoryLedger.updateMany({
-    where: {
-      organizationId,
-      OR: [{ ebmSyncStatus: null }, { ebmSyncStatus: 'FAILED' }],
-    },
+    where: { organizationId, ebmSyncStatus: 'FAILED' },
     data: { ebmSyncStatus: 'PENDING' },
   });
   return res.count;
