@@ -7,8 +7,7 @@
  * VSDC and no new sale, refund, stock movement, payment, tax or accounting
  * entry is created. The printed copy reproduces the original receipt's fiscal
  * identity exactly (SDC ID, A/B receipt counter, internal data, signature,
- * VSDC timestamp, MRC, QR) and is marked COPY + "THIS IS NOT AN OFFICIAL
- * RECEIPT".
+ * VSDC timestamp, MRC, QR) and is marked only by the COPY header title.
  *
  * Pure functions only (no DB) so the rules are unit-testable.
  */

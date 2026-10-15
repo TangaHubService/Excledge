@@ -92,6 +92,8 @@ export interface IOrganizationSettings {
     tin?: string;
     bhfId?: string;
     dvcSrlNo?: string;
+    /** CIS Machine Registration Code of the default branch device (Art. 3.2.1). */
+    mrcNo?: string;
     ebmDeviceId?: string;
   };
 }
@@ -166,6 +168,7 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
     tin: "",
     bhfId: "",
     dvcSrlNo: "",
+    mrcNo: "",
     ebmDeviceId: "",
   },
 };
@@ -184,6 +187,8 @@ export interface OrganizationSettingsPatch {
     tin?: string;
     bhfId?: string;
     dvcSrlNo?: string;
+    /** CIS Machine Registration Code of the default branch device (Art. 3.2.1). */
+    mrcNo?: string;
     ebmDeviceId?: string;
   };
 }

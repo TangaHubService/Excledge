@@ -6,12 +6,6 @@ import { C } from "./theme"
 
 type EbmSectionProps = Pick<EbmInvoice, "sdcInformation" | "verification" | "invoice" | "branding">
 
-/** Mirrors the backend isRefundTransaction: an NR/TR (copied or not) keeps its reference to the original. */
-function isRefundInvoice(invoice: EbmInvoice["invoice"] | undefined): boolean {
-  const label = String(invoice?.rcptLabel ?? "").toUpperCase()
-  return label === "NR" || label === "TR" || (!label && invoice?.status === "REFUNDED")
-}
-
 function QrCanvas({ payload }: { payload: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -46,8 +40,8 @@ export function EBMSection({ data }: { data: EbmSectionProps }) {
   const isTraining = rcptLabel === "TS" || rcptLabel === "TR"
   const isProforma = Boolean(data.invoice?.isProforma) || rcptLabel === "PS"
   const isCopy = !isTraining && !isProforma && (Boolean(data.invoice?.isCopy) || rcptLabel === "CS" || rcptLabel === "CR")
-  // QR only on NS/NR, like the EBM spec samples (13.1/14.1).
-  const showQr = !isCopy && !isTraining && !isProforma
+  // QR on signed receipts: NS/NR and their CS/CR copies (the original's QR, unchanged).
+  const showQr = !isTraining && !isProforma
   const qrImage = showQr ? data.verification?.qrCodeImage : null
   const qrPayload = showQr ? data.verification?.qrPayload : null
   const signature = safeText(sdc?.receiptSignature)
@@ -69,7 +63,6 @@ export function EBMSection({ data }: { data: EbmSectionProps }) {
   const cisTimeStr = formatTime(data.invoice?.time ?? data.invoice?.invoiceDate)
   const receiptNo = safeText(sdc?.receiptNumber ?? data.invoice?.receiptNumber)
   const invoiceNo = safeText(data.invoice?.invoiceNumber)
-  const refundRef = isRefundInvoice(data.invoice) ? (data.invoice?.originalReceiptNumber ?? "").trim() : ""
   const internalDataDisplay = internalData !== "—" ? dashEvery4(internalData) : "—"
   const signatureDisplay = signature !== "—" ? dashEvery4(signature) : "—"
   const mrc = safeText(sdc?.mrcNo)
@@ -123,8 +116,6 @@ export function EBMSection({ data }: { data: EbmSectionProps }) {
         <p style={{ ...lineStyle, fontWeight: 800 }}>RECEIPT NUMBER:{invoiceNo}</p>
         <p style={lineStyle}>Date : {cisDateStr}   {cisTimeStr}</p>
         <p style={lineStyle}>MRC : {mrc}</p>
-        {refundRef && <p style={lineStyle}>REF. NORMAL RECEIPT#: {refundRef}</p>}
-
         <p style={{ ...lineStyle, marginTop: 8, textAlign: "center", fontSize: 9, color: C.green, fontWeight: 700 }}>
           {branding}
         </p>

@@ -1,6 +1,7 @@
 import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.middleware';
 import { checkMrc } from '../utils/mrc';
+import { prisma } from '../lib/prisma';
 import {
   getBranches,
   getBranchById,
@@ -143,11 +144,15 @@ export const updateBranchController = async (req: AuthRequest, res: Response) =>
   try {
     const organizationId = parseInt(req.params.organizationId);
     const branchId = parseInt(req.params.id);
-    const { name, location, address, addressLine2, phone, status, metadata, bhfId, ebmDeviceId, ebmSerialNo, vsdcUrl } = req.body;
+    const { name, location, address, addressLine2, phone, status, metadata, bhfId, ebmDeviceId, ebmSerialNo, mrcNo, vsdcUrl } = req.body;
 
-    // C10: MRC number format validation (RRA spec §2.1: BBBCCNNNNNN, 11 chars).
-    // Relaxed in sandbox/mock for RRA test-issued device serials.
-    const mrc = checkMrc(ebmSerialNo);
+    // CIS spec Art. 3.2.1: the device MRC is BBBCCNNNNNN (11 chars).
+    // Relaxed in sandbox/mock for RRA test-issued codes.
+    const existing = await prisma.branch.findFirst({
+      where: { id: branchId, organizationId },
+      select: { mrcNo: true },
+    });
+    const mrc = checkMrc(mrcNo, { current: [existing?.mrcNo] });
     if (!mrc.ok) {
       return res.status(400).json({ error: mrc.error, code: mrc.code });
     }
@@ -163,6 +168,7 @@ export const updateBranchController = async (req: AuthRequest, res: Response) =>
       bhfId: bhfId === undefined ? undefined : bhfId,
       ebmDeviceId: ebmDeviceId === undefined ? undefined : ebmDeviceId,
       ebmSerialNo: ebmSerialNo === undefined ? undefined : ebmSerialNo,
+      mrcNo: mrc.value,
       vsdcUrl: vsdcUrl === undefined ? undefined : vsdcUrl,
     });
 

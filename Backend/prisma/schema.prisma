@@ -18,6 +18,7 @@ model Organization {
   currency                 String?
   ebmDeviceId              String? // Legacy: org-level fallback (use Branch.ebmDeviceId per branch)
   ebmSerialNo              String? // Legacy: org-level fallback (use Branch.ebmSerialNo per branch)
+  mrcNo                    String? // Legacy: org-level fallback (use Branch.mrcNo per branch)
   avatar                   String?
   address                  String?
   phone                    String?
@@ -218,7 +219,8 @@ model Branch {
   // RRA/EBM per-branch device credentials (each branch has its own VSDC device)
   bhfId                String? // RRA-assigned branch code, e.g. "00", "01"
   ebmDeviceId          String? // VSDC device ID issued per branch by RRA
-  ebmSerialNo          String? // VSDC device serial number issued per branch by RRA
+  ebmSerialNo          String? // VSDC device serial number issued per branch by RRA (dvcSrlNo)
+  mrcNo                String? // CIS Machine Registration Code of this device (CIS spec Art. 3.2.1, BBBCCNNNNNN)
   vsdcUrl              String? // Per-branch VSDC endpoint URL (B3)
   // RRA VSDC device initialization (/initializer/selectInitInfo, RRA checklist §58)
   ebmInitializedAt     DateTime?

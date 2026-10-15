@@ -499,10 +499,10 @@ describe('documentIndicator / isFormalNoticeIndicator — RRA checklist §55', (
     expect(isFormalNoticeIndicator(documentIndicator(data))).toBe(true);
   });
 
-  it('copy is watermarked COPY and always carries the notice', () => {
+  it('copy is titled COPY and carries no not-official notice', () => {
     const data = makePayload({ invoice: { isCopy: true } });
     expect(documentIndicator(data)).toBe('COPY');
-    expect(isFormalNoticeIndicator(documentIndicator(data))).toBe(true);
+    expect(isFormalNoticeIndicator(documentIndicator(data))).toBe(false);
   });
 
   it('a sale not yet certified by VSDC falls back to the notice even without a watermark', () => {

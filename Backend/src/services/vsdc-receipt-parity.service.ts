@@ -169,7 +169,6 @@ export function vsdcReceiptParityErrors(
     }
     const pairs: Array<[string, unknown, unknown]> = [
       ["sdcId", res.sdcId, sdc.sdcId],
-      ["mrcNo", res.mrcNo, sdc.mrcNo],
       ["intrlData", res.intrlData, sdc.internalData],
       ["rcptSign", res.rcptSign, sdc.receiptSignature],
     ]
@@ -314,7 +313,8 @@ export function vsdcPrintedTextErrors(
     if (rcptNo != null) need("SDC receipt number", `RECEIPT NUMBER: ${rcptNo}/${totRcptNo ?? rcptNo}${/^[NTP][SR]$/.test(type) ? ` ${type}` : ""}`)
     const sdcId = str(res.sdcId)
     if (sdcId) need("SDC ID", `SDC ID: ${sdcId}`)
-    const mrc = str(res.mrcNo)
+    // The device MRC configured in the CIS prints in preference to the one VSDC echoes.
+    const mrc = str(payload.sdcInformation.mrcNo) ?? str(res.mrcNo)
     if (mrc) need("MRC", `MRC: ${mrc}`)
     const pbct = str(res.vsdcRcptPbctDate)
     if (pbct) need("SDC date/time", `Date: ${compactDate(pbct)} Time: ${compactTime(pbct)}`)
@@ -348,8 +348,8 @@ export function vsdcPrintedTextErrors(
   }
 
   const notice = "THIS IS NOT AN OFFICIAL RECEIPT"
-  if (copy || training || proforma) need("notice", notice)
-  else if (payload.certification.isCertified) forbid("NS/NR notice", notice)
+  if (training || proforma) need("notice", notice)
+  else if (payload.certification.isCertified) forbid(copy ? "CS/CR notice" : "NS/NR notice", notice)
   const designation = copy ? "COPY" : training ? "TRAINING MODE" : proforma ? "PROFORMA" : null
   if (designation) {
     const n = text.split("\n").filter((l) => l.trim() === designation).length

@@ -100,18 +100,26 @@ Serial, and VSDC endpoint URL **per branch**. A branch with no per-branch values
 inherits the Organization-level credentials from Section 2.
 
 **Where:** **Admin → EBM Outbox → "EBM / VSDC Credentials"** card. Select a branch,
-enter the RRA-issued `bhfId`, `dvcSrlNo`/MRC, `sdcId`, and (optionally) a
-per-branch VSDC URL, then **"Save Credentials."** The per-branch device table on
-the same card shows every branch's current values.
+enter the RRA-issued `bhfId`, the VSDC device serial (`dvcSrlNo`), the device's
+**MRC (Machine Registration Code)**, `sdcId`, and (optionally) a per-branch VSDC
+URL, then **"Save Credentials."** The per-branch device table on the same card
+shows every branch's current values, MRC included.
+
+**MRC per device (CIS spec Article 3.2.1):** each connected device has its own
+MRC, configured separately from the VSDC device serial. It is validated as
+**BBBCCNNNNNN** (3-character developer id + 2-character certificate number +
+6-digit serial — exactly 11 characters, never fewer or more, in every
+environment) and printed as `MRC:` on every receipt (including reprints
+and copies) and fiscal report of the device, in place of the MRC VSDC echoes.
+A device with no MRC configured prints the MRC VSDC returns.
 
 **Initializing the device:** after saving the credentials, click **"Initialize
-with RRA."** This calls RRA's initialization service to confirm the device is
-registered under this TIN, pull back the authoritative SDC ID / MRC number, and
-seed the local invoice counter past the last number RRA has on record. Do this
+with RRA."** This calls RRA's initialization service with the device serial to
+confirm the device is registered under this TIN, pull back the authoritative
+SDC ID, and seed the local invoice counter past the last number RRA has on
+record. A blank device MRC is filled from the MRC VSDC reports; a configured
+MRC that differs from it is shown as a warning so it can be corrected. Do this
 once per branch device before the first real sale.
-
-The same MRC format validation described in Section 2 (BBBCCNNNNNN, 11
-characters) applies to per-branch serial numbers.
 
 ---
 

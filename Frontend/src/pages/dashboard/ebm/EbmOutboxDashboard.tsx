@@ -38,6 +38,7 @@ interface EbmCredForm {
   bhfId?: string | null;
   ebmDeviceId?: string | null;
   ebmSerialNo?: string | null;
+  mrcNo?: string | null;
   vsdcUrl?: string | null;
 }
 
@@ -62,6 +63,7 @@ function EbmCredentialsCard() {
       bhfId: branch.bhfId ?? '',
       ebmDeviceId: branch.ebmDeviceId ?? '',
       ebmSerialNo: branch.ebmSerialNo ?? '',
+      mrcNo: branch.mrcNo ?? '',
       vsdcUrl: branch.vsdcUrl ?? '',
     });
   };
@@ -82,7 +84,8 @@ function EbmCredentialsCard() {
     }
     if (orgId) {
       try {
-        const org = await apiClient.getOrganization(orgId);
+        const res = await apiClient.getOrganization(orgId);
+        const org = res?.organization ?? res?.data?.organization ?? res?.data ?? res;
         setOrgTin(org?.TIN ?? org?.tin ?? '');
       } catch (e) {
         console.error('Failed to load organization for EBM config', e);
@@ -97,22 +100,31 @@ function EbmCredentialsCard() {
     setForm((prev) => ({ ...prev, [key]: value }));
 
   const handleSave = async () => {
-    setSaving(true);
     setSavedMsg(null);
     setErrorMsg(null);
+    const mrc = (form.mrcNo ?? '').trim();
+    if (mrc && !/^[A-Za-z0-9]{11}$/.test(mrc)) {
+      setErrorMsg(`MRC must be exactly 11 letters or digits (you entered ${mrc.length}).`);
+      return;
+    }
+    setSaving(true);
     try {
-      await apiClient.updateOrganization({ TIN: orgTin });
+      if (orgTin.trim()) await apiClient.updateOrganization({ TIN: orgTin.trim() });
       if (branchId !== '') {
         await apiClient.updateBranch(branchId, {
           bhfId: (form.bhfId ?? '').trim(),
           ebmDeviceId: (form.ebmDeviceId ?? '').trim(),
-          ebmSerialNo: (form.ebmSerialNo ?? '').trim().toUpperCase(),
+          ebmSerialNo: (form.ebmSerialNo ?? '').trim(),
+          mrcNo: (form.mrcNo ?? '').trim().toUpperCase(),
           vsdcUrl: (form.vsdcUrl ?? '').trim(),
         });
       }
       setSavedMsg('EBM / VSDC credentials saved.');
     } catch (e: any) {
       setErrorMsg(
+        (e?.response?.data?.code === 'INVALID_MRC_FORMAT'
+          ? 'Invalid MRC. It must be 11 characters: BBBCCNNNNNN (3 developer + 2 certificate characters, then a 6-digit serial).'
+          : null) ||
         e?.message ||
           e?.response?.data?.error ||
           e?.response?.data?.message ||
@@ -134,6 +146,7 @@ function EbmCredentialsCard() {
       const info = (res as any)?.data ?? res;
       setInitInfo(info);
       setSavedMsg(`Device verified with RRA — SDC ${info?.sdcId ?? '?'} / MRC ${info?.mrcNo ?? '?'}.`);
+      if (info?.mrcWarning) setErrorMsg(info.mrcWarning);
       await load();
     } catch (e: any) {
       setErrorMsg(e?.message || e?.response?.data?.error || 'Device initialization failed.');
@@ -215,12 +228,27 @@ function EbmCredentialsCard() {
           </div>
 
           <div className="space-y-1.5">
-            <Label>dvcSrlNo / MRC (device serial)</Label>
+            <Label>dvcSrlNo (device serial)</Label>
             <Input
               value={form.ebmSerialNo ?? ''}
               onChange={(e) => set('ebmSerialNo', e.target.value)}
               placeholder="e.g. excelwartest"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>MRC (Machine Registration Code)</Label>
+            <Input
+              value={form.mrcNo ?? ''}
+              onChange={(e) => set('mrcNo', e.target.value.toUpperCase())}
+              placeholder="e.g. WIS01029467"
+              minLength={11}
+              maxLength={11}
+              className="font-mono"
+            />
+            <p className="text-xs text-muted-foreground">
+              Exactly 11 characters ({(form.mrcNo ?? '').trim().length}/11): BBBCCNNNNNN — 3 developer + 2 certificate characters, then a 6-digit serial. Printed on every receipt of this device.
+            </p>
           </div>
 
           <div className="space-y-1.5">
@@ -257,7 +285,8 @@ function EbmCredentialsCard() {
                   <TableRow>
                     <TableHead>Branch</TableHead>
                     <TableHead>bhfId</TableHead>
-                    <TableHead>Serial (MRC)</TableHead>
+                    <TableHead>dvcSrlNo</TableHead>
+                    <TableHead>MRC</TableHead>
                     <TableHead>sdcId</TableHead>
                     <TableHead>VSDC URL</TableHead>
                     <TableHead className="text-right">Action</TableHead>
@@ -272,6 +301,7 @@ function EbmCredentialsCard() {
                       </TableCell>
                       <TableCell>{branch.bhfId || '—'}</TableCell>
                       <TableCell>{branch.ebmSerialNo || '—'}</TableCell>
+                      <TableCell className="font-mono">{branch.mrcNo || '—'}</TableCell>
                       <TableCell>{branch.ebmDeviceId || '—'}</TableCell>
                       <TableCell className="max-w-[180px] truncate">{branch.vsdcUrl || '—'}</TableCell>
                       <TableCell className="text-right">

@@ -177,7 +177,7 @@ import {
   type StoredFiscalRecord,
 } from "../src/services/receipt-copy.service"
 import { composeInvoicePayload, getInvoicePdf, printReceiptCopy, reprintSaleReceipt } from "../src/controllers/sales.controller"
-import { generateEbmInvoicePdf } from "../src/services/invoice-pdf.service"
+import { generateEbmInvoicePdf, printsQrCode } from "../src/services/invoice-pdf.service"
 import { generateEbmReceiptPdf80mm } from "../src/services/invoice-receipt-pdf.service"
 import { renderSalesInvoiceHtml } from "../src/services/invoice-render.service"
 
@@ -421,7 +421,7 @@ describe("POST /:org/:saleId/copy — CS from an existing NS", () => {
     expect(copyCalls.filter((c) => c.x === 0 && c.opts?.width === 595.28)).toHaveLength(0)
     expect(copyCalls).toHaveLength(1)
     expect(t).not.toContain("ORIGINAL RECEIPT#")
-    expect(t).toContain("THIS IS NOT AN OFFICIAL RECEIPT")
+    expect(t).not.toContain("THIS IS NOT AN OFFICIAL RECEIPT")
     expect(t).toContain("RECEIPT NUMBER: 168/258 NS")
     expect(t).toContain("Date: 01/10/2026 Time: 10:15:30")
     expect(t).toContain("SDC ID: TESTSDC010000001")
@@ -471,7 +471,7 @@ describe("POST /:org/:saleId/copy — CR from an existing NR", () => {
       expect(t).toContain("REF. NORMAL RECEIPT#: 45")
       expect(t).not.toContain("REFUND REASON")
       expect(t).not.toContain("REFUND TO")
-      expect(t).toContain("THIS IS NOT AN OFFICIAL RECEIPT")
+      expect(t).not.toContain("THIS IS NOT AN OFFICIAL RECEIPT")
       expect(t).toContain("RECEIPT NUMBER: 41/260 NR")
       expect(t).toContain("TEST-SIGN-0002-IIII-JJJJ")
       expect(t).toContain("-2360.00")
@@ -679,7 +679,7 @@ describe("A4 layout", () => {
       // One header title per page.
       expect(cap.calls.filter((c) => c.text === "COPY")).toHaveLength(pages.length)
       const t = cap.joined()
-      expect(t).toContain("THIS IS NOT AN OFFICIAL RECEIPT")
+      expect(t).not.toContain("THIS IS NOT AN OFFICIAL RECEIPT")
       expect(t).toContain(formatMoney(payload.totals.grandTotal))
     }
   })
@@ -694,9 +694,13 @@ describe("A4 layout", () => {
     const payload = await stressPayload("CR", 2)
     const cap = captureText()
     try { await generateEbmInvoicePdf(payload, "A4") } finally { cap.restore() }
-    const refLine = cap.calls.find((c) => c.text.startsWith("REF. NORMAL RECEIPT#") && (c.y ?? 0) > 600)!
+    const mrcLine = cap.calls.find((c) => c.text.startsWith("MRC:") && (c.y ?? 0) > 600)!
     const footer = cap.calls.find((c) => c.text.includes("Powered by RRA VSDC"))!
-    expect(footer.y!).toBeGreaterThan(refLine.y!)
+    expect(footer.y!).toBeGreaterThan(mrcLine.y!)
+    // REF. NORMAL RECEIPT# prints once, under the title — never repeated in the bottom block.
+    const refLines = cap.calls.filter((c) => c.text.startsWith("REF. NORMAL RECEIPT#"))
+    expect(refLines).toHaveLength(1)
+    expect(refLines[0].y!).toBeLessThan(120)
   })
 })
 
@@ -718,7 +722,7 @@ describe("80mm thermal layout", () => {
       }
       expect(cap.calls.filter((c) => c.text === "COPY").length).toBeGreaterThanOrEqual(1)
       const t = cap.joined()
-      expect(t).toContain("THIS IS NOT AN OFFICIAL RECEIPT")
+      expect(t).not.toContain("THIS IS NOT AN OFFICIAL RECEIPT")
       expect(t).toContain("TEST-SIGN-TEST-SIGN")
       expect(t).toContain(formatMoney(payload.totals.grandTotal))
     }
@@ -765,13 +769,25 @@ describe("80mm thermal layout", () => {
 })
 
 describe("HTML preview + regression of the originals", () => {
-  it("HTML copy carries the COPY title and the REFUND sub-title, no watermark", async () => {
+  it("HTML copy carries the COPY title and the REFUND sub-title, no watermark or notice", async () => {
     seed(nrSale())
     const html = renderSalesInvoiceHtml((await composeInvoicePayload(mkReq(20), { copy: "force" }))!)
     expect(html).not.toContain('class="copy-watermark"')
     expect(html).toContain('<h2 class="title">COPY</h2>')
     expect(html).toMatch(/<h3 class="subtitle"[^>]*>REFUND<\/h3>/)
-    expect(html).toContain("THIS IS NOT AN OFFICIAL RECEIPT")
+    expect(html).not.toContain("THIS IS NOT AN OFFICIAL RECEIPT")
+  })
+
+  it("a copy carries the original's QR code, unchanged", async () => {
+    seed(nsSale(), nrSale())
+    for (const id of [10, 20]) {
+      const original = (await composeInvoicePayload(mkReq(id)))!
+      const copy = (await composeInvoicePayload(mkReq(id), { copy: "force" }))!
+      expect(printsQrCode(copy)).toBe(true)
+      expect(copy.verification.qrPayload).toBeTruthy()
+      expect(copy.verification.qrPayload).toBe(original.verification.qrPayload)
+      expect(copy.verification.qrCodeImage).toBe(original.verification.qrCodeImage)
+    }
   })
 
   it("original NS and NR still render as originals (no COPY, no notice)", async () => {

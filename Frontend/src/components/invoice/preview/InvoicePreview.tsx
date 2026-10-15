@@ -1,6 +1,6 @@
 import { forwardRef, type ReactNode } from "react"
 import type { EbmInvoice } from "../../../lib/invoice"
-import { documentTitle, InvoiceHeader } from "./InvoiceHeader"
+import { documentTitle, InvoiceHeader, refundReferenceLine } from "./InvoiceHeader"
 import { CustomerCard } from "./CustomerCard"
 import { InvoiceTable } from "./InvoiceTable"
 import { InvoiceSummary } from "./InvoiceSummary"
@@ -33,7 +33,7 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(
           overflow: "hidden",
         }}
       >
-        <InvoiceHeader data={data} title={documentTitle(data.invoice)} />
+        <InvoiceHeader data={data} title={documentTitle(data.invoice)} reference={refundReferenceLine(data.invoice)} />
 
         {/* Client and fiscal invoice details */}
         <CustomerCard data={data} />

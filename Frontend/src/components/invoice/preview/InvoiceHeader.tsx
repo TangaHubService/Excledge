@@ -38,7 +38,15 @@ export function documentTitle(invoice: EbmInvoice["invoice"]): string {
   return "INVOICE"
 }
 
-export function InvoiceHeader({ data, title }: { data: HeaderData; title?: string }) {
+/** Mirrors the backend refundReferenceLine: an NR/TR (copied or not) keeps its reference to the original. */
+export function refundReferenceLine(invoice: EbmInvoice["invoice"]): string {
+  const label = String(invoice?.rcptLabel ?? "").toUpperCase()
+  const isRefund = label === "NR" || label === "TR" || (!label && invoice?.status === "REFUNDED")
+  const ref = isRefund ? (invoice?.originalReceiptNumber ?? "").trim() : ""
+  return ref ? `REF. NORMAL RECEIPT#: ${ref}` : ""
+}
+
+export function InvoiceHeader({ data, title, reference }: { data: HeaderData; title?: string; reference?: string }) {
   const company = data.company
   const companyName = safeText(company?.name)
   const isEbmLinked = Boolean(company?.ebmLinked)
@@ -87,6 +95,9 @@ export function InvoiceHeader({ data, title }: { data: HeaderData; title?: strin
           <FlagBar style={{ height: 4, borderRadius: 0 }} />
         </div>
         <div style={{ color: C.navy, fontWeight: 900, fontSize: 31, letterSpacing: 0.4, lineHeight: 1, textTransform: "uppercase" }}>{title ?? "Invoice"}</div>
+        {reference && (
+          <div style={{ marginTop: 8, color: C.ink, fontSize: 12, fontWeight: 700, letterSpacing: 0.4 }}>{reference}</div>
+        )}
       </div>
     </header>
   )

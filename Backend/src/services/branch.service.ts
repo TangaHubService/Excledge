@@ -23,6 +23,8 @@ export interface UpdateBranchParams {
   bhfId?: string | null;
   ebmDeviceId?: string | null;
   ebmSerialNo?: string | null;
+  /** Already normalized by checkMrc. */
+  mrcNo?: string | null;
   vsdcUrl?: string | null;
 }
 
@@ -168,7 +170,7 @@ export async function updateBranch(
     patch.ebmSerialNo =
       data.ebmSerialNo == null || String(data.ebmSerialNo).trim() === ''
         ? null
-        : String(data.ebmSerialNo).trim().toUpperCase();
+        : String(data.ebmSerialNo).trim();
   }
 
   if (data.ebmDeviceId !== undefined) {

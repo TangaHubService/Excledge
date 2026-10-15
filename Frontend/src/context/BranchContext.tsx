@@ -16,6 +16,7 @@ export interface Branch {
     bhfId?: string | null;
     ebmDeviceId?: string | null;
     ebmSerialNo?: string | null;
+    mrcNo?: string | null;
     vsdcUrl?: string | null;
     _count?: {
         sales: number;

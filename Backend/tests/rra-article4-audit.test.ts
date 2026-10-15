@@ -216,8 +216,11 @@ describe('ART4 audit — one rendered receipt per label (NS,NR,CS,CR,TS,TR,PS)',
       expect(html).toContain('DATA-1234-DATA-5678');          // m. internal data dash-grouped
       expect(html).toContain('15/09/2026');                   // n+c. DD/MM/YYYY
       expect(html).toContain('Rwanda Revenue Authority');     // Art 7.29 RRA logo block
-      if (label === 'CS' || label === 'CR' || label === 'TS' || label === 'TR' || label === 'PS') {
+      if (label === 'TS' || label === 'TR' || label === 'PS') {
         expect(html).toContain(NOT_OFFICIAL_RECEIPT_NOTICE);  // Art 11
+      }
+      if (label === 'CS' || label === 'CR') {
+        expect(html).not.toContain(NOT_OFFICIAL_RECEIPT_NOTICE); // copy: COPY header title only
       }
       if (label === 'NR') {
         // Implemented (PDF only): NR prints the original-receipt reference +
@@ -249,7 +252,7 @@ describe('ART4 audit — one rendered receipt per label (NS,NR,CS,CR,TS,TR,PS)',
     expect(documentIndicator(auditRenderPayload('CS', false))).toBe('COPY');
     expect(documentIndicator(auditRenderPayload('TS', false))).toBe('TRAINING MODE');
     expect(documentIndicator(auditRenderPayload('PS', false))).toBe('PROFORMA');
-    expect(isFormalNoticeIndicator('COPY')).toBe(true);
+    expect(isFormalNoticeIndicator('COPY')).toBe(false);
   });
 });
 
@@ -288,7 +291,7 @@ describe('ART4 audit — documented spec gaps (passing assertions on current beh
     // a watermark, at >=2x amount text size.
     const p = auditRenderPayload('CS', false);
     expect(documentIndicator(p)).toBe('COPY');
-    expect(isFormalNoticeIndicator('COPY')).toBe(true);
+    expect(isFormalNoticeIndicator('COPY')).toBe(false);
   });
 });
 describe('ART4 audit — VSDC failure: no receipt is issued', () => {

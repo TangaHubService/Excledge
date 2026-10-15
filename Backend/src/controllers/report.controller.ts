@@ -356,12 +356,12 @@ export const getPluReportPdf = async (req: BranchAuthRequest, res: Response) => 
 
     const org = await prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { name: true, TIN: true, address: true, ebmSerialNo: true, ebmDeviceId: true },
+      select: { name: true, TIN: true, address: true, ebmSerialNo: true, mrcNo: true, ebmDeviceId: true },
     });
     const pluBranch = req.selectedBranchId != null && req.selectedBranchId > 0
       ? await prisma.branch.findFirst({
           where: { id: req.selectedBranchId, organizationId },
-          select: { ebmSerialNo: true, ebmInitInfo: true },
+          select: { ebmSerialNo: true, mrcNo: true, ebmInitInfo: true },
         })
       : null;
     const header: FiscalReportHeader = {
@@ -1713,12 +1713,12 @@ async function buildDailyReport(
   const [org, branch, sales, shiftAgg, heldCount, voidedSales] = await Promise.all([
     prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { name: true, TIN: true, address: true, ebmSerialNo: true, ebmDeviceId: true },
+      select: { name: true, TIN: true, address: true, ebmSerialNo: true, mrcNo: true, ebmDeviceId: true },
     }),
     targetBranchId != null
       ? prisma.branch.findUnique({
           where: { id: targetBranchId },
-          select: { name: true, bhfId: true, ebmSerialNo: true, ebmDeviceId: true, ebmInitInfo: true, address: true },
+          select: { name: true, bhfId: true, ebmSerialNo: true, mrcNo: true, ebmDeviceId: true, ebmInitInfo: true, address: true },
         })
       : Promise.resolve(null),
     prisma.sale.findMany({
