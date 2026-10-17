@@ -92,6 +92,7 @@ const allowedOrigins = [
     .map(s => s.trim().replace(/\/+$/, ''))
     .filter(Boolean),
   "https://erp.exceledgecpa.com", // always allow production origin
+  "https://accounting.exceledgecpa.com", // Accounting SPA (email sign-in + handoff)
   "http://localhost:5173",         // Vite dev server
   "http://localhost:3000",
   "http://localhost:3001",
