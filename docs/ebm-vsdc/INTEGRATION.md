@@ -122,8 +122,8 @@ and its stock-in.
 `/imports/selectImportItems` pulls declaration lines into `rra_import_items`.
 Each pull's request date must be strictly later than the previous one. The
 operator classifies + approves/rejects each line:
-`/imports/updateImportItems` with `imptItemSttsCd` 2/3; an approval books the
-stock-in as an Import.
+`/imports/updateImportItems` with `imptItemSttsCd` 3 (Approved) / 4 (Cancelled)
+per VSDC §4.18; an approval books the stock-in as an Import.
 
 ### Master data (§59, §61, §62, §64, §65)
 

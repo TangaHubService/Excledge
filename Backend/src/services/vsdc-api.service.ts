@@ -293,7 +293,8 @@ async function postToEndpoint(
   }
 
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
-  logger.info(`[RRA][REQ] POST ${url} payload:\n${stringifyRraLog(body, 2)}`);
+  const reqTin = typeof body.tin === 'string' ? body.tin : '';
+  logger.info(`[RRA][REQ] tin=${reqTin || '—'} POST ${url}`);
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), config.ebm.requestTimeoutMs);
 
@@ -325,9 +326,7 @@ async function postToEndpoint(
       json = rawText;
     }
 
-    logger.info(
-      `[RRA][RES] POST ${url} http=${res.status} body=${stringifyRraLog(json)?.slice(0, 4000)}`,
-    );
+    logger.info(`[RRA][RES] tin=${reqTin || '—'} POST ${url} http=${res.status}`);
 
     if (!res.ok) {
       const detail = json && typeof json === 'object'
@@ -649,7 +648,8 @@ async function postLookup<T = unknown>(
     return { success: false, resultCd: '?', resultMsg: 'EBM_API_URL is not configured', data: null, raw: null }
   }
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`
-  logger.info(`[RRA][REQ] POST ${url} payload:\n${stringifyRraLog(body, 2)}`)
+  const reqTin = typeof body.tin === 'string' ? body.tin : ''
+  logger.info(`[RRA][REQ] tin=${reqTin || '—'} POST ${url}`)
   const controller = new AbortController()
   const t = setTimeout(() => controller.abort(), config.ebm.requestTimeoutMs)
   try {
@@ -663,9 +663,7 @@ async function postLookup<T = unknown>(
     let json: any = null
     try { json = text ? JSON.parse(text) : null } catch { json = text }
 
-    logger.info(
-      `[RRA][RES] POST ${url} http=${res.status} body=${stringifyRraLog(json)?.slice(0, 4000)}`,
-    )
+    logger.info(`[RRA][RES] tin=${reqTin || '—'} POST ${url} http=${res.status}`)
 
     if (!res.ok) {
       return { success: false, resultCd: String(res.status), resultMsg: `Gateway HTTP ${res.status}`, data: null, raw: json }

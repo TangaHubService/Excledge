@@ -51,9 +51,9 @@ export function sarTyCdFor(
   }
 }
 
-/** Whether an inventory movement needs to be reported to RRA as a stock adjustment. */
+/** INITIAL_STOCK stays local; stock IO / master sync on real stock events only. */
 export function stockMovementNeedsEbm(movementType: InventoryMovementType): boolean {
-  return true;
+  return movementType !== 'INITIAL_STOCK';
 }
 
 async function resolveTransferCounterparty(entry: {

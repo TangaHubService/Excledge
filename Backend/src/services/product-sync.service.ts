@@ -1,16 +1,8 @@
 import { prisma } from '../lib/prisma';
-import { config } from '../config';
 import { isEbmEnabled } from './rra-ebm.service';
 import { buildVsdcEnvelope, saveItem } from './vsdc-api.service';
 import { itemTypeCodeDigit, getOriginNationCode } from './item-code.service';
 
-/**
- * Synchronize a product with the RRA VSDC gateway via POST /items/saveItems
- * (VSDC API Documentation v1.0.5 §3.3.4.1 — the "ItemSaveReq" shape).
- *
- * Idempotent: if the product is already SYNCED and no relevant fields
- * have changed, the call is skipped.
- */
 export async function syncProductToRra(
   productId: number,
   userId?: number,
@@ -132,19 +124,7 @@ export async function syncProductToRra(
       modrId: regrId,
     };
 
-    const requestUrl = `${(envelope.vsdcUrl ?? config.ebm.apiUrl ?? '').replace(/\/$/, '')}${config.ebm.itemPath || '/items/saveItems'}`;
-    console.log(
-      `[EBM][ProductSync] productId=${productId} orgId=${product.organizationId} itemCd=${product.itemCd} ` +
-      `POST ${requestUrl} request=${JSON.stringify({ tin: envelope.tin, bhfId: envelope.bhfId, ...payload })}`,
-    );
-
     const result = await saveItem(envelope, payload);
-
-    console.log(
-      `[EBM][ProductSync] productId=${productId} itemCd=${product.itemCd} ` +
-      `success=${result.success} httpStatus=${result.rawStatus} ` +
-      `response=${JSON.stringify(result.rawBody)}${result.error ? ` error=${result.error}` : ''}`,
-    );
 
     if (result.success) {
       await prisma.product.update({

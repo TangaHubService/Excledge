@@ -9,17 +9,14 @@ export function InvoiceSummary({ data }: { data: EbmInvoice }) {
   const totals = data.charges ? calculateInvoiceTotals(items, data.charges) : data.totals
   const grandTotal = Number(totals?.grandTotal ?? 0)
   const hasTax = Number(totals?.vat ?? 0) > 0 || Number(totals?.tax ?? 0) > 0 || items.some((item) => Number(item.taxAmount) > 0)
-  // Per-tax-type sales totals ("TOTAL A/B/C/D"): every band with sales, plus
-  // B always (RRA checklist §48) — mirrors the backend PDF summary.
   const bandOrder = ["A", "B", "C", "D"]
   const bandTotals = new Map<string, number>()
   for (const item of items) {
     const code = String((item as { taxCode?: unknown }).taxCode ?? "").toUpperCase() || "B"
     bandTotals.set(code, (bandTotals.get(code) ?? 0) + Number(item.total ?? 0))
   }
-  if (items.length > 0 && !bandTotals.has("B")) bandTotals.set("B", 0)
   const bandRows = [...bandTotals.entries()]
-    .filter(([code, total]) => code === "B" || Math.abs(total) > 0)
+    .filter(([, total]) => Math.abs(total) > 0)
     .sort(([a], [b]) => {
       const ai = bandOrder.indexOf(a)
       const bi = bandOrder.indexOf(b)

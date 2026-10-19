@@ -395,33 +395,17 @@ function drawTable(
 
 export function taxGroups(data: RenderInvoicePayload): TaxGroup[] {
   const grouped = new Map<string, TaxGroup>()
-  // R2: every PROGRAMMED rate with value > 0 prints on every receipt, even
-  // when no line item used it — seeded here at zero so it survives even for
-  // an all-exempt sale. B (the only statutory rate >0%, currently 18%) is
-  // additionally always seeded (RRA checklist §48). A/C/D at zero (§49) stay
-  // unseeded and only appear when a line item actually carries that code.
   const programmed = programmedRates(data)
-  const seed: Array<[string, number]> = []
-  programmed.forEach((rate, i) => {
-    if (rate > 0) seed.push([['A', 'B', 'C', 'D'][i], rate])
-  })
-  if (!seed.some(([code]) => code === 'B')) seed.push(['B', programmed[1]])
-  for (const [code, rate] of seed) {
-    grouped.set(code, { code, rate, total: 0, tax: 0 })
-  }
+  const codes = ['A', 'B', 'C', 'D'] as const
   for (const item of data.items) {
     const actualCode = safe(item.taxCode).toUpperCase()
     const key = actualCode || `TAX-${formatInvoiceQuantity(item.vatPct)}%`
-    const existing = grouped.get(key) ?? { code: key, rate: Number(item.vatPct) || 0, total: 0, tax: 0 }
+    const slot = codes.indexOf(key as typeof codes[number])
+    const rate = slot >= 0 ? programmed[slot] : (Number(item.vatPct) || 0)
+    const existing = grouped.get(key) ?? { code: key, rate, total: 0, tax: 0 }
     existing.total += Number(item.total) || 0
-    // Line taxes are NOT summed here: band tax is derived once from the band
-    // NET below (money.service policy), so the printed TAX rows match the
-    // R4 sample (5340.00 x 18/118 = 814.58) instead of drifting a cent from
-    // per-line cent rounding (768.81 + 45.76 = 814.57).
     grouped.set(key, existing)
   }
-  // Derive every A/B/C/D band tax from its net; legacy fallback keys keep
-  // their (zero) tax.
   const derived = bandTaxAmounts(data.items, programmed)
   for (const [code, tax] of Object.entries(derived)) {
     const band = grouped.get(code)
@@ -436,23 +420,12 @@ export function taxGroups(data: RenderInvoicePayload): TaxGroup[] {
   })
 }
 
-/**
- * Per-tax-type SALES bands for the printed "Total A/B/C/D" rows: every
- * programmed band with rate > 0 (R2 — prints even at zero sales), plus B
- * always (§48), plus any band that actually has sales (so a zero-rate label
- * only ever appears when an item with that rate was sold).
- */
 export function salesBands(data: RenderInvoicePayload): TaxGroup[] {
-  return taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.total) > 0 || g.rate > 0)
+  return taxGroups(data).filter((g) => Math.abs(g.total) > 0)
 }
 
-/**
- * Per-tax-type TAX rows: B plus every band with a rate > 0 or a non-zero
- * tax. Zero-rate bands (A-EX) carry no tax and get no TAX row, matching the
- * VSDC printout; TOTAL TAX still equals the sum of the printed rows (R11).
- */
 export function taxBandRows(data: RenderInvoicePayload): TaxGroup[] {
-  return taxGroups(data).filter((g) => g.code === "B" || Math.abs(g.tax) > 0 || g.rate > 0)
+  return taxGroups(data).filter((g) => Math.abs(g.total) > 0 && (Math.abs(g.tax) > 0 || g.rate > 0))
 }
 
 /** R3 receipt label for a band's sales row: `TOTAL A-EX`, `TOTAL B-18.00%`. */
@@ -516,13 +489,8 @@ export function bandTaxAmounts(
 function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): number {
   const currency = safe(data.invoice.currency || data.company.currency, "RWF")
   const currencyLabel = currency.toUpperCase() === "RWF" ? "" : ` ${currency.toUpperCase()}`
-  // R2/R3: every programmed rate > 0 prints its sales + tax rows on every
-  // receipt; zero-rate bands only when used. Labels: Total A-EX / Total B-18.00%.
   const groups = taxBandRows(data)
   const totalTax = taxGroups(data).reduce((sum, group) => sum + group.tax, 0)
-  // One authoritative invoice total first, then the grand total sliced by tax
-  // band ("Total A-EX / Total B-18.00% …" — the per-type sales totals), then
-  // the per-band TAX rows carrying the RRA-required tax breakdown.
   const rows: Array<[string, number | string]> = [[`Total${currencyLabel}`, data.totals.grandTotal]]
   for (const group of salesBands(data)) {
     rows.push([`Total ${bandSalesSuffix(group.code, group.rate)}${currencyLabel}`, group.total])

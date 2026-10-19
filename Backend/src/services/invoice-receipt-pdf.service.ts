@@ -170,15 +170,10 @@ function drawReceipt(
 
   const currency = safe(data.invoice.currency || data.company.currency, "RWF")
   const currencyLabel = currency.toUpperCase() === "RWF" ? "" : ` ${currency.toUpperCase()}`
-  // R2/R3: every programmed rate > 0 prints its sales + tax rows on every
-  // receipt; zero-rate bands only when used. Labels: TOTAL A-EX / TOTAL B-18.00%.
   const groups = taxBandRows(data)
   const totalTax = taxGroups(data).reduce((sum, group) => sum + group.tax, 0)
 
   y = labelValueLine(doc, `TOTAL${currencyLabel}`, formatInvoiceAmount(data.totals.grandTotal), y, true)
-  // Grand total sliced by tax band ("TOTAL A-EX / TOTAL B-18.00% …" — the
-  // per-type sales totals), then the per-band TAX rows carrying the
-  // RRA-required breakdown.
   for (const group of salesBands(data)) {
     y = labelValueLine(doc, `${bandSalesLabel(group.code, group.rate)}${currencyLabel}`, formatInvoiceAmount(group.total), y)
   }
