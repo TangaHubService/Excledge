@@ -1,8 +1,16 @@
 import { prisma } from '../lib/prisma';
 import type { Prisma } from '@prisma/client';
 import { isEbmEnabled, fix2, toRraDate, toRraDateTime } from './rra-ebm.service';
-import { buildVsdcEnvelope, selectPurchases, savePurchase, validateVsdcEnvelope, toRraReqDt } from './vsdc-api.service';
-import { receiveStockOnBranch, resolveActiveBranchId } from './inventory-ledger.service';
+import {
+  buildVsdcEnvelope,
+  selectPurchases,
+  savePurchase,
+  saveStockMaster,
+  validateVsdcEnvelope,
+  toRraReqDt,
+  type VsdcEnvelope,
+} from './vsdc-api.service';
+import { getCurrentStock, receiveStockOnBranch, resolveActiveBranchId } from './inventory-ledger.service';
 import { allocateItemCd, getOriginNationCode, DEFAULT_PKG_UNIT_CD } from './item-code.service';
 import { TaxService } from './tax.service';
 import { getTaxationTypes } from './rra-code.service';
@@ -17,8 +25,13 @@ import logger from '../utils/logger';
  *                              cache them for review.
  *  §71  confirmRraPurchase() — record/confirm a received purchase
  *                              (/trnsPurchase/savePurchases, pchsSttsCd='02'),
- *                              which also books the stock-in at RRA.
+ *                              which also books the stock-in at RRA; then push
+ *                              /stockMaster/saveStockMaster for remaining qty.
+ *                              Reject sends pchsSttsCd='04' (Canceled) to VSDC.
  */
+
+/** §4.11 Transaction Progress — used as pchsSttsCd. */
+const PCHS_STTS = { APPROVED: '02', CANCELED: '04' } as const;
 
 const CURSOR_RESOURCE = 'purchases';
 
@@ -268,6 +281,186 @@ async function resolvePurchaseLineProduct(
   return { product, localNm };
 }
 
+type PurchaseRow = {
+  id: number;
+  spplrTin: string;
+  spplrNm: string | null;
+  spplrBhfId: string | null;
+  spplrInvcNo: bigint;
+  rcptTyCd: string | null;
+  pmtTyCd: string | null;
+  remark: string | null;
+  rawResponse: unknown;
+  items: Array<PurchaseLine & {
+    pkg: { toNumber: () => number } | null;
+    qty: { toNumber: () => number };
+    splyAmt: { toNumber: () => number } | null;
+    dcRt: { toNumber: () => number } | null;
+    dcAmt: { toNumber: () => number } | null;
+    taxblAmt: { toNumber: () => number } | null;
+    taxAmt: { toNumber: () => number } | null;
+    totAmt: { toNumber: () => number } | null;
+  }>;
+};
+
+/** Map sales rcptTyCd (S/R) from selectTrnsPurchaseSales → purchase rcptTyCd (P/R). */
+function purchaseRcptTyCd(salesRcptTyCd: string | null): string {
+  const PURCHASE_RCPT_TY_CD_BY_SALES_RCPT_TY_CD: Record<string, string> = { S: 'P', R: 'R' };
+  return PURCHASE_RCPT_TY_CD_BY_SALES_RCPT_TY_CD[(salesRcptTyCd ?? '').toUpperCase()] ?? 'P';
+}
+
+function purchasePrcOrdCd(
+  opts: { prcOrdCd?: string },
+  rp: PurchaseRow,
+): string | undefined {
+  const fromOpts = opts.prcOrdCd?.trim();
+  const fromRow = (rp as { prcOrdCd?: string }).prcOrdCd?.trim();
+  const fromRaw = (rp.rawResponse as { prcOrdCd?: string } | null)?.prcOrdCd?.trim();
+  const value = fromOpts || fromRow || fromRaw;
+  return value || undefined;
+}
+
+/** §73 — refresh remaining qty after a stock change that skipped saveStockItems. */
+async function pushStockMastersAfterPurchase(
+  envelope: VsdcEnvelope,
+  organizationId: number,
+  branchId: number | null,
+  products: Array<{ id: number; itemCd: string | null }>,
+  regr: { id: string; name: string },
+  rraPurchaseId: number,
+): Promise<void> {
+  const seen = new Set<number>();
+  for (const product of products) {
+    if (seen.has(product.id) || !product.itemCd) continue;
+    seen.add(product.id);
+    const onHand = await getCurrentStock(organizationId, product.id, branchId);
+    const master = await saveStockMaster(envelope, product.itemCd, onHand, regr);
+    if (!master.success) {
+      logger.warn(
+        `[EBM] purchase #${rraPurchaseId}: stock master push failed for ${product.itemCd}: ${master.error}`,
+      );
+    }
+  }
+}
+
+/**
+ * Reject a pending B2B purchase at VSDC (pchsSttsCd 04 Canceled) then mark local REJECTED.
+ * When EBM is off, only the local status is updated.
+ */
+async function rejectRraPurchaseAtVsdc(
+  organizationId: number,
+  rp: PurchaseRow,
+  opts: { branchId?: number | null; userId?: number; prcOrdCd?: string },
+): Promise<{ success: boolean; error?: string }> {
+  if (!isEbmEnabled()) {
+    await prisma.rraPurchase.update({ where: { id: rp.id }, data: { status: 'REJECTED' } });
+    return { success: true };
+  }
+
+  const envelope = await buildVsdcEnvelope(organizationId, opts.branchId ?? null);
+  const envErr = validateVsdcEnvelope(envelope);
+  if (envErr) return { success: false, error: envErr };
+
+  const user = opts.userId
+    ? await prisma.user.findUnique({ where: { id: opts.userId }, select: { id: true, name: true } })
+    : null;
+  const regr = { id: String(user?.id ?? 'system'), name: user?.name ?? 'System' };
+  const now = new Date();
+
+  const taxblByBand: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 };
+  const taxByBand: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 };
+  const itemList = rp.items.map((it, idx) => {
+    const band = (it.taxTyCd ?? '').toUpperCase();
+    const slot = A_D.includes(band as typeof A_D[number]) ? band : 'A';
+    const qty = Math.abs(it.qty.toNumber());
+    const prc = Math.abs(it.prc.toNumber());
+    const splyAmt = fix2(it.splyAmt != null ? Math.abs(it.splyAmt.toNumber()) : qty * prc);
+    const taxAmt = it.taxAmt != null ? Math.abs(it.taxAmt.toNumber()) : 0;
+    const lineTot = it.totAmt != null ? Math.abs(it.totAmt.toNumber()) : splyAmt;
+    const taxblAmt = fix2(lineTot);
+    taxblByBand[slot] = fix2(taxblByBand[slot] + taxblAmt);
+    taxByBand[slot] = fix2(taxByBand[slot] + taxAmt);
+    return {
+      itemSeq: it.itemSeq ?? idx + 1,
+      itemCd: it.itemCd ?? undefined,
+      itemClsCd: it.itemClsCd ?? undefined,
+      itemNm: it.itemNm ?? 'Item',
+      bcd: it.bcd ?? undefined,
+      spplrItemClsCd: it.itemClsCd ?? undefined,
+      spplrItemCd: it.itemCd ?? undefined,
+      spplrItemNm: it.itemNm ?? undefined,
+      pkgUnitCd: it.pkgUnitCd ?? 'CT',
+      pkg: it.pkg != null ? it.pkg.toNumber() : qty,
+      qtyUnitCd: it.qtyUnitCd ?? 'U',
+      qty,
+      prc,
+      splyAmt: taxblAmt,
+      dcRt: it.dcRt != null ? it.dcRt.toNumber() : 0,
+      dcAmt: it.dcAmt != null ? it.dcAmt.toNumber() : 0,
+      taxblAmt,
+      taxTyCd: slot,
+      taxAmt,
+      totAmt: taxblAmt,
+      itemExprDt: null,
+    };
+  });
+
+  const totTaxblAmt = fix2(A_D.reduce((s, b) => s + taxblByBand[b], 0));
+  const totTaxAmt = fix2(A_D.reduce((s, b) => s + taxByBand[b], 0));
+  const prcOrdCd = purchasePrcOrdCd(opts, rp);
+
+  const payload: Record<string, unknown> = {
+    invcNo: Number(rp.spplrInvcNo),
+    orgInvcNo: 0,
+    spplrTin: rp.spplrTin,
+    spplrBhfId: rp.spplrBhfId ?? '00',
+    spplrNm: rp.spplrNm ?? '',
+    spplrInvcNo: Number(rp.spplrInvcNo),
+    regTyCd: 'M',
+    pchsTyCd: 'N',
+    ...(prcOrdCd ? { prcOrdCd } : {}),
+    rcptTyCd: purchaseRcptTyCd(rp.rcptTyCd),
+    pmtTyCd: rp.pmtTyCd ?? '01',
+    pchsSttsCd: PCHS_STTS.CANCELED,
+    cfmDt: toRraDateTime(now),
+    pchsDt: toRraDate(now),
+    wrhsDt: null,
+    cnclReqDt: toRraDateTime(now),
+    cnclDt: toRraDateTime(now),
+    totItemCnt: itemList.length,
+    taxblAmtA: taxblByBand.A, taxblAmtB: taxblByBand.B, taxblAmtC: taxblByBand.C, taxblAmtD: taxblByBand.D,
+    taxRtA: TAX_RATES.A, taxRtB: TAX_RATES.B, taxRtC: TAX_RATES.C, taxRtD: TAX_RATES.D,
+    taxAmtA: taxByBand.A, taxAmtB: taxByBand.B, taxAmtC: taxByBand.C, taxAmtD: taxByBand.D,
+    totTaxblAmt,
+    totTaxAmt,
+    totAmt: totTaxblAmt,
+    remark: rp.remark ?? '',
+    regrId: regr.id,
+    regrNm: regr.name,
+    modrId: regr.id,
+    modrNm: regr.name,
+    itemList,
+  };
+
+  try {
+    const res = await savePurchase(envelope, payload);
+    if (!res.success) {
+      return { success: false, error: res.error ?? 'savePurchases (reject) failed' };
+    }
+    await prisma.rraPurchase.update({ where: { id: rp.id }, data: { status: 'REJECTED' } });
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { lastSuccessfulVdsContact: new Date() },
+    });
+    logger.info(`[EBM] rejected RRA purchase #${rp.id} at VSDC (pchsSttsCd=${PCHS_STTS.CANCELED})`);
+    return { success: true };
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Purchase rejection failed';
+    logger.error(`[EBM] reject RRA purchase #${rp.id} failed`, e);
+    return { success: false, error: message };
+  }
+}
+
 export async function confirmRraPurchase(
   organizationId: number,
   rraPurchaseId: number,
@@ -287,8 +480,7 @@ export async function confirmRraPurchase(
   if (rp.status !== 'PENDING') return { success: false, error: `Purchase already ${rp.status.toLowerCase()}` };
 
   if (opts.reject) {
-    await prisma.rraPurchase.update({ where: { id: rraPurchaseId }, data: { status: 'REJECTED' } });
-    return { success: true };
+    return rejectRraPurchaseAtVsdc(organizationId, rp as PurchaseRow, opts);
   }
 
   if (!isEbmEnabled()) return { success: false, error: 'EBM is not enabled' };
@@ -359,16 +551,7 @@ export async function confirmRraPurchase(
   // Spec sample: totAmt equals totTaxblAmt (do NOT add totTaxAmt).
   const totAmt = totTaxblAmt;
   const now = new Date();
-
-  // The pull side (syncRraPurchases above) caches rcptTyCd straight from RRA's
-  // *Sales* Receipt Type code list (S=Sale, R=Refund after Sale) — that's the
-  // vocabulary `/trnsPurchase/selectTrnsPurchaseSales` returns, since it's the
-  // supplier's own sale record. `/trnsPurchase/savePurchases` validates this
-  // field against the distinct *Purchase* Receipt Type list (P=Purchase,
-  // R=Refund after Purchase) instead; forwarding the sales code unmapped gets
-  // rejected with `resultCd 913: Code value error ... [<rcptTyCd>]`.
-  const PURCHASE_RCPT_TY_CD_BY_SALES_RCPT_TY_CD: Record<string, string> = { S: 'P', R: 'R' };
-  const rcptTyCd = PURCHASE_RCPT_TY_CD_BY_SALES_RCPT_TY_CD[(rp.rcptTyCd ?? '').toUpperCase()] ?? 'P';
+  const prcOrdCd = purchasePrcOrdCd(opts, rp as PurchaseRow);
 
   const payload: Record<string, unknown> = {
     invcNo: Number(rp.spplrInvcNo),
@@ -381,12 +564,10 @@ export async function confirmRraPurchase(
     pchsTyCd: 'N',
     // §38: the RRA purchase order code for this incoming purchase, when the
     // operator provides one (the select-purchases pull does not return it).
-    ...((opts.prcOrdCd?.trim() || (rp as { prcOrdCd?: string }).prcOrdCd || (rp.rawResponse as { prcOrdCd?: string } | null)?.prcOrdCd)
-      ? { prcOrdCd: (opts.prcOrdCd?.trim() || (rp as { prcOrdCd?: string }).prcOrdCd || (rp.rawResponse as { prcOrdCd?: string }).prcOrdCd || '').trim() }
-      : {}),
-    rcptTyCd,
+    ...(prcOrdCd ? { prcOrdCd } : {}),
+    rcptTyCd: purchaseRcptTyCd(rp.rcptTyCd),
     pmtTyCd: rp.pmtTyCd ?? '01',
-    pchsSttsCd: '02', // §4.x — 02 Approved (records the purchase + stock-in)
+    pchsSttsCd: PCHS_STTS.APPROVED, // §4.11 — 02 Approved (records the purchase + stock-in)
     cfmDt: toRraDateTime(now),
     pchsDt: toRraDate(now),
     wrhsDt: toRraDateTime(now),
@@ -448,6 +629,16 @@ export async function confirmRraPurchase(
         });
         stockBooked += 1;
       }
+
+      // savePurchases books IO at RRA but not stock master — push remaining qty.
+      await pushStockMastersAfterPurchase(
+        envelope,
+        organizationId,
+        stockBranchId,
+        resolved.map((r) => r.product),
+        regr,
+        rraPurchaseId,
+      );
     } else {
       logger.warn(`[EBM] confirm RRA purchase #${rraPurchaseId}: no active branch — local stock not booked`);
     }

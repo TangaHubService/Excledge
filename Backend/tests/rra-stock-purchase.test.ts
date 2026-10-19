@@ -201,6 +201,19 @@ describe("confirmRraPurchase (§71)", () => {
     // RRA already booked the stock-in from /trnsPurchase/savePurchases —
     // this ledger row must not be queued for /stock/saveStockItems too.
     expect(booked.skipEbmSync).toBe(true)
+
+    // §73: remaining qty must still be pushed (savePurchases does not update master).
+    expect(stockMasterArgs.itemCd).toBe("RW2CTU0000001")
+    expect(stockMasterArgs.rsdQty).toBe(250)
+  })
+
+  it("rejects at VSDC with pchsSttsCd 04 (Canceled) and does not book stock", async () => {
+    const r = await confirmRraPurchase(1, 7, { userId: 3, reject: true })
+    expect(r.success).toBe(true)
+    expect(savePurchasePayload.pchsSttsCd).toBe("04")
+    expect(savePurchasePayload.cnclDt).toBeTruthy()
+    expect(addStockCalls).toHaveLength(0)
+    expect(stockMasterArgs).toBeNull()
   })
 
   it("falls back to the default branch when none is supplied so local stock still increments", async () => {
