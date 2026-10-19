@@ -154,34 +154,52 @@ export default function InventorySummaryDashboard() {
     }
   };
 
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat().format(num);
+  const toNum = (value: unknown) => {
+    const n = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(n) ? n : 0;
   };
 
-  const formatCurrency = (num: number) => {
+  const formatNumber = (num: unknown) => {
+    return new Intl.NumberFormat().format(toNum(num));
+  };
+
+  const formatCurrency = (num: unknown) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'RWF',
       minimumFractionDigits: 0,
-    }).format(num);
+    }).format(toNum(num));
   };
 
-  // Calculate totals from summary array
+  /** Shrink card totals so long figures stay inside the card. */
+  const metricClassName = (display: string) => {
+    const len = display.replace(/[^\d]/g, '').length;
+    if (len >= 14) return 'text-sm sm:text-base';
+    if (len >= 11) return 'text-base sm:text-lg';
+    if (len >= 8) return 'text-lg sm:text-xl';
+    return 'text-2xl';
+  };
+
   const calculateTotals = () => {
     if (!summaryData?.summary || !Array.isArray(summaryData.summary) || summaryData.summary.length === 0) {
       return null;
     }
 
     return summaryData.summary.reduce((acc, item) => ({
-      totalIn: acc.totalIn + item.totalIn,
-      totalOut: acc.totalOut + item.totalOut,
-      totalCost: acc.totalCost + item.totalCost,
-      totalStock: acc.totalStock + item.currentStock,
-      totalMovements: acc.totalMovements + item.movements.IN + item.movements.OUT,
+      totalIn: acc.totalIn + toNum(item.totalIn),
+      totalOut: acc.totalOut + toNum(item.totalOut),
+      totalCost: acc.totalCost + toNum(item.totalCost),
+      totalStock: acc.totalStock + toNum(item.currentStock),
+      totalMovements:
+        acc.totalMovements + toNum(item.movements?.IN) + toNum(item.movements?.OUT),
     }), { totalIn: 0, totalOut: 0, totalCost: 0, totalStock: 0, totalMovements: 0 });
   };
 
   const totals = calculateTotals();
+  const totalInLabel = totals ? formatNumber(totals.totalIn) : '';
+  const totalOutLabel = totals ? formatNumber(totals.totalOut) : '';
+  const totalStockLabel = totals ? formatNumber(totals.totalStock) : '';
+  const totalCostLabel = totals ? formatCurrency(totals.totalCost) : '';
 
   return (
     <div className="space-y-6 p-6">
@@ -261,66 +279,78 @@ export default function InventorySummaryDashboard() {
           {/* Summary Cards */}
           {totals && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="border-none shadow-lg bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/40 dark:to-gray-800 ring-1 ring-emerald-100 dark:ring-emerald-900/50">
+              <Card className="min-w-0 overflow-hidden border-none shadow-lg bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/40 dark:to-gray-800 ring-1 ring-emerald-100 dark:ring-emerald-900/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
                     {t('inventory.totalStockIn') || 'Total Stock IN'}
                   </CardTitle>
-                  <div className="rounded-full bg-emerald-100 dark:bg-emerald-900/50 p-2">
+                  <div className="rounded-full bg-emerald-100 dark:bg-emerald-900/50 p-2 shrink-0">
                     <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {formatNumber(totals.totalIn)}
+                <CardContent className="min-w-0">
+                  <div
+                    className={`font-bold tabular-nums tracking-tight text-gray-900 dark:text-white break-all leading-tight ${metricClassName(totalInLabel)}`}
+                    title={totalInLabel}
+                  >
+                    {totalInLabel}
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="border-none shadow-lg bg-gradient-to-br from-rose-50 to-white dark:from-rose-950/40 dark:to-gray-800 ring-1 ring-rose-100 dark:ring-rose-900/50">
+              <Card className="min-w-0 overflow-hidden border-none shadow-lg bg-gradient-to-br from-rose-50 to-white dark:from-rose-950/40 dark:to-gray-800 ring-1 ring-rose-100 dark:ring-rose-900/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-rose-700 dark:text-rose-400">
                     {t('inventory.totalStockOut') || 'Total Stock OUT'}
                   </CardTitle>
-                  <div className="rounded-full bg-rose-100 dark:bg-rose-900/50 p-2">
+                  <div className="rounded-full bg-rose-100 dark:bg-rose-900/50 p-2 shrink-0">
                     <TrendingDown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {formatNumber(totals.totalOut)}
+                <CardContent className="min-w-0">
+                  <div
+                    className={`font-bold tabular-nums tracking-tight text-gray-900 dark:text-white break-all leading-tight ${metricClassName(totalOutLabel)}`}
+                    title={totalOutLabel}
+                  >
+                    {totalOutLabel}
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="border-none shadow-lg bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/40 dark:to-gray-800 ring-1 ring-purple-100 dark:ring-purple-900/50">
+              <Card className="min-w-0 overflow-hidden border-none shadow-lg bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/40 dark:to-gray-800 ring-1 ring-purple-100 dark:ring-purple-900/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-400">
                     {t('inventory.currentStock') || 'Current Stock'}
                   </CardTitle>
-                  <div className="rounded-full bg-purple-100 dark:bg-purple-900/50 p-2">
+                  <div className="rounded-full bg-purple-100 dark:bg-purple-900/50 p-2 shrink-0">
                     <Package className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {formatNumber(totals.totalStock)}
+                <CardContent className="min-w-0">
+                  <div
+                    className={`font-bold tabular-nums tracking-tight text-gray-900 dark:text-white break-all leading-tight ${metricClassName(totalStockLabel)}`}
+                    title={totalStockLabel}
+                  >
+                    {totalStockLabel}
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="border-none shadow-lg bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/40 dark:to-gray-800 ring-1 ring-blue-100 dark:ring-blue-900/50">
+              <Card className="min-w-0 overflow-hidden border-none shadow-lg bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/40 dark:to-gray-800 ring-1 ring-blue-100 dark:ring-blue-900/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-400">
                     {t('inventory.totalCost') || 'Total Cost'}
                   </CardTitle>
-                  <div className="rounded-full bg-blue-100 dark:bg-blue-900/50 p-2">
+                  <div className="rounded-full bg-blue-100 dark:bg-blue-900/50 p-2 shrink-0">
                     <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {formatCurrency(totals.totalCost)}
+                <CardContent className="min-w-0">
+                  <div
+                    className={`font-bold tabular-nums tracking-tight text-gray-900 dark:text-white break-all leading-tight ${metricClassName(totalCostLabel)}`}
+                    title={totalCostLabel}
+                  >
+                    {totalCostLabel}
                   </div>
                 </CardContent>
               </Card>
@@ -383,25 +413,25 @@ export default function InventorySummaryDashboard() {
                                 <div className="text-xs text-gray-500 dark:text-gray-400">{branch.code}</div>
                               )}
                             </TableCell>
-                            <TableCell className="text-right text-emerald-600 dark:text-emerald-400 font-mono">
+                            <TableCell className="text-right text-emerald-600 dark:text-emerald-400 font-mono tabular-nums whitespace-nowrap">
                               +{formatNumber(item.totalIn)}
                             </TableCell>
-                            <TableCell className="text-right text-rose-600 dark:text-rose-400 font-mono">
+                            <TableCell className="text-right text-rose-600 dark:text-rose-400 font-mono tabular-nums whitespace-nowrap">
                               -{formatNumber(item.totalOut)}
                             </TableCell>
-                            <TableCell className="text-right font-semibold font-mono">
+                            <TableCell className="text-right font-semibold font-mono tabular-nums whitespace-nowrap">
                               {formatNumber(item.currentStock)}
                             </TableCell>
-                            <TableCell className="text-right font-mono">
+                            <TableCell className="text-right font-mono tabular-nums whitespace-nowrap">
                               {formatCurrency(item.totalCost)}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="space-y-1">
                                 <div className="text-xs text-emerald-600 dark:text-emerald-400">
-                                  IN: {item.movements.IN}
+                                  IN: {toNum(item.movements?.IN)}
                                 </div>
                                 <div className="text-xs text-rose-600 dark:text-rose-400">
-                                  OUT: {item.movements.OUT}
+                                  OUT: {toNum(item.movements?.OUT)}
                                 </div>
                               </div>
                             </TableCell>
@@ -413,7 +443,7 @@ export default function InventorySummaryDashboard() {
                                       {type.replace(/_/g, ' ')}
                                     </Badge>
                                     <span className="text-gray-500 dark:text-gray-400">
-                                      {stats.count} × {formatNumber(stats.quantity)}
+                                      {toNum(stats.count)} × {formatNumber(stats.quantity)}
                                     </span>
                                   </div>
                                 ))}

@@ -88,13 +88,13 @@ export const SIDEBAR_SECTIONS: { label: string; items: { key: keyof ISidebarConf
         ],
     },
     {
-        label: 'Inventory',
+        label: 'Items',
         items: [
-            { key: 'inventoryAll', label: 'All Inventory', route: '/dashboard/inventory-all' },
+            { key: 'inventoryAll', label: 'All Items', route: '/dashboard/inventory-all' },
             { key: 'lowStock', label: 'Low Stock', route: '/dashboard/low-stock' },
             { key: 'expiredProducts', label: 'Expired Products', route: '/dashboard/expired' },
             { key: 'stockMovementHistory', label: 'Stock Movement History', route: '/dashboard/ledger-history' },
-            { key: 'inventorySummary', label: 'Inventory Summary', route: '/dashboard/inventory-summary' },
+            { key: 'inventorySummary', label: 'Items Summary', route: '/dashboard/inventory-summary' },
             { key: 'stockTransfers', label: 'Stock Transfers', route: '/dashboard/stock-transfers' },
             { key: 'warehouses', label: 'Warehouses', route: '/dashboard/warehouses' },
             { key: 'production', label: 'Production & BOM', route: '/dashboard/production' },
@@ -136,7 +136,7 @@ export const SIDEBAR_SECTIONS: { label: string; items: { key: keyof ISidebarConf
         label: 'Reports',
         items: [
             { key: 'salesReports', label: 'Sales Reports', route: '/dashboard/sales-reports' },
-            { key: 'inventoryReports', label: 'Inventory Reports', route: '/dashboard/inventory-reports' },
+            { key: 'inventoryReports', label: 'Items Reports', route: '/dashboard/inventory-reports' },
             { key: 'stockReports', label: 'Stock Movement Report', route: '/dashboard/stock-reports' },
             { key: 'debtPaymentsReport', label: 'Debt Payments', route: '/dashboard/debt-payments-report' },
             { key: 'cashFlowReport', label: 'Cash Flow', route: '/dashboard/cash-flow-report' },
