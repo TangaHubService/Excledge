@@ -442,6 +442,8 @@ export async function applyRraStockMoves(
         select: { id: true },
       });
       if (existing) { skipped += 1; continue; }
+      // Already on RRA via /stock/selectStockItems — do not re-queue as
+      // TRANSFER_IN (sarTyCd 04) through /stock/saveStockItems.
       await addStock({
         organizationId,
         productId: product.id,
@@ -453,6 +455,7 @@ export async function applyRraStockMoves(
         referenceType: 'RRA_STOCK_MOVE',
         note: `HQ/branch stock move sarNo ${move.sarNo}`,
         metadata: { rraSarNo: move.sarNo, itemSeq: line.itemSeq ?? null } as any,
+        skipEbmSync: true,
       });
       applied += 1;
     }
