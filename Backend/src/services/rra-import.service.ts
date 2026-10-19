@@ -27,8 +27,15 @@ import logger from '../utils/logger';
 
 const CURSOR_RESOURCE = 'imports';
 
-/** VSDC §4.20 Import Item Status — 2 Approved, 3 Rejected (1 = pending, the incoming default). */
-const IMPT_STTS = { APPROVED: '2', REJECTED: '3' } as const;
+/** VSDC §4.18: 1 Unsent · 2 Waiting · 3 Approved · 4 Cancelled */
+const IMPT_STTS = { UNSENT: '1', WAITING: '2', APPROVED: '3', CANCELLED: '4' } as const;
+
+function localStatusFromImptStts(code: string | undefined): 'PENDING' | 'APPROVED' | 'REJECTED' {
+  const c = String(code ?? '').trim();
+  if (c === IMPT_STTS.APPROVED) return 'APPROVED';
+  if (c === IMPT_STTS.CANCELLED) return 'REJECTED';
+  return 'PENDING';
+}
 
 async function getCursor(organizationId: number): Promise<string> {
   const row = await prisma.rraSyncCursor.findUnique({
@@ -68,7 +75,7 @@ export async function syncRraImports(
         fetched: 0,
         cached: 0,
         lastReqDt: prevCursor,
-        error: `Request date must be later than the previous request (${prevCursor.slice(0, 8)})`,
+        error: `Request date must be later than the previous request (${prevCursor})`,
       };
     }
   } else {
@@ -86,6 +93,9 @@ export async function syncRraImports(
   const list = res.data?.itemList ?? [];
   let cached = 0;
   for (const it of list) {
+    const stts = (it as { imptItemsttsCd?: string; imptItemSttsCd?: string }).imptItemSttsCd
+      ?? (it as { imptItemsttsCd?: string }).imptItemsttsCd;
+    const mappedStatus = localStatusFromImptStts(stts);
     await prisma.rraImportItem.upsert({
       where: {
         organizationId_taskCd_dclDe_itemSeq: {
@@ -118,10 +128,13 @@ export async function syncRraImports(
         invcFcurExcrt: it.invcFcurExcrt ?? null,
         itemCd: it.itemCd ?? null,
         itemClsCd: it.itemClsCd ?? null,
+        status: mappedStatus,
         rawResponse: it as unknown as Prisma.InputJsonValue,
       },
-      // Never clobber a line the operator has already actioned.
-      update: { rawResponse: it as unknown as Prisma.InputJsonValue },
+      update: {
+        rawResponse: it as unknown as Prisma.InputJsonValue,
+        ...(mappedStatus !== 'PENDING' ? { status: mappedStatus } : {}),
+      },
     });
     cached += 1;
   }
@@ -188,7 +201,7 @@ export async function actionRraImport(
     hsCd: line.hsCd ?? '',
     itemClsCd,
     itemCd: itemCd ?? '',
-    imptItemSttsCd: action === 'approve' ? IMPT_STTS.APPROVED : IMPT_STTS.REJECTED,
+    imptItemSttsCd: action === 'approve' ? IMPT_STTS.APPROVED : IMPT_STTS.CANCELLED,
     remark: opts.remark ?? '',
     modrId: modr.id,
     modrNm: modr.name,

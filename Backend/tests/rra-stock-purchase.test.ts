@@ -143,6 +143,9 @@ describe("sarTyCdFor (§4.19 stock in/out reason)", () => {
     expect(stockMovementNeedsEbm("SALE")).toBe(true)
     expect(stockMovementNeedsEbm("PURCHASE")).toBe(true)
   })
+  it("does not report INITIAL_STOCK (product create) to stock IO / master", () => {
+    expect(stockMovementNeedsEbm("INITIAL_STOCK")).toBe(false)
+  })
 })
 
 describe("submitStockLedgerEntryToEbm (§72/§73)", () => {

@@ -22,9 +22,24 @@ vi.mock("../src/lib/prisma", () => ({
       })),
       update: vi.fn(async () => ({})),
     },
+    product: {
+      findFirst: vi.fn(async ({ where }: any) => ({
+        id: where?.id ?? 77,
+        itemClsCd: "5059690800",
+        itemCd: "RW2CTU0000009",
+        itemType: "PRODUCT",
+        unitPrice: 100,
+      })),
+      update: vi.fn(async () => ({})),
+    },
     user: { findUnique: vi.fn(async () => ({ id: 2, name: "Importer" })) },
     organization: { update: vi.fn(async () => ({})) },
   },
+}))
+
+vi.mock("../src/services/product-sync.service", () => ({
+  applySellingPriceOnReceipt: vi.fn(async () => undefined),
+  syncProductToRraAsync: vi.fn(),
 }))
 
 vi.mock("../src/services/rra-ebm.service", async () => {
@@ -93,10 +108,10 @@ describe("syncRraImports — request-date validation (§67)", () => {
 })
 
 describe("actionRraImport — approve/reject (§68)", () => {
-  it("approves with imptItemSttsCd 2 and books the stock-in when a product is linked", async () => {
+  it("approves with imptItemSttsCd 3 and books the stock-in when a product is linked", async () => {
     const r = await actionRraImport(1, 1, "approve", { branchId: 3, userId: 2, itemClsCd: "5059690800", itemCd: "RW2CTU0000009", linkProductId: 77 })
     expect(r.success).toBe(true)
-    expect(updatePayload.imptItemSttsCd).toBe("2")
+    expect(updatePayload.imptItemSttsCd).toBe("3")
     expect(updatePayload.taskCd).toBe("TASK1")
     expect(updatePayload.itemClsCd).toBe("5059690800")
 
@@ -114,10 +129,10 @@ describe("actionRraImport — approve/reject (§68)", () => {
     expect(addStockArgs.branchId).toBe(9)
   })
 
-  it("rejects with imptItemSttsCd 3 and does not touch stock", async () => {
+  it("cancels with imptItemSttsCd 4 and does not touch stock", async () => {
     const r = await actionRraImport(1, 1, "reject", { branchId: 3, userId: 2, remark: "wrong HS code" })
     expect(r.success).toBe(true)
-    expect(updatePayload.imptItemSttsCd).toBe("3")
+    expect(updatePayload.imptItemSttsCd).toBe("4")
     expect(addStockArgs).toBeNull()
   })
 

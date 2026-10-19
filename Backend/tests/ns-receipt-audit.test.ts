@@ -275,11 +275,13 @@ describe('NS-8: EJ text block', () => {
 });
 
 describe('NS-9: receipt content print rules', () => {
-  it('B-18% prints on every receipt even when unused; A prints only when used', () => {
+  it('band totals print only for tax codes used on line items', () => {
     const onlyA = taxGroups(renderPayload({ items: [renderItem({ taxCode: 'A', vatPct: 0, taxAmount: 0, total: 500, subtotal: 500, net: 500 })] }));
-    expect(onlyA.find((g) => g.code === 'B')).toBeDefined(); // §7.22 seeded
+    expect(onlyA.find((g) => g.code === 'A')).toBeDefined();
+    expect(onlyA.find((g) => g.code === 'B')).toBeUndefined();
     const onlyB = taxGroups(renderPayload({ items: [renderItem()] }));
-    expect(onlyB.find((g) => g.code === 'A')).toBeUndefined(); // §7.23 absent
+    expect(onlyB.find((g) => g.code === 'B')).toBeDefined();
+    expect(onlyB.find((g) => g.code === 'A')).toBeUndefined();
     expect(bandSalesLabel('A', 0)).toBe('TOTAL A-EX');
     expect(bandSalesLabel('B', 18)).toBe('TOTAL B-18.00%');
   });

@@ -366,7 +366,7 @@ export async function listRraImports(req: BranchAuthRequest, res: Response) {
       prisma.rraImportItem.count({ where: { organizationId, status: 'PENDING' } }),
       prisma.rraSyncCursor.findUnique({ where: { organizationId_resource: { organizationId, resource: 'imports' } } }),
     ]);
-    res.json(success({ imports: rows, pending, lastRequestDate: cursor?.lastReqDt?.slice(0, 8) ?? null }));
+    res.json(success({ imports: rows, pending, lastRequestDate: cursor?.lastReqDt ?? null }));
   } catch (e: any) {
     console.error('[RRA imports list]', e);
     res.status(500).json(apiError('Failed to list import declarations'));

@@ -893,12 +893,10 @@ export function buildRraSendReceiptPayload(
       // ("length must be between 0 and 20") — clamp the trade name.
       trdeNm: clampField(org.name, 20),
       adrs: clampField(org.address, 200),
-      // Seller company information, one line each (name, address, phone),
-      // printed above the receipt body on the VSDC printout. VSDC caps
-      // topMsg at 300 characters (910 "size must be between 0 and 300").
       topMsg: clampField(
         [
           sanitizeVsdcText(org.name),
+          org.TIN?.trim() ? `TIN:${sanitizeVsdcText(org.TIN)}` : '',
           sanitizeVsdcText(org.address),
           org.phone?.trim() ? `Tel:${sanitizeVsdcText(org.phone)}` : '',
         ].filter(Boolean).join('\n'),

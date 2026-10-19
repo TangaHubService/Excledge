@@ -421,18 +421,11 @@ export function renderSalesInvoiceHtml(data: RenderInvoicePayload): string {
 
   type SummaryRow = readonly [string, number, boolean]
 
-  // Grand total sliced by tax band ("TOTAL A-EX / TOTAL B-18.00%" — the
-  // per-type sales totals): every programmed band with rate > 0, plus B
-  // always, plus any band with sales (R2 — a zero-rate label only appears
-  // when an item with that rate was sold).
   const salesBandRows: SummaryRow[] = salesBands(data)
     .map((group) => (
       [bandSalesLabel(group.code, group.rate), group.total, false] as SummaryRow
     ))
 
-  // Per-band tax rows under each label actually in play (R2/R3): programmed
-  // bands with rate > 0 plus used bands, so TOTAL TAX always equals the sum
-  // of the printed per-rate taxes (R11).
   const taxBreakdownRows: SummaryRow[] = taxBandRows(data)
     .map((group) => (
       [`TOTAL TAX ${group.code}`, group.tax, false] as SummaryRow

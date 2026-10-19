@@ -191,21 +191,22 @@ describe('spec case (c) — training receipt math', () => {
   });
 });
 
-describe('R2 zero-rate label behavior', () => {
+describe('band totals only for item tax codes in play', () => {
   const payloadOf = (items: any[], taxRates?: [number, number, number, number]) =>
     ({ items, totals: { grandTotal: 0 }, taxRates } as any);
 
-  it('B prints even when unused; unused zero-rate labels stay hidden', () => {
+  it('unused bands (including B) stay hidden when no items use them', () => {
     const data = payloadOf([{ taxCode: 'A', vatPct: 0, total: 1000, taxAmount: 0 }]);
-    expect(salesBands(data).map((g) => g.code).sort()).toEqual(['A', 'B']);
-    expect(taxGroups(data).map((g) => g.code).sort()).toEqual(['A', 'B']);
+    expect(salesBands(data).map((g) => g.code)).toEqual(['A']);
+    expect(taxGroups(data).map((g) => g.code)).toEqual(['A']);
+    expect(taxBandRows(data).map((g) => g.code)).toEqual([]);
   });
 
-  it('a programmed rate > 0 prints even with no sales on it', () => {
+  it('only bands present on line items print, even if another rate is programmed', () => {
     const data = payloadOf([{ taxCode: 'B', vatPct: 18, total: 100, taxAmount: 15.25 }], [0, 18, 5, 0]);
-    expect(salesBands(data).map((g) => g.code)).toContain('C');
-    expect(taxBandRows(data).map((g) => g.code)).toContain('C');
-    // …while the zero-rate D label stays hidden.
+    expect(salesBands(data).map((g) => g.code)).toEqual(['B']);
+    expect(taxBandRows(data).map((g) => g.code)).toEqual(['B']);
+    expect(salesBands(data).map((g) => g.code)).not.toContain('C');
     expect(salesBands(data).map((g) => g.code)).not.toContain('D');
   });
 

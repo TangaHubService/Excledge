@@ -117,6 +117,7 @@ describe("S11 mapping (v1.0.5)", () => {
   })
   it("SALE needs EBM stock sync", () => {
     expect(stockMovementNeedsEbm("SALE")).toBe(true)
+    expect(stockMovementNeedsEbm("INITIAL_STOCK")).toBe(false)
   })
 })
 

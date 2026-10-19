@@ -48,6 +48,18 @@ import {
 const todayIso = () => new Date().toISOString().split("T")[0];
 const daysAgoIso = (n: number) => new Date(Date.now() - n * 864e5).toISOString().split("T")[0];
 
+const formatLastReqDt = (raw: string | null | undefined): string => {
+  if (!raw) return "";
+  const d = raw.replace(/\D/g, "");
+  if (d.length >= 14) {
+    return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)} ${d.slice(8, 10)}:${d.slice(10, 12)}:${d.slice(12, 14)}`;
+  }
+  if (d.length >= 8) {
+    return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+  }
+  return raw;
+};
+
 const money = (n: number | null | undefined) =>
   (Number(n ?? 0)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const formatInt = (n: number | null | undefined) => (Number(n ?? 0)).toLocaleString("en-US");
@@ -1190,7 +1202,6 @@ interface RraImport {
 }
 
 function ImportDeclarationsCard() {
-  const [requestDate, setRequestDate] = useState("");
   const [imports, setImports] = useState<RraImport[]>([]);
   const [lastReq, setLastReq] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1218,10 +1229,9 @@ function ImportDeclarationsCard() {
   const sync = async () => {
     setBusy(true);
     try {
-      const res = await apiClient.syncRraImports(requestDate || undefined);
+      const res = await apiClient.syncRraImports();
       const out = (res as any)?.data ?? res;
       toast.success(`Pulled ${out?.cached ?? 0} import line(s) from RRA`);
-      setRequestDate("");
       await load();
     } catch (e: any) {
       toast.error(e?.message ?? "Import pull failed");
@@ -1278,19 +1288,20 @@ function ImportDeclarationsCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Ship className="size-4" /> Import declarations</CardTitle>
         <CardDescription>
-          Import declaration lines pulled from RRA. Classify and approve or reject each one — an approval books the stock-in. Each pull's request date must be later than the previous one.
+          Import declaration lines pulled from RRA. Classify and approve or reject each one — an approval books the stock-in.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="imp-date">Request from date <span className="text-muted-foreground">(optional)</span></Label>
-            <Input id="imp-date" type="date" value={requestDate} max={todayIso()} onChange={(e) => setRequestDate(e.target.value)} className="w-40" />
-          </div>
+        <div className="flex flex-wrap items-center gap-3">
           <Button onClick={sync} disabled={busy}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Pull from RRA
           </Button>
-          {lastReq && <span className="text-xs text-muted-foreground">Last request: {lastReq}</span>}
+          <div className="inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm text-sky-950">
+            <span className="text-xs font-semibold uppercase tracking-wide text-sky-700">Last request</span>
+            <span className="font-mono font-semibold tabular-nums">
+              {lastReq ? formatLastReqDt(lastReq) : "—"}
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto rounded-lg border">
@@ -1540,7 +1551,7 @@ function AuditorOverviewCard() {
                     {(data.syncCursors ?? []).map((c: any) => (
                       <TableRow key={c.resource}>
                         <TableCell>{c.resource}</TableCell>
-                        <TableCell>{c.lastReqDt}</TableCell>
+                        <TableCell className="font-mono text-xs">{formatLastReqDt(c.lastReqDt)}</TableCell>
                         <TableCell>{c.lastRunAt ? new Date(c.lastRunAt).toLocaleString() : "—"}</TableCell>
                         <TableCell className="max-w-[240px] truncate">{c.lastResult ?? "—"}</TableCell>
                       </TableRow>

@@ -148,17 +148,16 @@ describe("per-tax-type sales totals (Total A/B/C/D)", () => {
     return invoice
   }
 
-  it("A4 prints one sales-total row per band in play (B always, even at zero)", async () => {
+  it("A4 prints one sales-total row per band that has items", async () => {
     const drawn = await captureDrawnText(() => generateEbmInvoicePdf(bandFixture(), "A4"))
     const blob = drawn.join("\n")
-    // R3 labels: exempt band as A-EX, taxed bands with their rate.
     for (const label of ["Total A-EX", "Total B-18.00%", "Total C-0.00%", "Total D-0.00%"]) {
       expect(drawn).toContain(label)
     }
     expect(blob).not.toMatch(/Rwf/i)
   })
 
-  it("A4 omits unused bands but keeps B at zero sales", async () => {
+  it("A4 omits unused bands entirely (no empty Total A/C/D on a B-only invoice)", async () => {
     const invoice = normalOriginalFixture()
     invoice.items = invoice.items.filter((i) => i.taxCode === "B")
     const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))

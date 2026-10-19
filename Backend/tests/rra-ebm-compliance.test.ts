@@ -380,24 +380,22 @@ function makePayload(overrides: {
   };
 }
 
-describe('taxGroups — RRA checklist §46/§48/§49 (A/B/C/D tax label printing)', () => {
-  it('§48: tax code B always appears at the statutory rate, even with zero sales', () => {
+describe('taxGroups — A/B/C/D totals only for bands used on line items', () => {
+  it('unused B is omitted when the invoice has only A items', () => {
     const groups = taxGroups(makePayload({ items: [makeItem({ taxCode: 'A', vatPct: 0 })] }));
-    const bGroup = groups.find((g) => g.code === 'B');
-    expect(bGroup).toBeDefined();
-    expect(bGroup!.rate).toBe(18);
-    expect(bGroup!.total).toBe(0);
-    expect(bGroup!.tax).toBe(0);
+    expect(groups.find((g) => g.code === 'B')).toBeUndefined();
+    expect(groups.find((g) => g.code === 'A')).toBeDefined();
   });
 
-  it('§49: tax codes A/C/D only appear when a line item actually used them', () => {
+  it('tax codes A/C/D only appear when a line item actually used them', () => {
     const groups = taxGroups(makePayload({ items: [makeItem({ taxCode: 'B', vatPct: 18, taxAmount: 18 })] }));
+    expect(groups.find((g) => g.code === 'B')).toBeDefined();
     expect(groups.find((g) => g.code === 'A')).toBeUndefined();
     expect(groups.find((g) => g.code === 'C')).toBeUndefined();
     expect(groups.find((g) => g.code === 'D')).toBeUndefined();
   });
 
-  it('§46: a used code accumulates totals from its line items, on top of the forced B row', () => {
+  it('a used code accumulates totals from its line items only', () => {
     const groups = taxGroups(makePayload({
       items: [
         makeItem({ taxCode: 'A', vatPct: 0, total: 50, taxAmount: 0 }),
@@ -406,7 +404,7 @@ describe('taxGroups — RRA checklist §46/§48/§49 (A/B/C/D tax label printing
     }));
     const aGroup = groups.find((g) => g.code === 'A');
     expect(aGroup!.total).toBe(80);
-    expect(groups.find((g) => g.code === 'B')).toBeDefined();
+    expect(groups.map((g) => g.code)).toEqual(['A']);
   });
 });
 
@@ -690,13 +688,13 @@ describe('buildRraSendReceiptPayload — submission guards', () => {
     expect(payload.receipt.adrs.length).toBeLessThanOrEqual(200);
   });
 
-  it('sends the seller company info as the receipt topMsg (name, address, phone lines)', () => {
+  it('sends the seller company info as the receipt topMsg (name, TIN, address, phone lines)', () => {
     const full = buildRraSendReceiptPayload(
       makeSale(),
       { TIN: '100000000', name: 'Seller', address: 'Kigali', phone: '+250788000000' },
       '01',
     ) as any;
-    expect(full.receipt.topMsg).toBe('Seller\nKigali\nTel:+250788000000');
+    expect(full.receipt.topMsg).toBe('Seller\nTIN:100000000\nKigali\nTel:+250788000000');
     expect(full.receipt.btmMsg).toBe('Thank you for your business');
     const bare = buildRraSendReceiptPayload(
       makeSale(),
@@ -803,13 +801,13 @@ describe('VSDC buyer identity mapping — official receipt structure', () => {
     expect(toVsdcCustTinMobile(null)).toBeNull();
   });
 
-  it('topMsg carries the seller name, address and phone on separate lines (≤ 300 chars)', () => {
+  it('topMsg carries the seller name, TIN, address and phone on separate lines (≤ 300 chars)', () => {
     const payload = buildRraSendReceiptPayload(
       makeBuyerSale({ TIN: '100000001', phone: '', customerType: 'INDIVIDUAL' }),
       { TIN: '999945560', name: 'Exceledge demo pharmacy', address: 'KN 100 ST', phone: '0788888888' },
       '01',
     ) as any;
-    expect(receiptOf(payload).topMsg).toBe('Exceledge demo pharmacy\nKN 100 ST\nTel:0788888888');
+    expect(receiptOf(payload).topMsg).toBe('Exceledge demo pharmacy\nTIN:999945560\nKN 100 ST\nTel:0788888888');
     const long = buildRraSendReceiptPayload(
       makeBuyerSale({ TIN: '100000001', phone: '', customerType: 'INDIVIDUAL' }),
       { TIN: '999945560', name: 'N'.repeat(400), address: null },
