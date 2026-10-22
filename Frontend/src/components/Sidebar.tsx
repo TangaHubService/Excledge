@@ -110,8 +110,8 @@ const baseNavigation: NavItem[] = [
   { id: "warehouses", name: "nav.warehouses", href: "warehouses", icon: Building2, restrictedRoles: ["SELLER"], moduleKey: "warehouses", featureFlag: "stockTransfersEnabled" },
   { id: "production", name: "Production & BOM", href: "production", icon: Package, restrictedRoles: ["SELLER"], moduleKey: "production" },
 
-  { id: "orders-header", name: "nav.ordersHeader", href: "", type: "header" },
-  { id: "orders", name: "nav.orders", href: "orders", icon: ShoppingCart, moduleKey: "orders" },
+  { id: "orders-header", name: "nav.purchasesHeader", href: "", type: "header" },
+  { id: "orders", name: "nav.purchases", href: "purchases", icon: ShoppingCart, moduleKey: "orders" },
   { id: "suppliers", name: "nav.suppliers", href: "suppliers", icon: Users, moduleKey: "suppliers" },
   { id: "supplier-invoices", name: "Supplier Invoices", href: "supplier-invoices", icon: FileText, moduleKey: "supplierInvoices" },
   { id: "scan-invoice", name: "Scan Invoice", href: "scan-invoice", icon: ScanLine, moduleKey: "scanInvoice" },
