@@ -34,12 +34,23 @@ import logger from '../utils/logger';
 const PCHS_STTS = { APPROVED: '02', CANCELED: '04' } as const;
 
 const CURSOR_RESOURCE = 'purchases';
+/** Default VSDC lastReqDt when no purchases cursor row exists yet. */
+/** VSDC §3.3.7.1 JSON sample uses 20190524000000 — use the same default when no cursor exists. */
+export const PURCHASES_DEFAULT_LAST_REQ_DT = '20190524000000';
 
 async function getCursor(organizationId: number): Promise<string> {
   const row = await prisma.rraSyncCursor.findUnique({
     where: { organizationId_resource: { organizationId, resource: CURSOR_RESOURCE } },
   });
-  return row?.lastReqDt ?? '20200101000000';
+  return row?.lastReqDt ?? PURCHASES_DEFAULT_LAST_REQ_DT;
+}
+
+/** Normalize a UI/API request date (yyyy-mm-dd or yyyyMMddHHmmss) to VSDC lastReqDt. */
+function normalizePurchaseReqDt(raw: string): string | null {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length >= 14) return digits.slice(0, 14);
+  if (digits.length >= 8) return `${digits.slice(0, 8)}000000`;
+  return null;
 }
 
 async function saveCursor(organizationId: number, lastReqDt: string, result: string): Promise<void> {
@@ -50,21 +61,88 @@ async function saveCursor(organizationId: number, lastReqDt: string, result: str
   });
 }
 
+/** Record a pull outcome without changing lastReqDt (empty / failed pulls).
+ *  Creates the cursor row with the default lastReqDt if none exists yet so the UI can show it. */
+async function touchCursorResult(organizationId: number, result: string): Promise<void> {
+  const existing = await prisma.rraSyncCursor.findUnique({
+    where: { organizationId_resource: { organizationId, resource: CURSOR_RESOURCE } },
+    select: { id: true },
+  });
+  if (!existing) {
+    await prisma.rraSyncCursor.create({
+      data: {
+        organizationId,
+        resource: CURSOR_RESOURCE,
+        lastReqDt: PURCHASES_DEFAULT_LAST_REQ_DT,
+        lastRunAt: new Date(),
+        lastResult: result,
+      },
+    });
+    return;
+  }
+  await prisma.rraSyncCursor.updateMany({
+    where: { organizationId, resource: CURSOR_RESOURCE },
+    data: { lastRunAt: new Date(), lastResult: result },
+  });
+}
+
+function mapPurchaseItems(itemList: any[] | undefined) {
+  return (itemList ?? []).map((it: any, idx: number) => ({
+    itemSeq: it.itemSeq ?? idx + 1,
+    itemCd: it.itemCd ?? null,
+    itemClsCd: it.itemClsCd ?? null,
+    itemNm: it.itemNm ?? null,
+    bcd: it.bcd ?? null,
+    pkgUnitCd: it.pkgUnitCd ?? null,
+    pkg: it.pkg ?? null,
+    qtyUnitCd: it.qtyUnitCd ?? null,
+    qty: it.qty ?? 0,
+    prc: it.prc ?? 0,
+    splyAmt: it.splyAmt ?? 0,
+    dcRt: it.dcRt ?? null,
+    dcAmt: it.dcAmt ?? null,
+    taxTyCd: it.taxTyCd ?? null,
+    taxblAmt: it.taxblAmt ?? null,
+    taxAmt: it.taxAmt ?? null,
+    totAmt: it.totAmt ?? null,
+  }));
+}
+
 // ── §70: pull received purchases ─────────────────────────────
 
 export async function syncRraPurchases(
   organizationId: number,
-  branchId?: number | null,
-): Promise<{ ok: boolean; fetched: number; cached: number; error?: string }> {
-  if (!isEbmEnabled()) return { ok: false, fetched: 0, cached: 0, error: 'EBM is not enabled' };
+  opts: { branchId?: number | null; requestDate?: string } | number | null = {},
+): Promise<{ ok: boolean; fetched: number; cached: number; lastReqDt: string; error?: string }> {
+  if (!isEbmEnabled()) return { ok: false, fetched: 0, cached: 0, lastReqDt: '', error: 'EBM is not enabled' };
 
-  const since = await getCursor(organizationId);
+  // Backward compatible: syncRraPurchases(orgId, branchId) from the master-data job.
+  const normalized =
+    typeof opts === 'number' || opts === null
+      ? { branchId: opts, requestDate: undefined as string | undefined }
+      : opts;
+
+  const prevCursor = await getCursor(organizationId);
+  const requestDate = normalized.requestDate?.trim() || undefined;
+  let since = prevCursor;
+  if (requestDate) {
+    const parsed = normalizePurchaseReqDt(requestDate);
+    if (!parsed) {
+      return { ok: false, fetched: 0, cached: 0, lastReqDt: prevCursor, error: 'Request date must be yyyy-mm-dd' };
+    }
+    since = parsed;
+    // Persist an earlier/manual cursor so the UI "Last request" matches what VSDC will receive.
+    if (since !== prevCursor) {
+      await saveCursor(organizationId, since, `RESET: pull from ${since}`);
+    }
+  }
+
   const runAt = toRraReqDt(new Date());
-  const envelope = await buildVsdcEnvelope(organizationId, branchId ?? null);
+  const envelope = await buildVsdcEnvelope(organizationId, normalized.branchId ?? null);
   const res = await selectPurchases(envelope, since);
   if (!res.success) {
-    await saveCursor(organizationId, since, `FAILED: ${res.resultMsg}`);
-    return { ok: false, fetched: 0, cached: 0, error: `${res.resultCd}: ${res.resultMsg}` };
+    await touchCursorResult(organizationId, `FAILED: ${res.resultMsg}`);
+    return { ok: false, fetched: 0, cached: 0, lastReqDt: since, error: `${res.resultCd}: ${res.resultMsg}` };
   }
 
   // The sandbox returns the list under `saleList` (per TrnsPurchaseSalesRes).
@@ -72,62 +150,62 @@ export async function syncRraPurchases(
   let cached = 0;
   for (const p of list) {
     const spplrInvcNo = BigInt(p.spplrInvcNo ?? 0);
-    await prisma.rraPurchase.upsert({
-      where: {
-        organizationId_spplrTin_spplrInvcNo: {
-          organizationId,
-          spplrTin: p.spplrTin ?? '',
-          spplrInvcNo,
-        },
-      },
-      create: {
-        organizationId,
-        spplrTin: p.spplrTin ?? '',
-        spplrNm: p.spplrNm ?? null,
-        spplrBhfId: p.spplrBhfId ?? null,
-        spplrInvcNo,
-        rcptTyCd: p.rcptTyCd ?? null,
-        pmtTyCd: p.pmtTyCd ?? null,
-        salesDt: p.salesDt ?? null,
-        totItemCnt: p.totItemCnt ?? null,
-        totTaxblAmt: p.totTaxblAmt ?? null,
-        totTaxAmt: p.totTaxAmt ?? null,
-        totAmt: p.totAmt ?? null,
-        remark: p.remark ?? null,
-        rawResponse: p as Prisma.InputJsonValue,
-        items: {
-          create: (p.itemList ?? []).map((it: any, idx: number) => ({
-            itemSeq: it.itemSeq ?? idx + 1,
-            itemCd: it.itemCd ?? null,
-            itemClsCd: it.itemClsCd ?? null,
-            itemNm: it.itemNm ?? null,
-            bcd: it.bcd ?? null,
-            pkgUnitCd: it.pkgUnitCd ?? null,
-            pkg: it.pkg ?? null,
-            qtyUnitCd: it.qtyUnitCd ?? null,
-            qty: it.qty ?? 0,
-            prc: it.prc ?? 0,
-            splyAmt: it.splyAmt ?? 0,
-            dcRt: it.dcRt ?? null,
-            dcAmt: it.dcAmt ?? null,
-            taxTyCd: it.taxTyCd ?? null,
-            taxblAmt: it.taxblAmt ?? null,
-            taxAmt: it.taxAmt ?? null,
-            totAmt: it.totAmt ?? null,
-          })),
-        },
-      },
-      update: {
-        // Do not clobber a purchase the operator has already actioned.
-        rawResponse: p as Prisma.InputJsonValue,
-        spplrNm: p.spplrNm ?? null,
-      },
+    const spplrTin = p.spplrTin ?? '';
+    const prcOrdCd = typeof p.prcOrdCd === 'string' && p.prcOrdCd.trim() ? p.prcOrdCd.trim() : null;
+    const existing = await prisma.rraPurchase.findUnique({
+      where: { organizationId_spplrTin_spplrInvcNo: { organizationId, spplrTin, spplrInvcNo } },
+      select: { id: true, status: true },
     });
+
+    if (!existing) {
+      await prisma.rraPurchase.create({
+        data: {
+          organizationId,
+          spplrTin,
+          spplrNm: p.spplrNm ?? null,
+          spplrBhfId: p.spplrBhfId ?? null,
+          spplrInvcNo,
+          rcptTyCd: p.rcptTyCd ?? null,
+          pmtTyCd: p.pmtTyCd ?? null,
+          prcOrdCd,
+          salesDt: p.salesDt ?? null,
+          totItemCnt: p.totItemCnt ?? null,
+          totTaxblAmt: p.totTaxblAmt ?? null,
+          totTaxAmt: p.totTaxAmt ?? null,
+          totAmt: p.totAmt ?? null,
+          remark: p.remark ?? null,
+          rawResponse: p as Prisma.InputJsonValue,
+          items: { create: mapPurchaseItems(p.itemList) },
+        },
+      });
+    } else {
+      // Do not clobber a purchase the operator has already actioned.
+      await prisma.rraPurchase.update({
+        where: { id: existing.id },
+        data: {
+          rawResponse: p as Prisma.InputJsonValue,
+          spplrNm: p.spplrNm ?? null,
+          ...(prcOrdCd ? { prcOrdCd } : {}),
+        },
+      });
+      // Refresh line items while still PENDING so a re-pull stays accurate.
+      if (existing.status === 'PENDING') {
+        await prisma.rraPurchaseItem.deleteMany({ where: { rraPurchaseId: existing.id } });
+        await prisma.rraPurchaseItem.createMany({
+          data: mapPurchaseItems(p.itemList).map((it) => ({ ...it, rraPurchaseId: existing.id })),
+        });
+      }
+    }
     cached += 1;
   }
 
+  if (cached === 0) {
+    await touchCursorResult(organizationId, `OK: 0 purchases`);
+    return { ok: true, fetched: 0, cached: 0, lastReqDt: since };
+  }
+
   await saveCursor(organizationId, runAt, `OK: ${cached} purchases`);
-  return { ok: true, fetched: list.length, cached };
+  return { ok: true, fetched: list.length, cached, lastReqDt: runAt };
 }
 
 // ── §71: confirm / record a received purchase ────────────────
@@ -289,6 +367,7 @@ type PurchaseRow = {
   spplrInvcNo: bigint;
   rcptTyCd: string | null;
   pmtTyCd: string | null;
+  prcOrdCd?: string | null;
   remark: string | null;
   rawResponse: unknown;
   items: Array<PurchaseLine & {
@@ -350,10 +429,13 @@ async function pushStockMastersAfterPurchase(
 async function rejectRraPurchaseAtVsdc(
   organizationId: number,
   rp: PurchaseRow,
-  opts: { branchId?: number | null; userId?: number; prcOrdCd?: string },
+  opts: { branchId?: number | null; userId?: number; prcOrdCd?: string; remark?: string },
 ): Promise<{ success: boolean; error?: string }> {
   if (!isEbmEnabled()) {
-    await prisma.rraPurchase.update({ where: { id: rp.id }, data: { status: 'REJECTED' } });
+    await prisma.rraPurchase.update({
+      where: { id: rp.id },
+      data: { status: 'REJECTED', remark: opts.remark?.trim() || rp.remark },
+    });
     return { success: true };
   }
 
@@ -434,7 +516,7 @@ async function rejectRraPurchaseAtVsdc(
     totTaxblAmt,
     totTaxAmt,
     totAmt: totTaxblAmt,
-    remark: rp.remark ?? '',
+    remark: opts.remark?.trim() || rp.remark || '',
     regrId: regr.id,
     regrNm: regr.name,
     modrId: regr.id,
@@ -447,7 +529,10 @@ async function rejectRraPurchaseAtVsdc(
     if (!res.success) {
       return { success: false, error: res.error ?? 'savePurchases (reject) failed' };
     }
-    await prisma.rraPurchase.update({ where: { id: rp.id }, data: { status: 'REJECTED' } });
+    await prisma.rraPurchase.update({
+      where: { id: rp.id },
+      data: { status: 'REJECTED', remark: opts.remark?.trim() || rp.remark },
+    });
     await prisma.organization.update({
       where: { id: organizationId },
       data: { lastSuccessfulVdsContact: new Date() },
@@ -469,6 +554,7 @@ export async function confirmRraPurchase(
     userId?: number;
     reject?: boolean;
     prcOrdCd?: string;
+    remark?: string;
     items?: PurchaseItemOverride[];
   } = {},
 ): Promise<{ success: boolean; error?: string }> {
@@ -562,8 +648,8 @@ export async function confirmRraPurchase(
     spplrInvcNo: Number(rp.spplrInvcNo),
     regTyCd: 'M',
     pchsTyCd: 'N',
-    // §38: the RRA purchase order code for this incoming purchase, when the
-    // operator provides one (the select-purchases pull does not return it).
+    // §38: purchase order code from the inbound sale (persisted on pull) or
+    // an operator override supplied at confirm time.
     ...(prcOrdCd ? { prcOrdCd } : {}),
     rcptTyCd: purchaseRcptTyCd(rp.rcptTyCd),
     pmtTyCd: rp.pmtTyCd ?? '01',

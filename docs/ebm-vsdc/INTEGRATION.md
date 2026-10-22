@@ -109,21 +109,26 @@ Every non-SALE `inventory_ledger` row is queued (`ebmSyncStatus=PENDING`). A
 `/stockMaster/saveStockMaster` with the item's new on-hand quantity. SALE rows
 are never queued — RRA derives stock-out from `saveSales`.
 
-### Purchases (§70, §71)
+### Purchases (§70, §71, §38)
 
 `/trnsPurchase/selectTrnsPurchaseSales` pulls B2B sales issued to the taxpayer
-into `rra_purchases`. The operator confirms each: `confirmRraPurchase()` builds
-`TrnsPurchaseSaveReq` (per-band tax, `itemList`) and POSTs
-`/trnsPurchase/savePurchases` with `pchsSttsCd=02`, which records the purchase
-and its stock-in.
+into `rra_purchases` (including `prcOrdCd`). The operator confirms each:
+`confirmRraPurchase()` builds `TrnsPurchaseSaveReq` (per-band tax, `itemList`,
+`prcOrdCd`) and POSTs `/trnsPurchase/savePurchases` with `pchsSttsCd=02`, which
+records the purchase and its stock-in; reject uses `04` and optional `remark`.
+Local stock is booked with `skipEbmSync` (RRA already counted it) and stock
+master is pushed immediately (§74). UI: sidebar **Purchases**
+(`/dashboard/purchases`). Import declarations stay on Fiscal Reports → Imports.
 
-### Import declarations (§66, §67, §68)
+### Import declarations (§66, §67, §68, §74)
 
 `/imports/selectImportItems` pulls declaration lines into `rra_import_items`.
-Each pull's request date must be strictly later than the previous one. The
-operator classifies + approves/rejects each line:
-`/imports/updateImportItems` with `imptItemSttsCd` 3 (Approved) / 4 (Cancelled)
-per VSDC §4.18; an approval books the stock-in as an Import.
+Each pull's request date must be strictly later than the previous one (§67 —
+managed via the stored sync cursor). The operator classifies + approves/rejects
+each line: `/imports/updateImportItems` with `imptItemSttsCd` 3 (Approved) /
+4 (Cancelled) per VSDC §4.18. Approve requires `hsCd` and a receiving product
+(link existing or create from the declaration); approval books local stock and
+immediately submits `/stock/saveStockItems` (sarTyCd 01) + `/stockMaster`.
 
 ### Master data (§59, §61, §62, §64, §65)
 
