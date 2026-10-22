@@ -256,6 +256,18 @@ export async function syncStock(req: BranchAuthRequest, res: Response) {
 export async function stockSyncStatus(req: BranchAuthRequest, res: Response) {
   try {
     const organizationId = parseInt(req.params.organizationId);
+    const ledgerSelect = {
+      id: true,
+      movementType: true,
+      quantity: true,
+      direction: true,
+      reference: true,
+      referenceType: true,
+      ebmError: true,
+      ebmSyncStatus: true,
+      createdAt: true,
+      product: { select: { name: true, itemCd: true } },
+    } as const;
     const grouped = await prisma.inventoryLedger.groupBy({
       by: ['ebmSyncStatus'],
       where: { organizationId },
@@ -263,13 +275,29 @@ export async function stockSyncStatus(req: BranchAuthRequest, res: Response) {
     });
     const counts: Record<string, number> = { PENDING: 0, SYNCED: 0, FAILED: 0, NOT_APPLICABLE: 0 };
     for (const g of grouped) counts[g.ebmSyncStatus ?? 'NOT_APPLICABLE'] = (g as any)._count;
-    const failures = await prisma.inventoryLedger.findMany({
-      where: { organizationId, ebmSyncStatus: 'FAILED' },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-      select: { id: true, movementType: true, quantity: true, direction: true, ebmError: true, createdAt: true, product: { select: { name: true } } },
+    const [failures, pending] = await Promise.all([
+      prisma.inventoryLedger.findMany({
+        where: { organizationId, ebmSyncStatus: 'FAILED' },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: ledgerSelect,
+      }),
+      prisma.inventoryLedger.findMany({
+        where: { organizationId, ebmSyncStatus: 'PENDING' },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        select: ledgerSelect,
+      }),
+    ]);
+    const toRow = (r: (typeof failures)[number]) => ({
+      ...r,
+      quantity: r.quantity != null ? Number(r.quantity) : 0,
     });
-    res.json(success({ counts, failures }));
+    res.json(success({
+      counts,
+      failures: failures.map(toRow),
+      pending: pending.map(toRow),
+    }));
   } catch (e: any) {
     console.error('[RRA stock status]', e);
     res.status(500).json(apiError('Failed to read stock-sync status'));
@@ -278,31 +306,81 @@ export async function stockSyncStatus(req: BranchAuthRequest, res: Response) {
 
 // ── B2B purchases (§70, §71) ─────────────────────────────────
 
+async function loadPurchasesPayload(organizationId: number, status?: string) {
+  const [rows, pending, cursor] = await Promise.all([
+    prisma.rraPurchase.findMany({
+      where: { organizationId, ...(status ? { status: status as any } : {}) },
+      include: { items: { orderBy: { itemSeq: 'asc' } } },
+      orderBy: { pulledAt: 'desc' },
+      take: 200,
+    }),
+    prisma.rraPurchase.count({ where: { organizationId, status: 'PENDING' } }),
+    prisma.rraSyncCursor.findUnique({
+      where: { organizationId_resource: { organizationId, resource: 'purchases' } },
+    }),
+  ]);
+  // Normalize Prisma Decimal / BigInt so the client always gets plain JSON.
+  const purchases = rows.map((r) => ({
+    ...r,
+    spplrInvcNo: r.spplrInvcNo.toString(),
+    totTaxblAmt: r.totTaxblAmt != null ? Number(r.totTaxblAmt) : null,
+    totTaxAmt: r.totTaxAmt != null ? Number(r.totTaxAmt) : null,
+    totAmt: r.totAmt != null ? Number(r.totAmt) : null,
+    items: r.items.map((it) => ({
+      ...it,
+      pkg: it.pkg != null ? Number(it.pkg) : null,
+      qty: Number(it.qty),
+      prc: Number(it.prc),
+      splyAmt: Number(it.splyAmt),
+      dcRt: it.dcRt != null ? Number(it.dcRt) : null,
+      dcAmt: it.dcAmt != null ? Number(it.dcAmt) : null,
+      taxblAmt: it.taxblAmt != null ? Number(it.taxblAmt) : null,
+      taxAmt: it.taxAmt != null ? Number(it.taxAmt) : null,
+      totAmt: it.totAmt != null ? Number(it.totAmt) : null,
+    })),
+  }));
+  return {
+    purchases,
+    pending,
+    lastRequestDate: cursor?.lastReqDt ?? '20190524000000',
+    lastRunAt: cursor?.lastRunAt ?? null,
+    lastResult: cursor?.lastResult ?? null,
+  };
+}
+
 export async function syncPurchases(req: BranchAuthRequest, res: Response) {
   try {
     const organizationId = parseInt(req.params.organizationId);
-    const result = await syncRraPurchases(organizationId, branchOf(req));
-    return result.ok ? res.json(success(result)) : res.status(502).json(apiError(result.error ?? 'Purchase sync failed'));
+    const rawDate = (req.body?.requestDate ?? req.query.requestDate) as string | undefined;
+    const requestDate = typeof rawDate === 'string' && rawDate.trim() ? rawDate.trim() : undefined;
+    const result = await syncRraPurchases(organizationId, { branchId: branchOf(req), requestDate });
+    if (!result.ok) {
+      return res.status(502).json(apiError(result.error ?? 'Purchase sync failed'));
+    }
+    // Return the refreshed list in the same response so the UI updates immediately.
+    const payload = await loadPurchasesPayload(organizationId);
+    return res.json(success({
+      ...result,
+      ...payload,
+      lastRequestDate: payload.lastRequestDate ?? result.lastReqDt,
+    }));
   } catch (e: any) {
     console.error('[RRA purchases sync]', e);
     res.status(500).json(apiError('Failed to pull purchases from RRA'));
   }
 }
 
+const RRA_PURCHASE_STATUSES = new Set(['PENDING', 'CONFIRMED', 'REJECTED']);
+
 export async function listRraPurchases(req: BranchAuthRequest, res: Response) {
   try {
     const organizationId = parseInt(req.params.organizationId);
-    const status = req.query.status as string | undefined;
-    const rows = await prisma.rraPurchase.findMany({
-      where: { organizationId, ...(status ? { status: status as any } : {}) },
-      include: { items: { orderBy: { itemSeq: 'asc' } } },
-      orderBy: { pulledAt: 'desc' },
-      take: 200,
-    });
-    const pending = await prisma.rraPurchase.count({ where: { organizationId, status: 'PENDING' } });
-    // spplrInvcNo is a BigInt column — JSON.stringify cannot serialize it.
-    const purchases = rows.map((r) => ({ ...r, spplrInvcNo: r.spplrInvcNo.toString() }));
-    res.json(success({ purchases, pending }));
+    const rawStatus = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+    const status = rawStatus ? rawStatus.toUpperCase() : undefined;
+    if (status && !RRA_PURCHASE_STATUSES.has(status)) {
+      return res.status(400).json(apiError('Invalid status filter — use PENDING, CONFIRMED, or REJECTED'));
+    }
+    res.json(success(await loadPurchasesPayload(organizationId, status)));
   } catch (e: any) {
     console.error('[RRA purchases list]', e);
     res.status(500).json(apiError('Failed to list RRA purchases'));
@@ -330,6 +408,7 @@ export async function confirmPurchase(req: BranchAuthRequest, res: Response) {
       userId: (req as any).user?.userId,
       reject,
       prcOrdCd: req.body?.prcOrdCd,
+      remark: typeof req.body?.remark === 'string' ? req.body.remark : undefined,
       items: items.length ? items : undefined,
     });
     return result.success ? res.json(success(result)) : res.status(502).json(apiError(result.error ?? 'Purchase confirmation failed'));
@@ -344,7 +423,8 @@ export async function confirmPurchase(req: BranchAuthRequest, res: Response) {
 export async function syncImports(req: BranchAuthRequest, res: Response) {
   try {
     const organizationId = parseInt(req.params.organizationId);
-    const requestDate = (req.body?.requestDate ?? req.query.requestDate) as string | undefined;
+    const rawDate = (req.body?.requestDate ?? req.query.requestDate) as string | undefined;
+    const requestDate = typeof rawDate === 'string' && rawDate.trim() ? rawDate.trim() : undefined;
     const result = await syncRraImports(organizationId, { branchId: branchOf(req), requestDate });
     return result.ok ? res.json(success(result)) : res.status(400).json(apiError(result.error ?? 'Import sync failed', undefined, result));
   } catch (e: any) {
@@ -353,20 +433,32 @@ export async function syncImports(req: BranchAuthRequest, res: Response) {
   }
 }
 
+const RRA_IMPORT_STATUSES = new Set(['PENDING', 'APPROVED', 'REJECTED']);
+
 export async function listRraImports(req: BranchAuthRequest, res: Response) {
   try {
     const organizationId = parseInt(req.params.organizationId);
-    const status = req.query.status as string | undefined;
+    const rawStatus = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+    const status = rawStatus ? rawStatus.toUpperCase() : undefined;
+    if (status && !RRA_IMPORT_STATUSES.has(status)) {
+      return res.status(400).json(apiError(`Invalid status filter — use PENDING, APPROVED, or REJECTED`));
+    }
     const [rows, pending, cursor] = await Promise.all([
       prisma.rraImportItem.findMany({
-        where: { organizationId, ...(status ? { status: status as any } : {}) },
+        where: { organizationId, ...(status ? { status: status as 'PENDING' | 'APPROVED' | 'REJECTED' } : {}) },
         orderBy: [{ dclDe: 'desc' }, { itemSeq: 'asc' }],
         take: 300,
       }),
       prisma.rraImportItem.count({ where: { organizationId, status: 'PENDING' } }),
       prisma.rraSyncCursor.findUnique({ where: { organizationId_resource: { organizationId, resource: 'imports' } } }),
     ]);
-    res.json(success({ imports: rows, pending, lastRequestDate: cursor?.lastReqDt ?? null }));
+    res.json(success({
+      imports: rows,
+      pending,
+      lastRequestDate: cursor?.lastReqDt ?? null,
+      lastRunAt: cursor?.lastRunAt ?? null,
+      lastResult: cursor?.lastResult ?? null,
+    }));
   } catch (e: any) {
     console.error('[RRA imports list]', e);
     res.status(500).json(apiError('Failed to list import declarations'));
@@ -378,13 +470,15 @@ export async function actionImport(req: BranchAuthRequest, res: Response) {
     const organizationId = parseInt(req.params.organizationId);
     const id = parseInt(req.params.id);
     const action = req.params.action === 'reject' ? 'reject' : 'approve';
-    const { itemClsCd, itemCd, linkProductId, remark, sellingPrice, expiryDate } = req.body ?? {};
+    const { itemClsCd, itemCd, linkProductId, remark, sellingPrice, expiryDate, createProduct, itemNm } = req.body ?? {};
     const result = await actionRraImport(organizationId, id, action, {
       branchId: branchOf(req),
       userId: (req as any).user?.userId,
       itemClsCd,
       itemCd,
       linkProductId: linkProductId != null ? parseInt(String(linkProductId)) : undefined,
+      createProduct: createProduct === true || createProduct === 'true',
+      itemNm: typeof itemNm === 'string' ? itemNm : undefined,
       remark,
       sellingPrice: parsePositiveNumber(sellingPrice),
       expiryDate: parseOptionalDate(expiryDate),

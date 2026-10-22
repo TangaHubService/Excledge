@@ -27,7 +27,7 @@ export default function NotificationBell({ toolbar = false }: { toolbar?: boolea
   const getNotificationLink = (n: Notification): string | null => {
     if (n.type === 'WARNING' || n.type === 'ALERT') return '/dashboard/low-stock';
     if (n.type === 'SALE') return '/dashboard/sales';
-    if (n.type === 'PURCHASE_ORDER') return '/dashboard/orders';
+    if (n.type === 'PURCHASE_ORDER') return '/dashboard/purchases';
     if (n.data?.productId) return '/dashboard/inventory-all';
     if (n.data?.userId) return '/dashboard/users';
     return null;
