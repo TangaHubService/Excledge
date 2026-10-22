@@ -35,8 +35,7 @@ import WarehouseManagement from "./pages/dashboard/inventory/WarehouseManagement
 
 import { AcceptInvitationPage } from "./pages/auth/AcceptInvitation";
 import { SuppliersPage } from "./pages/dashboard/suppliers/SuppliersPage";
-import { OrdersPage } from "./pages/dashboard/orders/OrdersPage";
-import { CreateOrderPage } from "./pages/dashboard/orders/CreateOrderPage";
+import { RraPurchasesPage } from "./pages/dashboard/purchases/RraPurchasesPage";
 import { ChangePasswordPage } from "./pages/auth/ChangePassword";
 import LandingPage from "./pages/LandingPage";
 import SalesPage from "./pages/dashboard/sales/sales";
@@ -139,7 +138,7 @@ function App() {
                       <Route path="debt-payments-report" element={<PaidDebtReport />} />
                       <Route path="cash-flow-report" element={<CashFlowReport />} />
                       <Route path="stock-reports" element={<StockReports />} />
-                      <Route path="purchases-report" element={<Navigate to="/dashboard/orders" replace />} />
+                      <Route path="purchases-report" element={<Navigate to="/dashboard/fiscal-reports?tab=detail" replace />} />
                       <Route path="ledger-history" element={<LedgerHistoryPage />} />
                       <Route path="inventory-summary" element={<InventorySummaryDashboard />} />
                       <Route path="stock-transfers" element={<StockTransfersPage />} />
@@ -162,10 +161,10 @@ function App() {
                       <Route path="fiscal-reports" element={<FiscalReportsPage />} />
                       <Route path="profile" element={<Profile />} />
                       <Route path="suppliers" element={<SuppliersPage />} />
-                      <Route path="orders">
-                        <Route index element={<OrdersPage />} />
-                        <Route path="new" element={<CreateOrderPage />} />
-                      </Route>
+                      <Route path="purchases" element={<RraPurchasesPage />} />
+                      <Route path="import-declarations" element={<Navigate to="/dashboard/fiscal-reports?tab=imports" replace />} />
+                      <Route path="orders" element={<Navigate to="/dashboard/purchases" replace />} />
+                      <Route path="orders/*" element={<Navigate to="/dashboard/purchases" replace />} />
                       <Route path="debt" element={<DebtManagement />} />
                       <Route path="expenses" element={<ExpensesPage />} />
                       <Route path="payroll" element={<PayrollPage />} />

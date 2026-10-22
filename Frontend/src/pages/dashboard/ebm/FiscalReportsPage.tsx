@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Download, Loader2, ScrollText, ChevronRight, CheckCircle2, AlertTriangle, RefreshCw, Database, Bell, Boxes, Truck, X, Ship, Shield } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { FileText, Download, Loader2, ScrollText, ChevronRight, CheckCircle2, AlertTriangle, RefreshCw, Database, Bell, Boxes, Truck, X, Ship, Shield, Eye } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
 import { RraItemClassPicker } from "../../../components/inventory/RraItemClassPicker";
 import { SearchableSelect } from "../../../components/ui/SearchableSelect";
@@ -44,9 +44,65 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "../../../components/ui/drawer";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../../../components/ui/tooltip";
 
 const todayIso = () => new Date().toISOString().split("T")[0];
 const daysAgoIso = (n: number) => new Date(Date.now() - n * 864e5).toISOString().split("T")[0];
+
+/**
+ * Truncate for table cells without colliding into neighbors.
+ * Caps characters at `max`, and also uses CSS ellipsis inside a bounded width.
+ * Full text is available on hover.
+ */
+function TruncatedText({
+  value,
+  max = 50,
+  className,
+}: {
+  value: string | null | undefined;
+  max?: number;
+  className?: string;
+}) {
+  const full = (value ?? "").trim();
+  if (!full) return <span className={className}>—</span>;
+  const truncated = full.length > max;
+  const display = truncated ? `${full.slice(0, max)}…` : full;
+  const text = (
+    <span
+      className={`block min-w-0 max-w-full truncate ${className ?? ""}`}
+      title={truncated ? undefined : full}
+    >
+      {display}
+    </span>
+  );
+  if (!truncated) return text;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="m-0 block w-full min-w-0 max-w-full cursor-default border-0 bg-transparent p-0 text-left text-inherit"
+        >
+          {text}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="z-[80] max-w-xs whitespace-pre-wrap break-words">
+        {full}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+const formatDclDe = (raw: string | null | undefined): string => {
+  const d = (raw ?? "").replace(/\D/g, "");
+  if (d.length >= 8) return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+  return raw ?? "—";
+};
 
 const formatLastReqDt = (raw: string | null | undefined): string => {
   if (!raw) return "";
@@ -781,23 +837,6 @@ function MasterDataCard() {
   );
 }
 
-interface RraPurchaseItem {
-  id: number; itemSeq: number; itemNm: string | null; itemCd: string | null;
-  qty: string | number; qtyUnitCd: string | null; prc: string | number;
-  taxTyCd: string | null; taxblAmt: string | number | null; taxAmt: string | number | null; totAmt: string | number | null;
-}
-interface RraPurchase {
-  id: number; spplrTin: string; spplrNm: string | null; spplrBhfId: string | null; spplrInvcNo: string | number;
-  rcptTyCd: string | null; pmtTyCd: string | null; salesDt: string | null; remark: string | null;
-  totItemCnt: number | null; totTaxblAmt: string | number | null; totTaxAmt: string | number | null; totAmt: string | number | null;
-  status: "PENDING" | "CONFIRMED" | "REJECTED";
-  items: RraPurchaseItem[];
-}
-
-const PMT_LABEL: Record<string, string> = {
-  "01": "Cash", "02": "Credit", "03": "Cash/Credit", "04": "Bank Check", "05": "Card", "06": "Mobile money", "07": "Other",
-};
-
 interface CatalogProduct {
   id: number;
   name: string;
@@ -806,33 +845,71 @@ interface CatalogProduct {
   unitPrice?: number | string | null;
   itemType?: string | null;
 }
-interface LineEdit {
-  localNm: string;
-  linkProductId: string;
-  sellingPrice: string;
-  expiryDate: string;
-}
 
 const priceOf = (p?: CatalogProduct) => (p?.unitPrice != null ? String(Number(p.unitPrice)) : "");
 
-function StockAndPurchasesCard() {
-  const [stock, setStock] = useState<{ counts: Record<string, number>; failures: any[] } | null>(null);
-  const [purchases, setPurchases] = useState<RraPurchase[]>([]);
-  const [busy, setBusy] = useState<null | "stock" | "purchases" | "moves">(null);
-  const [rowBusy, setRowBusy] = useState<number | null>(null);
-  const [selected, setSelected] = useState<RraPurchase | null>(null);
-  const [rejecting, setRejecting] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-  const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
-  const [lineEdits, setLineEdits] = useState<Record<number, LineEdit>>({});
+function unwrapApiData(res: unknown): any {
+  let cur: any = res;
+  if (cur?.success === true && cur.data != null) cur = cur.data;
+  // Some proxies double-wrap: { success, data: { data: {...} } }.
+  // Do not unwrap again when this already looks like a stock-status payload.
+  const looksLikeDomainPayload =
+    cur?.counts != null
+    || Array.isArray(cur?.pending)
+    || Array.isArray(cur?.failures)
+    || cur?.imports != null;
+  if (
+    !looksLikeDomainPayload
+    && cur?.data != null
+    && typeof cur.data === "object"
+    && !Array.isArray(cur.data)
+  ) {
+    cur = cur.data;
+  }
+  return cur;
+}
+
+type StockLedgerRow = {
+  id: number;
+  movementType: string;
+  quantity: number;
+  direction: string;
+  reference?: string | null;
+  referenceType?: string | null;
+  ebmError?: string | null;
+  ebmSyncStatus?: string | null;
+  createdAt: string;
+  product?: { name?: string | null; itemCd?: string | null } | null;
+};
+
+function stockPendingReason(row: StockLedgerRow): string {
+  if (row.movementType === "SALE") {
+    return row.reference
+      ? `Waiting for sale ${row.reference} to be fiscalized`
+      : "Waiting for the linked sale to be fiscalized";
+  }
+  return row.ebmError?.trim() || "Queued for VSDC";
+}
+
+function StockSyncCard() {
+  const [stock, setStock] = useState<{
+    counts: Record<string, number>;
+    failures: StockLedgerRow[];
+    pending?: StockLedgerRow[];
+  } | null>(null);
+  const [busy, setBusy] = useState<null | "stock" | "moves">(null);
 
   const load = useCallback(async () => {
     try {
-      const [s, p] = await Promise.all([apiClient.getRraStockStatus(), apiClient.listRraPurchases()]);
-      setStock(((s as any)?.data ?? s) as any);
-      setPurchases((((p as any)?.data ?? p)?.purchases ?? []) as RraPurchase[]);
+      const s = await apiClient.getRraStockStatus();
+      const stockData = unwrapApiData(s);
+      setStock({
+        counts: (stockData?.counts && typeof stockData.counts === "object") ? stockData.counts : {},
+        failures: Array.isArray(stockData?.failures) ? stockData.failures : [],
+        pending: Array.isArray(stockData?.pending) ? stockData.pending : [],
+      });
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load stock / purchase status");
+      toast.error(e?.message ?? "Failed to load stock status");
     }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -864,97 +941,15 @@ function StockAndPurchasesCard() {
     } finally { setBusy(null); }
   };
 
-  const syncPurchases = async () => {
-    setBusy("purchases");
-    try {
-      const res = await apiClient.syncRraPurchases();
-      const out = (res as any)?.data ?? res;
-      toast.success(`Pulled ${out?.cached ?? 0} purchase(s) from RRA`);
-      await load();
-    } catch (e: any) {
-      toast.error(e?.message ?? "Purchase pull failed");
-    } finally { setBusy(null); }
-  };
-
-  const openDetail = (p: RraPurchase) => {
-    setSelected(p);
-    setRejecting(false);
-    setRejectReason("");
-    setLineEdits(Object.fromEntries(
-      p.items.map((it) => [it.id, { localNm: it.itemNm ?? "", linkProductId: "__new__", sellingPrice: "", expiryDate: "" }]),
-    ));
-    if (p.status === "PENDING") {
-      apiClient.getProducts({ page: 1, limit: 500 })
-        .then((res) => {
-          const items = parseInventoryGetProductsResponse(res).items as CatalogProduct[];
-          setCatalog(items);
-          setLineEdits((prev) => {
-            const next = { ...prev };
-            for (const it of p.items) {
-              const cur = next[it.id];
-              if (!cur || (cur.linkProductId && cur.linkProductId !== "__new__")) continue;
-              const supplierNm = (it.itemNm ?? "").trim().toLowerCase();
-              const match = items.find((prod) =>
-                (it.itemCd && prod.itemCd === it.itemCd) ||
-                (!!supplierNm && prod.name.trim().toLowerCase() === supplierNm),
-              );
-              if (match) {
-                next[it.id] = {
-                  ...cur,
-                  localNm: cur.localNm || match.name,
-                  linkProductId: String(match.id),
-                  sellingPrice: cur.sellingPrice || priceOf(match),
-                };
-              }
-            }
-            return next;
-          });
-        })
-        .catch(() => setCatalog([]));
-    }
-  };
-
-  const setLine = (itemId: number, patch: Partial<LineEdit>) => {
-    setLineEdits((prev) => ({ ...prev, [itemId]: { ...prev[itemId], ...patch } }));
-  };
-
-  const action = async (id: number, reject: boolean) => {
-    setRowBusy(id);
-    try {
-      const items = !reject && selected
-        ? selected.items.map((it) => {
-            const edit = lineEdits[it.id];
-            const linkId = edit?.linkProductId && edit.linkProductId !== "__new__"
-              ? Number(edit.linkProductId)
-              : undefined;
-            const sellingPrice = Number(edit?.sellingPrice);
-            return {
-              itemId: it.id,
-              itemSeq: it.itemSeq,
-              itemNm: edit?.localNm?.trim() || it.itemNm || undefined,
-              linkProductId: linkId && Number.isFinite(linkId) ? linkId : undefined,
-              sellingPrice: Number.isFinite(sellingPrice) && sellingPrice > 0 ? sellingPrice : undefined,
-              expiryDate: edit?.expiryDate || undefined,
-            };
-          })
-        : undefined;
-      await apiClient.confirmRraPurchase(id, reject, { items });
-      toast.success(reject ? "Purchase rejected" : "Purchase confirmed with RRA");
-      setPurchases((prev) => prev.map((x) => (x.id === id ? { ...x, status: reject ? "REJECTED" : "CONFIRMED" } : x)));
-      setSelected(null);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Action failed");
-    } finally { setRowBusy(null); }
-  };
-
   const sc = stock?.counts ?? {};
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Boxes className="size-4" /> Stock &amp; purchases</CardTitle>
+        <CardTitle className="flex items-center gap-2"><Boxes className="size-4" /> Stock sync</CardTitle>
         <CardDescription>
-          Every stock movement, sales included, is reported to the VSDC as stock in/out; B2B purchases issued to you are pulled from RRA and confirmed here.
+          Every stock movement, sales included, is reported to the VSDC as stock in/out.
+          B2B purchases are managed under <span className="font-medium text-foreground">Purchases</span> in the sidebar.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -966,11 +961,64 @@ function StockAndPurchasesCard() {
             {busy === "moves" ? <Loader2 className="size-4 animate-spin" /> : <Truck className="size-4" />} Pull stock moves
           </Button>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            <span><b className="text-foreground tabular-nums">{sc.PENDING ?? 0}</b> pending</span>
+            <span title="Inventory ledger rows waiting to be sent to VSDC">
+              <b className="text-amber-600 tabular-nums">{sc.PENDING ?? 0}</b> pending sync
+            </span>
             <span><b className="text-emerald-600 tabular-nums">{sc.SYNCED ?? 0}</b> synced</span>
             <span><b className="text-amber-600 tabular-nums">{sc.FAILED ?? 0}</b> failed</span>
           </div>
         </div>
+
+        {(sc.PENDING ?? 0) > 0 ? (
+          <div className="space-y-2">
+            <div className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              Pending stock sync ({sc.PENDING}) — SALE rows wait until their invoice is fiscalized; other rows send when you press “Sync stock now”
+            </div>
+            {(stock?.pending?.length ?? 0) > 0 ? (
+              <div className="overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-900/50">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead>When</TableHead>
+                      <TableHead>Why waiting</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(stock?.pending ?? []).map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell className="font-medium">
+                          <div>{row.product?.name ?? `#${row.id}`}</div>
+                          {row.product?.itemCd ? (
+                            <div className="font-mono text-[10px] text-muted-foreground">{row.product.itemCd}</div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>{row.movementType}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {row.direction === "OUT" ? "−" : "+"}
+                          {formatInt(Number(row.quantity))}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                          {new Date(row.createdAt).toLocaleString()}
+                        </TableCell>
+                        <TableCell className="max-w-[18rem] text-sm text-amber-700 dark:text-amber-400">
+                          {stockPendingReason(row)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-400">
+                {sc.PENDING} ledger row(s) are PENDING, but details could not be loaded. Refresh the page or press “Sync stock now”.
+              </p>
+            )}
+          </div>
+        ) : null}
+
         {stock?.failures?.length ? (
           <div className="max-h-48 space-y-1 overflow-auto rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
             <div className="font-medium">Stock movements RRA rejected ({sc.FAILED ?? stock.failures.length}) — fix the cause, then press “Sync stock now”:</div>
@@ -983,247 +1031,112 @@ function StockAndPurchasesCard() {
             ))}
           </div>
         ) : null}
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-overline uppercase tracking-wide text-muted-foreground">
-              <Truck className="size-3.5" /> Received purchases (RRA)
-            </div>
-            <Button size="sm" variant="outline" onClick={syncPurchases} disabled={busy === "purchases"}>
-              {busy === "purchases" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Pull from RRA
-            </Button>
-          </div>
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Supplier</TableHead>
-                  <TableHead>Invoice</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Items</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {purchases.length === 0 && (
-                  <TableRow><TableCell colSpan={7} className="py-6 text-center text-muted-foreground">No purchases pulled from RRA.</TableCell></TableRow>
-                )}
-                {purchases.map((p) => (
-                  <TableRow key={p.id} className="cursor-pointer" onClick={() => openDetail(p)}>
-                    <TableCell>{p.spplrNm ?? p.spplrTin}</TableCell>
-                    <TableCell className="font-mono text-xs">{String(p.spplrInvcNo)}</TableCell>
-                    <TableCell>{p.salesDt ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{p.totItemCnt ?? p.items.length}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(Number(p.totAmt))}</TableCell>
-                    <TableCell>
-                      <span className={
-                        p.status === "CONFIRMED" ? "text-emerald-600" : p.status === "REJECTED" ? "text-muted-foreground" : "text-amber-600"
-                      }>{p.status}</span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        {p.status === "PENDING" ? "Review" : "View"} <ChevronRight className="size-3.5" />
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
       </CardContent>
-
-      <Drawer open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null); }}>
-        <DrawerContent className="sm:max-w-2xl">
-          <DrawerHeader className="px-0 pt-0">
-            <DrawerTitle>Purchase invoice {selected ? String(selected.spplrInvcNo) : ""}</DrawerTitle>
-          </DrawerHeader>
-          {selected && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                <div><span className="text-muted-foreground">Supplier</span><div>{selected.spplrNm ?? "—"}</div></div>
-                <div><span className="text-muted-foreground">Supplier TIN</span><div className="font-mono">{selected.spplrTin}</div></div>
-                <div><span className="text-muted-foreground">Invoice no.</span><div className="font-mono">{String(selected.spplrInvcNo)}</div></div>
-                <div><span className="text-muted-foreground">Date</span><div>{selected.salesDt ?? "—"}</div></div>
-                <div><span className="text-muted-foreground">Payment</span><div>{PMT_LABEL[selected.pmtTyCd ?? ""] ?? selected.pmtTyCd ?? "—"}</div></div>
-                <div><span className="text-muted-foreground">Status</span><div>{selected.status}</div></div>
-                {selected.remark && <div className="col-span-2"><span className="text-muted-foreground">Remark</span><div>{selected.remark}</div></div>}
-              </div>
-
-              {selected.status === "PENDING" && (
-                <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                  You can rename each item to how it should appear in your inventory and set its selling price. The supplier&apos;s name is kept for RRA. Leave unmatched to create a new product, or link an existing one.
-                </p>
-              )}
-
-              <div className="max-h-[28rem] space-y-3 overflow-auto">
-                {selected.items.map((it) => {
-                  const edit = lineEdits[it.id] ?? { localNm: it.itemNm ?? "", linkProductId: "__new__", sellingPrice: "", expiryDate: "" };
-                  return (
-                    <div key={it.id} className="rounded-lg border p-3">
-                      <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-                        <div>
-                          <span className="mr-2 text-muted-foreground">#{it.itemSeq}</span>
-                          <span className="font-medium">{it.itemNm ?? "Item"}</span>
-                          {it.itemCd && <span className="ml-1 font-mono text-xs text-muted-foreground">{it.itemCd}</span>}
-                        </div>
-                        <div className="flex flex-wrap gap-x-4 text-xs text-muted-foreground">
-                          <span>Qty {formatInt(Number(it.qty))} {it.qtyUnitCd ?? ""}</span>
-                          <span>Unit {money(Number(it.prc))}</span>
-                          <span>Tax {it.taxTyCd ?? "—"} {money(Number(it.taxAmt))}</span>
-                          <span className="font-medium text-foreground">Total {money(Number(it.totAmt))}</span>
-                        </div>
-                      </div>
-                      {selected.status === "PENDING" && (
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <div className="space-y-1">
-                            <Label htmlFor={`local-nm-${it.id}`}>Name in your inventory</Label>
-                            <Input
-                              id={`local-nm-${it.id}`}
-                              value={edit.localNm}
-                              onChange={(e) => setLine(it.id, { localNm: e.target.value })}
-                              placeholder={it.itemNm ?? "Item name"}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label>Match existing product</Label>
-                            <SearchableSelect
-                              value={edit.linkProductId}
-                              onChange={(value) => {
-                                const prod = catalog.find((p) => String(p.id) === value);
-                                setLine(it.id, {
-                                  linkProductId: value,
-                                  localNm: value !== "__new__" && prod ? prod.name : edit.localNm,
-                                  sellingPrice: value !== "__new__" && prod ? priceOf(prod) : edit.sellingPrice,
-                                });
-                              }}
-                              placeholder="Create as a new product"
-                              searchPlaceholder="Search your products..."
-                              emptyText="No matching products."
-                              options={[
-                                { value: "__new__", label: "Create as a new product", emphasized: true },
-                                ...catalog.filter((p) => p.itemType !== "SERVICE").map((p) => ({
-                                  value: String(p.id),
-                                  label: p.name,
-                                  sublabel: p.itemCd ?? p.sku ?? undefined,
-                                })),
-                              ]}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor={`sell-price-${it.id}`}>Selling price</Label>
-                            <Input
-                              id={`sell-price-${it.id}`}
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              inputMode="decimal"
-                              value={edit.sellingPrice}
-                              onChange={(e) => setLine(it.id, { sellingPrice: e.target.value })}
-                              placeholder={`Cost ${money(Number(it.prc))}`}
-                            />
-                            {Number(edit.sellingPrice) > 0 && Number(edit.sellingPrice) < Number(it.prc) && (
-                              <p className="text-xs text-amber-600">Below the purchase cost of {money(Number(it.prc))}.</p>
-                            )}
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor={`expiry-${it.id}`}>Expiry date (optional)</Label>
-                            <Input
-                              id={`expiry-${it.id}`}
-                              type="date"
-                              value={edit.expiryDate}
-                              onChange={(e) => setLine(it.id, { expiryDate: e.target.value })}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex flex-col items-end gap-0.5 text-sm">
-                <div><span className="text-muted-foreground mr-3">Taxable</span><span className="tabular-nums">{money(Number(selected.totTaxblAmt))}</span></div>
-                <div><span className="text-muted-foreground mr-3">Tax</span><span className="tabular-nums">{money(Number(selected.totTaxAmt))}</span></div>
-                <div className="font-semibold"><span className="text-muted-foreground mr-3">Total</span><span className="tabular-nums">{money(Number(selected.totAmt))}</span></div>
-              </div>
-
-              {selected.status === "PENDING" && (
-                rejecting ? (
-                  <div className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-950/30">
-                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Reject this purchase?</p>
-                    <p className="text-xs text-red-700/80 dark:text-red-400/80">
-                      It will be marked as not accepted and no stock will be recorded. This can't be undone from here.
-                    </p>
-                    <Input
-                      value={rejectReason}
-                      onChange={(e) => setRejectReason(e.target.value)}
-                      placeholder="Reason (optional)"
-                      className="bg-background"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => setRejecting(false)}>Back</Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        disabled={rowBusy === selected.id}
-                        onClick={() => action(selected.id, true)}
-                      >
-                        {rowBusy === selected.id ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />} Reject purchase
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex justify-between gap-2 border-t pt-3">
-                    <Button variant="ghost" onClick={() => setRejecting(true)} disabled={rowBusy === selected.id}>
-                      <X className="size-4" /> Reject
-                    </Button>
-                    <Button onClick={() => action(selected.id, false)} disabled={rowBusy === selected.id}>
-                      {rowBusy === selected.id ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} Confirm with RRA
-                    </Button>
-                  </div>
-                )
-              )}
-            </div>
-          )}
-        </DrawerContent>
-      </Drawer>
     </Card>
   );
 }
 
+type RraImportStatus = "PENDING" | "APPROVED" | "REJECTED";
+type RraImportStatusFilter = "ALL" | RraImportStatus;
+
 interface RraImport {
-  id: number; taskCd: string; dclNo: string | null; dclDe: string; itemSeq: number;
-  hsCd: string | null; itemNm: string | null; orgnNatCd: string | null; spplrNm: string | null;
-  qty: string | number | null; invcFcurAmt: string | number | null; invcFcurCd: string | null;
-  itemClsCd: string | null; status: "PENDING" | "APPROVED" | "REJECTED"; remark: string | null;
+  id: number;
+  taskCd: string;
+  dclNo: string | null;
+  dclDe: string;
+  itemSeq: number;
+  hsCd: string | null;
+  itemNm: string | null;
+  orgnNatCd: string | null;
+  exptNatCd: string | null;
+  spplrNm: string | null;
+  agntNm: string | null;
+  pkg: string | number | null;
+  pkgUnitCd: string | null;
+  qty: string | number | null;
+  qtyUnitCd: string | null;
+  totWt: string | number | null;
+  netWt: string | number | null;
+  invcFcurAmt: string | number | null;
+  invcFcurCd: string | null;
+  invcFcurExcrt: string | number | null;
+  itemCd: string | null;
+  itemClsCd: string | null;
+  status: RraImportStatus;
+  remark: string | null;
+  actionedAt: string | null;
+  linkedProductId: number | null;
+}
+
+function ImportDetailRows({ line }: { line: RraImport }) {
+  const qty = line.qty != null ? `${Number(line.qty).toLocaleString()} ${line.qtyUnitCd ?? ""}`.trim() : "—";
+  const pkg = line.pkg != null ? `${Number(line.pkg).toLocaleString()} ${line.pkgUnitCd ?? ""}`.trim() : "—";
+  const invoice = line.invcFcurAmt != null
+    ? `${Number(line.invcFcurAmt).toLocaleString()} ${line.invcFcurCd ?? ""}`.trim()
+    : "—";
+  const rows: Array<{ label: string; value: ReactNode; wide?: boolean }> = [
+    { label: "Declaration no.", value: line.dclNo ?? "—" },
+    { label: "Declaration date", value: formatDclDe(line.dclDe) },
+    { label: "Task code", value: <span className="font-mono text-xs">{line.taskCd}</span> },
+    { label: "Line", value: line.itemSeq },
+    { label: "Supplier", value: line.spplrNm?.trim() || "—", wide: true },
+    { label: "Agent", value: line.agntNm?.trim() || "—", wide: true },
+    { label: "Item name", value: line.itemNm?.trim() || "—", wide: true },
+    { label: "HS code", value: <span className="font-mono text-xs">{line.hsCd ?? "—"}</span> },
+    { label: "Origin nation", value: line.orgnNatCd ?? "—" },
+    { label: "Export nation", value: line.exptNatCd ?? "—" },
+    { label: "Quantity", value: qty },
+    { label: "Package", value: pkg },
+    { label: "Total weight", value: line.totWt != null ? Number(line.totWt).toLocaleString() : "—" },
+    { label: "Net weight", value: line.netWt != null ? Number(line.netWt).toLocaleString() : "—" },
+    { label: "Invoice amount", value: invoice },
+    { label: "Exchange rate", value: line.invcFcurExcrt != null ? Number(line.invcFcurExcrt).toLocaleString() : "—" },
+    { label: "Item code", value: <span className="font-mono text-xs">{line.itemCd ?? "—"}</span> },
+    { label: "Item class", value: <span className="font-mono text-xs">{line.itemClsCd ?? "—"}</span> },
+    { label: "Status", value: line.status },
+    { label: "Actioned at", value: line.actionedAt ? new Date(line.actionedAt).toLocaleString() : "—" },
+    { label: "Remark", value: line.remark?.trim() || "—", wide: true },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+      {rows.map((r) => (
+        <div key={r.label} className={r.wide ? "col-span-2" : undefined}>
+          <div className="text-xs text-muted-foreground">{r.label}</div>
+          <div className="break-words">{r.value}</div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function ImportDeclarationsCard() {
   const [imports, setImports] = useState<RraImport[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<RraImportStatusFilter>("PENDING");
   const [lastReq, setLastReq] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [detail, setDetail] = useState<RraImport | null>(null);
   const [action, setAction] = useState<null | { line: RraImport; kind: "approve" | "reject" }>(null);
   const [clsCd, setClsCd] = useState("");
   const [remark, setRemark] = useState("");
   const [rowBusy, setRowBusy] = useState(false);
   const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
-  const [linkProductId, setLinkProductId] = useState("");
+  const [linkProductId, setLinkProductId] = useState("__new__");
+  const [itemNm, setItemNm] = useState("");
   const [sellingPrice, setSellingPrice] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const res = await apiClient.listRraImports();
+      const res = await apiClient.listRraImports(statusFilter === "ALL" ? undefined : statusFilter);
       const data = (res as any)?.data ?? res;
       setImports((data?.imports ?? []) as RraImport[]);
+      setPendingCount(Number(data?.pending ?? 0));
       setLastReq(data?.lastRequestDate ?? null);
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to load import declarations");
     }
-  }, []);
+  }, [statusFilter]);
   useEffect(() => { load(); }, [load]);
 
   const sync = async () => {
@@ -1231,8 +1144,10 @@ function ImportDeclarationsCard() {
     try {
       const res = await apiClient.syncRraImports();
       const out = (res as any)?.data ?? res;
-      toast.success(`Pulled ${out?.cached ?? 0} import line(s) from RRA`);
+      const pulled = Number(out?.cached ?? 0);
+      toast.success(`Pulled ${pulled} import line(s) from RRA`);
       await load();
+      if (out?.lastReqDt) setLastReq(String(out.lastReqDt));
     } catch (e: any) {
       toast.error(e?.message ?? "Import pull failed");
     } finally { setBusy(false); }
@@ -1242,7 +1157,8 @@ function ImportDeclarationsCard() {
     setAction({ line, kind });
     setClsCd(line.itemClsCd ?? "");
     setRemark("");
-    setLinkProductId("");
+    setLinkProductId("__new__");
+    setItemNm(line.itemNm ?? "");
     setSellingPrice("");
     setExpiryDate("");
     if (kind === "approve") {
@@ -1255,6 +1171,7 @@ function ImportDeclarationsCard() {
           if (match) {
             setLinkProductId(String(match.id));
             setSellingPrice(priceOf(match));
+            setItemNm(match.name);
           }
         })
         .catch(() => setCatalog([]));
@@ -1264,20 +1181,33 @@ function ImportDeclarationsCard() {
   const submitAction = async () => {
     if (!action) return;
     const approve = action.kind === "approve";
-    const linkId = Number(linkProductId);
+    const createNew = linkProductId === "__new__";
+    const linkId = createNew ? NaN : Number(linkProductId);
     const price = Number(sellingPrice);
+    if (approve && !clsCd && createNew && !action.line.itemClsCd) {
+      toast.error("Pick an RRA item classification to create the product");
+      return;
+    }
+    if (approve && !action.line.hsCd?.trim()) {
+      toast.error("This declaration has no HS code from RRA — it cannot be approved");
+      return;
+    }
     setRowBusy(true);
     try {
-      await apiClient.actionRraImport(action.line.id, action.kind, {
+      const res = await apiClient.actionRraImport(action.line.id, action.kind, {
         itemClsCd: approve ? clsCd || undefined : undefined,
         remark: remark || undefined,
         linkProductId: approve && linkId > 0 ? linkId : undefined,
+        createProduct: approve && createNew ? true : undefined,
+        itemNm: approve && createNew ? (itemNm.trim() || undefined) : undefined,
         sellingPrice: approve && price > 0 ? price : undefined,
         expiryDate: approve && expiryDate ? expiryDate : undefined,
       });
-      toast.success(action.kind === "approve" ? "Import line approved with RRA" : "Import line rejected");
-      setImports((prev) => prev.map((x) => (x.id === action.line.id ? { ...x, status: action.kind === "approve" ? "APPROVED" : "REJECTED" } : x)));
+      const out = (res as any)?.data ?? res;
+      if (out?.warning) toast.warn(String(out.warning));
+      else toast.success(action.kind === "approve" ? "Import line approved with RRA" : "Import line rejected");
       setAction(null);
+      await load();
     } catch (e: any) {
       toast.error(e?.message ?? "Action failed");
     } finally { setRowBusy(false); }
@@ -1296,59 +1226,139 @@ function ImportDeclarationsCard() {
           <Button onClick={sync} disabled={busy}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Pull from RRA
           </Button>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Status</Label>
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as RraImportStatusFilter)}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All</SelectItem>
+                <SelectItem value="PENDING">Pending{pendingCount > 0 ? ` (${pendingCount})` : ""}</SelectItem>
+                <SelectItem value="APPROVED">Approved</SelectItem>
+                <SelectItem value="REJECTED">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm text-sky-950">
             <span className="text-xs font-semibold uppercase tracking-wide text-sky-700">Last request</span>
             <span className="font-mono font-semibold tabular-nums">
               {lastReq ? formatLastReqDt(lastReq) : "—"}
             </span>
           </div>
+          <div className="text-sm text-muted-foreground">
+            Showing <b className="text-foreground tabular-nums">{imports.length}</b>
+            {statusFilter !== "ALL" ? ` ${statusFilter.toLowerCase()}` : ""} line(s)
+            {pendingCount > 0 && statusFilter !== "PENDING" ? (
+              <> · <b className="text-amber-600 tabular-nums">{pendingCount}</b> pending overall</>
+            ) : null}
+          </div>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Declaration</TableHead>
-                <TableHead>Item</TableHead>
-                <TableHead>HS code</TableHead>
-                <TableHead>Origin</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Invoice</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {imports.length === 0 && (
-                <TableRow><TableCell colSpan={8} className="py-6 text-center text-muted-foreground">No import declarations pulled from RRA.</TableCell></TableRow>
-              )}
-              {imports.map((im) => (
-                <TableRow key={im.id}>
-                  <TableCell className="font-mono text-xs">{im.dclNo ?? im.taskCd}<span className="text-muted-foreground"> · {im.dclDe}</span></TableCell>
-                  <TableCell>{im.itemNm ?? "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">{im.hsCd ?? "—"}</TableCell>
-                  <TableCell>{im.orgnNatCd ?? "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">{im.qty != null ? Number(im.qty) : "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">{im.invcFcurAmt != null ? `${Number(im.invcFcurAmt).toLocaleString()} ${im.invcFcurCd ?? ""}` : "—"}</TableCell>
-                  <TableCell>
-                    <span className={im.status === "APPROVED" ? "text-emerald-600" : im.status === "REJECTED" ? "text-muted-foreground" : "text-amber-600"}>{im.status}</span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {im.status === "PENDING" && (
-                      <div className="flex justify-end gap-1">
-                        <Button size="sm" variant="outline" onClick={() => openAction(im, "approve")}>
-                          <CheckCircle2 className="size-3.5" /> Approve
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => openAction(im, "reject")}><X className="size-3.5" /></Button>
-                      </div>
-                    )}
-                  </TableCell>
+        <TooltipProvider>
+          <div className="overflow-x-auto rounded-lg border">
+            <Table className="table-fixed w-full min-w-[720px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[9.5rem]">Declaration</TableHead>
+                  <TableHead className="w-[14rem]">Supplier</TableHead>
+                  <TableHead className="w-[14rem]">Item</TableHead>
+                  <TableHead className="w-[7rem] text-right">Qty</TableHead>
+                  <TableHead className="w-[8rem] text-right">Invoice</TableHead>
+                  <TableHead className="w-[6.5rem]">Status</TableHead>
+                  <TableHead className="w-[13rem] text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {imports.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-6 text-center text-muted-foreground">
+                      {statusFilter === "ALL"
+                        ? "No import declarations pulled from RRA."
+                        : `No ${statusFilter.toLowerCase()} import lines.`}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {imports.map((im) => (
+                  <TableRow key={im.id}>
+                    <TableCell className="overflow-hidden whitespace-nowrap font-mono text-xs">
+                      <div className="truncate">{im.dclNo ?? im.taskCd}</div>
+                      <div className="truncate text-muted-foreground">{formatDclDe(im.dclDe)} · line {im.itemSeq}</div>
+                    </TableCell>
+                    <TableCell className="overflow-hidden">
+                      <div className="min-w-0 max-w-full">
+                        <TruncatedText value={im.spplrNm} max={50} />
+                      </div>
+                    </TableCell>
+                    <TableCell className="overflow-hidden">
+                      <div className="min-w-0 max-w-full">
+                        <TruncatedText value={im.itemNm} max={50} />
+                      </div>
+                    </TableCell>
+                    <TableCell className="overflow-hidden text-right tabular-nums whitespace-nowrap">
+                      <span className="block truncate">
+                        {im.qty != null ? `${Number(im.qty).toLocaleString()} ${im.qtyUnitCd ?? ""}`.trim() : "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="overflow-hidden text-right tabular-nums whitespace-nowrap">
+                      <span className="block truncate">
+                        {im.invcFcurAmt != null
+                          ? `${Number(im.invcFcurAmt).toLocaleString()} ${im.invcFcurCd ?? ""}`.trim()
+                          : "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="overflow-hidden">
+                      <span className={im.status === "APPROVED" ? "text-emerald-600" : im.status === "REJECTED" ? "text-muted-foreground" : "text-amber-600"}>
+                        {im.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="overflow-hidden text-right">
+                      <div className="flex flex-nowrap justify-end gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => setDetail(im)}>
+                          <Eye className="size-3.5" /> View details
+                        </Button>
+                        {im.status === "PENDING" && (
+                          <>
+                            <Button size="sm" variant="outline" onClick={() => openAction(im, "approve")}>
+                              <CheckCircle2 className="size-3.5" /> Approve
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => openAction(im, "reject")}>
+                              <X className="size-3.5" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </TooltipProvider>
       </CardContent>
+
+      <Drawer open={!!detail} onOpenChange={(o) => { if (!o) setDetail(null); }}>
+        <DrawerContent className="sm:max-w-lg">
+          <DrawerHeader className="px-0 pt-0">
+            <DrawerTitle>Import line details</DrawerTitle>
+          </DrawerHeader>
+          {detail && (
+            <div className="space-y-4">
+              <ImportDetailRows line={detail} />
+              {detail.status === "PENDING" && (
+                <div className="flex justify-end gap-2 border-t pt-3">
+                  <Button variant="ghost" onClick={() => { setDetail(null); openAction(detail, "reject"); }}>
+                    <X className="size-4" /> Reject
+                  </Button>
+                  <Button onClick={() => { setDetail(null); openAction(detail, "approve"); }}>
+                    <CheckCircle2 className="size-4" /> Approve
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </DrawerContent>
+      </Drawer>
 
       <Dialog open={!!action} onOpenChange={(o) => !o && setAction(null)}>
         <DialogContent className="max-w-lg">
@@ -1358,17 +1368,24 @@ function ImportDeclarationsCard() {
           {action && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                {action.line.itemNm} — declaration {action.line.dclNo ?? action.line.taskCd}, line {action.line.itemSeq}
+                {action.kind === "approve" ? "Approve" : "Reject"}{" "}
+                <span className="font-medium text-foreground">{action.line.itemNm?.trim() || "this line"}</span>
+                {" "}({action.line.dclNo ?? action.line.taskCd}, line {action.line.itemSeq}).
               </p>
               {action.kind === "approve" && (
                 <>
+                  {!action.line.hsCd?.trim() && (
+                    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-400">
+                      This line has no HS code from RRA. Approval is blocked until RRA supplies one.
+                    </p>
+                  )}
                   <RraItemClassPicker
                     value={clsCd}
                     onChange={setClsCd}
-                    required={!linkProductId && !action.line.itemClsCd}
+                    required={linkProductId === "__new__" && !action.line.itemClsCd}
                   />
-                  {!clsCd && !!linkProductId && (
-                    <p className="text-xs text-muted-foreground">Left empty, the receiving product's RRA classification is used.</p>
+                  {linkProductId !== "__new__" && !clsCd && (
+                    <p className="text-xs text-muted-foreground">Left empty, the receiving product&apos;s RRA classification is used.</p>
                   )}
                   <div className="space-y-1.5">
                     <Label>Receive into product</Label>
@@ -1377,21 +1394,37 @@ function ImportDeclarationsCard() {
                       onChange={(value) => {
                         setLinkProductId(value);
                         const prod = catalog.find((p) => String(p.id) === value);
-                        if (prod) setSellingPrice(priceOf(prod));
+                        if (prod) {
+                          setSellingPrice(priceOf(prod));
+                          setItemNm(prod.name);
+                        } else if (value === "__new__") {
+                          setItemNm(action.line.itemNm ?? "");
+                        }
                       }}
-                      placeholder="Pick the product that receives this stock"
+                      placeholder="Create as a new product"
                       searchPlaceholder="Search your products..."
                       emptyText="No matching products."
-                      options={catalog.filter((p) => p.itemType !== "SERVICE").map((p) => ({
-                        value: String(p.id),
-                        label: p.name,
-                        sublabel: p.itemCd ?? p.sku ?? undefined,
-                      }))}
+                      options={[
+                        { value: "__new__", label: "Create as a new product", emphasized: true },
+                        ...catalog.filter((p) => p.itemType !== "SERVICE").map((p) => ({
+                          value: String(p.id),
+                          label: p.name,
+                          sublabel: p.itemCd ?? p.sku ?? undefined,
+                        })),
+                      ]}
                     />
-                    {!linkProductId && (
-                      <p className="text-xs text-amber-600">Without a product, RRA is updated but no stock is added locally.</p>
-                    )}
                   </div>
+                  {linkProductId === "__new__" && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="imp-item-nm">Name in your inventory</Label>
+                      <Input
+                        id="imp-item-nm"
+                        value={itemNm}
+                        onChange={(e) => setItemNm(e.target.value)}
+                        placeholder={action.line.itemNm ?? "Imported item"}
+                      />
+                    </div>
+                  )}
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label htmlFor="imp-sell-price">Selling price</Label>
@@ -1403,8 +1436,7 @@ function ImportDeclarationsCard() {
                         inputMode="decimal"
                         value={sellingPrice}
                         onChange={(e) => setSellingPrice(e.target.value)}
-                        placeholder="Keep current price"
-                        disabled={!linkProductId}
+                        placeholder="Set selling price"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -1429,6 +1461,141 @@ function ImportDeclarationsCard() {
           )}
         </DialogContent>
       </Dialog>
+    </Card>
+  );
+}
+
+function PurchasesImportDetailReportCard() {
+  const [start, setStart] = useState(daysAgoIso(30));
+  const [end, setEnd] = useState(todayIso());
+  const [busy, setBusy] = useState(false);
+  const [data, setData] = useState<any>(null);
+
+  const load = async () => {
+    setBusy(true);
+    try {
+      const res = await apiClient.getPurchasesReport({ startDate: start, endDate: end });
+      setData((res as any)?.data ?? res);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to load purchases / importation report");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const summary = data?.summary;
+  const importation = data?.importation;
+  const orders = (data?.orders ?? []) as any[];
+  const importItems = (importation?.items ?? []) as any[];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Truck className="size-4" /> Purchases &amp; importation</CardTitle>
+        <CardDescription>
+          Detailed purchases and importation report (RRA checklist §25) — local purchase orders plus RRA import declaration lines.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">From</Label>
+            <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="w-40" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">To</Label>
+            <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="w-40" />
+          </div>
+          <Button onClick={load} disabled={busy}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Load report
+          </Button>
+        </div>
+
+        {summary && (
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+            <span><b className="text-foreground tabular-nums">{summary.orderCount ?? 0}</b> purchase orders</span>
+            <span><b className="text-foreground tabular-nums">{money(summary.totalPurchases)}</b> total</span>
+            <span><b className="text-foreground tabular-nums">{money(summary.totalTax)}</b> tax</span>
+            {importation?.summary && (
+              <>
+                <span><b className="text-foreground tabular-nums">{importation.summary.lines ?? 0}</b> import lines</span>
+                <span className="text-amber-600"><b className="tabular-nums">{importation.summary.PENDING ?? 0}</b> pending</span>
+                <span className="text-emerald-600"><b className="tabular-nums">{importation.summary.APPROVED ?? 0}</b> approved</span>
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <div className="text-overline uppercase tracking-wide text-muted-foreground">Purchase orders</div>
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Order</TableHead>
+                  <TableHead>Supplier</TableHead>
+                  <TableHead>Ordered</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Items</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orders.length === 0 && (
+                  <TableRow><TableCell colSpan={6} className="py-6 text-center text-muted-foreground">No purchase orders in this range.</TableCell></TableRow>
+                )}
+                {orders.map((o) => (
+                  <TableRow key={o.id}>
+                    <TableCell className="font-mono text-xs">{o.orderNumber}</TableCell>
+                    <TableCell>{o.supplierName || "—"}</TableCell>
+                    <TableCell>{o.orderedAt}</TableCell>
+                    <TableCell>{o.status}</TableCell>
+                    <TableCell className="text-right tabular-nums">{o.itemCount}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(o.totalAmount)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-overline uppercase tracking-wide text-muted-foreground">Importation</div>
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Declaration</TableHead>
+                  <TableHead>Supplier</TableHead>
+                  <TableHead>Item</TableHead>
+                  <TableHead>HS</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {importItems.length === 0 && (
+                  <TableRow><TableCell colSpan={6} className="py-6 text-center text-muted-foreground">No import declaration lines in this range.</TableCell></TableRow>
+                )}
+                {importItems.map((i, idx) => (
+                  <TableRow key={`${i.taskCd}-${i.dclDe}-${i.itemSeq}-${idx}`}>
+                    <TableCell className="font-mono text-xs">{i.dclNo ?? i.taskCd}<span className="text-muted-foreground"> · {i.dclDe}</span></TableCell>
+                    <TableCell>{i.supplier || "—"}</TableCell>
+                    <TableCell>{i.itemNm ?? "—"}</TableCell>
+                    <TableCell className="font-mono text-xs">{i.hsCd ?? "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{i.qty != null ? Number(i.qty) : "—"}</TableCell>
+                    <TableCell>
+                      <span className={i.status === "APPROVED" ? "text-emerald-600" : i.status === "REJECTED" ? "text-muted-foreground" : "text-amber-600"}>{i.status}</span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      </CardContent>
     </Card>
   );
 }
@@ -1572,8 +1739,9 @@ const TABS = [
   { value: "plu", label: "PLU", icon: FileText },
   { value: "journal", label: "Journal", icon: ScrollText },
   { value: "masterdata", label: "Master data", icon: Database },
-  { value: "stock", label: "Stock & purchases", icon: Boxes },
+  { value: "stock", label: "Stock sync", icon: Boxes },
   { value: "imports", label: "Imports", icon: Ship },
+  { value: "detail", label: "Purchases report", icon: Truck },
   { value: "audit", label: "Auditor", icon: Shield },
 ] as const;
 
@@ -1582,6 +1750,8 @@ const TAB_STORAGE_KEY = "fiscal-reports-tab";
 export function FiscalReportsPage() {
   const [tab, setTab] = useState<string>(() => {
     try {
+      const fromUrl = new URLSearchParams(window.location.search).get("tab");
+      if (fromUrl && TABS.some((t) => t.value === fromUrl)) return fromUrl;
       const saved = localStorage.getItem(TAB_STORAGE_KEY);
       if (saved && TABS.some((t) => t.value === saved)) return saved;
     } catch { /* ignore */ }
@@ -1589,19 +1759,17 @@ export function FiscalReportsPage() {
   });
 
   // Small attention signals shown as a dot on the relevant tab.
-  const [signals, setSignals] = useState<{ notices: number; imports: number; purchases: number }>({ notices: 0, imports: 0, purchases: 0 });
+  const [signals, setSignals] = useState<{ notices: number; imports: number }>({ notices: 0, imports: 0 });
   useEffect(() => {
     (async () => {
       try {
-        const [md, imp, pur] = await Promise.all([
+        const [md, imp] = await Promise.all([
           apiClient.getRraMasterDataStatus().catch(() => null),
           apiClient.listRraImports("PENDING").catch(() => null),
-          apiClient.listRraPurchases("PENDING").catch(() => null),
         ]);
         setSignals({
           notices: ((md as any)?.data ?? md)?.counts?.unreadNotices ?? 0,
           imports: (((imp as any)?.data ?? imp)?.imports ?? []).length,
-          purchases: (((pur as any)?.data ?? pur)?.purchases ?? []).length,
         });
       } catch { /* ignore */ }
     })();
@@ -1615,7 +1783,6 @@ export function FiscalReportsPage() {
   const dotFor = (v: string) => {
     if (v === "masterdata" && signals.notices > 0) return true;
     if (v === "imports" && signals.imports > 0) return true;
-    if (v === "stock" && signals.purchases > 0) return true;
     return false;
   };
 
@@ -1624,7 +1791,7 @@ export function FiscalReportsPage() {
       <div>
         <h1 className="text-h1 font-semibold">Fiscal reports</h1>
         <p className="text-body-sm text-muted-foreground">
-          RRA CIS/VSDC daily X/Z reports, the PLU report, the electronic journal, RRA master data, and stock, purchase &amp; import sync.
+          RRA CIS/VSDC daily X/Z reports, the PLU report, the electronic journal, RRA master data, stock sync, and import declarations. B2B purchases live under Purchases in the sidebar.
         </p>
       </div>
 
@@ -1645,8 +1812,9 @@ export function FiscalReportsPage() {
         <TabsContent value="plu" className="mt-4"><PluCard /></TabsContent>
         <TabsContent value="journal" className="mt-4"><ElectronicJournalCard /></TabsContent>
         <TabsContent value="masterdata" className="mt-4"><MasterDataCard /></TabsContent>
-        <TabsContent value="stock" className="mt-4"><StockAndPurchasesCard /></TabsContent>
+        <TabsContent value="stock" className="mt-4"><StockSyncCard /></TabsContent>
         <TabsContent value="imports" className="mt-4"><ImportDeclarationsCard /></TabsContent>
+        <TabsContent value="detail" className="mt-4"><PurchasesImportDetailReportCard /></TabsContent>
         <TabsContent value="audit" className="mt-4"><AuditorOverviewCard /></TabsContent>
       </Tabs>
     </div>

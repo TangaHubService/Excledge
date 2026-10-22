@@ -39,6 +39,22 @@ Use this as a working checklist alongside RRA’s official forms. Requirements c
 - [x] Official RRA logo on invoice HTML/JSON payload
 - [x] Production & BOM sidebar entry
 
+## Import declarations & B2B purchases (status 2026-10-22)
+
+RRA application checklist rows **§66–§71** (+ related **§25 / §38 / §74**).  
+Services: `rra-import.service.ts`, `purchase-sync.service.ts`. UI: sidebar **Purchases** (`/dashboard/purchases`); Fiscal Reports → Stock sync / Imports / Purchases report.
+
+| # | Requirement | Status | Notes |
+|---|-------------|--------|-------|
+| **§66** | Pull import items (`/imports/selectImportItems`) | **Done** | Cache, list + Pull UI, nightly job, Bruno 07, unit tests. |
+| **§67** | Import request-date must be later than previous | **Done** | Enforced in `syncRraImports` via stored cursor; empty pulls do not advance cursor. |
+| **§68** | Update import status approve/reject (`imptItemSttsCd` 3/4) | **Done** | Approve/reject with classify; create-or-link product; `hsCd` required; stock booked on approve. |
+| **§70** | Pull purchase-sales (`/trnsPurchase/selectTrnsPurchaseSales`) | **Done** | Cache + Pull UI + job; re-pull refreshes PENDING line items; empty pulls do not advance cursor. |
+| **§71** | Save/confirm purchase (`pchsSttsCd` 02/04) | **Done** | Confirm/reject UI; `prcOrdCd` + reject remark wired through to VSDC. |
+| **§74** | Realtime stock for approved import / confirmed purchase | **Done** | Purchases: local + `savePurchases` + immediate stock master. Imports: local book + immediate `/stock/saveStockItems` + stock master. |
+| **§25** | Detailed purchases + importation reports | **Done** | Backend reports + Fiscal Reports → Purchases report tab; `/dashboard/purchases-report` routes there. |
+| **§38** | Manage purchase code from purchases | **Done** | `prcOrdCd` persisted on pull, shown/editable on confirm, forwarded on save. |
+
 ## Excledge-specific test ideas
 
 1. Sale with standard VAT lines; verify `EbmTransaction` = `SUCCESS` and PDF shows fiscal block.

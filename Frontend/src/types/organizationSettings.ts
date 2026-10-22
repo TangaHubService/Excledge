@@ -101,9 +101,9 @@ export const SIDEBAR_SECTIONS: { label: string; items: { key: keyof ISidebarConf
         ],
     },
     {
-        label: 'Orders',
+        label: 'Purchases',
         items: [
-            { key: 'orders', label: 'Orders', route: '/dashboard/orders' },
+            { key: 'orders', label: 'Purchases', route: '/dashboard/purchases' },
             { key: 'suppliers', label: 'Suppliers', route: '/dashboard/suppliers' },
             { key: 'supplierInvoices', label: 'Supplier Invoices', route: '/dashboard/supplier-invoices' },
             { key: 'scanInvoice', label: 'Scan Invoice', route: '/dashboard/scan-invoice' },
