@@ -19,6 +19,8 @@ model Organization {
   ebmDeviceId              String? // Legacy: org-level fallback (use Branch.ebmDeviceId per branch)
   ebmSerialNo              String? // Legacy: org-level fallback (use Branch.ebmSerialNo per branch)
   mrcNo                    String? // Legacy: org-level fallback (use Branch.mrcNo per branch)
+  ebmTinResetAt            DateTime?
+  ebmInitializedAt         DateTime?
   avatar                   String?
   address                  String?
   phone                    String?
@@ -1408,6 +1410,30 @@ model RraNotice {
 /// /trnsPurchase/selectTrnsPurchaseSales (RRA checklist §70). The operator
 /// reviews each one and confirms it (/trnsPurchase/savePurchases with
 /// pchsSttsCd, RRA checklist §71), which records the purchase and its stock-in.
+model VsdcLocalPurchase {
+  id             Int      @id @default(autoincrement())
+  organizationId Int
+  branchId       Int
+  sourceType     String
+  sourceId       Int
+  receiptKey     String   @unique
+  spplrTin       String?
+  spplrNm        String?
+  spplrInvcRef   String?
+  userId         Int?
+  lines          Json
+  status         String   @default("PENDING")
+  cisInvcNo      Int?
+  pulledAt       DateTime?
+  retryCount     Int      @default(0)
+  lastError      String?
+  registeredAt   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("vsdc_local_purchases")
+}
+
 model RraPurchase {
   id              Int               @id @default(autoincrement())
   organizationId  Int
@@ -1430,6 +1456,7 @@ model RraPurchase {
   purchaseOrderId Int?
   rawResponse     Json?
   pulledAt        DateTime          @default(now())
+  cisInvcNo       Int?
   items           RraPurchaseItem[]
   organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
