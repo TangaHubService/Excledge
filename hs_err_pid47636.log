@@ -1,0 +1,24 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  SIGSEGV (0xb) at pc=0x000000010b02fdbf, pid=47636, tid=0x0000000000001303
+#
+# JRE version: OpenJDK Runtime Environment (8.0_502-b07) (build 1.8.0_502-b07)
+# Java VM: OpenJDK 64-Bit Server VM (25.502-b07 mixed mode bsd-amd64 compressed oops)
+# Problematic frame:
+# V  [libjvm.dylib+0x44adbf]
+#
+# Failed to write core dump. Core dumps have been disabled. To enable core dumping, try "ulimit -c unlimited" before starting Java again
+#
+# If you would like to submit a bug report, please visit:
+#   https://github.com/adoptium/adoptium-support/issues
+#
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x000000013195a000):  JavaThread "DestroyJavaVM" [_thread_blocked, id=4867, stack(0x00007000087d6000,0x00007000088d6000)]
+
+siginfo: si_signo: 11 (SIGSEGV), si_code: 1 (SEGV_MAPERR), si_addr: 0x0000000000000000
+
+Registers:
+RAX=0x0000000000000000

@@ -369,6 +369,19 @@
     ]
   },
   {
+    "method": "GET",
+    "path": "/api/sales/:organizationId/last-receipt",
+    "tag": "Sales",
+    "handler": "getLastReceipt",
+    "auth": true,
+    "roles": [
+      "ADMIN",
+      "SELLER",
+      "ACCOUNTANT",
+      "BRANCH_MANAGER"
+    ]
+  },
+  {
     "method": "PUT",
     "path": "/api/sales/:organizationId/:saleId/proforma",
     "tag": "Sales",
@@ -434,6 +447,19 @@
     ]
   },
   {
+    "method": "GET",
+    "path": "/api/sales/:organizationId/:saleId/refundable",
+    "tag": "Sales",
+    "handler": "getRefundable",
+    "auth": true,
+    "roles": [
+      "ADMIN",
+      "SELLER",
+      "ACCOUNTANT",
+      "BRANCH_MANAGER"
+    ]
+  },
+  {
     "method": "POST",
     "path": "/api/sales/:organizationId/:saleId/cancel",
     "tag": "Sales",
@@ -448,9 +474,35 @@
   },
   {
     "method": "POST",
+    "path": "/api/sales/:organizationId/:saleId/correct",
+    "tag": "Sales",
+    "handler": "correctSale",
+    "auth": true,
+    "roles": [
+      "ADMIN",
+      "SELLER",
+      "ACCOUNTANT",
+      "BRANCH_MANAGER"
+    ]
+  },
+  {
+    "method": "POST",
     "path": "/api/sales/:organizationId/:saleId/reprint",
     "tag": "Sales",
     "handler": "reprintSaleReceipt",
+    "auth": true,
+    "roles": [
+      "ADMIN",
+      "SELLER",
+      "ACCOUNTANT",
+      "BRANCH_MANAGER"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/sales/:organizationId/:saleId/copy",
+    "tag": "Sales",
+    "handler": "printReceiptCopy",
     "auth": true,
     "roles": [
       "ADMIN",
@@ -1102,6 +1154,31 @@
     "path": "/api/reports/purchases/:organizationId",
     "tag": "Reports",
     "handler": "getPurchasesReport",
+    "auth": true,
+    "roles": [
+      "ADMIN",
+      "ACCOUNTANT",
+      "BRANCH_MANAGER"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/reports/items/:organizationId",
+    "tag": "Reports",
+    "handler": "getItemsReport",
+    "auth": true,
+    "roles": [
+      "ADMIN",
+      "ACCOUNTANT",
+      "SELLER",
+      "BRANCH_MANAGER"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/reports/imports/:organizationId",
+    "tag": "Reports",
+    "handler": "getImportationReport",
     "auth": true,
     "roles": [
       "ADMIN",
@@ -2018,6 +2095,26 @@
     ]
   },
   {
+    "method": "POST",
+    "path": "/api/accounting-integration/notifications/email",
+    "tag": "Accounting Integration",
+    "handler": "post /api/accounting-integration/notifications/email",
+    "auth": false,
+    "roles": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/accounting-integration/:organizationId/inventory-opening",
+    "tag": "Accounting Integration",
+    "handler": "post /api/accounting-integration/:organizationId/inventory-opening",
+    "auth": true,
+    "roles": [
+      "SYSTEM_OWNER",
+      "ADMIN",
+      "ACCOUNTANT"
+    ]
+  },
+  {
     "method": "GET",
     "path": "/api/organizations/:organizationId/ebm-status",
     "tag": "EBM and RRA",
@@ -2038,6 +2135,14 @@
     "path": "/api/organizations/:organizationId/ebm-outbox/:id/check-status",
     "tag": "EBM and RRA",
     "handler": "checkEbmOutboxStatus",
+    "auth": true,
+    "roles": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/organizations/:organizationId/ebm-outbox/:id/retry",
+    "tag": "EBM and RRA",
+    "handler": "retryEbmOutbox",
     "auth": true,
     "roles": []
   },
@@ -2086,6 +2191,14 @@
     "path": "/api/organizations/:organizationId/rra/codes",
     "tag": "EBM and RRA",
     "handler": "listCodes",
+    "auth": true,
+    "roles": []
+  },
+  {
+    "method": "GET",
+    "path": "/api/organizations/:organizationId/rra/code-catalog",
+    "tag": "EBM and RRA",
+    "handler": "getCodeCatalog",
     "auth": true,
     "roles": []
   },
@@ -2175,7 +2288,11 @@
     "tag": "EBM and RRA",
     "handler": "syncStock",
     "auth": true,
-    "roles": []
+    "roles": [
+      "ADMIN",
+      "ACCOUNTANT",
+      "BRANCH_MANAGER"
+    ]
   },
   {
     "method": "GET",
@@ -2199,7 +2316,11 @@
     "tag": "EBM and RRA",
     "handler": "confirmPurchase",
     "auth": true,
-    "roles": []
+    "roles": [
+      "ADMIN",
+      "ACCOUNTANT",
+      "BRANCH_MANAGER"
+    ]
   },
   {
     "method": "GET",
@@ -2223,7 +2344,11 @@
     "tag": "EBM and RRA",
     "handler": "actionImport",
     "auth": true,
-    "roles": []
+    "roles": [
+      "ADMIN",
+      "ACCOUNTANT",
+      "BRANCH_MANAGER"
+    ]
   },
   {
     "method": "GET",
@@ -2255,13 +2380,25 @@
     "tag": "EBM and RRA",
     "handler": "syncStockMoves",
     "auth": true,
-    "roles": []
+    "roles": [
+      "ADMIN",
+      "ACCOUNTANT",
+      "BRANCH_MANAGER"
+    ]
   },
   {
     "method": "POST",
     "path": "/api/organizations/:organizationId/rra/customers/:customerId/sync",
     "tag": "EBM and RRA",
     "handler": "pushCustomer",
+    "auth": true,
+    "roles": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/organizations/:organizationId/rra/customers/:customerId/insurance/sync",
+    "tag": "EBM and RRA",
+    "handler": "pushInsurance",
     "auth": true,
     "roles": []
   },
@@ -2278,6 +2415,14 @@
     "path": "/api/organizations/:organizationId/rra/items/:productId/composition/:componentId/sync",
     "tag": "EBM and RRA",
     "handler": "pushBomComposition",
+    "auth": true,
+    "roles": []
+  },
+  {
+    "method": "GET",
+    "path": "/api/organizations/:organizationId/rra/audit-overview",
+    "tag": "EBM and RRA",
+    "handler": "getAuditOverview",
     "auth": true,
     "roles": []
   },
@@ -2742,6 +2887,137 @@
     "roles": [
       "ADMIN",
       "BRANCH_MANAGER"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/payroll/:organizationId/employees",
+    "tag": "Payroll",
+    "handler": "listEmployees",
+    "auth": true,
+    "roles": [
+      "SYSTEM_OWNER",
+      "ADMIN",
+      "ACCOUNTANT"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/payroll/:organizationId/employees",
+    "tag": "Payroll",
+    "handler": "createEmployee",
+    "auth": true,
+    "roles": [
+      "SYSTEM_OWNER",
+      "ADMIN",
+      "ACCOUNTANT"
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/api/payroll/:organizationId/employees/:id",
+    "tag": "Payroll",
+    "handler": "updateEmployee",
+    "auth": true,
+    "roles": [
+      "SYSTEM_OWNER",
+      "ADMIN",
+      "ACCOUNTANT"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/payroll/:organizationId/preview",
+    "tag": "Payroll",
+    "handler": "previewPayslip",
+    "auth": true,
+    "roles": [
+      "SYSTEM_OWNER",
+      "ADMIN",
+      "ACCOUNTANT"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/payroll/:organizationId/runs",
+    "tag": "Payroll",
+    "handler": "listRuns",
+    "auth": true,
+    "roles": [
+      "SYSTEM_OWNER",
+      "ADMIN",
+      "ACCOUNTANT"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/payroll/:organizationId/runs",
+    "tag": "Payroll",
+    "handler": "createRun",
+    "auth": true,
+    "roles": [
+      "SYSTEM_OWNER",
+      "ADMIN",
+      "ACCOUNTANT"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/payroll/:organizationId/runs/:id",
+    "tag": "Payroll",
+    "handler": "getRun",
+    "auth": true,
+    "roles": [
+      "SYSTEM_OWNER",
+      "ADMIN",
+      "ACCOUNTANT"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/payroll/:organizationId/runs/:id/recalculate",
+    "tag": "Payroll",
+    "handler": "recalculateRun",
+    "auth": true,
+    "roles": [
+      "SYSTEM_OWNER",
+      "ADMIN",
+      "ACCOUNTANT"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/payroll/:organizationId/runs/:id/cancel",
+    "tag": "Payroll",
+    "handler": "cancelRun",
+    "auth": true,
+    "roles": [
+      "SYSTEM_OWNER",
+      "ADMIN",
+      "ACCOUNTANT"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/payroll/:organizationId/runs/:id/approve",
+    "tag": "Payroll",
+    "handler": "approveRun",
+    "auth": true,
+    "roles": [
+      "SYSTEM_OWNER",
+      "ADMIN"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/payroll/:organizationId/runs/:id/pay",
+    "tag": "Payroll",
+    "handler": "payRun",
+    "auth": true,
+    "roles": [
+      "SYSTEM_OWNER",
+      "ADMIN",
+      "ACCOUNTANT"
     ]
   },
   {

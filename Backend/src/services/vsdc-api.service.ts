@@ -52,6 +52,19 @@ const VSDC_RESULT_MESSAGES: Record<string, string> = {
   '999': 'There is an unknown error. Please ask the administrator',
 };
 
+/**
+ * VSDC §4.14 codes are 3-digit strings ("000", "001", …). Some WAR builds
+ * JSON-encode them as numbers (`0`, `1`) which would otherwise miss the
+ * success / benign-empty checks below.
+ */
+export function normalizeVsdcResultCd(raw: unknown): string {
+  if (raw == null) return '?';
+  const s = String(raw).trim();
+  if (!s || s === '?') return '?';
+  if (/^\d+$/.test(s)) return s.padStart(3, '0');
+  return s;
+}
+
 export function parseVsdcStatusCode(raw: unknown): {
   code: string;
   isError: boolean;
@@ -62,11 +75,13 @@ export function parseVsdcStatusCode(raw: unknown): {
     return { code: '?', isError: true, isWarning: false, message: 'No response body' };
   }
   const o = raw as Record<string, unknown>;
-  const code = String(o.resultCd ?? '?');
+  const code = normalizeVsdcResultCd(o.resultCd);
   const serverMessage = typeof o.resultMsg === 'string' && o.resultMsg.length > 0 ? o.resultMsg : undefined;
   const message = serverMessage ?? VSDC_RESULT_MESSAGES[code] ?? `Unknown VSDC result code ${code}`;
   return {
     code,
+    // "001" is a benign empty lookup for select* endpoints (handled in postLookup);
+    // write endpoints still treat it as a non-success business result.
     isError: code !== '000' && code !== '?',
     isWarning: false,
     message,
@@ -88,6 +103,8 @@ export interface VsdcEnvelope {
   env: string;
   /** C3: per-branch VSDC endpoint; falls back to config.ebm.apiUrl if absent */
   vsdcUrl?: string;
+  /** The organization TIN was reset (CIS §7.2) after this device was last initialized. */
+  reinitRequired?: boolean;
 }
 
 export interface VsdcResponse {
@@ -128,12 +145,17 @@ export async function buildVsdcEnvelope(
       ebmSerialNo: true,
       mrcNo: true,
       name: true,
+      ebmTinResetAt: true,
+      ebmInitializedAt: true,
     },
   });
 
   if (!org) {
     throw new Error(`Organization ${organizationId} not found`);
   }
+  const initializedSinceReset = (initializedAt: Date | null | undefined) =>
+    !org.ebmTinResetAt || (!!initializedAt && initializedAt > org.ebmTinResetAt);
+  let reinitRequired = !initializedSinceReset(org.ebmInitializedAt);
 
   // Prefer per-branch credentials (RRA issues device per branch).
   // Fall back to org-level credentials for single-branch setups not yet migrated.
@@ -147,9 +169,10 @@ export async function buildVsdcEnvelope(
   if (branchId != null) {
     const branch = await prisma.branch.findUnique({
       where: { id: branchId },
-      select: { bhfId: true, ebmDeviceId: true, ebmSerialNo: true, mrcNo: true, vsdcUrl: true },
+      select: { bhfId: true, ebmDeviceId: true, ebmSerialNo: true, mrcNo: true, vsdcUrl: true, ebmInitializedAt: true },
     });
     if (branch) {
+      reinitRequired = !initializedSinceReset(branch.ebmInitializedAt);
       if (branch.bhfId) bhfId = branch.bhfId;
       if (branch.ebmDeviceId) sdcId = branch.ebmDeviceId;
       if (branch.ebmSerialNo) dvcSrlNo = branch.ebmSerialNo;
@@ -166,6 +189,7 @@ export async function buildVsdcEnvelope(
     dvcSrlNo,
     env: config.ebm.environment,
     vsdcUrl,
+    reinitRequired,
   };
 }
 
@@ -248,6 +272,9 @@ export function validateVsdcEnvelope(env: VsdcEnvelope): string | null {
   }
   if (!(env.mrcNo ?? '').trim() && !(env.dvcSrlNo ?? '').trim()) {
     return 'No RRA EBM/VSDC device serial (MRC) is configured for this organization/branch — configure it before issuing fiscal receipts.';
+  }
+  if (env.reinitRequired) {
+    return 'The organization TIN was changed: this VSDC device must be re-initialized under the new TIN before issuing fiscal receipts.';
   }
   return null;
 }
@@ -632,10 +659,24 @@ export interface VsdcLookupResult<T = unknown> {
   raw: unknown
 }
 
-/** yyyyMMddHHmmss — the `lastReqDt` format every incremental lookup expects. */
+/** yyyyMMddHHmmss — the `lastReqDt` format every incremental lookup expects (Africa/Kigali). */
 export function toRraReqDt(d: Date): string {
+  const { year, month, day, hour, minute, second } = kigaliWallParts(d)
+  return `${year}${month}${day}${hour}${minute}${second}`
+}
+
+/** Advance a yyyyMMddHHmmss cursor by one second (string arithmetic, no Date parse). */
+export function bumpRraReqDt(lastReqDt: string): string {
+  const digits = lastReqDt.replace(/\D/g, '').padEnd(14, '0').slice(0, 14)
+  const y = Number(digits.slice(0, 4))
+  const mo = Number(digits.slice(4, 6))
+  const d = Number(digits.slice(6, 8))
+  const h = Number(digits.slice(8, 10))
+  const mi = Number(digits.slice(10, 12))
+  const s = Number(digits.slice(12, 14))
+  const dt = new Date(Date.UTC(y, mo - 1, d, h, mi, s + 1))
   const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+  return `${dt.getUTCFullYear()}${p(dt.getUTCMonth() + 1)}${p(dt.getUTCDate())}${p(dt.getUTCHours())}${p(dt.getUTCMinutes())}${p(dt.getUTCSeconds())}`
 }
 
 async function postLookup<T = unknown>(

@@ -4,6 +4,7 @@ import { isEbmEnabled, fix2, toRraDate } from './rra-ebm.service';
 import { buildVsdcEnvelope, saveStockItems, saveStockMaster, validateVsdcEnvelope } from './vsdc-api.service';
 import { getCurrentStock } from './inventory-ledger.service';
 import { getTaxRateForCode } from './rra-code.service';
+import { bandTaxFromNet } from './money.service';
 import logger from '../utils/logger';
 
 /**
@@ -199,7 +200,9 @@ async function submitOne(ledgerId: number): Promise<{ success: boolean; error?: 
     return { success: false, error: 'Product has no taxCode' };
   }
   const rate = await getTaxRateForCode(entry.organizationId, taxTyCd);
-  const taxAmt = sarTyCd === '02' && rate > 0 ? fix2(splyAmt - splyAmt / (1 + rate / 100)) : 0;
+  // Every movement type carries the VAT contained in its (tax-inclusive)
+  // supply amount — the same band extraction the sales payload uses.
+  const taxAmt = bandTaxFromNet(splyAmt, rate);
   const taxblAmt = fix2(splyAmt - taxAmt);
 
   const sarNo = entry.ebmSarNo ?? (await reserveSarNo(entry.organizationId, ledgerId));

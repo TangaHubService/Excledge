@@ -4,6 +4,7 @@ import { isEbmEnabled } from './rra-ebm.service';
 import { buildVsdcEnvelope, selectInitInfo, validateVsdcEnvelope, type RraInitInfo } from './vsdc-api.service';
 import logger from '../utils/logger';
 import { hasMrcLength, mrcMismatch } from '../utils/mrc';
+import { purchaseCounterKey } from './vsdc-purchase-counter.service';
 
 /**
  * RRA VSDC device initialization (RRA checklist §58).
@@ -37,7 +38,8 @@ export async function initializeVsdcDevice(
   if (!isEbmEnabled()) return { success: false, error: 'EBM is not enabled' };
 
   const envelope = await buildVsdcEnvelope(organizationId, branchId ?? null);
-  const envErr = validateVsdcEnvelope(envelope);
+  // Initialization is exactly what clears a pending post-TIN-reset re-init.
+  const envErr = validateVsdcEnvelope({ ...envelope, reinitRequired: false });
   if (envErr) return { success: false, error: envErr };
 
   const res = await selectInitInfo(envelope);
@@ -77,6 +79,7 @@ export async function initializeVsdcDevice(
       data: {
         ebmDeviceId: info.sdcId ?? undefined,
         mrcNo: mrcFill,
+        ebmInitializedAt: new Date(),
       },
     });
   }
@@ -100,12 +103,26 @@ export async function initializeVsdcDevice(
     seededCounterTo = Number(rows[0]?.nextSequence ?? 0);
   }
 
+  // Same for the CIS purchase sequence (TrnsPurchaseSaveReq.invcNo). The row
+  // holds the last number issued, so the next purchase gets lastPchsInvcNo+1.
+  const lastPchsInvcNo = Number(info.lastPchsInvcNo ?? 0);
+  if (lastPchsInvcNo > 0) {
+    const pchsKey = purchaseCounterKey(envelope.bhfId, branchId);
+    await prisma.$executeRaw`
+      INSERT INTO "vsdc_device_counters" ("organizationId", "deviceKey", "nextSequence", "updatedAt")
+      VALUES (${organizationId}, ${pchsKey}, ${lastPchsInvcNo}, NOW())
+      ON CONFLICT ("organizationId", "deviceKey") DO UPDATE
+        SET "nextSequence" = GREATEST("vsdc_device_counters"."nextSequence", ${lastPchsInvcNo}),
+            "updatedAt" = NOW()
+    `;
+  }
+
   await prisma.organization.update({
     where: { id: organizationId },
     data: { lastSuccessfulVdsContact: new Date() },
   });
 
-  logger.info(`[VSDC-INIT] org ${organizationId} branch ${branchId ?? '-'}: sdcId=${info.sdcId} mrcNo=${info.mrcNo} lastRraInvcNo=${lastRraInvcNo} seededTo=${seededCounterTo ?? 'n/a'}`);
+  logger.info(`[VSDC-INIT] org ${organizationId} branch ${branchId ?? '-'}: sdcId=${info.sdcId} mrcNo=${info.mrcNo} lastRraInvcNo=${lastRraInvcNo} seededTo=${seededCounterTo ?? 'n/a'} lastPchsInvcNo=${lastPchsInvcNo}`);
 
   return { success: true, info, seededCounterTo, mrcNo: envelope.mrcNo || reportedMrc, mrcWarning: mrcWarning ?? undefined };
 }

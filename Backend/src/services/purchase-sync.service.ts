@@ -15,6 +15,7 @@ import { allocateItemCd, getOriginNationCode, DEFAULT_PKG_UNIT_CD } from './item
 import { TaxService } from './tax.service';
 import { getTaxationTypes } from './rra-code.service';
 import { syncProductToRra, applySellingPriceOnReceipt } from './product-sync.service';
+import { allocatePurchaseInvcNo } from './vsdc-purchase-counter.service';
 import logger from '../utils/logger';
 
 /**
@@ -361,6 +362,7 @@ async function resolvePurchaseLineProduct(
 
 type PurchaseRow = {
   id: number;
+  cisInvcNo?: number | null;
   spplrTin: string;
   spplrNm: string | null;
   spplrBhfId: string | null;
@@ -397,6 +399,37 @@ function purchasePrcOrdCd(
   const fromRaw = (rp.rawResponse as { prcOrdCd?: string } | null)?.prcOrdCd?.trim();
   const value = fromOpts || fromRow || fromRaw;
   return value || undefined;
+}
+
+/**
+ * The CIS invcNo for this purchase document, allocated once and persisted so a
+ * retry resends the same number. A confirm after a rejected attempt, or a
+ * reject, reuses it too: it identifies the CIS's record of this purchase.
+ */
+async function cisInvcNoForRraPurchase(
+  organizationId: number,
+  rp: { id: number; cisInvcNo?: number | null },
+  envelope: VsdcEnvelope,
+  branchId: number | null | undefined,
+): Promise<number> {
+  if (rp.cisInvcNo && rp.cisInvcNo > 0) return rp.cisInvcNo;
+  const allocated = await allocatePurchaseInvcNo(organizationId, envelope.bhfId, branchId);
+  const claimed = await prisma.rraPurchase.updateMany({
+    where: { id: rp.id, cisInvcNo: null },
+    data: { cisInvcNo: allocated },
+  });
+  if (claimed.count === 1) return allocated;
+  const current = await prisma.rraPurchase.findUnique({ where: { id: rp.id }, select: { cisInvcNo: true } });
+  return current?.cisInvcNo ?? allocated;
+}
+
+/** spplrInvcNo is NUMBER(38) — only a purely numeric supplier reference fits. */
+function numericSupplierInvcNo(ref: string | number | bigint | null | undefined): number | null {
+  if (ref == null) return null;
+  const s = String(ref).trim();
+  if (!/^\d{1,15}$/.test(s)) return null;
+  const n = Number(s);
+  return n > 0 ? n : null;
 }
 
 /** §73 — refresh remaining qty after a stock change that skipped saveStockItems. */
@@ -490,14 +523,20 @@ async function rejectRraPurchaseAtVsdc(
   const totTaxblAmt = fix2(A_D.reduce((s, b) => s + taxblByBand[b], 0));
   const totTaxAmt = fix2(A_D.reduce((s, b) => s + taxByBand[b], 0));
   const prcOrdCd = purchasePrcOrdCd(opts, rp);
+  let invcNo: number;
+  try {
+    invcNo = await cisInvcNoForRraPurchase(organizationId, rp, envelope, opts.branchId);
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Purchase number allocation failed' };
+  }
 
   const payload: Record<string, unknown> = {
-    invcNo: Number(rp.spplrInvcNo),
+    invcNo,
     orgInvcNo: 0,
     spplrTin: rp.spplrTin,
     spplrBhfId: rp.spplrBhfId ?? '00',
     spplrNm: rp.spplrNm ?? '',
-    spplrInvcNo: Number(rp.spplrInvcNo),
+    spplrInvcNo: numericSupplierInvcNo(rp.spplrInvcNo),
     regTyCd: 'M',
     pchsTyCd: 'N',
     ...(prcOrdCd ? { prcOrdCd } : {}),
@@ -638,14 +677,20 @@ export async function confirmRraPurchase(
   const totAmt = totTaxblAmt;
   const now = new Date();
   const prcOrdCd = purchasePrcOrdCd(opts, rp as PurchaseRow);
+  let invcNo: number;
+  try {
+    invcNo = await cisInvcNoForRraPurchase(organizationId, rp, envelope, opts.branchId);
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Purchase number allocation failed' };
+  }
 
   const payload: Record<string, unknown> = {
-    invcNo: Number(rp.spplrInvcNo),
+    invcNo,
     orgInvcNo: 0,
     spplrTin: rp.spplrTin,
     spplrBhfId: rp.spplrBhfId ?? '00',
     spplrNm: rp.spplrNm ?? '',
-    spplrInvcNo: Number(rp.spplrInvcNo),
+    spplrInvcNo: numericSupplierInvcNo(rp.spplrInvcNo),
     regTyCd: 'M',
     pchsTyCd: 'N',
     // §38: purchase order code from the inbound sale (persisted on pull) or

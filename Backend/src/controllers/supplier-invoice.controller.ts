@@ -12,6 +12,12 @@ import { analyzeInvoice } from '../services/invoice-analysis.service';
 import { config } from '../config';
 import { getOrderBy } from '../utils/sorting';
 import { enqueueScannedSupplierBillAccountingEvent } from '../services/accounting-outbox.service';
+import {
+  isLocalPurchaseRegistrationOn,
+  queueLocalPurchase,
+  registerLocalPurchaseAsync,
+  type LocalPurchaseLine,
+} from '../services/vsdc-local-purchase.service';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -493,6 +499,8 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
     let skippedItems = 0;
     let errorItems = 0;
     const importErrors: Array<{ itemId: number; error: string }> = [];
+    const vsdcPurchaseOn = await isLocalPurchaseRegistrationOn(organizationId);
+    const receiptLines: LocalPurchaseLine[] = [];
 
     // Each item gets its own transaction: once a Postgres statement fails, the
     // whole transaction is aborted and refuses further commands (25P02), so a
@@ -510,6 +518,7 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
         continue;
       }
 
+      let committedLine: LocalPurchaseLine | null = null;
       try {
         await prisma.$transaction(
           async (tx) => {
@@ -572,8 +581,10 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
                 expiryDate: expiryDate || undefined,
                 note: `Imported from invoice ${invoice.invoiceNumber || id}`,
                 metadata: { invoiceId: id },
+                skipEbmSync: vsdcPurchaseOn,
                 tx,
               });
+              committedLine = { productId: action.productId, quantity: qty, unitCost: unitPrice, expiryDate };
 
               // NOTE (stock S14): addStock above already increments
               // Product.quantity via the centralized ledger service. Do NOT
@@ -639,8 +650,10 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
                 expiryDate: expiryDate || undefined,
                 note: `Created from invoice ${invoice.invoiceNumber || id}`,
                 metadata: { invoiceId: id },
+                skipEbmSync: vsdcPurchaseOn,
                 tx,
               });
+              committedLine = { productId: newProduct.id, quantity: qty, unitCost: unitPrice, expiryDate };
 
               await tx.supplierInvoiceItem.update({
                 where: { id: item.id },
@@ -654,6 +667,7 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
           },
           { timeout: 30000 }
         );
+        if (committedLine) receiptLines.push(committedLine);
 
         const merged = { ...item, ...(action.data || {}) };
         receivedAtCost += (parseInt(String(merged.quantity)) || 0) * clampMoney(parseFloat(String(merged.unitPrice)) || 0);
@@ -694,6 +708,25 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
         },
       }),
     ]);
+
+    if (vsdcPurchaseOn && receiptLines.length > 0) {
+      const supplier = supplierId
+        ? await prisma.supplier.findUnique({ where: { id: supplierId }, select: { TIN: true, name: true } })
+        : null;
+      const queued = await queueLocalPurchase(prisma, {
+        organizationId,
+        branchId,
+        sourceType: 'SUPPLIER_INVOICE',
+        sourceId: id,
+        receiptKey: `SI:${id}`,
+        supplierTin: supplier?.TIN ?? invoice.vendorTIN,
+        supplierName: supplier?.name ?? invoice.supplierName,
+        supplierInvoiceRef: invoice.invoiceNumber,
+        userId,
+        lines: receiptLines,
+      });
+      if (queued) registerLocalPurchaseAsync(queued.id);
+    }
 
     const accounting = await enqueueScannedSupplierBillAccountingEvent(id, receivedAtCost).catch((e: Error) => ({
       queued: false,

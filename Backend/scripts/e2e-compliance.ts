@@ -162,7 +162,8 @@ async function main() {
   const voidOb = await outboxStatus(saleIds[1], 'VOID');
   const voidTx = await prisma.ebmTransaction.findFirst({ where: { saleId: saleIds[1], operation: 'VOID' }, orderBy: { createdAt: 'desc' } });
   const vsent = (voidTx?.responseData as any)?.requestPayload;
-  check('void fiscalized with fresh invcNo + stts 04, no orgInvcNo', voidOb?.status === 'SUCCEEDED' && vsent?.salesSttsCd === '04' && (vsent?.orgInvcNo === 0 || vsent?.orgInvcNo == null) && !!vsent?.cnclDt, { stts: vsent?.salesSttsCd });
+  const voidOrigInvc = (await prisma.sale.findUnique({ where: { id: saleIds[1] }, select: { vsdcInvcNo: true } }))?.vsdcInvcNo;
+  check('void fiscalized with fresh invcNo + stts 04, orgInvcNo = original', voidOb?.status === 'SUCCEEDED' && vsent?.salesSttsCd === '04' && Number(vsent?.orgInvcNo) === Number(voidOrigInvc) && !!vsent?.cnclDt, { stts: vsent?.salesSttsCd, orgInvc: vsent?.orgInvcNo });
 
   // ── 6. copy/reprint submits nothing ──
   const obBefore = await prisma.ebmOutbox.count({ where: { saleId: saleIds[2] } });

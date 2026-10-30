@@ -172,6 +172,13 @@ describe('parseVsdcStatusCode (§4.14 API Response Code)', () => {
     expect(status.code).toBe('000');
   });
 
+  it('normalizes numeric resultCd 0 / 1 to 000 / 001', () => {
+    expect(parseVsdcStatusCode({ resultCd: 0 }).code).toBe('000');
+    expect(parseVsdcStatusCode({ resultCd: 0 }).isError).toBe(false);
+    expect(parseVsdcStatusCode({ resultCd: 1 }).code).toBe('001');
+    expect(parseVsdcStatusCode({ resultCd: 1 }).message).toBe('There is no search result');
+  });
+
   it('any other resultCd is an error, using resultMsg verbatim', () => {
     const status = parseVsdcStatusCode({ resultCd: '910', resultMsg: 'Request parameter error' });
     expect(status.isError).toBe(true);
@@ -688,20 +695,41 @@ describe('buildRraSendReceiptPayload — submission guards', () => {
     expect(payload.receipt.adrs.length).toBeLessThanOrEqual(200);
   });
 
-  it('sends the seller company info as the receipt topMsg (name, TIN, address, phone lines)', () => {
+  it('sends the seller name as the receipt topMsg, both messages within CHAR 20', () => {
     const full = buildRraSendReceiptPayload(
       makeSale(),
       { TIN: '100000000', name: 'Seller', address: 'Kigali', phone: '+250788000000' },
       '01',
     ) as any;
-    expect(full.receipt.topMsg).toBe('Seller\nTIN:100000000\nKigali\nTel:+250788000000');
-    expect(full.receipt.btmMsg).toBe('Thank you for your business');
+    expect(full.receipt.topMsg).toBe('Seller');
+    expect(full.receipt.btmMsg).toBe('THANK YOU');
+    expect(full.receipt.btmMsg.length).toBeLessThanOrEqual(20);
     const bare = buildRraSendReceiptPayload(
       makeSale(),
       { TIN: null, name: 'Seller', address: null },
       '01',
     ) as any;
     expect(bare.receipt.topMsg).toBe('Seller');
+  });
+
+  it('does not send taxRtF / taxRtTt (not in TrnsSalesSaveWrReq)', () => {
+    const p = buildRraSendReceiptPayload(makeSale(), { TIN: '100000000', name: 'Seller', address: null }, '01') as any;
+    expect(p).not.toHaveProperty('taxRtF');
+    expect(p).not.toHaveProperty('taxRtTt');
+    expect(p).toHaveProperty('taxRtA');
+    expect(p).toHaveProperty('taxRtD');
+  });
+
+  it('a void carries salesSttsCd 04 and orgInvcNo = the original invoice', () => {
+    const p = buildRraSendReceiptPayload(
+      makeSale(),
+      { TIN: '100000000', name: 'Seller', address: null },
+      '01',
+      { cnclDt: new Date('2026-10-01T08:00:00.000Z'), invcNoOverride: 99, orgInvcNo: 42 },
+    ) as any;
+    expect(p.salesSttsCd).toBe('04');
+    expect(p.invcNo).toBe(99);
+    expect(p.orgInvcNo).toBe(42);
   });
 });
 
@@ -801,19 +829,19 @@ describe('VSDC buyer identity mapping — official receipt structure', () => {
     expect(toVsdcCustTinMobile(null)).toBeNull();
   });
 
-  it('topMsg carries the seller name, TIN, address and phone on separate lines (≤ 300 chars)', () => {
+  it('topMsg is the seller name clamped to CHAR 20', () => {
     const payload = buildRraSendReceiptPayload(
       makeBuyerSale({ TIN: '100000001', phone: '', customerType: 'INDIVIDUAL' }),
       { TIN: '999945560', name: 'Exceledge demo pharmacy', address: 'KN 100 ST', phone: '0788888888' },
       '01',
     ) as any;
-    expect(receiptOf(payload).topMsg).toBe('Exceledge demo pharmacy\nTIN:999945560\nKN 100 ST\nTel:0788888888');
+    expect(receiptOf(payload).topMsg).toBe('Exceledge demo pharm');
     const long = buildRraSendReceiptPayload(
       makeBuyerSale({ TIN: '100000001', phone: '', customerType: 'INDIVIDUAL' }),
       { TIN: '999945560', name: 'N'.repeat(400), address: null },
       '01',
     ) as any;
-    expect((receiptOf(long).topMsg as string).length).toBe(300);
+    expect((receiptOf(long).topMsg as string).length).toBe(20);
   });
 
   it('3. customer with both TIN and phone → TIN wins on top, both receipt slots filled, never swapped', () => {

@@ -348,6 +348,9 @@
           "online": {
             "type": "boolean"
           },
+          "trainingMode": {
+            "type": "boolean"
+          },
           "lastContact": {
             "type": "string",
             "format": "date-time",
@@ -983,6 +986,25 @@
         }
       }
     },
+    "/api/organizations/{organizationId}/rra/code-catalog": {
+      "get": {
+        "tags": [
+          "RRA Master Data"
+        ],
+        "summary": "Typed catalog of cached `/code/selectCodes` lists",
+        "description": "Tax types (04), tourism tax (03/08), countries (05), property types (02), units (10/17), refund reasons (32), etc.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/organizationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Code catalog for ERP dropdowns"
+          }
+        }
+      }
+    },
     "/api/organizations/{organizationId}/rra/codes/sync": {
       "post": {
         "tags": [
@@ -1407,6 +1429,27 @@
                   },
                   "branchId": {
                     "type": "integer"
+                  },
+                  "items": {
+                    "type": "array",
+                    "description": "Optional per-line buyer names / product links. `itemNm` is stored as the local catalog name (VSDC `itemNm`); the supplier name stays on `spplrItemNm`.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "itemId": {
+                          "type": "integer"
+                        },
+                        "itemSeq": {
+                          "type": "integer"
+                        },
+                        "itemNm": {
+                          "type": "string"
+                        },
+                        "linkProductId": {
+                          "type": "integer"
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -2212,6 +2255,60 @@
         "responses": {
           "200": {
             "description": "Reprint payload with isCopy=true"
+          }
+        }
+      }
+    },
+    "/api/sales/{organizationId}/{saleId}/copy": {
+      "post": {
+        "tags": [
+          "Fiscal Sales"
+        ],
+        "summary": "CS/CR copy of an existing NS/NR receipt (PDF, original VSDC fiscal data, marked COPY; not submitted to VSDC)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/organizationId"
+          },
+          {
+            "name": "saleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "A4",
+                "A5",
+                "80mm"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "application/pdf; headers X-Receipt-Copy-Label (CS|CR) and X-Receipt-Copy-Number"
+          },
+          "400": {
+            "description": "Invalid receipt id"
+          },
+          "404": {
+            "description": "Receipt not found in this organization/branch"
+          },
+          "409": {
+            "description": "Stored VSDC record missing, incomplete or inconsistent (code FISCAL_RECORD_MISSING | FISCAL_DATA_INCOMPLETE | FISCAL_DATA_MISMATCH)"
+          },
+          "422": {
+            "description": "Not an NS/NR receipt (training, proforma, voided) — code COPY_NOT_ALLOWED"
+          },
+          "425": {
+            "description": "Original receipt not yet confirmed by VSDC"
           }
         }
       }

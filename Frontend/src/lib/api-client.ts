@@ -709,6 +709,14 @@ class ApiClient {
     })
   }
 
+  /** Queue an 80mm receipt print on a logged-in POS app for this sale's branch. */
+  async enqueuePosPrint(saleId: string | number, copies = 1) {
+    return this.request(`/sales/${this.getOrganizationId()}/${saleId}/pos-print`, {
+      method: "POST",
+      body: JSON.stringify({ copies }),
+    })
+  }
+
   /**
    * CS/CR: PDF copy of an existing NS (Copy Sale) or NR (Copy Refund) receipt,
    * carrying the original receipt's VSDC fiscal data and marked COPY. The
@@ -1128,10 +1136,15 @@ class ApiClient {
     return this.request(`/reports/electronic-journal/${this.getOrganizationId()}/${saleId}`);
   }
 
-  /** Detailed purchases report (RRA checklist §25). */
+  /** Detailed purchases report (RRA checklist §25) — local POs + importation block. */
   async getPurchasesReport(params: { startDate?: string; endDate?: string } = {}) {
     const q = new URLSearchParams(params as Record<string, string>);
     return this.request(`/reports/purchases/${this.getOrganizationId()}?${q.toString()}`);
+  }
+
+  /** Importation report (RRA checklist §25). */
+  async getImportationReport() {
+    return this.request(`/reports/imports/${this.getOrganizationId()}`);
   }
 
   // ── RRA master-data (Codes §59 / Item Class §61 / Customer §62 / Select Item §64 / Notices §65) ──
@@ -1202,6 +1215,7 @@ class ApiClient {
     reject = false,
     body: {
       prcOrdCd?: string;
+      remark?: string;
       items?: Array<{
         itemId?: number;
         itemSeq?: number;
@@ -1235,6 +1249,8 @@ class ApiClient {
       itemClsCd?: string;
       itemCd?: string;
       linkProductId?: number;
+      createProduct?: boolean;
+      itemNm?: string;
       remark?: string;
       sellingPrice?: number;
       expiryDate?: string;

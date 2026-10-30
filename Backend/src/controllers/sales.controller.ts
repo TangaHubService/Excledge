@@ -2554,10 +2554,11 @@ export const printReceiptCopy = async (req: BranchAuthRequest, res: Response) =>
 /** Authoritative backend-generated invoice PDF (A4, A5 or 80mm) for download, preview, sharing, and printing. */
 export const getInvoicePdf = async (req: BranchAuthRequest, res: Response) => {
   try {
-    // CIS §16/§22: an official receipt is not issued until VSDC has signed it.
-    // A pending or failed fiscal sale (any receipt type — normal, training or
-    // proforma) returns 425 instead of a printable document.
-    const invoiceData = await composeInvoicePayload(req)
+    // CIS §16/§22: official receipts wait for VSDC signature (425 while pending).
+    // ?allowPending=1 — POS/auto-print may request the composed PDF stamped
+    // NOT FISCALISED so the slip still prints immediately after a sale.
+    const allowUnfiscalized = String(req.query.allowPending ?? "") === "1"
+    const invoiceData = await composeInvoicePayload(req, { allowUnfiscalized })
     if (!invoiceData) return res.status(404).json(apiError("Sale not found"))
 
     const format = parsePdfFormat(req.query.format)

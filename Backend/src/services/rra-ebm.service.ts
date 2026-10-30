@@ -621,15 +621,12 @@ export function buildRraSendReceiptPayload(
     /**
      * VOID must be submitted as a brand-new sales-transaction document — the
      * VSDC sandbox rejects a resubmitted `invcNo` with resultCd 924
-     * ("Invoice number already exists"), and rejects `orgInvcNo` on a void
-     * with resultCd 910 ("Original invoice number ... only provided for
-     * refunds"). Callers building a void payload must allocate a fresh
-     * `invcNo` (e.g. via `generateInvoiceNumber()`) and pass it here instead
-     * of letting this function fall back to the original sale's `vsdcInvcNo`.
+     * ("Invoice number already exists"). Callers building a void payload must
+     * allocate a fresh `invcNo` (e.g. via `generateInvoiceNumber()`) and pass
+     * it here, with `orgInvcNo` = the original sale's `vsdcInvcNo`.
      */
     invcNoOverride?: number;
     taxRates?: [number, number, number, number];
-    tourismTaxRate?: number;
   } = {},
 ): Record<string, unknown> {
   const rcptTyCd = rcptTyCdFromLabel(sale.rcptLabel);
@@ -866,10 +863,6 @@ export function buildRraSendReceiptPayload(
     taxRtB: (opts.taxRates ?? TAX_RATE_BY_SLOT)[1],
     taxRtC: (opts.taxRates ?? TAX_RATE_BY_SLOT)[2],
     taxRtD: (opts.taxRates ?? TAX_RATE_BY_SLOT)[3],
-    // Mandatory combined fields required by the RRA reference implementation
-    // (validated as taxRtF / taxRtTt in the sandbox WAR).
-    taxRtF: (opts.taxRates ?? TAX_RATE_BY_SLOT)[1],
-    taxRtTt: opts.tourismTaxRate ?? 3,
     taxAmtA: taxAmt[0],
     taxAmtB: taxAmt[1],
     taxAmtC: taxAmt[2],
@@ -893,17 +886,10 @@ export function buildRraSendReceiptPayload(
       // ("length must be between 0 and 20") — clamp the trade name.
       trdeNm: clampField(org.name, 20),
       adrs: clampField(org.address, 200),
-      topMsg: clampField(
-        [
-          sanitizeVsdcText(org.name),
-          org.TIN?.trim() ? `TIN:${sanitizeVsdcText(org.TIN)}` : '',
-          sanitizeVsdcText(org.address),
-          org.phone?.trim() ? `Tel:${sanitizeVsdcText(org.phone)}` : '',
-        ].filter(Boolean).join('\n'),
-        300,
-      ),
-      // VSDC caps btmMsg at 100 characters (910 "size must be between 0 and 100").
-      btmMsg: clampField('Thank you for your business', 100),
+      // VSDC API v1.0.5 §3.3.6.1 sizes topMsg and btmMsg at CHAR 20. The full
+      // seller header (TIN, address, phone) is printed by the CIS itself.
+      topMsg: clampField(sanitizeVsdcText(org.name), 20),
+      btmMsg: clampField('THANK YOU', 20),
       prchrAcptcYn: 'N',
     },
     itemList,

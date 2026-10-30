@@ -18,6 +18,11 @@ import {
   updateProforma,
   convertProforma,
 } from "../controllers/sales.controller";
+import {
+  enqueuePosPrintJob,
+  claimNextPosPrintJob,
+  completePosPrintJob,
+} from "../controllers/pos-print.controller";
 import { authenticate, authorize } from "../middleware/auth.middleware";
 import { branchAuth } from "../middleware/branchAuth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
@@ -184,6 +189,36 @@ router.post(
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
   validate(correctSaleSchema),
   correctSale
+);
+
+// Queue an 80mm receipt print on a logged-in POS device for this branch.
+router.post(
+  "/:organizationId/:saleId/pos-print",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  enqueuePosPrintJob
+);
+
+// POS app: claim the next pending remote print job (atomic).
+router.post(
+  "/:organizationId/pos-print-jobs/claim-next",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  claimNextPosPrintJob
+);
+
+// POS app: mark a claimed job PRINTED or FAILED.
+router.post(
+  "/:organizationId/pos-print-jobs/:jobId/complete",
+  authenticate,
+  orgAccess, requireActiveSubscription(),
+  branchAuth,
+  authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  completePosPrintJob
 );
 
 // Reprint a sale receipt (increments reprintCount, returns isCopy=true)

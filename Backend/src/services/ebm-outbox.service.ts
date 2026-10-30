@@ -12,7 +12,7 @@ import {
   clampField,
   withBranchSellerAddress,
 } from './rra-ebm.service';
-import { getRraPaymentCode, validateRefundReasonCodeForOrg, DEFAULT_RFD_RSN_CD, getTaxRatesBySlot, getTourismTaxRate } from './rra-code.service';
+import { getRraPaymentCode, validateRefundReasonCodeForOrg, DEFAULT_RFD_RSN_CD, getTaxRatesBySlot } from './rra-code.service';
 import {
   buildVsdcEnvelope,
   saveInvc,
@@ -400,11 +400,8 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       continue;
     }
 
-    const [taxRates, tourismTaxRate] = await Promise.all([
-      getTaxRatesBySlot(row.organizationId),
-      getTourismTaxRate(row.organizationId),
-    ]);
-    const rateOpts = { taxRates, tourismTaxRate };
+    const taxRates = await getTaxRatesBySlot(row.organizationId);
+    const rateOpts = { taxRates };
 
     // ── Auto-allocate an RRA purchase code when the sale has none on record ──
     // The sandbox rejects every sale without a real single-use code (881/882).
@@ -605,6 +602,20 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         succeeded += 1;
         continue;
       }
+      // orgInvcNo on the cancellation is the original NS invcNo. Sending 0 would
+      // detach the cancellation from the document it cancels, so refuse.
+      const voidOrgInvcNo = sale.vsdcInvcNo;
+      if (typeof voidOrgInvcNo !== 'number' || !Number.isInteger(voidOrgInvcNo) || voidOrgInvcNo <= 0) {
+        await prisma.ebmOutbox.update({
+          where: { id: row.id },
+          data: {
+            status: 'DEAD_LETTER',
+            lastError: 'Original NS has no VSDC invoice number (orgInvcNo) — cancellation was not submitted',
+          },
+        });
+        failed += 1;
+        continue;
+      }
       let rraPaymentCode: string;
       try {
         rraPaymentCode = await getRraPaymentCode(row.organizationId, sale.paymentType);
@@ -618,10 +629,11 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       }
       try {
         // A cancellation is a NEW sales-transaction document (fresh invcNo)
-        // with cnclDt/cnclReqDt set and salesSttsCd='04' — the sandbox
-        // rejects a resubmitted invcNo (924) and rejects orgInvcNo on a void
-        // (910: orgInvcNo is refund-only). Confirmed against the RRA VSDC
-        // sandbox 2026-08-10.
+        // with cnclDt/cnclReqDt set, salesSttsCd='04' and orgInvcNo = the
+        // original NS invcNo. The sandbox rejects a resubmitted invcNo (924).
+        // A 2026-08-10 sandbox run answered 910 to orgInvcNo on a void; if that
+        // recurs the row dead-letters with the VSDC message rather than
+        // silently sending 0.
         //
         // A void is a fresh submission, so it needs a fresh unconsumed
         // purchase code too: reusing the original sale's (already consumed)
@@ -657,7 +669,12 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
             data: { payload: { ...(row.payload as Record<string, unknown>), voidInvcNo } as any },
           });
         }
-        payload = buildRraSendReceiptPayload(sale, org, rraPaymentCode, { cnclDt: new Date(), invcNoOverride: voidInvcNo, ...rateOpts });
+        payload = buildRraSendReceiptPayload(sale, org, rraPaymentCode, {
+          cnclDt: new Date(),
+          invcNoOverride: voidInvcNo,
+          orgInvcNo: voidOrgInvcNo,
+          ...rateOpts,
+        });
         payload.remark = (row.payload as { reason?: string })?.reason ?? '';
         payload.idempotencyKey = row.idempotencyKey;
       } catch (e: unknown) {

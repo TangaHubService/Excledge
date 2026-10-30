@@ -84,6 +84,7 @@ export default function SaleDetailsPage() {
     const [isPrintingInvoice, setIsPrintingInvoice] = useState(false);
     const [isSharingInvoice, setIsSharingInvoice] = useState(false);
     const [isCopying, setIsCopying] = useState<'print' | 'download' | null>(null);
+    const [isSendingToPos, setIsSendingToPos] = useState(false);
     // Named distinctly from date-fns's `format` (imported above) to avoid shadowing it.
     const [invoiceFormat, setInvoiceFormat] = useState<InvoicePdfFormat>('A4');
 
@@ -203,6 +204,28 @@ export default function SaleDetailsPage() {
             toast.error(t('sales.invoiceGenerationError') || 'Failed to generate invoice');
         } finally {
             setIsDownloadingInvoice(false);
+        }
+    };
+
+    const handleSendToPos = async () => {
+        if (!id) return;
+        setIsSendingToPos(true);
+        try {
+            const res = await apiClient.enqueuePosPrint(id, 1) as {
+                success?: boolean;
+                message?: string;
+                data?: { alreadyQueued?: boolean };
+            };
+            if (res?.data?.alreadyQueued) {
+                toast.info(res.message || 'Already queued — waiting for the POS to print');
+            } else {
+                toast.success(res?.message || 'Sent to POS printer — keep the POS app open');
+            }
+        } catch (error) {
+            console.error('Failed to queue POS print:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to send print job to POS');
+        } finally {
+            setIsSendingToPos(false);
         }
     };
 
@@ -360,6 +383,24 @@ export default function SaleDetailsPage() {
                             <Printer className="h-4 w-4 mr-2" />
                         )}
                         {t('sales.printInvoice') || 'Print Invoice'}
+                    </Button>
+                    <Button
+                        onClick={handleSendToPos}
+                        disabled={isSendingToPos}
+                        variant="outline"
+                        size="sm"
+                        className={theme === 'dark'
+                            ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700 hover:text-white'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                        }
+                        title="Queue this 80mm receipt on a logged-in POS device"
+                    >
+                        {isSendingToPos ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                            <Printer className="h-4 w-4 mr-2" />
+                        )}
+                        {t('sales.sendToPos') || 'Send to POS'}
                     </Button>
                     <Button
                         onClick={handleDownloadInvoice}

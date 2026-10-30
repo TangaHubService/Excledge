@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { Prisma } from '@prisma/client';
 import { isEbmEnabled } from './rra-ebm.service';
@@ -236,6 +237,23 @@ export function syncInsuranceToRraAsync(
   });
 }
 
+/**
+ * saveBrancheUsers requires a `pwd`. It is a random per-user value kept only
+ * for this payload: never the login password, never derived from its hash,
+ * and never logged. Created once and reused so re-syncs send the same value.
+ */
+async function vsdcRegistrationPassword(userId: number): Promise<string> {
+  const existing = await prisma.vsdcUserCredential.findUnique({ where: { userId }, select: { pwd: true } });
+  if (existing) return existing.pwd;
+  const row = await prisma.vsdcUserCredential.upsert({
+    where: { userId },
+    create: { userId, pwd: randomBytes(18).toString('base64url') },
+    update: {},
+    select: { pwd: true },
+  });
+  return row.pwd;
+}
+
 /** POST /branches/saveBrancheUsers — push a branch cashier/user account. */
 export async function syncUserToRra(
   organizationId: number,
@@ -251,7 +269,6 @@ export async function syncUserToRra(
       name: true,
       email: true,
       phone: true,
-      password: true,
       isActive: true,
       deletedAt: true,
       userBranches: { where: { branch: { organizationId } }, select: { branchId: true, isPrimary: true } },
@@ -275,9 +292,7 @@ export async function syncUserToRra(
   const regrNm = clamp(actor?.name ?? 'System', 60);
   const regrId = clamp(actor ? String(actor.id) : 'system', 20);
 
-  // VSDC stores a CIS login credential for recovery — send a non-reversible
-  // placeholder derived from the already-hashed password, never a cleartext secret.
-  const pwd = clamp(user.password || `user-${user.id}`, 255);
+  const pwd = await vsdcRegistrationPassword(user.id);
 
   const payload = {
     userId: clamp(String(user.id), 20),

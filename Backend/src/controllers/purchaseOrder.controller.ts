@@ -5,6 +5,12 @@ import { auditLogger } from "../utils/auditLogger"
 import { addStock } from "../services/inventory-ledger.service"
 import { syncProductToRraAsync } from "../services/product-sync.service"
 import { enqueueGoodsReceivedAccountingEvent } from "../services/accounting-outbox.service"
+import {
+    isLocalPurchaseRegistrationOn,
+    queueLocalPurchase,
+    registerLocalPurchaseAsync,
+    type LocalPurchaseLine,
+} from "../services/vsdc-local-purchase.service"
 import NotificationService from "../services/notification.service"
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 import { buildBranchFilter, getBranchIdForOperation } from "../middleware/branchAuth.middleware"
@@ -437,6 +443,8 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
             batchNumber: string;
         }> = []
         const repricedProductIds: number[] = []
+        const vsdcPurchaseOn = await isLocalPurchaseRegistrationOn(order.organizationId)
+        let localPurchaseId: number | null = null
 
         const updatedOrder = await prisma.$transaction(async (tx) => {
             const terminalStatuses: PurchaseOrderStatus[] = ['COMPLETED', 'CANCELLED']
@@ -471,6 +479,8 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
                 if (!branch) {
                     throw new Error("Invalid or inactive branch for receiving")
                 }
+                const receiptLedgerIds: number[] = []
+                const receiptLines: LocalPurchaseLine[] = []
 
                 for (const item of po.items) {
                     if (!item.productId) continue
@@ -526,7 +536,7 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
                         }
                     })
 
-                    await addStock({
+                    const ledgerEntry = await addStock({
                         organizationId: order.organizationId,
                         productId: item.productId,
                         userId,
@@ -539,8 +549,12 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
                         reference: order.orderNumber,
                         referenceType: 'PURCHASE_ORDER',
                         note: `Purchase Order #${order.orderNumber} - ${status === 'PARTIALLY_RECEIVED' ? 'Partial' : 'Full'} receive at branch ${effectiveBranchId}`,
+                        // RRA books this stock-in from the savePurchases registration below.
+                        skipEbmSync: vsdcPurchaseOn,
                         tx,
                     });
+                    receiptLedgerIds.push(ledgerEntry.id)
+                    receiptLines.push({ productId: item.productId, quantity: recvQty, unitCost: recvUnitCost, expiryDate: recvExpiryDate })
 
                     const newTotalReceived = (item.quantityReceived || 0) + recvQty
                     await tx.purchaseOrderItem.update({
@@ -573,6 +587,22 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
                     lines: receivingHistory.map((r) => ({ productId: r.productId, productName: r.productName, quantity: r.newlyReceivedQty, unitCost: r.unitCost })),
                 })
 
+                if (vsdcPurchaseOn && receiptLedgerIds.length > 0) {
+                    const queued = await queueLocalPurchase(tx, {
+                        organizationId: order.organizationId,
+                        branchId: effectiveBranchId,
+                        sourceType: 'PURCHASE_ORDER',
+                        sourceId: po.id,
+                        receiptKey: `PO:${po.id}:L${receiptLedgerIds[0]}`,
+                        supplierTin: po.supplier?.TIN,
+                        supplierName: po.supplier?.name,
+                        supplierInvoiceRef: order.orderNumber,
+                        userId: Number(userId) || null,
+                        lines: receiptLines,
+                    })
+                    localPurchaseId = queued?.id ?? null
+                }
+
                 // Determine if this should be PARTIALLY_RECEIVED based on received quantities
                 if (status === 'COMPLETED') {
                     const allFullyReceived = receivingHistory.every(r => r.remainingQty <= 0)
@@ -589,6 +619,7 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
         })
 
         for (const productId of repricedProductIds) syncProductToRraAsync(productId, userId)
+        if (localPurchaseId != null) registerLocalPurchaseAsync(localPurchaseId)
 
         // Send emails
         try {

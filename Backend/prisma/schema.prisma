@@ -19,6 +19,8 @@ model Organization {
   ebmDeviceId              String? // Legacy: org-level fallback (use Branch.ebmDeviceId per branch)
   ebmSerialNo              String? // Legacy: org-level fallback (use Branch.ebmSerialNo per branch)
   mrcNo                    String? // Legacy: org-level fallback (use Branch.mrcNo per branch)
+  ebmTinResetAt            DateTime?
+  ebmInitializedAt         DateTime?
   avatar                   String?
   address                  String?
   phone                    String?
@@ -45,6 +47,7 @@ model Organization {
   products                 Product[]
   purchaseOrders           PurchaseOrder[]
   sales                    Sale[]
+  posPrintJobs             PosPrintJob[]
   stockMovements           StockMovement[]
   subscriptions            Subscription[]               @relation("OrganizationSubscriptions")
   supplierPayments         SupplierPayment[]
@@ -262,6 +265,7 @@ model Branch {
   shifts            Shift[]
   heldSales         HeldSale[]
   fuelDispensers    FuelDispenser[]
+  posPrintJobs      PosPrintJob[]
 
   @@unique([organizationId, bhfId])
   @@unique([organizationId, code])
@@ -813,6 +817,7 @@ model Sale {
   ebmTransactions      EbmTransaction[] @relation("SaleEbmTransactions")
   ebmOutboxItems       EbmOutbox[]
   accountingOutboxItems ErpAccountingOutbox[]
+  posPrintJobs         PosPrintJob[]
   prcOrdCd             String?          @map("prc_ord_cd") // RRA purchase order code used for this sale (single-use)
   saleItems            SaleItem[]
   customer             Customer         @relation(fields: [customerId], references: [id])
@@ -834,6 +839,40 @@ model Sale {
   @@index([branchId, createdAt]) // NEW
   @@index([branchId, status]) // NEW
   @@map("sales")
+}
+
+/// Remote print queue: dashboard/API enqueues a job; a logged-in POS app claims
+/// it and prints on the device's built-in thermal printer.
+enum PosPrintJobStatus {
+  PENDING
+  PRINTING
+  PRINTED
+  FAILED
+  CANCELLED
+}
+
+model PosPrintJob {
+  id             Int               @id @default(autoincrement())
+  organizationId Int
+  branchId       Int
+  saleId         Int
+  copies         Int               @default(1)
+  status         PosPrintJobStatus @default(PENDING)
+  requestedById  Int?
+  claimedById    Int?
+  claimedAt      DateTime?
+  finishedAt     DateTime?
+  lastError      String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id])
+  sale         Sale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, branchId, status, createdAt])
+  @@index([saleId, status])
+  @@map("pos_print_jobs")
 }
 
 model ActivityLog {
@@ -1371,6 +1410,30 @@ model RraNotice {
 /// /trnsPurchase/selectTrnsPurchaseSales (RRA checklist §70). The operator
 /// reviews each one and confirms it (/trnsPurchase/savePurchases with
 /// pchsSttsCd, RRA checklist §71), which records the purchase and its stock-in.
+model VsdcLocalPurchase {
+  id             Int      @id @default(autoincrement())
+  organizationId Int
+  branchId       Int
+  sourceType     String
+  sourceId       Int
+  receiptKey     String   @unique
+  spplrTin       String?
+  spplrNm        String?
+  spplrInvcRef   String?
+  userId         Int?
+  lines          Json
+  status         String   @default("PENDING")
+  cisInvcNo      Int?
+  pulledAt       DateTime?
+  retryCount     Int      @default(0)
+  lastError      String?
+  registeredAt   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("vsdc_local_purchases")
+}
+
 model RraPurchase {
   id              Int               @id @default(autoincrement())
   organizationId  Int
@@ -1380,6 +1443,8 @@ model RraPurchase {
   spplrInvcNo     BigInt
   rcptTyCd        String?
   pmtTyCd         String?
+  /// RRA purchase order code from the inbound B2B sale (selectTrnsPurchaseSales / §38).
+  prcOrdCd        String?
   salesDt         String?
   totItemCnt      Int?
   totTaxblAmt     Decimal?          @db.Decimal(15, 2)
@@ -1391,6 +1456,7 @@ model RraPurchase {
   purchaseOrderId Int?
   rawResponse     Json?
   pulledAt        DateTime          @default(now())
+  cisInvcNo       Int?
   items           RraPurchaseItem[]
   organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 

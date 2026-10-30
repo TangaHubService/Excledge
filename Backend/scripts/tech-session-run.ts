@@ -389,7 +389,7 @@ async function main() {
       status: voidOb?.status,
       err: voidOb?.lastError,
     })
-    check('3. Void stts=04 fresh invc, no orgInvcNo', vsent?.salesSttsCd === '04' && (vsent?.orgInvcNo === 0 || vsent?.orgInvcNo == null) && !!vsent?.cnclDt, {
+    check('3. Void stts=04 fresh invc, orgInvcNo = original', vsent?.salesSttsCd === '04' && Number(vsent?.orgInvcNo) === Number(sale2.completeSale.vsdcInvcNo) && vsent?.invcNo !== vsent?.orgInvcNo && !!vsent?.cnclDt, {
       stts: vsent?.salesSttsCd,
       orgInvc: vsent?.orgInvcNo,
       cnclDt: vsent?.cnclDt,

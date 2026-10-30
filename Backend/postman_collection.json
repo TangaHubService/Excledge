@@ -38,6 +38,79 @@
   ],
   "item": [
     {
+      "name": "Accounting Integration",
+      "item": [
+        {
+          "name": "Post /api/accounting-integration/notifications/email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounting-integration/notifications/email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounting-integration",
+                "notifications",
+                "email"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Handler: `post /api/accounting-integration/notifications/email` (`src/routes/accounting-integration.routes.ts:26`).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": 2,\n  \"title\": \"Test notification\",\n  \"body\": \"Test\",\n  \"severity\": \"Test\",\n  \"targetRole\": \"Test\",\n  \"targetErpUserId\": 2,\n  \"link\": \"Test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Post /api/accounting-integration/:organization Id/inventory-opening",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounting-integration/{{organizationId}}/inventory-opening",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounting-integration",
+                ":organizationId",
+                "inventory-opening"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "description": "Allowed roles: SYSTEM_OWNER, ADMIN, ACCOUNTANT. Handler: `post /api/accounting-integration/:organizationId/inventory-opening` (`src/routes/accounting-integration.routes.ts:72`)."
+          }
+        }
+      ]
+    },
+    {
       "name": "Activity Logs",
       "item": [
         {
@@ -778,7 +851,7 @@
                 }
               ]
             },
-            "description": "Handler: `selectBatches` (`src/controllers/batch.controller.ts:119`).",
+            "description": "Handler: `selectBatches` (`src/controllers/batch.controller.ts:124`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"productId\": 2,\n  \"quantity\": 1,\n  \"method\": \"Test\",\n  \"warehouseId\": 2\n}",
@@ -1268,7 +1341,7 @@
               ],
               "variable": []
             },
-            "description": "Handler: `getUserBranchesController` (`src/controllers/branch.controller.ts:60`)."
+            "description": "Handler: `getUserBranchesController` (`src/controllers/branch.controller.ts:61`)."
           }
         },
         {
@@ -1295,7 +1368,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `getUserPrimaryBranchController` (`src/controllers/branch.controller.ts:78`)."
+            "description": "Handler: `getUserPrimaryBranchController` (`src/controllers/branch.controller.ts:79`)."
           }
         },
         {
@@ -1333,7 +1406,7 @@
                 }
               ]
             },
-            "description": "Handler: `getBranchesController` (`src/controllers/branch.controller.ts:22`)."
+            "description": "Handler: `getBranchesController` (`src/controllers/branch.controller.ts:23`)."
           }
         },
         {
@@ -1368,7 +1441,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `createBranchController` (`src/controllers/branch.controller.ts:98`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `createBranchController` (`src/controllers/branch.controller.ts:99`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Test item\",\n  \"code\": \"123456\",\n  \"location\": \"Kigali\",\n  \"address\": \"Kigali\",\n  \"phone\": \"+250788000000\",\n  \"metadata\": {}\n}",
@@ -1413,7 +1486,7 @@
                 }
               ]
             },
-            "description": "Handler: `getBranch` (`src/controllers/branch.controller.ts:39`)."
+            "description": "Handler: `getBranch` (`src/controllers/branch.controller.ts:40`)."
           }
         },
         {
@@ -1453,10 +1526,10 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `updateBranchController` (`src/controllers/branch.controller.ts:142`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `updateBranchController` (`src/controllers/branch.controller.ts:143`).",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Test item\",\n  \"location\": \"Kigali\",\n  \"address\": \"Kigali\",\n  \"addressLine2\": \"Test address\",\n  \"phone\": \"+250788000000\",\n  \"status\": \"ACTIVE\",\n  \"metadata\": {},\n  \"bhfId\": 2,\n  \"ebmDeviceId\": 2,\n  \"ebmSerialNo\": \"TEST-SERIAL\",\n  \"vsdcUrl\": \"http://localhost:8080\"\n}",
+              "raw": "{\n  \"name\": \"Test item\",\n  \"location\": \"Kigali\",\n  \"address\": \"Kigali\",\n  \"addressLine2\": \"Test address\",\n  \"phone\": \"+250788000000\",\n  \"status\": \"ACTIVE\",\n  \"metadata\": {},\n  \"bhfId\": 2,\n  \"ebmDeviceId\": 2,\n  \"ebmSerialNo\": \"TEST-SERIAL\",\n  \"mrcNo\": \"Test\",\n  \"vsdcUrl\": \"http://localhost:8080\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1498,7 +1571,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN. Handler: `deleteBranchController` (`src/controllers/branch.controller.ts:220`)."
+            "description": "Allowed roles: ADMIN. Handler: `deleteBranchController` (`src/controllers/branch.controller.ts:230`)."
           }
         },
         {
@@ -1535,7 +1608,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `setDefaultBranchController` (`src/controllers/branch.controller.ts:195`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `setDefaultBranchController` (`src/controllers/branch.controller.ts:205`)."
           }
         },
         {
@@ -1576,7 +1649,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, BRANCH_MANAGER. Handler: `assignUserToBranchController` (`src/controllers/branch.controller.ts:244`).",
+            "description": "Allowed roles: ADMIN, BRANCH_MANAGER. Handler: `assignUserToBranchController` (`src/controllers/branch.controller.ts:254`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"userId\": 2,\n  \"isPrimary\": false\n}",
@@ -1622,7 +1695,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, BRANCH_MANAGER. Handler: `getBranchUsersController` (`src/controllers/branch.controller.ts:309`)."
+            "description": "Allowed roles: ADMIN, BRANCH_MANAGER. Handler: `getBranchUsersController` (`src/controllers/branch.controller.ts:319`)."
           }
         },
         {
@@ -1664,7 +1737,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, BRANCH_MANAGER. Handler: `removeUserFromBranchController` (`src/controllers/branch.controller.ts:281`)."
+            "description": "Allowed roles: ADMIN, BRANCH_MANAGER. Handler: `removeUserFromBranchController` (`src/controllers/branch.controller.ts:291`)."
           }
         }
       ]
@@ -1773,7 +1846,7 @@
                 }
               ]
             },
-            "description": "Handler: `getCustomerById` (`src/controllers/customer.controller.ts:138`)."
+            "description": "Handler: `getCustomerById` (`src/controllers/customer.controller.ts:141`)."
           }
         },
         {
@@ -1813,7 +1886,7 @@
                 }
               ]
             },
-            "description": "Handler: `updateCustomer` (`src/controllers/customer.controller.ts:255`).",
+            "description": "Handler: `updateCustomer` (`src/controllers/customer.controller.ts:273`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Updated test customer\",\n  \"phone\": \"+250788000000\"\n}",
@@ -1858,7 +1931,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN. Handler: `deleteCustomer` (`src/controllers/customer.controller.ts:314`)."
+            "description": "Allowed roles: ADMIN. Handler: `deleteCustomer` (`src/controllers/customer.controller.ts:345`)."
           }
         },
         {
@@ -1890,7 +1963,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT. Handler: `bulkImportCustomers` (`src/controllers/customer.controller.ts:347`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT. Handler: `bulkImportCustomers` (`src/controllers/customer.controller.ts:378`).",
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -1933,7 +2006,7 @@
                 }
               ]
             },
-            "description": "Handler: `downloadCustomerTemplate` (`src/controllers/customer.controller.ts:594`)."
+            "description": "Handler: `downloadCustomerTemplate` (`src/controllers/customer.controller.ts:625`)."
           }
         },
         {
@@ -1966,7 +2039,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT. Handler: `previewImportCustomers` (`src/controllers/customer.controller.ts:455`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT. Handler: `previewImportCustomers` (`src/controllers/customer.controller.ts:486`).",
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -2013,7 +2086,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT. Handler: `confirmImportCustomers` (`src/controllers/customer.controller.ts:498`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT. Handler: `confirmImportCustomers` (`src/controllers/customer.controller.ts:529`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"importId\": 2\n}",
@@ -2060,7 +2133,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT. Handler: `downloadCustomerErrorFile` (`src/controllers/customer.controller.ts:564`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT. Handler: `downloadCustomerErrorFile` (`src/controllers/customer.controller.ts:595`)."
           }
         }
       ]
@@ -2104,7 +2177,7 @@
                 }
               ]
             },
-            "description": "Handler: `getOverviewDashboard` (`src/controllers/dashboard.controller.ts:962`)."
+            "description": "Handler: `getOverviewDashboard` (`src/controllers/dashboard.controller.ts:966`)."
           }
         },
         {
@@ -2143,7 +2216,7 @@
                 }
               ]
             },
-            "description": "Handler: `getDashboardStats` (`src/controllers/dashboard.controller.ts:272`)."
+            "description": "Handler: `getDashboardStats` (`src/controllers/dashboard.controller.ts:276`)."
           }
         },
         {
@@ -2194,7 +2267,7 @@
                 }
               ]
             },
-            "description": "Handler: `getSalesTrend` (`src/controllers/dashboard.controller.ts:410`)."
+            "description": "Handler: `getSalesTrend` (`src/controllers/dashboard.controller.ts:414`)."
           }
         },
         {
@@ -2226,7 +2299,7 @@
                 }
               ]
             },
-            "description": "Handler: `getNotifications` (`src/controllers/dashboard.controller.ts:490`)."
+            "description": "Handler: `getNotifications` (`src/controllers/dashboard.controller.ts:494`)."
           }
         },
         {
@@ -2258,7 +2331,7 @@
                 }
               ]
             },
-            "description": "Handler: `topSellingProducts` (`src/controllers/dashboard.controller.ts:583`)."
+            "description": "Handler: `topSellingProducts` (`src/controllers/dashboard.controller.ts:587`)."
           }
         },
         {
@@ -2309,7 +2382,7 @@
                 }
               ]
             },
-            "description": "Handler: `getDetailedInventory` (`src/controllers/dashboard.controller.ts:881`)."
+            "description": "Handler: `getDetailedInventory` (`src/controllers/dashboard.controller.ts:885`)."
           }
         },
         {
@@ -2348,7 +2421,7 @@
                 }
               ]
             },
-            "description": "Handler: `getBranchDashboardStats` (`src/controllers/dashboard.controller.ts:97`)."
+            "description": "Handler: `getBranchDashboardStats` (`src/controllers/dashboard.controller.ts:101`)."
           }
         },
         {
@@ -2387,7 +2460,7 @@
                 }
               ]
             },
-            "description": "Handler: `getExecutiveDashboard` (`src/controllers/dashboard.controller.ts:634`)."
+            "description": "Handler: `getExecutiveDashboard` (`src/controllers/dashboard.controller.ts:638`)."
           }
         }
       ]
@@ -2432,7 +2505,7 @@
                 }
               ]
             },
-            "description": "Handler: `recordDebtPayment` (`src/controllers/debtPayment.controller.ts:22`).",
+            "description": "Handler: `recordDebtPayment` (`src/controllers/debtPayment.controller.ts:23`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"amount\": 1000,\n  \"paymentDate\": \"2026-09-15T10:00:00.000Z\",\n  \"paymentMethod\": \"CASH\",\n  \"reference\": \"API-TEST-001\",\n  \"notes\": \"Created from API documentation\"\n}",
@@ -2478,7 +2551,7 @@
                 }
               ]
             },
-            "description": "Handler: `getSalePayments` (`src/controllers/debtPayment.controller.ts:144`)."
+            "description": "Handler: `getSalePayments` (`src/controllers/debtPayment.controller.ts:158`)."
           }
         },
         {
@@ -2515,7 +2588,7 @@
                 }
               ]
             },
-            "description": "Handler: `getCustomerDebtPayments` (`src/controllers/debtPayment.controller.ts:177`)."
+            "description": "Handler: `getCustomerDebtPayments` (`src/controllers/debtPayment.controller.ts:191`)."
           }
         },
         {
@@ -2547,7 +2620,7 @@
                 }
               ]
             },
-            "description": "Handler: `getOutstandingDebts` (`src/controllers/debtPayment.controller.ts:215`)."
+            "description": "Handler: `getOutstandingDebts` (`src/controllers/debtPayment.controller.ts:229`)."
           }
         },
         {
@@ -2579,7 +2652,7 @@
                 }
               ]
             },
-            "description": "Handler: `getAllPaymentHistory` (`src/controllers/debtPayment.controller.ts:246`)."
+            "description": "Handler: `getAllPaymentHistory` (`src/controllers/debtPayment.controller.ts:260`)."
           }
         }
       ]
@@ -2702,6 +2775,122 @@
       ]
     },
     {
+      "name": "EBM and RRA",
+      "item": [
+        {
+          "name": "Retry Ebm Outbox",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/organizations/{{organizationId}}/ebm-outbox/{{id}}/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "organizations",
+                ":organizationId",
+                "ebm-outbox",
+                ":id",
+                "retry"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "id",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Handler: `retryEbmOutbox` (`src/controllers/ebm-outbox.controller.ts:124`)."
+          }
+        },
+        {
+          "name": "Push Insurance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/organizations/{{organizationId}}/rra/customers/:customerId/insurance/sync",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "organizations",
+                ":organizationId",
+                "rra",
+                "customers",
+                ":customerId",
+                "insurance",
+                "sync"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "customerId",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Handler: `pushInsurance` (`src/controllers/ebm-master-data.controller.ts:548`)."
+          }
+        },
+        {
+          "name": "Get Audit Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/organizations/{{organizationId}}/rra/audit-overview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "organizations",
+                ":organizationId",
+                "rra",
+                "audit-overview"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "description": "Handler: `getAuditOverview` (`src/controllers/ebm-master-data.controller.ts:570`)."
+          }
+        }
+      ]
+    },
+    {
       "name": "EBM Device & Outbox",
       "item": [
         {
@@ -2728,7 +2917,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `getEbmStatus` (`src/controllers/ebm-outbox.controller.ts:46`)."
+            "description": "Handler: `getEbmStatus` (`src/controllers/ebm-outbox.controller.ts:47`)."
           }
         },
         {
@@ -2800,7 +2989,7 @@
                 }
               ]
             },
-            "description": "Handler: `checkEbmOutboxStatus` (`src/controllers/ebm-outbox.controller.ts:74`).",
+            "description": "Handler: `checkEbmOutboxStatus` (`src/controllers/ebm-outbox.controller.ts:76`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"idempotencyKey\": \"CHECK-001\"\n}",
@@ -3227,7 +3416,7 @@
               ],
               "variable": []
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getDailyReport` (`src/controllers/report.controller.ts:1771`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getDailyReport` (`src/controllers/report.controller.ts:1880`)."
           }
         },
         {
@@ -3268,7 +3457,7 @@
               ],
               "variable": []
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getDailyReportPdf` (`src/controllers/report.controller.ts:1793`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getDailyReportPdf` (`src/controllers/report.controller.ts:1902`)."
           }
         },
         {
@@ -3332,7 +3521,7 @@
               ],
               "variable": []
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getPluReport` (`src/controllers/report.controller.ts:280`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getPluReport` (`src/controllers/report.controller.ts:340`)."
           }
         },
         {
@@ -3373,7 +3562,7 @@
               ],
               "variable": []
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getPluReportPdf` (`src/controllers/report.controller.ts:311`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getPluReportPdf` (`src/controllers/report.controller.ts:382`)."
           }
         },
         {
@@ -3425,7 +3614,7 @@
               ],
               "variable": []
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getElectronicJournal` (`src/controllers/report.controller.ts:1821`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getElectronicJournal` (`src/controllers/report.controller.ts:1932`)."
           }
         },
         {
@@ -3458,7 +3647,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getElectronicJournalEntry` (`src/controllers/report.controller.ts:1883`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getElectronicJournalEntry` (`src/controllers/report.controller.ts:1994`)."
           }
         },
         {
@@ -3498,7 +3687,7 @@
               ],
               "variable": []
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getPurchasesReport` (`src/controllers/report.controller.ts:1958`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getPurchasesReport` (`src/controllers/report.controller.ts:2069`)."
           }
         }
       ]
@@ -3579,7 +3768,7 @@
                 }
               ]
             },
-            "description": "Converts an unconverted proforma and consumes inventory. Needs an open shift; payments must cover the total. The quote cannot be converted twice. Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `convertProforma` (`src/controllers/sales.controller.ts:201`).",
+            "description": "Converts an unconverted proforma and consumes inventory. Needs an open shift; payments must cover the total. The quote cannot be converted twice. Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `convertProforma` (`src/controllers/sales.controller.ts:268`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"customerId\": 2,\n  \"items\": [\n    {}\n  ],\n  \"paymentType\": \"CASH\",\n  \"cashAmount\": 1000,\n  \"debtAmount\": 0,\n  \"insuranceAmount\": 0,\n  \"shiftId\": 2,\n  \"payments\": [\n    {}\n  ]\n}",
@@ -3671,7 +3860,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `cancelSale` (`src/controllers/sales.controller.ts:1095`).",
+            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `cancelSale` (`src/controllers/sales.controller.ts:1569`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"reason\": \"Customer cancelled order\"\n}",
@@ -3713,7 +3902,60 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `reprintSaleReceipt` (`src/controllers/sales.controller.ts:856`)."
+            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `reprintSaleReceipt` (`src/controllers/sales.controller.ts:1305`)."
+          }
+        },
+        {
+          "name": "CS/CR copy of an existing NS/NR receipt (PDF, original VSDC fiscal data, marked COPY; not submitted to VSDC)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sales/{{organizationId}}/:saleId/copy?format=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sales",
+                ":organizationId",
+                ":saleId",
+                "copy"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                }
+              ],
+              "variable": [
+                {
+                  "key": "saleId",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `printReceiptCopy` (`src/controllers/sales.controller.ts:2489`).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"pdf\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
@@ -3787,7 +4029,7 @@
                 }
               ]
             },
-            "description": "Returns the invoice PDF. May return 425 while EBM processing is pending. Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `getInvoicePdf` (`src/controllers/sales.controller.ts:1664`)."
+            "description": "Returns the invoice PDF. May return 425 while EBM processing is pending. Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `getInvoicePdf` (`src/controllers/sales.controller.ts:2555`)."
           }
         },
         {
@@ -3827,7 +4069,7 @@
                 }
               ]
             },
-            "description": "Invoice responses depend on the router module: sales invoice downloads and supplier invoice records use different formats. Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `getInvoice` (`src/controllers/sales.controller.ts:1640`)."
+            "description": "Invoice responses depend on the router module: sales invoice downloads and supplier invoice records use different formats. Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `getInvoice` (`src/controllers/sales.controller.ts:2447`)."
           }
         }
       ]
@@ -4030,7 +4272,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/inventory/tax-codes",
+              "raw": "{{baseUrl}}/api/inventory/tax-codes?organizationId=2",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -4039,10 +4281,17 @@
                 "inventory",
                 "tax-codes"
               ],
-              "query": [],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "2",
+                  "disabled": false,
+                  "description": ""
+                }
+              ],
               "variable": []
             },
-            "description": "Handler: `getTaxCodes` (`src/controllers/inventory.controller.ts:1413`)."
+            "description": "Handler: `getTaxCodes` (`src/controllers/inventory.controller.ts:1463`)."
           }
         },
         {
@@ -4111,7 +4360,7 @@
                 }
               ]
             },
-            "description": "Handler: `getProducts` (`src/controllers/inventory.controller.ts:21`)."
+            "description": "Handler: `getProducts` (`src/controllers/inventory.controller.ts:22`)."
           }
         },
         {
@@ -4163,7 +4412,7 @@
                 }
               ]
             },
-            "description": "Handler: `getExpiringProducts` (`src/controllers/inventory.controller.ts:1027`)."
+            "description": "Handler: `getExpiringProducts` (`src/controllers/inventory.controller.ts:1077`)."
           }
         },
         {
@@ -4215,7 +4464,7 @@
                 }
               ]
             },
-            "description": "Handler: `getExpiredProducts` (`src/controllers/inventory.controller.ts:1087`)."
+            "description": "Handler: `getExpiredProducts` (`src/controllers/inventory.controller.ts:1137`)."
           }
         },
         {
@@ -4273,7 +4522,7 @@
                 }
               ]
             },
-            "description": "Handler: `getLowStockProducts` (`src/controllers/inventory.controller.ts:1146`)."
+            "description": "Handler: `getLowStockProducts` (`src/controllers/inventory.controller.ts:1196`)."
           }
         },
         {
@@ -4304,7 +4553,7 @@
                 }
               ]
             },
-            "description": "Current implementation reads organizationId from path parameters, but this registered route only supplies id. Use the organization product list to retrieve products until the detail route is corrected. Handler: `getProductById` (`src/controllers/inventory.controller.ts:232`)."
+            "description": "Current implementation reads organizationId from path parameters, but this registered route only supplies id. Use the organization product list to retrieve products until the detail route is corrected. Handler: `getProductById` (`src/controllers/inventory.controller.ts:240`)."
           }
         },
         {
@@ -4340,7 +4589,7 @@
                 }
               ]
             },
-            "description": "The JSON body is an array of product objects, not an object with a products property. Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `createProducts` (`src/controllers/inventory.controller.ts:518`).",
+            "description": "The JSON body is an array of product objects, not an object with a products property. Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `createProducts` (`src/controllers/inventory.controller.ts:539`).",
             "body": {
               "mode": "raw",
               "raw": "[\n  {\n    \"name\": \"API test finished product\",\n    \"itemType\": \"PRODUCT\",\n    \"unitPrice\": 1000,\n    \"purchasePrice\": 500,\n    \"quantity\": 10,\n    \"minStock\": 0,\n    \"taxCategory\": \"EXEMPT\",\n    \"taxCode\": \"A\",\n    \"measurementUnit\": \"PCS\",\n    \"itemClsCd\": \"REPLACE_WITH_VALID_RRA_CLASS\",\n    \"origin\": \"RW\",\n    \"pkgUnitCd\": \"CT\",\n    \"qtyUnitCd\": \"U\"\n  }\n]",
@@ -4386,7 +4635,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `deleteProduct` (`src/controllers/inventory.controller.ts:992`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `deleteProduct` (`src/controllers/inventory.controller.ts:1028`)."
           }
         },
         {
@@ -4428,7 +4677,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `updateProductImage` (`src/controllers/inventory.controller.ts:930`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `updateProductImage` (`src/controllers/inventory.controller.ts:966`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"removeImage\": false\n}",
@@ -4479,7 +4728,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `adjustStock` (`src/controllers/inventory.controller.ts:1262`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `adjustStock` (`src/controllers/inventory.controller.ts:1312`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"quantity\": 1,\n  \"note\": \"Test inventory adjustment\"\n}",
@@ -4530,7 +4779,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `markAsDamage` (`src/controllers/inventory.controller.ts:1309`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `markAsDamage` (`src/controllers/inventory.controller.ts:1359`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"quantity\": 1,\n  \"note\": \"Test inventory adjustment\"\n}",
@@ -4581,7 +4830,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `processExpiredStock` (`src/controllers/inventory.controller.ts:1362`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `processExpiredStock` (`src/controllers/inventory.controller.ts:1412`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"quantity\": 1,\n  \"note\": \"Test inventory adjustment\"\n}",
@@ -4627,7 +4876,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `addStockToInventory` (`src/controllers/inventory-ledger.controller.ts:22`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `addStockToInventory` (`src/controllers/inventory-ledger.controller.ts:25`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"productId\": 2,\n  \"quantity\": 1,\n  \"movementType\": \"Test\",\n  \"warehouseId\": 2,\n  \"unitCost\": 500,\n  \"reference\": \"API-TEST-001\",\n  \"referenceType\": \"MANUAL\",\n  \"batchNumber\": \"API-BATCH-001\",\n  \"expiryDate\": \"2027-09-15T00:00:00.000Z\",\n  \"note\": \"Test inventory adjustment\",\n  \"metadata\": {},\n  \"branchId\": 2\n}",
@@ -4673,7 +4922,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `removeStockFromInventory` (`src/controllers/inventory-ledger.controller.ts:97`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `removeStockFromInventory` (`src/controllers/inventory-ledger.controller.ts:100`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"productId\": 2,\n  \"quantity\": 1,\n  \"movementType\": \"Test\",\n  \"warehouseId\": 2,\n  \"reference\": \"API-TEST-001\",\n  \"referenceType\": \"MANUAL\",\n  \"note\": \"Test inventory adjustment\",\n  \"metadata\": {},\n  \"branchId\": 2\n}",
@@ -4719,7 +4968,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `adjustInventoryStock` (`src/controllers/inventory-ledger.controller.ts:166`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `adjustInventoryStock` (`src/controllers/inventory-ledger.controller.ts:169`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"productId\": 2,\n  \"quantity\": 1,\n  \"warehouseId\": 2,\n  \"unitCost\": 500,\n  \"reference\": \"API-TEST-001\",\n  \"referenceType\": \"MANUAL\",\n  \"note\": \"Test inventory adjustment\",\n  \"metadata\": {},\n  \"branchId\": 2\n}",
@@ -4803,7 +5052,7 @@
                 }
               ]
             },
-            "description": "Handler: `getInventoryLedger` (`src/controllers/inventory-ledger.controller.ts:254`)."
+            "description": "Handler: `getInventoryLedger` (`src/controllers/inventory-ledger.controller.ts:257`)."
           }
         },
         {
@@ -4855,7 +5104,7 @@
                 }
               ]
             },
-            "description": "Handler: `getInventorySummaryReport` (`src/controllers/inventory-ledger.controller.ts:297`)."
+            "description": "Handler: `getInventorySummaryReport` (`src/controllers/inventory-ledger.controller.ts:300`)."
           }
         },
         {
@@ -4900,7 +5149,7 @@
                 }
               ]
             },
-            "description": "Handler: `getCurrentStockLevel` (`src/controllers/inventory-ledger.controller.ts:335`)."
+            "description": "Handler: `getCurrentStockLevel` (`src/controllers/inventory-ledger.controller.ts:338`)."
           }
         },
         {
@@ -4945,7 +5194,7 @@
                 }
               ]
             },
-            "description": "Handler: `getProductInventoryHistory` (`src/controllers/inventory-ledger.controller.ts:368`)."
+            "description": "Handler: `getProductInventoryHistory` (`src/controllers/inventory-ledger.controller.ts:371`)."
           }
         },
         {
@@ -4987,7 +5236,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `recalculateStock` (`src/controllers/inventory-ledger.controller.ts:402`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `recalculateStock` (`src/controllers/inventory-ledger.controller.ts:405`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"warehouseId\": 2\n}",
@@ -5258,7 +5507,7 @@
                 }
               ]
             },
-            "description": "Handler: `getOrgSettings` (`src/controllers/organization.controller.ts:332`)."
+            "description": "Handler: `getOrgSettings` (`src/controllers/organization.controller.ts:372`)."
           }
         },
         {
@@ -5294,7 +5543,7 @@
                 }
               ]
             },
-            "description": "Handler: `updateOrgSettings` (`src/controllers/organization.controller.ts:349`).",
+            "description": "Handler: `updateOrgSettings` (`src/controllers/organization.controller.ts:389`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"featureFlags\": {},\n  \"preferences\": {},\n  \"sidebarConfig\": {},\n  \"ebmConfig\": {}\n}",
@@ -5333,7 +5582,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `getUserOrganizations` (`src/controllers/organization.controller.ts:20`)."
+            "description": "Handler: `getUserOrganizations` (`src/controllers/organization.controller.ts:22`)."
           }
         },
         {
@@ -5362,7 +5611,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `createOrganization` (`src/controllers/organization.controller.ts:132`).",
+            "description": "Handler: `createOrganization` (`src/controllers/organization.controller.ts:134`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Test item\",\n  \"businessType\": \"RETAIL\",\n  \"address\": \"Kigali\",\n  \"phone\": \"+250788000000\",\n  \"email\": \"tester@example.com\"\n}",
@@ -5402,7 +5651,7 @@
                 }
               ]
             },
-            "description": "Handler: `getOrganizationById` (`src/controllers/organization.controller.ts:54`)."
+            "description": "Handler: `getOrganizationById` (`src/controllers/organization.controller.ts:56`)."
           }
         },
         {
@@ -5433,7 +5682,7 @@
                 }
               ]
             },
-            "description": "Handler: `deleteOrganization` (`src/controllers/organization.controller.ts:401`)."
+            "description": "Handler: `deleteOrganization` (`src/controllers/organization.controller.ts:444`)."
           }
         },
         {
@@ -5465,7 +5714,7 @@
                 }
               ]
             },
-            "description": "Handler: `updateOrganizationAvatar` (`src/controllers/organization.controller.ts:1088`).",
+            "description": "Handler: `updateOrganizationAvatar` (`src/controllers/organization.controller.ts:1131`).",
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -5511,7 +5760,7 @@
                 }
               ]
             },
-            "description": "Handler: `inviteUser` (`src/controllers/organization.controller.ts:433`).",
+            "description": "Handler: `inviteUser` (`src/controllers/organization.controller.ts:476`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"tester@example.com\",\n  \"role\": \"ADMIN\",\n  \"branchId\": 2\n}",
@@ -5552,7 +5801,7 @@
                 }
               ]
             },
-            "description": "Handler: `bulkInviteUsers` (`src/controllers/organization.controller.ts:609`)."
+            "description": "Handler: `bulkInviteUsers` (`src/controllers/organization.controller.ts:652`)."
           }
         },
         {
@@ -5584,7 +5833,7 @@
                 }
               ]
             },
-            "description": "Handler: `acceptInvitation` (`src/controllers/organization.controller.ts:860`).",
+            "description": "Handler: `acceptInvitation` (`src/controllers/organization.controller.ts:903`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Test item\"\n}",
@@ -5620,7 +5869,7 @@
                 }
               ]
             },
-            "description": "Handler: `getInvitationDetails` (`src/controllers/organization.controller.ts:774`)."
+            "description": "Handler: `getInvitationDetails` (`src/controllers/organization.controller.ts:817`)."
           }
         },
         {
@@ -5647,7 +5896,7 @@
                 }
               ]
             },
-            "description": "Handler: `cancelInvitation` (`src/controllers/organization.controller.ts:742`)."
+            "description": "Handler: `cancelInvitation` (`src/controllers/organization.controller.ts:785`)."
           }
         },
         {
@@ -5674,7 +5923,7 @@
                 }
               ]
             },
-            "description": "Handler: `declineInvitation` (`src/controllers/organization.controller.ts:809`)."
+            "description": "Handler: `declineInvitation` (`src/controllers/organization.controller.ts:852`)."
           }
         },
         {
@@ -5706,7 +5955,7 @@
                 }
               ]
             },
-            "description": "Handler: `getOrganizationUsers` (`src/controllers/organization.controller.ts:992`)."
+            "description": "Handler: `getOrganizationUsers` (`src/controllers/organization.controller.ts:1035`)."
           }
         },
         {
@@ -5743,7 +5992,405 @@
                 }
               ]
             },
-            "description": "Handler: `removeUserFromOrganization` (`src/controllers/organization.controller.ts:1038`)."
+            "description": "Handler: `removeUserFromOrganization` (`src/controllers/organization.controller.ts:1081`)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payroll",
+      "item": [
+        {
+          "name": "List Employees",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payroll/{{organizationId}}/employees?status=ACTIVE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payroll",
+                ":organizationId",
+                "employees"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "ACTIVE",
+                  "disabled": false,
+                  "description": ""
+                }
+              ],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "description": "Allowed roles: SYSTEM_OWNER, ADMIN, ACCOUNTANT. Handler: `listEmployees` (`src/controllers/payroll.controller.ts:81`)."
+          }
+        },
+        {
+          "name": "Create Employee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payroll/{{organizationId}}/employees",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payroll",
+                ":organizationId",
+                "employees"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "description": "Allowed roles: SYSTEM_OWNER, ADMIN, ACCOUNTANT. Handler: `createEmployee` (`src/controllers/payroll.controller.ts:94`)."
+          }
+        },
+        {
+          "name": "Update Employee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payroll/{{organizationId}}/employees/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payroll",
+                ":organizationId",
+                "employees",
+                ":id"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "id",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Allowed roles: SYSTEM_OWNER, ADMIN, ACCOUNTANT. Handler: `updateEmployee` (`src/controllers/payroll.controller.ts:105`)."
+          }
+        },
+        {
+          "name": "Preview Payslip",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payroll/{{organizationId}}/preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payroll",
+                ":organizationId",
+                "preview"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "description": "Allowed roles: SYSTEM_OWNER, ADMIN, ACCOUNTANT. Handler: `previewPayslip` (`src/controllers/payroll.controller.ts:119`)."
+          }
+        },
+        {
+          "name": "List Runs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payroll/{{organizationId}}/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payroll",
+                ":organizationId",
+                "runs"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "description": "Allowed roles: SYSTEM_OWNER, ADMIN, ACCOUNTANT. Handler: `listRuns` (`src/controllers/payroll.controller.ts:130`)."
+          }
+        },
+        {
+          "name": "Create Run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payroll/{{organizationId}}/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payroll",
+                ":organizationId",
+                "runs"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "description": "Allowed roles: SYSTEM_OWNER, ADMIN, ACCOUNTANT. Handler: `createRun` (`src/controllers/payroll.controller.ts:181`)."
+          }
+        },
+        {
+          "name": "Get Run",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payroll/{{organizationId}}/runs/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payroll",
+                ":organizationId",
+                "runs",
+                ":id"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "id",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Allowed roles: SYSTEM_OWNER, ADMIN, ACCOUNTANT. Handler: `getRun` (`src/controllers/payroll.controller.ts:149`)."
+          }
+        },
+        {
+          "name": "Recalculate Run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payroll/{{organizationId}}/runs/{{id}}/recalculate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payroll",
+                ":organizationId",
+                "runs",
+                ":id",
+                "recalculate"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "id",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Allowed roles: SYSTEM_OWNER, ADMIN, ACCOUNTANT. Handler: `recalculateRun` (`src/controllers/payroll.controller.ts:202`)."
+          }
+        },
+        {
+          "name": "Cancel Run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payroll/{{organizationId}}/runs/{{id}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payroll",
+                ":organizationId",
+                "runs",
+                ":id",
+                "cancel"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "id",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Allowed roles: SYSTEM_OWNER, ADMIN, ACCOUNTANT. Handler: `cancelRun` (`src/controllers/payroll.controller.ts:262`)."
+          }
+        },
+        {
+          "name": "Approve Run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payroll/{{organizationId}}/runs/{{id}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payroll",
+                ":organizationId",
+                "runs",
+                ":id",
+                "approve"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "id",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Allowed roles: SYSTEM_OWNER, ADMIN. Handler: `approveRun` (`src/controllers/payroll.controller.ts:214`)."
+          }
+        },
+        {
+          "name": "Pay Run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payroll/{{organizationId}}/runs/{{id}}/pay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payroll",
+                ":organizationId",
+                "runs",
+                ":id",
+                "pay"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "id",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Allowed roles: SYSTEM_OWNER, ADMIN, ACCOUNTANT. Handler: `payRun` (`src/controllers/payroll.controller.ts:238`)."
           }
         }
       ]
@@ -6008,7 +6655,7 @@
                 }
               ]
             },
-            "description": "Handler: `getPurchaseOrders` (`src/controllers/purchaseOrder.controller.ts:15`)."
+            "description": "Handler: `getPurchaseOrders` (`src/controllers/purchaseOrder.controller.ts:17`)."
           }
         },
         {
@@ -6043,7 +6690,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `createPurchaseOrder` (`src/controllers/purchaseOrder.controller.ts:65`).",
+            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `createPurchaseOrder` (`src/controllers/purchaseOrder.controller.ts:67`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"supplierId\": 2,\n  \"items\": [\n    {\n      \"productId\": 2,\n      \"productName\": \"Test item\",\n      \"quantity\": 10,\n      \"unitPrice\": 500,\n      \"taxCode\": \"A\",\n      \"taxRate\": 0\n    }\n  ],\n  \"notes\": \"Created from API documentation\",\n  \"expectedDate\": \"2026-09-30T00:00:00.000Z\"\n}",
@@ -6088,7 +6735,7 @@
                 }
               ]
             },
-            "description": "Handler: `getPurchaseOrder` (`src/controllers/purchaseOrder.controller.ts:38`)."
+            "description": "Handler: `getPurchaseOrder` (`src/controllers/purchaseOrder.controller.ts:40`)."
           }
         },
         {
@@ -6128,7 +6775,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `updatePurchaseOrder` (`src/controllers/purchaseOrder.controller.ts:214`).",
+            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `updatePurchaseOrder` (`src/controllers/purchaseOrder.controller.ts:216`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"items\": [\n    {\n      \"productId\": 2,\n      \"productName\": \"Test item\",\n      \"quantity\": 10,\n      \"unitPrice\": 500,\n      \"taxCode\": \"A\",\n      \"taxRate\": 0\n    }\n  ],\n  \"notes\": \"Created from API documentation\",\n  \"expectedDate\": \"2026-09-30T00:00:00.000Z\"\n}",
@@ -6173,7 +6820,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `deletePurchaseOrder` (`src/controllers/purchaseOrder.controller.ts:637`)."
+            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `deletePurchaseOrder` (`src/controllers/purchaseOrder.controller.ts:669`)."
           }
         },
         {
@@ -6214,7 +6861,7 @@
                 }
               ]
             },
-            "description": "COMPLETED/PARTIALLY_RECEIVED receive stock and require branchId. receivedItems supplies per-product received quantities, costs and batches. Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `updatePurchaseOrderStatus` (`src/controllers/purchaseOrder.controller.ts:371`).",
+            "description": "COMPLETED/PARTIALLY_RECEIVED receive stock and require branchId. receivedItems supplies per-product received quantities, costs and batches. Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `updatePurchaseOrderStatus` (`src/controllers/purchaseOrder.controller.ts:373`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"APPROVED\",\n  \"branchId\": 2,\n  \"receivedItems\": [\n    {\n      \"productId\": 2,\n      \"quantity\": 10,\n      \"unitCost\": 500,\n      \"batchNumber\": \"API-BATCH-001\",\n      \"expiryDate\": \"2027-09-15T00:00:00.000Z\"\n    }\n  ]\n}",
@@ -6321,7 +6968,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getSalesReport` (`src/controllers/report.controller.ts:18`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getSalesReport` (`src/controllers/report.controller.ts:46`)."
           }
         },
         {
@@ -6353,7 +7000,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getInventoryReport` (`src/controllers/report.controller.ts:396`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getInventoryReport` (`src/controllers/report.controller.ts:477`)."
           }
         },
         {
@@ -6385,7 +7032,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getDebtorsReport` (`src/controllers/report.controller.ts:604`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getDebtorsReport` (`src/controllers/report.controller.ts:686`)."
           }
         },
         {
@@ -6430,7 +7077,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getDebtPaymentsReport` (`src/controllers/report.controller.ts:930`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getDebtPaymentsReport` (`src/controllers/report.controller.ts:989`)."
           }
         },
         {
@@ -6487,7 +7134,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getCashFlowReport` (`src/controllers/report.controller.ts:1033`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getCashFlowReport` (`src/controllers/report.controller.ts:1092`)."
           }
         },
         {
@@ -6544,7 +7191,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getStockReport` (`src/controllers/report.controller.ts:1355`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getStockReport` (`src/controllers/report.controller.ts:1414`)."
           }
         },
         {
@@ -6625,7 +7272,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getStockHistory` (`src/controllers/report.controller.ts:1475`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getStockHistory` (`src/controllers/report.controller.ts:1505`)."
           }
         },
         {
@@ -6676,7 +7323,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getProfitReportController` (`src/controllers/report.controller.ts:1552`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getProfitReportController` (`src/controllers/report.controller.ts:1585`)."
           }
         },
         {
@@ -6726,7 +7373,71 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `exportReport` (`src/controllers/report.controller.ts:657`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `exportReport` (`src/controllers/report.controller.ts:739`)."
+          }
+        },
+        {
+          "name": "Get Items Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/items/{{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "items",
+                ":organizationId"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getItemsReport` (`src/routes/report.routes.ts:51`)."
+          }
+        },
+        {
+          "name": "Get Importation Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/imports/{{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "imports",
+                ":organizationId"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `getImportationReport` (`src/controllers/report.controller.ts:2172`)."
           }
         }
       ]
@@ -6764,7 +7475,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `syncBranches` (`src/controllers/ebm-master-data.controller.ts:421`).",
+            "description": "Handler: `syncBranches` (`src/controllers/ebm-master-data.controller.ts:465`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -6806,7 +7517,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `syncStockMoves` (`src/controllers/ebm-master-data.controller.ts:434`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `syncStockMoves` (`src/controllers/ebm-master-data.controller.ts:478`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -6854,7 +7565,7 @@
                 }
               ]
             },
-            "description": "Handler: `pushCustomer` (`src/controllers/ebm-master-data.controller.ts:447`).",
+            "description": "Handler: `pushCustomer` (`src/controllers/ebm-master-data.controller.ts:495`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -6902,7 +7613,7 @@
                 }
               ]
             },
-            "description": "Handler: `pushUser` (`src/controllers/ebm-master-data.controller.ts:464`).",
+            "description": "Handler: `pushUser` (`src/controllers/ebm-master-data.controller.ts:512`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -6956,7 +7667,7 @@
                 }
               ]
             },
-            "description": "Handler: `pushBomComposition` (`src/controllers/ebm-master-data.controller.ts:481`).",
+            "description": "Handler: `pushBomComposition` (`src/controllers/ebm-master-data.controller.ts:529`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -6998,7 +7709,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `listRefundReasons` (`src/controllers/ebm-master-data.controller.ts:395`)."
+            "description": "Handler: `listRefundReasons` (`src/controllers/ebm-master-data.controller.ts:426`)."
           }
         },
         {
@@ -7026,7 +7737,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `listPaymentMappings` (`src/controllers/ebm-master-data.controller.ts:408`)."
+            "description": "Handler: `listPaymentMappings` (`src/controllers/ebm-master-data.controller.ts:452`)."
           }
         }
       ]
@@ -7059,7 +7770,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `masterDataStatus` (`src/controllers/ebm-master-data.controller.ts:368`)."
+            "description": "Handler: `masterDataStatus` (`src/controllers/ebm-master-data.controller.ts:399`)."
           }
         },
         {
@@ -7091,7 +7802,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `syncAll` (`src/controllers/ebm-master-data.controller.ts:214`).",
+            "description": "Handler: `syncAll` (`src/controllers/ebm-master-data.controller.ts:231`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -7135,7 +7846,35 @@
               ],
               "variable": []
             },
-            "description": "Handler: `listCodes` (`src/controllers/ebm-master-data.controller.ts:45`)."
+            "description": "Handler: `listCodes` (`src/controllers/ebm-master-data.controller.ts:62`)."
+          }
+        },
+        {
+          "name": "Typed catalog of cached `/code/selectCodes` lists",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/organizations/{{organizationId}}/rra/code-catalog",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "organizations",
+                ":organizationId",
+                "rra",
+                "code-catalog"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Tax types (04), tourism tax (03/08), countries (05), property types (02), units (10/17), refund reasons (32), etc."
           }
         },
         {
@@ -7168,7 +7907,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `syncCodes` (`src/controllers/ebm-master-data.controller.ts:34`).",
+            "description": "Handler: `syncCodes` (`src/controllers/ebm-master-data.controller.ts:51`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -7218,7 +7957,7 @@
               ],
               "variable": []
             },
-            "description": "Handler: `searchItemClasses` (`src/controllers/ebm-master-data.controller.ts:78`)."
+            "description": "Handler: `searchItemClasses` (`src/controllers/ebm-master-data.controller.ts:95`)."
           }
         },
         {
@@ -7251,7 +7990,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `syncItemClasses` (`src/controllers/ebm-master-data.controller.ts:67`).",
+            "description": "Handler: `syncItemClasses` (`src/controllers/ebm-master-data.controller.ts:84`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -7288,7 +8027,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `listNotices` (`src/controllers/ebm-master-data.controller.ts:115`)."
+            "description": "Handler: `listNotices` (`src/controllers/ebm-master-data.controller.ts:132`)."
           }
         },
         {
@@ -7321,7 +8060,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `syncNotices` (`src/controllers/ebm-master-data.controller.ts:104`).",
+            "description": "Handler: `syncNotices` (`src/controllers/ebm-master-data.controller.ts:121`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -7365,7 +8104,7 @@
                 }
               ]
             },
-            "description": "Handler: `markNoticeRead` (`src/controllers/ebm-master-data.controller.ts:129`)."
+            "description": "Handler: `markNoticeRead` (`src/controllers/ebm-master-data.controller.ts:146`)."
           }
         },
         {
@@ -7439,7 +8178,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `reconcileItems` (`src/controllers/ebm-master-data.controller.ts:192`).",
+            "description": "Handler: `reconcileItems` (`src/controllers/ebm-master-data.controller.ts:209`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -7487,7 +8226,7 @@
                 }
               ]
             },
-            "description": "Handler: `syncOneProduct` (`src/controllers/ebm-master-data.controller.ts:168`).",
+            "description": "Handler: `syncOneProduct` (`src/controllers/ebm-master-data.controller.ts:185`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"itemClsCd\": \"REPLACE_WITH_VALID_RRA_CLASS\",\n  \"taxCode\": \"A\"\n}",
@@ -7529,7 +8268,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `stockSyncStatus` (`src/controllers/ebm-master-data.controller.ts:239`)."
+            "description": "Handler: `stockSyncStatus` (`src/controllers/ebm-master-data.controller.ts:256`)."
           }
         },
         {
@@ -7593,7 +8332,7 @@
               ],
               "variable": []
             },
-            "description": "Handler: `listRraPurchases` (`src/controllers/ebm-master-data.controller.ts:275`)."
+            "description": "Handler: `listRraPurchases` (`src/controllers/ebm-master-data.controller.ts:292`)."
           }
         },
         {
@@ -7626,7 +8365,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `syncPurchases` (`src/controllers/ebm-master-data.controller.ts:264`).",
+            "description": "Handler: `syncPurchases` (`src/controllers/ebm-master-data.controller.ts:281`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -7684,7 +8423,7 @@
             "description": "Calls `/trnsPurchase/savePurchases`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"reject\": false,\n  \"prcOrdCd\": \"REPLACE_WITH_VALID_PURCHASE_CODE\",\n  \"branchId\": 2\n}",
+              "raw": "{\n  \"reject\": false,\n  \"prcOrdCd\": \"REPLACE_WITH_VALID_PURCHASE_CODE\",\n  \"branchId\": 2,\n  \"items\": [\n    {\n      \"itemId\": 2,\n      \"itemSeq\": 1,\n      \"itemNm\": \"Example\",\n      \"linkProductId\": 2\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7725,7 +8464,7 @@
               ],
               "variable": []
             },
-            "description": "Handler: `listRraImports` (`src/controllers/ebm-master-data.controller.ts:327`)."
+            "description": "Handler: `listRraImports` (`src/controllers/ebm-master-data.controller.ts:356`)."
           }
         },
         {
@@ -7765,7 +8504,7 @@
               ],
               "variable": []
             },
-            "description": "Handler: `syncImports` (`src/controllers/ebm-master-data.controller.ts:315`).",
+            "description": "Handler: `syncImports` (`src/controllers/ebm-master-data.controller.ts:344`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"branchId\": 2,\n  \"requestDate\": \"20260915\"\n}",
@@ -8059,7 +8798,39 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getSales` (`src/controllers/sales.controller.ts:276`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getSales` (`src/controllers/sales.controller.ts:343`)."
+          }
+        },
+        {
+          "name": "Get Last Receipt",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sales/{{organizationId}}/last-receipt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sales",
+                ":organizationId",
+                "last-receipt"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `getLastReceipt` (`src/controllers/sales.controller.ts:2588`)."
           }
         },
         {
@@ -8100,7 +8871,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `updateProforma` (`src/controllers/sales.controller.ts:88`).",
+            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `updateProforma` (`src/controllers/sales.controller.ts:139`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"customerId\": 2,\n  \"items\": [\n    {\n      \"productId\": 2,\n      \"quantity\": 1,\n      \"unitPrice\": 1000,\n      \"discount\": 0,\n      \"itemType\": \"PRODUCT\",\n      \"serviceName\": \"Consultation\",\n      \"serviceDescription\": \"Test service\"\n    }\n  ]\n}",
@@ -8145,7 +8916,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getSaleById` (`src/controllers/sales.controller.ts:389`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getSaleById` (`src/controllers/sales.controller.ts:457`)."
           }
         },
         {
@@ -8186,10 +8957,97 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `payDebt` (`src/controllers/sales.controller.ts:456`).",
+            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `payDebt` (`src/controllers/sales.controller.ts:525`).",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"amount\": 1000\n}",
+              "raw": "{\n  \"amount\": 1000,\n  \"paymentMethod\": \"CASH\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get Refundable",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sales/{{organizationId}}/:saleId/refundable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sales",
+                ":organizationId",
+                ":saleId",
+                "refundable"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "saleId",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `getRefundable` (`src/controllers/sales.controller.ts:1132`)."
+          }
+        },
+        {
+          "name": "Correct Sale",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sales/{{organizationId}}/:saleId/correct",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sales",
+                ":organizationId",
+                ":saleId",
+                "correct"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "saleId",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Allowed roles: ADMIN, SELLER, ACCOUNTANT, BRANCH_MANAGER. Handler: `correctSale` (`src/controllers/sales.controller.ts:1753`).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Testing this API operation\",\n  \"items\": [\n    {\n      \"productId\": 2,\n      \"quantity\": 1,\n      \"unitPrice\": 1000,\n      \"discount\": 0,\n      \"itemType\": \"PRODUCT\",\n      \"serviceName\": \"Consultation\",\n      \"serviceDescription\": \"Test service\"\n    }\n  ],\n  \"customerId\": 2,\n  \"paymentType\": \"CASH\",\n  \"cashAmount\": 1000,\n  \"debtAmount\": 0,\n  \"insuranceAmount\": 0,\n  \"payments\": [\n    {}\n  ],\n  \"shiftId\": 2,\n  \"inventoryMethod\": \"FIFO\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -8232,7 +9090,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `regenerateInvoice` (`src/controllers/sales.controller.ts:909`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `regenerateInvoice` (`src/controllers/sales.controller.ts:1382`)."
           }
         }
       ]
@@ -9742,7 +10600,7 @@
                 }
               ]
             },
-            "description": "Multipart upload: invoice is a PDF/JPEG/PNG (maximum 20 MB). extractedData is a JSON string containing products and invoice header fields. Scanning is performed by the client; without extractedData the uploaded invoice enters REVIEW for manual editing. Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `uploadAndScanInvoice` (`src/controllers/supplier-invoice.controller.ts:19`).",
+            "description": "Multipart upload: invoice is a PDF/JPEG/PNG (maximum 20 MB). extractedData is a JSON string containing products and invoice header fields. Scanning is performed by the client; without extractedData the uploaded invoice enters REVIEW for manual editing. Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `uploadAndScanInvoice` (`src/controllers/supplier-invoice.controller.ts:20`).",
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -9813,7 +10671,7 @@
                 }
               ]
             },
-            "description": "Handler: `getInvoices` (`src/controllers/supplier-invoice.controller.ts:176`)."
+            "description": "Handler: `getInvoices` (`src/controllers/supplier-invoice.controller.ts:177`)."
           }
         },
         {
@@ -9849,7 +10707,7 @@
                 }
               ]
             },
-            "description": "Invoice responses depend on the router module: sales invoice downloads and supplier invoice records use different formats. Handler: `getInvoice` (`src/controllers/supplier-invoice.controller.ts:235`)."
+            "description": "Invoice responses depend on the router module: sales invoice downloads and supplier invoice records use different formats. Handler: `getInvoice` (`src/controllers/supplier-invoice.controller.ts:236`)."
           }
         },
         {
@@ -9885,7 +10743,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `deleteInvoice` (`src/controllers/supplier-invoice.controller.ts:714`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `deleteInvoice` (`src/controllers/supplier-invoice.controller.ts:727`)."
           }
         },
         {
@@ -9926,7 +10784,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `updateInvoiceItems` (`src/controllers/supplier-invoice.controller.ts:266`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `updateInvoiceItems` (`src/controllers/supplier-invoice.controller.ts:267`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"items\": [\n    {\n      \"id\": 2,\n      \"productId\": 2,\n      \"productName\": \"Test item\",\n      \"quantity\": 10,\n      \"unitPrice\": 500,\n      \"sellingPrice\": 1000,\n      \"batchNumber\": \"API-BATCH-001\",\n      \"expiryDate\": \"2027-09-15T00:00:00.000Z\",\n      \"sku\": \"API-TEST-001\",\n      \"itemClsCd\": \"REPLACE_WITH_VALID_RRA_CLASS\",\n      \"qtyUnitCd\": \"U\",\n      \"pkgUnitCd\": \"CT\",\n      \"origin\": \"RW\"\n    }\n  ],\n  \"invoiceHeader\": {\n    \"supplierName\": \"Test supplier\",\n    \"invoiceNumber\": \"API-INVOICE-001\",\n    \"invoiceDate\": \"2026-09-15T00:00:00.000Z\",\n    \"currency\": \"RWF\",\n    \"totalAmount\": 5000\n  }\n}",
@@ -9971,7 +10829,7 @@
                 }
               ]
             },
-            "description": "Handler: `matchProducts` (`src/controllers/supplier-invoice.controller.ts:378`).",
+            "description": "Handler: `matchProducts` (`src/controllers/supplier-invoice.controller.ts:379`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"items\": [\n    {\n      \"productName\": \"Test item\",\n      \"sku\": \"API-TEST-001\",\n      \"barcode\": \"1234567890123\"\n    }\n  ]\n}",
@@ -10017,7 +10875,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `importInvoiceProducts` (`src/controllers/supplier-invoice.controller.ts:437`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `importInvoiceProducts` (`src/controllers/supplier-invoice.controller.ts:438`)."
           }
         }
       ]
@@ -10057,7 +10915,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `recordSupplierPayment` (`src/controllers/supplier-payment.controller.ts:25`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `recordSupplierPayment` (`src/controllers/supplier-payment.controller.ts:26`).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"purchaseOrderId\": 2,\n  \"amount\": 1000,\n  \"paymentMethod\": \"CASH\",\n  \"paymentDate\": \"2026-09-15T00:00:00.000Z\",\n  \"reference\": \"API-TEST-001\",\n  \"notes\": \"Created from API documentation\"\n}",
@@ -10134,7 +10992,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getSupplierPayments` (`src/controllers/supplier-payment.controller.ts:165`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getSupplierPayments` (`src/controllers/supplier-payment.controller.ts:186`)."
           }
         },
         {
@@ -10170,7 +11028,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getSupplierPaymentById` (`src/controllers/supplier-payment.controller.ts:256`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `getSupplierPaymentById` (`src/controllers/supplier-payment.controller.ts:277`)."
           }
         },
         {
@@ -10206,7 +11064,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `deleteSupplierPayment` (`src/controllers/supplier-payment.controller.ts:331`)."
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, BRANCH_MANAGER. Handler: `deleteSupplierPayment` (`src/controllers/supplier-payment.controller.ts:352`)."
           }
         }
       ]
@@ -10771,7 +11629,7 @@
                 }
               ]
             },
-            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `updateProduct` (`src/controllers/inventory.controller.ts:760`).",
+            "description": "Allowed roles: ADMIN, ACCOUNTANT, SELLER, BRANCH_MANAGER. Handler: `updateProduct` (`src/controllers/inventory.controller.ts:785`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -10810,7 +11668,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `createCustomer` (`src/controllers/customer.controller.ts:198`).",
+            "description": "Handler: `createCustomer` (`src/controllers/customer.controller.ts:204`).",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -10931,7 +11789,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `get /health` (`src/index.ts:184`)."
+            "description": "Handler: `get /health` (`src/index.ts:194`)."
           }
         },
         {
@@ -10950,7 +11808,7 @@
               "query": [],
               "variable": []
             },
-            "description": "Handler: `get /version` (`src/index.ts:193`)."
+            "description": "Handler: `get /version` (`src/index.ts:203`)."
           }
         }
       ]

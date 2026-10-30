@@ -438,7 +438,11 @@ export async function receiveStockOnBranch(params: AddStockParams) {
   };
 
   if (params.tx) return run(params.tx);
-  return prisma.$transaction((tx) => run(tx));
+  // addStock skips queueStockSync when it receives an outer `tx`; queue here so
+  // standalone receives (imports, PO receipts, etc.) still push to VSDC.
+  const entry = await prisma.$transaction((tx) => run(tx));
+  queueStockSync(entry);
+  return entry;
 }
 
 /**

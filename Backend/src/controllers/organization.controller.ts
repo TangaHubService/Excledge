@@ -15,9 +15,16 @@ import {
 import type { OrganizationSettingsPatch } from "../types/organization-settings.types";
 import { checkMrc, MrcFormatError } from "../utils/mrc";
 
+import { Prisma } from "@prisma/client";
 import type { Request, Response } from "express";
 
 const subscriptionService = new SubscriptionService(prisma);
+
+class TinResetBlockedError extends Error {
+  constructor(unsent: number) {
+    super(`Cannot change the TIN while ${unsent} sale/refund/void document(s) are still waiting for RRA under the current TIN.`);
+  }
+}
 
 export const getUserOrganizations = async (req: Request, res: Response) => {
   try {
@@ -283,9 +290,38 @@ export const updateOrganization = async (req: Request, res: Response) => {
 
     const existingOrg = await prisma.organization.findUnique({
       where: { id },
-      select: { trainingMode: true, mrcNo: true },
+      select: { trainingMode: true, mrcNo: true, TIN: true },
     });
     const previousTrainingMode = existingOrg?.trainingMode ?? false;
+
+    // CIS spec §7.2: a TIN change is a total VSDC reset. The device, its SDC
+    // identity, the per-device invoice/purchase counters and the RRA sync
+    // cursors all belong to the old TIN, so they are cleared and every device
+    // must be re-initialized (validateVsdcEnvelope refuses until it is). The
+    // change is refused while documents are still queued for the old TIN.
+    // Historical invoices are kept untouched for audit; only the numbering
+    // seed ignores them (sequences restart after the reset, §7.3).
+    const previousTin = existingOrg?.TIN?.trim() || "";
+    const nextTin = typeof TIN === "string" ? TIN.trim() : undefined;
+    const tinChanged = nextTin !== undefined && previousTin !== "" && nextTin !== previousTin;
+    if (tinChanged) {
+      if (req.body?.confirmTinReset !== true) {
+        return res.status(409).json({
+          error: "Changing the TIN resets the RRA VSDC device: every branch must be re-initialized and fiscal numbering restarts. Resend with confirmTinReset=true to proceed.",
+          code: "TIN_RESET_CONFIRMATION_REQUIRED",
+        });
+      }
+      const [unsentSales, unsentPurchases] = await Promise.all([
+        prisma.ebmOutbox.count({ where: { organizationId: id, status: { in: ["PENDING", "PROCESSING", "FAILED"] } } }),
+        prisma.vsdcLocalPurchase.count({ where: { organizationId: id, status: { in: ["PENDING", "FAILED"] } } }),
+      ]);
+      if (unsentSales > 0 || unsentPurchases > 0) {
+        return res.status(409).json({
+          error: `Cannot change the TIN while documents are still waiting for RRA under the current TIN (${unsentSales} sale/refund/void, ${unsentPurchases} purchase). Let them fiscalize or resolve them in the EBM queue first.`,
+          code: "TIN_RESET_BLOCKED_UNSENT",
+        });
+      }
+    }
 
     // CIS spec Art. 3.2.1 MRC format (relaxed in sandbox/mock), same rule as branch update.
     const mrc = checkMrc(mrcNo, { current: [existingOrg?.mrcNo] });
@@ -296,8 +332,28 @@ export const updateOrganization = async (req: Request, res: Response) => {
     // A mode switch waits for in-flight sales/refunds (they hold the shared
     // receipt-mode lock) so no receipt commits under a mode it did not read.
     const organization = await prisma.$transaction(async (tx) => {
-      if (trainingMode !== undefined && trainingMode !== previousTrainingMode) {
+      if ((trainingMode !== undefined && trainingMode !== previousTrainingMode) || tinChanged) {
         await lockReceiptModeForChange(tx, id);
+      }
+      if (tinChanged) {
+        const unsent = await tx.ebmOutbox.count({
+          where: { organizationId: id, status: { in: ["PENDING", "PROCESSING", "FAILED"] } },
+        });
+        if (unsent > 0) {
+          throw new TinResetBlockedError(unsent);
+        }
+        await tx.branch.updateMany({
+          where: { organizationId: id },
+          data: { ebmDeviceId: null, ebmInitializedAt: null, ebmInitInfo: Prisma.DbNull },
+        });
+        await tx.$executeRaw`DELETE FROM "vsdc_device_counters" WHERE "organizationId" = ${id}`;
+        await tx.rraSyncCursor.deleteMany({ where: { organizationId: id } });
+        // Stock movements not yet reported belong to the old TIN; they are
+        // detached from the queue rather than sent under the new one.
+        await tx.inventoryLedger.updateMany({
+          where: { organizationId: id, ebmSyncStatus: { in: ["PENDING", "FAILED"] } },
+          data: { ebmSyncStatus: null, ebmError: "Not reported: organization TIN was reset" },
+        });
       }
       return tx.organization.update({
         where: { id },
@@ -337,9 +393,27 @@ export const updateOrganization = async (req: Request, res: Response) => {
           ...(trainingMode !== undefined
             ? { trainingMode }
             : {}),
+          ...(tinChanged
+            ? { ebmTinResetAt: new Date(), ebmInitializedAt: null, lastSuccessfulVdsContact: null, ebmDeviceId: null }
+            : {}),
         },
       });
+    }).catch((e: unknown) => {
+      if (e instanceof TinResetBlockedError) return e;
+      throw e;
     });
+    if (organization instanceof TinResetBlockedError) {
+      return res.status(409).json({ error: organization.message, code: "TIN_RESET_BLOCKED_UNSENT" });
+    }
+    if (tinChanged) {
+      await auditLogger.system(req, {
+        type: 'SETTINGS_UPDATE',
+        description: `Organization TIN changed from ${previousTin} to ${nextTin}: VSDC device state reset, re-initialization required`,
+        entityType: 'Organization',
+        entityId: organization.id,
+        metadata: { setting: 'TIN', from: previousTin, to: nextTin },
+      });
+    }
 
     await auditLogger.system(req, {
       type: 'SETTINGS_UPDATE',

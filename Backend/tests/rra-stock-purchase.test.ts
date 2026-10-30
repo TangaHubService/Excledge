@@ -18,6 +18,7 @@ vi.mock("../src/lib/prisma", () => {
     spplrInvcNo: 4321n,
     rcptTyCd: "P",
     pmtTyCd: "01",
+    prcOrdCd: "ABC123",
     remark: null,
     status: "PENDING",
     items: [
@@ -208,12 +209,25 @@ describe("confirmRraPurchase (§71)", () => {
   })
 
   it("rejects at VSDC with pchsSttsCd 04 (Canceled) and does not book stock", async () => {
-    const r = await confirmRraPurchase(1, 7, { userId: 3, reject: true })
+    const r = await confirmRraPurchase(1, 7, { userId: 3, reject: true, remark: "wrong goods" })
     expect(r.success).toBe(true)
     expect(savePurchasePayload.pchsSttsCd).toBe("04")
     expect(savePurchasePayload.cnclDt).toBeTruthy()
+    expect(savePurchasePayload.remark).toBe("wrong goods")
     expect(addStockCalls).toHaveLength(0)
     expect(stockMasterArgs).toBeNull()
+  })
+
+  it("forwards the persisted purchase code on confirm (§38)", async () => {
+    const r = await confirmRraPurchase(1, 7, { userId: 3 })
+    expect(r.success).toBe(true)
+    expect(savePurchasePayload.prcOrdCd).toBe("ABC123")
+  })
+
+  it("lets the operator override prcOrdCd at confirm time", async () => {
+    const r = await confirmRraPurchase(1, 7, { userId: 3, prcOrdCd: "XYZ987" })
+    expect(r.success).toBe(true)
+    expect(savePurchasePayload.prcOrdCd).toBe("XYZ987")
   })
 
   it("falls back to the default branch when none is supplied so local stock still increments", async () => {

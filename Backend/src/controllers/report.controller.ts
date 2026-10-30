@@ -2061,9 +2061,8 @@ export const getElectronicJournalEntry = async (req: BranchAuthRequest, res: Res
 
 // ──────────────────────────────────────────────
 // Detailed purchases report (RRA checklist §25)
-// Importation reporting depends on the import-declaration feature (checklist
-// §66–68), which is a separate phase — none exists yet, so this covers the
-// purchases half only.
+// Includes local purchase orders plus an `importation` block from
+// rra_import_items (checklist §66–68).
 // ──────────────────────────────────────────────
 
 export const getPurchasesReport = async (req: BranchAuthRequest, res: Response) => {
