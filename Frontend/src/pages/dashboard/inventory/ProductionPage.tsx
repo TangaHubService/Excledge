@@ -23,7 +23,7 @@ import {
 import {
   Label,
 } from "../../../components/ui/label";
-import { Loader2, CheckCircle, XCircle, History, Package, Settings } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, History, Settings } from "lucide-react";
 import { apiClient } from "../../../lib/api-client";
 import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
 import { toast } from "react-toastify";
@@ -204,19 +204,17 @@ export const ProductionPage = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Package className="h-6 w-6 text-blue-600" />
-            Production
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Production
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             Manufacture finished products from raw materials
           </p>
         </div>
       </div>
 
       {/* Production Form */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Create Production Run</h2>
+      <div className="bg-card rounded-xl border border-border p-6">
+        <h2 className="text-lg font-semibold text-foreground mb-4">Create Production Run</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="space-y-2">
@@ -304,32 +302,32 @@ export const ProductionPage = () => {
 
         {/* Requirements Check Result */}
         {showRequirements && requirements && (
-          <div className={`mt-6 p-4 rounded-xl border ${requirements.canProduce ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20' : 'border-rose-300 bg-rose-50 dark:bg-rose-900/20'}`}>
+          <div className={`mt-6 p-4 rounded-xl border ${requirements.canProduce ? 'border-success/25 bg-success/10 dark:bg-success/20' : 'border-danger/25 bg-danger/10 dark:bg-danger/20'}`}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 {requirements.canProduce ? (
-                  <CheckCircle className="h-5 w-5 text-emerald-600" />
+                  <CheckCircle className="h-5 w-5 text-success" />
                 ) : (
-                  <XCircle className="h-5 w-5 text-rose-600" />
+                  <XCircle className="h-5 w-5 text-danger" />
                 )}
-                <h3 className={`font-semibold ${requirements.canProduce ? 'text-emerald-800 dark:text-emerald-200' : 'text-rose-800 dark:text-rose-200'}`}>
+                <h3 className={`font-semibold ${requirements.canProduce ? 'text-success dark:text-emerald-200' : 'text-danger dark:text-rose-200'}`}>
                   {requirements.canProduce ? 'Production Possible' : 'Insufficient Materials'}
                 </h3>
               </div>
-              <span className="text-sm text-gray-500 dark:text-gray-400">
+              <span className="text-sm text-muted-foreground">
                 Total Cost: {requirements.components.reduce((sum, c) => sum + c.requiredQuantity * c.unitCost, 0).toLocaleString()} Frw
               </span>
             </div>
 
             <Table className="text-sm">
-              <TableHeader className="bg-gray-50 dark:bg-gray-700/50">
+              <TableHeader className="bg-surface-subtle">
                 <TableRow>
-                  <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-2">Raw Material</TableHead>
-                  <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-2 text-center">Required</TableHead>
-                  <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-2 text-center">Available</TableHead>
-                  <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-2 text-center">Unit Cost</TableHead>
-                  <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-2 text-center">Total Cost</TableHead>
-                  <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-2 text-center">Status</TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-2">Raw Material</TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-2 text-center">Required</TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-2 text-center">Available</TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-2 text-center">Unit Cost</TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-2 text-center">Total Cost</TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-2 text-center">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -339,7 +337,7 @@ export const ProductionPage = () => {
                     <TableCell className="px-4 py-2 text-center font-mono">
                       {comp.requiredQuantity} {comp.requiredUnit}
                     </TableCell>
-                    <TableCell className={`px-4 py-2 text-center font-mono ${comp.availableStock < comp.requiredQuantity ? 'text-rose-600' : ''}`}>
+                    <TableCell className={`px-4 py-2 text-center font-mono ${comp.availableStock < comp.requiredQuantity ? 'text-danger' : ''}`}>
                       {comp.availableStock} {comp.requiredUnit}
                     </TableCell>
                     <TableCell className="px-4 py-2 text-right">
@@ -350,11 +348,11 @@ export const ProductionPage = () => {
                     </TableCell>
                     <TableCell className="px-4 py-2 text-center">
                       {comp.availableStock >= comp.requiredQuantity ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-success/15 text-success dark:bg-success/30 dark:text-emerald-200">
                           ✓ OK
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-200">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-danger/15 text-danger dark:bg-danger/30 dark:text-rose-200">
                           ✗ Short by {comp.requiredQuantity - comp.availableStock}
                         </span>
                       )}
@@ -382,7 +380,7 @@ export const ProductionPage = () => {
       </div>
 
       {selectedProduct && selectedBranchId != null && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="bg-card rounded-xl border border-border p-6">
           <BomManagement
             productId={selectedProduct.id}
             organizationId={Number(apiClient.getOrganizationId())}
@@ -392,46 +390,46 @@ export const ProductionPage = () => {
       )}
 
       {/* Production History */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
             <History className="h-5 w-5" />
             Production History
           </h2>
         </div>
         
         {productionRuns.length === 0 ? (
-          <div className="py-12 text-center text-gray-500 dark:text-gray-400">
-            <History className="mx-auto h-12 w-12 text-gray-300 mb-4" />
+          <div className="py-12 text-center text-muted-foreground">
+            <History className="mx-auto h-12 w-12 text-muted-foreground/60 mb-4" />
             <p>No production runs yet</p>
           </div>
         ) : (
           <Table>
-            <TableHeader className="bg-gray-50 dark:bg-gray-700/50">
+            <TableHeader className="bg-surface-subtle">
               <TableRow>
-                <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-3">Run ID</TableHead>
-                <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-3">Product</TableHead>
-                <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-3 text-center">Qty Produced</TableHead>
-                <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-3">Date</TableHead>
-                <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-3">Produced By</TableHead>
+                <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-3">Run ID</TableHead>
+                <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-3">Product</TableHead>
+                <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-3 text-center">Qty Produced</TableHead>
+                <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-3">Date</TableHead>
+                <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-3">Produced By</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {productionRuns.map((run) => (
-                <TableRow key={run.id} className="border-t border-gray-100 dark:border-gray-700/50 hover:bg-gray-50/60 dark:hover:bg-gray-700/30">
-                  <TableCell className="px-4 py-3 font-mono text-blue-600 dark:text-blue-400">
+                <TableRow key={run.id} className="border-t border-border hover:bg-surface-subtle/60">
+                  <TableCell className="px-4 py-3 font-mono text-primary">
                     PROD-{String(run.id).padStart(6, '0')}
                   </TableCell>
                   <TableCell className="px-4 py-3 font-medium">
                     {run.product.name}
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-white">
+                  <TableCell className="px-4 py-3 text-center font-semibold text-foreground">
                     {Number(run.quantity).toLocaleString()}
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                  <TableCell className="px-4 py-3 text-sm text-muted-foreground">
                     {new Date(run.producedAt).toLocaleString()}
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                  <TableCell className="px-4 py-3 text-sm text-muted-foreground">
                     {run.user.name}
                   </TableCell>
                 </TableRow>

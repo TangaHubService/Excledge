@@ -390,9 +390,9 @@ function StepBar({ current }: { current: string }) {
             <span
               className={cn(
                 'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold',
-                i < idx && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-                i === idx && 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900',
-                i > idx && 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500',
+                i < idx && 'bg-success/15 text-success dark:bg-success/40 dark:text-emerald-300',
+                i === idx && 'bg-gray-900 text-white',
+                i > idx && 'bg-muted text-muted-foreground',
               )}
             >
               {i < idx ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
@@ -400,8 +400,8 @@ function StepBar({ current }: { current: string }) {
             <span
               className={cn(
                 'text-sm font-medium',
-                i === idx && 'text-gray-900 dark:text-gray-100',
-                i !== idx && 'text-gray-400 dark:text-gray-500',
+                i === idx && 'text-foreground',
+                i !== idx && 'text-muted-foreground',
               )}
             >
               {s.label}
@@ -411,7 +411,7 @@ function StepBar({ current }: { current: string }) {
             <div
               className={cn(
                 'h-px flex-1 min-w-[16px]',
-                i < idx ? 'bg-emerald-300 dark:bg-emerald-700' : 'bg-gray-200 dark:bg-gray-700',
+                i < idx ? 'bg-emerald-300 dark:bg-success' : 'bg-muted',
               )}
             />
           )}
@@ -448,18 +448,18 @@ function UploadStep({
         className={cn(
           'flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-12 transition-colors',
           dragging
-            ? 'border-blue-400 bg-blue-50 dark:border-blue-600 dark:bg-blue-900/20'
-            : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:hover:border-gray-500 dark:hover:bg-gray-700',
+            ? 'border-primary bg-primary/10'
+            : 'border-border bg-surface-subtle hover:border-gray-400 hover:bg-muted',
         )}
       >
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
-          <Upload className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/15">
+          <Upload className="h-6 w-6 text-primary" />
         </div>
         <div className="text-center">
-          <p className="text-base font-medium text-gray-700 dark:text-gray-200">
+          <p className="text-base font-medium text-foreground">
             Drop your CSV here or click to browse
           </p>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-sm text-muted-foreground">
             Supports .csv files with product data
           </p>
         </div>
@@ -483,7 +483,7 @@ function UploadStep({
             variant="ghost"
             size="sm"
             onClick={onDownloadTemplate}
-            className="gap-2 text-gray-500"
+            className="gap-2 text-muted-foreground"
           >
             <Download className="h-4 w-4" />
             Download CSV template
@@ -520,12 +520,12 @@ function MappingStep({
   return (
     <div className="space-y-6">
       {/* Preview data */}
-      <div className="rounded-xl border bg-white shadow-sm dark:bg-zinc-800 dark:border-zinc-700">
+      <div className="rounded-xl border bg-card shadow-sm">
         <div className="border-b px-6 py-3">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+          <h3 className="text-sm font-semibold text-foreground">
             Column Mapping
           </h3>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             Map each CSV column to a system field. Required fields are marked with *.
           </p>
         </div>
@@ -533,23 +533,23 @@ function MappingStep({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">CSV Column</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Maps To</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Preview</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+              <tr className="border-b bg-surface-subtle">
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">CSV Column</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Maps To</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Preview</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y dark:divide-gray-700">
+            <tbody className="divide-y">
               {csvHeaders.map((header, i) => {
                 const mapping = mappings.find(m => m.csvHeader === header);
                 const isMapped = !!mapping?.systemField;
                 const isRequired = systemFields.find(f => f.value === mapping?.systemField)?.required;
 
                 return (
-                  <tr key={header} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
+                  <tr key={header} className="hover:bg-muted">
                     <td className="px-4 py-3">
-                      <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                      <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-foreground">
                         {header}
                       </code>
                     </td>
@@ -571,17 +571,17 @@ function MappingStep({
                         </SelectContent>
                       </Select>
                     </td>
-                    <td className="max-w-[200px] truncate px-4 py-3 text-gray-500">
+                    <td className="max-w-[200px] truncate px-4 py-3 text-muted-foreground">
                       {csvRows[0]?.[i] ?? ''}
                     </td>
                     <td className="px-4 py-3">
                       {isMapped ? (
-                        <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+                        <Badge variant="outline" className="border-success/25 bg-success/10 text-success dark:border-emerald-800 dark:bg-success/20 dark:text-emerald-300">
                           <CheckCircle2 className="mr-1 h-3 w-3" />
                           {isRequired ? 'Required' : 'Mapped'}
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="border-gray-200 text-gray-400 dark:border-gray-600">
+                        <Badge variant="outline" className="border-border text-muted-foreground">
                           Skipped
                         </Badge>
                       )}
@@ -596,13 +596,13 @@ function MappingStep({
 
       {/* Unmapped required fields warning */}
       {hasRequiredUnmapped && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
-          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+        <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 dark:border-amber-800 dark:bg-warning/20">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
           <div>
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+            <p className="text-sm font-medium text-warning dark:text-amber-200">
               {unmappedFields.filter(f => f.required).length} required field(s) not mapped
             </p>
-            <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+            <p className="mt-1 text-xs text-warning dark:text-amber-300">
               {unmappedFields.filter(f => f.required).map(f => f.label).join(', ')} — map a CSV column to these fields or add them later.
             </p>
           </div>
@@ -615,7 +615,7 @@ function MappingStep({
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
-        <Button type="button" onClick={onContinue} className="h-11 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white">
+        <Button type="button" onClick={onContinue} className="h-11 gap-1.5 bg-primary hover:bg-primary/90 text-white">
           Validate {csvRows.length} rows
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -654,24 +654,24 @@ function ValidationStep({
   return (
     <div className="space-y-6">
       {/* Summary bar */}
-      <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+      <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4 shadow-sm">
         <div className="flex items-center gap-2">
           <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-          <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+          <span className="text-sm font-medium text-success dark:text-emerald-300">
             {parsedRows.filter(r => !errorRowNumbers.has(r._rowNumber)).length} valid
           </span>
         </div>
         {errors.length > 0 && (
           <>
             <div className="flex items-center gap-2">
-              <XCircle className="h-5 w-5 text-red-500" />
-              <span className="text-sm font-medium text-red-700 dark:text-red-300">
+              <XCircle className="h-5 w-5 text-danger" />
+              <span className="text-sm font-medium text-danger dark:text-red-300">
                 {errorRowNumbers.size} row(s) with errors
               </span>
             </div>
             <div className="flex items-center gap-2">
               <SkipForward className="h-5 w-5 text-amber-500" />
-              <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+              <span className="text-sm font-medium text-warning dark:text-amber-300">
                 {skippedRows.size} skipped
               </span>
             </div>
@@ -682,22 +682,22 @@ function ValidationStep({
       {/* Error groups */}
       {groupedErrors.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Errors to resolve</h3>
+          <h3 className="text-sm font-semibold text-foreground">Errors to resolve</h3>
           {groupedErrors.map(group => (
             <div
               key={group.key}
               className={cn(
                 'rounded-lg border p-4',
                 group.allSkipped
-                  ? 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50'
-                  : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/10',
+                  ? 'border-border bg-surface-subtle'
+                  : 'border-danger/25 bg-danger/10 dark:border-red-800 dark:bg-danger/10',
               )}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <AlertCircle className={cn('h-4 w-4', group.allSkipped ? 'text-gray-400' : 'text-red-500')} />
-                    <span className={cn('text-sm font-medium', group.allSkipped ? 'text-gray-500' : 'text-red-700 dark:text-red-300')}>
+                    <AlertCircle className={cn('h-4 w-4', group.allSkipped ? 'text-muted-foreground' : 'text-danger')} />
+                    <span className={cn('text-sm font-medium', group.allSkipped ? 'text-muted-foreground' : 'text-danger dark:text-red-300')}>
                       {group.field} — {group.message}
                     </span>
                     <Badge variant="outline" className="ml-1 text-[10px]">
@@ -717,8 +717,8 @@ function ValidationStep({
                           className={cn(
                             'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
                             isSkipped
-                              ? 'bg-gray-200 text-gray-500 line-through dark:bg-gray-700 dark:text-gray-400'
-                              : 'bg-white text-gray-700 ring-1 ring-gray-300 hover:bg-red-50 hover:ring-red-300 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-600 dark:hover:bg-red-900/20',
+                              ? 'bg-muted text-muted-foreground line-through'
+                              : 'bg-card text-foreground ring-1 ring-border hover:bg-danger/10 hover:ring-red-300 dark:hover:bg-danger/20',
                           )}
                           title={isSkipped ? 'Remove skip' : 'Skip this row'}
                         >
@@ -741,7 +741,7 @@ function ValidationStep({
                           const resolvedValue = resolvedErrors[resolveKey] ?? err.suggestion ?? '';
                           return (
                             <div key={resolveKey} className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500 w-12 shrink-0">Row {r}:</span>
+                              <span className="text-xs text-muted-foreground w-12 shrink-0">Row {r}:</span>
                               <Input
                                 value={resolvedValue}
                                 onChange={e => onResolveError(resolveKey, e.target.value)}
@@ -752,7 +752,7 @@ function ValidationStep({
                                 <button
                                   type="button"
                                   onClick={() => onResolveError(resolveKey, err.suggestion!)}
-                                  className="text-xs text-blue-600 hover:underline shrink-0"
+                                  className="text-xs text-primary hover:underline shrink-0"
                                 >
                                   Use suggestion
                                 </button>
@@ -771,8 +771,8 @@ function ValidationStep({
                   className={cn(
                     'shrink-0 rounded-md p-1.5 text-xs font-medium transition-colors',
                     group.allSkipped
-                      ? 'bg-gray-200 text-gray-500 dark:bg-gray-700'
-                      : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-gray-700',
+                      ? 'bg-muted text-muted-foreground'
+                      : 'text-muted-foreground hover:bg-muted hover:text-muted-foreground',
                   )}
                   title="Skip all rows with this error"
                 >
@@ -794,7 +794,7 @@ function ValidationStep({
           type="button"
           onClick={onContinue}
           disabled={importing}
-          className="h-11 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+          className="h-11 gap-1.5 bg-primary hover:bg-primary/90 text-white"
         >
           {importing ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -813,13 +813,13 @@ function ValidationStep({
 
 function DoneStep({ onReset }: { onReset: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 rounded-xl border bg-white p-12 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-        <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+    <div className="flex flex-col items-center justify-center gap-4 rounded-xl border bg-card p-12 shadow-sm">
+      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success/15 dark:bg-success/30">
+        <CheckCircle2 className="h-8 w-8 text-success dark:text-emerald-400" />
       </div>
       <div className="text-center">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Import Complete</h2>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        <h2 className="text-xl font-semibold text-foreground">Import Complete</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
           Your products have been imported successfully.
         </p>
       </div>

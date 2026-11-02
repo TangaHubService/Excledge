@@ -147,8 +147,8 @@ export const PaymentMethodModal = ({
         if (paymentStatus === 'success') {
             return (
                 <div className="text-center space-y-6 py-4">
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                        <CheckCircle2 className="h-10 w-10 text-green-600" />
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/15">
+                        <CheckCircle2 className="h-10 w-10 text-success" />
                     </div>
                     <div>
                         <h3 className="text-lg font-medium">Payment Successful!</h3>
@@ -166,8 +166,8 @@ export const PaymentMethodModal = ({
         if (localPaymentStatus === 'error') {
             return (
                 <div className="text-center space-y-6 py-4">
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
-                        <XCircle className="h-10 w-10 text-red-600" />
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-danger/15">
+                        <XCircle className="h-10 w-10 text-danger" />
                     </div>
                     <div>
                         <h3 className="text-lg font-medium">
@@ -234,8 +234,8 @@ export const PaymentMethodModal = ({
         return (
             <div className="space-y-3 py-2">
                 {/* Plan Summary */}
-                <div className="text-center p-3 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
-                    <h3 className="font-semibold text-base text-gray-900">{planName}</h3>
+                <div className="text-center p-3 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-500/25">
+                    <h3 className="font-semibold text-base text-foreground">{planName}</h3>
                 </div>
 
                 {/* Duration + live total/date preview */}
@@ -250,7 +250,7 @@ export const PaymentMethodModal = ({
                 {/* Payment Methods */}
                 <div className="space-y-3">
                     <div>
-                        <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                        <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
                             Select Payment Method
                         </h4>
                         <div className="grid grid-cols-3 gap-2">
@@ -266,8 +266,8 @@ export const PaymentMethodModal = ({
                                     className={`
                                         relative border-2 rounded-xl h-22 sm:h-24 p-2 flex flex-col items-center justify-center transition-all duration-300
                                         ${selectedMethod === item.key
-                                            ? "border-indigo-500 shadow-lg shadow-indigo-200 bg-indigo-50 scale-105"
-                                            : "border-gray-200 bg-white hover:border-indigo-300 hover:shadow-md"
+                                            ? "border-indigo-500 shadow-lg shadow-indigo-200 bg-indigo-500/10 scale-105"
+                                            : "border-border bg-card hover:border-indigo-300 hover:shadow-md"
                                         }
                                         disabled:opacity-50 disabled:cursor-not-allowed
                                     `}
@@ -290,18 +290,18 @@ export const PaymentMethodModal = ({
                                             <CreditCard className="h-6 w-6 text-indigo-600" />
                                         )}
                                     </div>
-                                    <span className="text-xs font-semibold text-center text-gray-700 leading-tight">{item.label}</span>
+                                    <span className="text-xs font-semibold text-center text-foreground leading-tight">{item.label}</span>
                                 </button>
                             ))}
                         </div>
                     </div>
 
                     {(selectedMethod === 'MTN' || selectedMethod === 'AIRTEL') && (
-                        <div className="space-y-2 pt-2 pb-2 px-3 bg-gray-50 rounded-lg border border-gray-200">
-                            <Label htmlFor="phone" className="text-sm font-semibold text-gray-700">Phone Number</Label>
+                        <div className="space-y-2 pt-2 pb-2 px-3 bg-surface-subtle rounded-lg border border-border">
+                            <Label htmlFor="phone" className="text-sm font-semibold text-foreground">Phone Number</Label>
                             <div className="relative w-full">
                                 <div className="absolute inset-y-0 left-0 pl-2 sm:pl-3 flex items-center pointer-events-none">
-                                    <span className="text-gray-500 text-xs sm:text-sm whitespace-nowrap">🇷🇼 +25</span>
+                                    <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">🇷🇼 +25</span>
                                 </div>
                                 <Input
                                     id="phone"
@@ -309,11 +309,11 @@ export const PaymentMethodModal = ({
                                     value={phoneNumber}
                                     onChange={handlePhoneChange}
                                     placeholder="07XXXXXXXX"
-                                    className="pl-16 sm:pl-16 h-10 w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                                    className="pl-16 sm:pl-16 h-10 w-full border-border focus:border-indigo-500 focus:ring-indigo-500 text-sm"
                                     disabled={isProcessing}
                                 />
                             </div>
-                            <p className="text-xs text-gray-600 flex items-start sm:items-center gap-1">
+                            <p className="text-xs text-muted-foreground flex items-start sm:items-center gap-1">
                                 <svg className="w-4 h-4 flex-shrink-0 mt-0.5 sm:mt-0" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                                 </svg>
@@ -327,7 +327,7 @@ export const PaymentMethodModal = ({
                             w-full mt-4 h-10 text-sm font-semibold transition-all duration-300
                             ${selectedMethod
                                 ? "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg hover:shadow-xl"
-                                : "bg-gray-300"
+                                : "bg-muted"
                             }
                         `}
                         onClick={handlePayment}
@@ -353,7 +353,7 @@ export const PaymentMethodModal = ({
                     </Button>
 
                     {/* Security Badge */}
-                    <div className="flex items-center justify-center gap-2 text-xs text-gray-500 mt-3">
+                    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground mt-3">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                         </svg>
@@ -367,7 +367,7 @@ export const PaymentMethodModal = ({
     return (
         <Drawer open={isOpen} onOpenChange={(open) => !open && handleModalClose()}>
             <DrawerContent
-                className="sm:max-w-md bg-white overflow-y-auto !p-4"
+                className="sm:max-w-md bg-card overflow-y-auto !p-4"
                 onInteractOutside={(e) => {
                     e.preventDefault();
                 }}

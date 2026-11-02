@@ -29,6 +29,7 @@ import { cn } from '../../../lib/utils'
 import { apiClient } from '../../../lib/api-client'
 import { useBranch } from '../../../context/BranchContext'
 import { useAuth } from '../../../context/AuthContext'
+import { PageHeader } from "../../../components/common/PageHeader";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -164,14 +165,14 @@ function KpiCard({ icon: Icon, label, value, sub, color }: {
   icon: React.ElementType; label: string; value: string; sub?: string; color: string
 }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-card border border-gray-200 dark:border-gray-700 shadow-card p-4 flex items-center gap-4 h-full">
+    <div className="bg-card rounded-card border border-border shadow-card p-4 flex items-center gap-4 h-full">
       <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0', color)}>
         <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0">
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{label}</p>
-        <p className="text-lg font-bold tabular-nums text-gray-900 dark:text-white truncate">{value}</p>
-        {sub && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">{sub}</p>}
+        <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+        <p className="text-lg font-bold tabular-nums text-foreground truncate">{value}</p>
+        {sub && <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{sub}</p>}
       </div>
     </div>
   )
@@ -513,22 +514,22 @@ export function ShiftSummaryPage() {
   // ── Header action button ────────────────────────────────────────────────────
 
   const headerAction = !activeShift ? (
-    <Button onClick={() => setOpenDialog(true)} className="gap-2 bg-white text-blue-700 hover:bg-white/90 font-semibold shadow-sm self-start sm:self-auto">
+    <Button onClick={() => setOpenDialog(true)} className="gap-2 bg-card text-primary hover:bg-card/90 font-semibold shadow-sm self-start sm:self-auto">
       <Plus className="h-4 w-4" />
       Open Shift
     </Button>
   ) : activeShift.status === 'OPEN' || activeShift.status === 'REOPENED' ? (
-    <Button onClick={handleStartClose} disabled={busy} className="gap-2 bg-white text-blue-700 hover:bg-white/90 font-semibold shadow-sm self-start sm:self-auto">
+    <Button onClick={handleStartClose} disabled={busy} className="gap-2 bg-card text-primary hover:bg-card/90 font-semibold shadow-sm self-start sm:self-auto">
       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
       Start Closing
     </Button>
   ) : activeShift.status === 'CLOSING' ? (
-    <Button onClick={handleSubmitClose} disabled={busy || actualCash.trim() === ''} className="gap-2 bg-white text-blue-700 hover:bg-white/90 font-semibold shadow-sm self-start sm:self-auto">
+    <Button onClick={handleSubmitClose} disabled={busy || actualCash.trim() === ''} className="gap-2 bg-card text-primary hover:bg-card/90 font-semibold shadow-sm self-start sm:self-auto">
       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
       Submit Closing
     </Button>
   ) : (
-    <Badge className="bg-white/20 text-white border-white/20">
+    <Badge className="bg-card/20 text-white border-white/20">
       {STATUS_LABELS[activeShift.status]}
     </Badge>
   )
@@ -540,7 +541,7 @@ export function ShiftSummaryPage() {
       key: 'shiftNumber',
       header: 'Shift',
       sortValue: row => row.shiftNumber,
-      render: row => <span className="font-semibold text-gray-900 dark:text-white">{shiftNumber(row)}</span>,
+      render: row => <span className="font-semibold text-foreground">{shiftNumber(row)}</span>,
     },
     {
       key: 'user',
@@ -559,7 +560,7 @@ export function ShiftSummaryPage() {
       header: 'Opened',
       sortValue: row => new Date(row.openedAt).getTime(),
       render: row => (
-        <span className="text-gray-600 dark:text-gray-300">
+        <span className="text-muted-foreground">
           {new Date(row.openedAt).toLocaleDateString()} {new Date(row.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
       ),
@@ -570,7 +571,7 @@ export function ShiftSummaryPage() {
       sortValue: row => row.closedAt ? new Date(row.closedAt).getTime() : 0,
       render: row => row.closedAt
         ? `${new Date(row.closedAt).toLocaleDateString()} ${new Date(row.closedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-        : <span className="text-gray-400">—</span>,
+        : <span className="text-muted-foreground">—</span>,
     },
     {
       key: 'status',
@@ -589,7 +590,7 @@ export function ShiftSummaryPage() {
       key: 'expectedCash',
       header: 'Expected',
       sortValue: row => row.expectedCash ?? 0,
-      render: row => row.expectedCash != null ? `${money(row.expectedCash)} RWF` : <span className="text-gray-400">—</span>,
+      render: row => row.expectedCash != null ? `${money(row.expectedCash)} RWF` : <span className="text-muted-foreground">—</span>,
       className: 'tabular-nums',
     },
     {
@@ -597,8 +598,8 @@ export function ShiftSummaryPage() {
       header: 'Variance',
       sortValue: row => row.difference ?? 0,
       render: row => row.difference != null
-        ? <span className={cn('tabular-nums font-medium', row.difference === 0 ? 'text-emerald-600' : 'text-amber-600')}>{money(row.difference)} RWF</span>
-        : <span className="text-gray-400">—</span>,
+        ? <span className={cn('tabular-nums font-medium', row.difference === 0 ? 'text-success' : 'text-warning')}>{money(row.difference)} RWF</span>
+        : <span className="text-muted-foreground">—</span>,
     },
     {
       key: 'actions',
@@ -606,16 +607,16 @@ export function ShiftSummaryPage() {
       className: 'w-40',
       render: row => (
         <div className="flex items-center gap-1 justify-end">
-          <button type="button" onClick={() => openDetails(row)} className="p-1 rounded text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors" title="Details">
+          <button type="button" onClick={() => openDetails(row)} className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" title="Details">
             <Eye className="h-3.5 w-3.5" />
           </button>
           {isAdmin && row.status === 'CLOSED' && (
-            <button type="button" onClick={() => handleReopen(row)} className="p-1 rounded text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors" title="Reopen">
+            <button type="button" onClick={() => handleReopen(row)} className="p-1 rounded text-muted-foreground hover:text-warning dark:hover:text-amber-400 hover:bg-warning/10 dark:hover:bg-warning/20 transition-colors" title="Reopen">
               <RotateCcw className="h-3.5 w-3.5" />
             </button>
           )}
           {isAdmin && (row.status === 'OPEN' || row.status === 'REOPENED') && (
-            <button type="button" onClick={() => handleCancel(row)} className="p-1 rounded text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Cancel">
+            <button type="button" onClick={() => handleCancel(row)} className="p-1 rounded text-muted-foreground hover:text-danger dark:hover:text-red-400 hover:bg-danger/10 dark:hover:bg-danger/20 transition-colors" title="Cancel">
               <XCircle className="h-3.5 w-3.5" />
             </button>
           )}
@@ -632,32 +633,22 @@ export function ShiftSummaryPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
       {/* Page header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 text-white shadow-lg">
-        <div className="pointer-events-none absolute inset-0 bg-black/10" />
-        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-              <Clock className="h-7 w-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Shift Summary</h1>
-              <p className="text-sm text-white/70 mt-0.5">
-                Open, manage, reconcile and review shifts for your branch.
-              </p>
-            </div>
-          </div>
-          {headerAction}
-        </div>
-        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-        <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
-      </div>
+      <PageHeader
+        title="Shift Summary"
+        description={<>Open, manage, reconcile and review shifts for your branch.</>}
+        actions={
+          <>
+            {headerAction}
+          </>
+        }
+      />
 
       {error && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-danger/25 dark:border-red-800 bg-danger/10 dark:bg-danger/20 px-4 py-3 text-sm text-danger dark:text-red-300">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">
+          <button onClick={() => setError(null)} className="text-danger hover:text-danger">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -666,47 +657,47 @@ export function ShiftSummaryPage() {
       {/* KPI row */}
       {activeShift && summary ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard icon={Banknote} label="Expected Cash" value={`${money(summary.expectedCash)} RWF`} sub="float + sales ± movements" color="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" />
-          <KpiCard icon={TrendingUp} label="Cash Sales" value={`${money(summary.cashSales)} RWF`} sub={`${money(summary.netSales)} RWF net sales`} color="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400" />
-          <KpiCard icon={Smartphone} label="Mobile Money" value={`${money(summary.mobileMoneySales)} RWF`} sub={`${money(summary.expectedMobileMoney)} RWF expected`} color="bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400" />
+          <KpiCard icon={Banknote} label="Expected Cash" value={`${money(summary.expectedCash)} RWF`} sub="float + sales ± movements" color="bg-primary/10 text-primary" />
+          <KpiCard icon={TrendingUp} label="Cash Sales" value={`${money(summary.cashSales)} RWF`} sub={`${money(summary.netSales)} RWF net sales`} color="bg-success/10 dark:bg-success/20 text-success dark:text-emerald-400" />
+          <KpiCard icon={Smartphone} label="Mobile Money" value={`${money(summary.mobileMoneySales)} RWF`} sub={`${money(summary.expectedMobileMoney)} RWF expected`} color="bg-violet-500/10 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400" />
           <KpiCard
             icon={activeShift.difference === 0 ? CheckCircle2 : AlertTriangle}
             label="Variance"
             value={`${money(activeShift.difference ?? 0)} RWF`}
             sub={activeShift.difference === 0 ? 'No variance' : (activeShift.varianceReason ?? 'Counted vs expected')}
             color={activeShift.difference === 0
-              ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
-              : 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'}
+              ? 'bg-success/10 dark:bg-success/20 text-success dark:text-emerald-400'
+              : 'bg-warning/10 dark:bg-warning/20 text-warning dark:text-amber-400'}
           />
         </div>
       ) : daily ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard icon={TrendingUp} label="Today's Sales" value={`${money(daily.totalSales)} RWF`} sub={`${daily.shiftCount} closed shift${daily.shiftCount !== 1 ? 's' : ''}`} color="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" />
-          <KpiCard icon={Banknote} label="Cash Sales" value={`${money(daily.cashSales)} RWF`} sub={`${money(daily.mobileMoneySales)} RWF mobile`} color="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400" />
-          <KpiCard icon={Wallet} label="Expenses" value={`${money(daily.expenses)} RWF`} sub={`${money(daily.returns)} RWF returns`} color="bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400" />
+          <KpiCard icon={TrendingUp} label="Today's Sales" value={`${money(daily.totalSales)} RWF`} sub={`${daily.shiftCount} closed shift${daily.shiftCount !== 1 ? 's' : ''}`} color="bg-primary/10 text-primary" />
+          <KpiCard icon={Banknote} label="Cash Sales" value={`${money(daily.cashSales)} RWF`} sub={`${money(daily.mobileMoneySales)} RWF mobile`} color="bg-success/10 dark:bg-success/20 text-success dark:text-emerald-400" />
+          <KpiCard icon={Wallet} label="Expenses" value={`${money(daily.expenses)} RWF`} sub={`${money(daily.returns)} RWF returns`} color="bg-warning/10 dark:bg-warning/20 text-warning dark:text-amber-400" />
           <KpiCard
             icon={daily.variance === 0 ? CheckCircle2 : AlertTriangle}
             label="Variance"
             value={`${money(daily.variance)} RWF`}
             sub="across closed shifts"
             color={daily.variance === 0
-              ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
-              : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'}
+              ? 'bg-success/10 dark:bg-success/20 text-success dark:text-emerald-400'
+              : 'bg-danger/10 dark:bg-danger/20 text-danger dark:text-red-400'}
           />
         </div>
       ) : null}
 
       {/* No active shift → clear call to action */}
       {!activeShift && (
-        <div className="bg-white dark:bg-gray-800 rounded-card border border-dashed border-gray-300 dark:border-gray-600 shadow-card px-6 py-10 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-900/20">
-            <Clock className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+        <div className="bg-card rounded-card border border-dashed border-border shadow-card px-6 py-10 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+            <Clock className="h-6 w-6 text-primary" />
           </div>
-          <h2 className="mt-3 font-semibold text-gray-900 dark:text-white">No active shift</h2>
-          <p className="mx-auto mt-1 max-w-md text-sm text-gray-500 dark:text-gray-400">
+          <h2 className="mt-3 font-semibold text-foreground">No active shift</h2>
+          <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
             Open a shift to start tracking sales and till movements for the day.
           </p>
-          <Button onClick={() => setOpenDialog(true)} className="mt-4 gap-2 bg-blue-600 hover:bg-blue-700">
+          <Button onClick={() => setOpenDialog(true)} className="mt-4 gap-2 bg-primary hover:bg-primary/90">
             <Plus className="h-4 w-4" /> Open Shift
           </Button>
         </div>
@@ -714,14 +705,14 @@ export function ShiftSummaryPage() {
 
       {/* Active shift panel */}
       {activeShift && (
-        <div className="bg-white dark:bg-gray-800 rounded-card border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex flex-wrap items-center gap-2">
+        <div className="bg-card rounded-card border border-border shadow-card overflow-hidden">
+          <div className="px-5 py-4 border-b border-border flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              <h2 className="font-semibold text-gray-900 dark:text-white">{shiftNumber(activeShift)}</h2>
+              <Clock className="h-5 w-5 text-primary" />
+              <h2 className="font-semibold text-foreground">{shiftNumber(activeShift)}</h2>
               <StatusBadge status={STATUS_TONES[activeShift.status]} label={STATUS_LABELS[activeShift.status]} />
             </div>
-            <p className="w-full sm:ml-auto sm:w-auto text-xs text-gray-500 dark:text-gray-400 sm:text-right">
+            <p className="w-full sm:ml-auto sm:w-auto text-xs text-muted-foreground sm:text-right">
               {activeBranch?.name ?? `Branch #${activeShift.branchId}`} · Cashier: {activeShift.user?.name ?? `#${activeShift.userId}`} · Opened {new Date(activeShift.openedAt).toLocaleString()}
               {activeShift.closedAt ? ` · Closed ${new Date(activeShift.closedAt).toLocaleString()}` : ''}
             </p>
@@ -730,32 +721,32 @@ export function ShiftSummaryPage() {
           <div className="p-5 space-y-5">
             {summary && (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-                <KpiCard icon={Wallet} label="Opening Cash" value={`${money(summary.openingFloat)} RWF`} color="bg-gray-50 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300" />
-                <KpiCard icon={Smartphone} label="Opening Mobile" value={`${money(summary.openingMobileMoney)} RWF`} color="bg-gray-50 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300" />
-                <KpiCard icon={ArrowUpCircle} label="Cash In" value={`${money(summary.cashIn)} RWF`} color="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400" />
-                <KpiCard icon={ArrowDownCircle} label="Cash Out" value={`${money(summary.cashOut)} RWF`} color="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400" />
-                <KpiCard icon={Receipt} label="Expenses" value={`${money(summary.expenseTotal)} RWF`} color="bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400" />
-                <KpiCard icon={History} label="Transactions" value={String(activeShift._count?.sales ?? 0)} color="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" />
+                <KpiCard icon={Wallet} label="Opening Cash" value={`${money(summary.openingFloat)} RWF`} color="bg-surface-subtle text-muted-foreground" />
+                <KpiCard icon={Smartphone} label="Opening Mobile" value={`${money(summary.openingMobileMoney)} RWF`} color="bg-surface-subtle text-muted-foreground" />
+                <KpiCard icon={ArrowUpCircle} label="Cash In" value={`${money(summary.cashIn)} RWF`} color="bg-success/10 dark:bg-success/20 text-success dark:text-emerald-400" />
+                <KpiCard icon={ArrowDownCircle} label="Cash Out" value={`${money(summary.cashOut)} RWF`} color="bg-danger/10 dark:bg-danger/20 text-danger dark:text-red-400" />
+                <KpiCard icon={Receipt} label="Expenses" value={`${money(summary.expenseTotal)} RWF`} color="bg-warning/10 dark:bg-warning/20 text-warning dark:text-amber-400" />
+                <KpiCard icon={History} label="Transactions" value={String(activeShift._count?.sales ?? 0)} color="bg-primary/10 text-primary" />
               </div>
             )}
 
             {(activeShift.status === 'OPEN' || activeShift.status === 'REOPENED') && (
-              <div className="flex flex-wrap gap-2 border-t border-gray-100 dark:border-gray-700 pt-4">
+              <div className="flex flex-wrap gap-2 border-t border-border pt-4">
                 <Button variant="outline" onClick={() => setMovementDialog('CASH_IN')} disabled={busy}>
-                  <Plus className="h-4 w-4 text-emerald-600" /> Cash In
+                  <Plus className="h-4 w-4 text-success" /> Cash In
                 </Button>
                 <Button variant="outline" onClick={() => setMovementDialog('CASH_OUT')} disabled={busy}>
-                  <ArrowDownCircle className="h-4 w-4 text-red-600" /> Cash Out
+                  <ArrowDownCircle className="h-4 w-4 text-danger" /> Cash Out
                 </Button>
                 <Button variant="outline" onClick={() => setExpenseDialog(true)} disabled={busy}>
-                  <Receipt className="h-4 w-4 text-blue-600" /> Record Expense
+                  <Receipt className="h-4 w-4 text-primary" /> Record Expense
                 </Button>
               </div>
             )}
 
             {activeShift.status === 'CLOSING' && (
-              <div className="space-y-4 rounded-card border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 p-4">
-                <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+              <div className="space-y-4 rounded-card border border-primary/30 bg-primary/50 p-4">
+                <div className="flex items-center gap-2 text-primary">
                   <Lock className="h-5 w-5" />
                   <p className="text-sm font-semibold">Reconcile the till. Sales are locked during closing.</p>
                 </div>
@@ -770,10 +761,10 @@ export function ShiftSummaryPage() {
                       inputMode="decimal"
                     />
                     {summary && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="text-xs text-muted-foreground">
                         Expected: {money(summary.expectedCash)} RWF
                         {actualCash.trim() ? (
-                          <span className={Number(actualCash) - summary.expectedCash === 0 ? ' text-emerald-600' : ' text-amber-600'}>
+                          <span className={Number(actualCash) - summary.expectedCash === 0 ? ' text-success' : ' text-warning'}>
                             {' '}· Variance: {money(Number(actualCash) - summary.expectedCash)} RWF
                           </span>
                         ) : null}
@@ -803,12 +794,12 @@ export function ShiftSummaryPage() {
                           placeholder={money(denom)}
                           inputMode="numeric"
                         />
-                        <p className="text-center text-[11px] text-gray-500">{money(denom)}</p>
+                        <p className="text-center text-[11px] text-muted-foreground">{money(denom)}</p>
                       </div>
                     ))}
                   </div>
                   {denominationsTotal > 0 && (
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                    <p className="text-sm font-medium text-muted-foreground">
                       Counted total: {money(denominationsTotal)} RWF
                     </p>
                   )}
@@ -838,14 +829,14 @@ export function ShiftSummaryPage() {
             )}
 
             {activeShift.status === 'PENDING_APPROVAL' && (
-              <div className="space-y-4 rounded-card border border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/10 p-4">
+              <div className="space-y-4 rounded-card border border-orange-500/25 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/10 p-4">
                 <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
                   <AlertTriangle className="h-5 w-5" />
                   <p className="text-sm font-semibold">This closing is pending manager approval.</p>
                 </div>
                 {pendingForReview && (
                   <div className="flex flex-wrap gap-2">
-                    <Button onClick={() => openReview(activeShift, 'APPROVE')} disabled={busy} className="bg-emerald-600 hover:bg-emerald-700">
+                    <Button onClick={() => openReview(activeShift, 'APPROVE')} disabled={busy} className="bg-success hover:bg-success/90">
                       <BadgeCheck className="h-4 w-4" /> Approve
                     </Button>
                     <Button variant="destructive" onClick={() => openReview(activeShift, 'REJECT')} disabled={busy}>
@@ -854,7 +845,7 @@ export function ShiftSummaryPage() {
                   </div>
                 )}
                 {isOwnShift && (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Waiting for a manager to review your closing.</p>
+                  <p className="text-sm text-muted-foreground">Waiting for a manager to review your closing.</p>
                 )}
               </div>
             )}
@@ -864,14 +855,14 @@ export function ShiftSummaryPage() {
 
       {/* Shift history */}
       <div className="space-y-4">
-        <h2 className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white">
-          <History className="h-5 w-5 text-blue-600 dark:text-blue-400" /> Shift History
+        <h2 className="flex items-center gap-2 font-semibold text-foreground">
+          <History className="h-5 w-5 text-primary" /> Shift History
         </h2>
 
         {/* Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-card border border-gray-200 dark:border-gray-700 shadow-card p-4 flex flex-wrap gap-3 items-end">
+        <div className="bg-card rounded-card border border-border shadow-card p-4 flex flex-wrap gap-3 items-end">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={historyFilter.search}
               onChange={e => setHistoryFilter(prev => ({ ...prev, search: e.target.value, page: 1 }))}
@@ -891,7 +882,7 @@ export function ShiftSummaryPage() {
             </Select>
           </div>
           {hasHistoryFilters && (
-            <button type="button" onClick={clearHistoryFilters} className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 dark:hover:text-red-400 transition-colors">
+            <button type="button" onClick={clearHistoryFilters} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-danger dark:hover:text-red-400 transition-colors">
               <X className="h-3.5 w-3.5" /> Clear
             </button>
           )}
@@ -922,7 +913,7 @@ export function ShiftSummaryPage() {
           </DrawerHeader>
           <div className="space-y-4 pt-1">
             <div className="space-y-1.5">
-              <Label>Branch <span className="text-red-500">*</span></Label>
+              <Label>Branch <span className="text-danger">*</span></Label>
               <Select value={branchId ? String(branchId) : undefined} onValueChange={v => setBranchId(Number(v))} disabled={branchesLoading}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={branchesLoading ? 'Loading branches…' : 'Select branch'} />
@@ -937,13 +928,13 @@ export function ShiftSummaryPage() {
 
             <div className="space-y-1.5">
               <Label>Cashier</Label>
-              <Input value={user?.name ?? ''} readOnly className="bg-gray-50 dark:bg-gray-700" />
+              <Input value={user?.name ?? ''} readOnly className="bg-surface-subtle" />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-emerald-600" /> Opening Cash (RWF)
+                  <Wallet className="h-4 w-4 text-success" /> Opening Cash (RWF)
                 </Label>
                 <Input value={openingCash} onChange={e => setOpeningCash(formatDigits(e.target.value))} placeholder="0" inputMode="numeric" />
               </div>
@@ -956,7 +947,7 @@ export function ShiftSummaryPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Opening Notes <span className="text-gray-400 text-xs">(optional)</span></Label>
+              <Label>Opening Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
               <Textarea value={openingNotes} onChange={e => setOpeningNotes(e.target.value)} placeholder="Anything notable at the start of the shift" rows={2} />
             </div>
           </div>
@@ -964,7 +955,7 @@ export function ShiftSummaryPage() {
             <Button variant="outline" onClick={() => setOpenDialog(false)} disabled={busy}>
               Cancel
             </Button>
-            <Button onClick={handleOpen} disabled={!branchId || busy} className="bg-blue-600 hover:bg-blue-700">
+            <Button onClick={handleOpen} disabled={!branchId || busy} className="bg-primary hover:bg-primary/90">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Open Shift
             </Button>
@@ -998,7 +989,7 @@ export function ShiftSummaryPage() {
             <Button
               onClick={handleMovement}
               disabled={busy || Number(movementAmount) <= 0}
-              className={movementDialog === 'CASH_IN' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}
+              className={movementDialog === 'CASH_IN' ? 'bg-success hover:bg-success/90' : 'bg-danger hover:bg-danger/90'}
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : movementDialog === 'CASH_IN' ? <Plus className="h-4 w-4" /> : <ArrowDownCircle className="h-4 w-4" />}
               Confirm {movementDialog === 'CASH_IN' ? 'Cash In' : 'Cash Out'}
@@ -1075,7 +1066,7 @@ export function ShiftSummaryPage() {
             <Button
               onClick={handleReview}
               disabled={busy || (reviewAction === 'REJECT' && !reviewReason.trim())}
-              className={reviewAction === 'APPROVE' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}
+              className={reviewAction === 'APPROVE' ? 'bg-success hover:bg-success/90' : 'bg-danger hover:bg-danger/90'}
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : reviewAction === 'APPROVE' ? <BadgeCheck className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
               {reviewAction === 'APPROVE' ? 'Approve Closing' : 'Reject Closing'}
@@ -1104,26 +1095,26 @@ export function ShiftSummaryPage() {
             <div className="space-y-4 overflow-y-auto max-h-[65vh] pr-1">
               {details.summary && (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <KpiCard icon={Wallet} label="Opening Cash" value={`${money(details.summary.openingFloat)} RWF`} color="bg-gray-50 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300" />
-                  <KpiCard icon={TrendingUp} label="Cash Sales" value={`${money(details.summary.cashSales)} RWF`} color="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400" />
-                  <KpiCard icon={Smartphone} label="Mobile Money" value={`${money(details.summary.mobileMoneySales)} RWF`} color="bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400" />
+                  <KpiCard icon={Wallet} label="Opening Cash" value={`${money(details.summary.openingFloat)} RWF`} color="bg-surface-subtle text-muted-foreground" />
+                  <KpiCard icon={TrendingUp} label="Cash Sales" value={`${money(details.summary.cashSales)} RWF`} color="bg-success/10 dark:bg-success/20 text-success dark:text-emerald-400" />
+                  <KpiCard icon={Smartphone} label="Mobile Money" value={`${money(details.summary.mobileMoneySales)} RWF`} color="bg-violet-500/10 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400" />
                   <KpiCard
                     icon={Number(details.shift.difference) === 0 ? CheckCircle2 : AlertTriangle}
                     label="Variance"
                     value={`${money(details.shift.difference)} RWF`}
-                    color={Number(details.shift.difference) === 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'}
+                    color={Number(details.shift.difference) === 0 ? 'bg-success/10 dark:bg-success/20 text-success dark:text-emerald-400' : 'bg-warning/10 dark:bg-warning/20 text-warning dark:text-amber-400'}
                   />
                 </div>
               )}
 
               <div>
-                <h4 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                <h4 className="mb-2 text-sm font-semibold text-foreground">
                   Transactions ({details.transactions?.length ?? 0})
                 </h4>
                 {details.transactions?.length > 0 ? (
-                  <div className="max-h-56 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="max-h-56 overflow-y-auto rounded-lg border border-border">
                     <table className="w-full text-sm">
-                      <thead className="bg-gray-50 dark:bg-gray-700/40 text-xs text-gray-500 dark:text-gray-400">
+                      <thead className="bg-surface-subtle text-xs text-muted-foreground">
                         <tr>
                           <th className="px-3 py-2 text-left font-medium">Number</th>
                           <th className="px-3 py-2 text-left font-medium">Status</th>
@@ -1132,14 +1123,14 @@ export function ShiftSummaryPage() {
                           <th className="px-3 py-2 text-right font-medium">Mobile</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      <tbody className="divide-y divide-border">
                         {details.transactions.map((tx: any) => (
                           <tr key={tx.id}>
-                            <td className="px-3 py-2 font-mono text-xs text-gray-600 dark:text-gray-300">{tx.saleNumber}</td>
-                            <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{tx.status}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{money(tx.totalAmount)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{money(tx.cashAmount)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">
+                            <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{tx.saleNumber}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{tx.status}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{money(tx.totalAmount)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{money(tx.cashAmount)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                               {money(tx.salePayments?.filter((p: any) => p.paymentMethod === 'MTN_MOMO' || p.paymentMethod === 'AIRTEL_MONEY').reduce((s: number, p: any) => s + Number(p.amount), 0))}
                             </td>
                           </tr>
@@ -1148,44 +1139,44 @@ export function ShiftSummaryPage() {
                     </table>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400">No transactions on this shift.</p>
+                  <p className="text-sm text-muted-foreground">No transactions on this shift.</p>
                 )}
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <h4 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  <h4 className="mb-2 text-sm font-semibold text-foreground">
                     Cash Movements ({details.cashMovements?.length ?? 0})
                   </h4>
-                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 p-2">
+                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
                     {details.cashMovements?.length > 0 ? (
                       details.cashMovements.map((m: any) => (
-                        <div key={m.id} className="flex items-center justify-between rounded bg-gray-50 dark:bg-gray-700/40 px-3 py-2 text-sm">
-                          <span className={m.type === 'CASH_IN' ? 'text-emerald-600' : 'text-red-600'}>
+                        <div key={m.id} className="flex items-center justify-between rounded bg-surface-subtle px-3 py-2 text-sm">
+                          <span className={m.type === 'CASH_IN' ? 'text-success' : 'text-danger'}>
                             {m.type === 'CASH_IN' ? 'In' : 'Out'} · {money(m.amount)}
                           </span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">{m.reason ?? ''}</span>
+                          <span className="text-xs text-muted-foreground">{m.reason ?? ''}</span>
                         </div>
                       ))
                     ) : (
-                      <p className="text-sm text-gray-400">No cash movements.</p>
+                      <p className="text-sm text-muted-foreground">No cash movements.</p>
                     )}
                   </div>
                 </div>
                 <div>
-                  <h4 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  <h4 className="mb-2 text-sm font-semibold text-foreground">
                     Expenses ({details.expenses?.length ?? 0})
                   </h4>
-                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 p-2">
+                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
                     {details.expenses?.length > 0 ? (
                       details.expenses.map((e: any) => (
-                        <div key={e.id} className="flex items-center justify-between rounded bg-gray-50 dark:bg-gray-700/40 px-3 py-2 text-sm">
-                          <span className="text-gray-700 dark:text-gray-200">{CATEGORY_LABELS[e.category] ?? e.category} · {money(e.amount)}</span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">{e.paymentMethod}</span>
+                        <div key={e.id} className="flex items-center justify-between rounded bg-surface-subtle px-3 py-2 text-sm">
+                          <span className="text-foreground">{CATEGORY_LABELS[e.category] ?? e.category} · {money(e.amount)}</span>
+                          <span className="text-xs text-muted-foreground">{e.paymentMethod}</span>
                         </div>
                       ))
                     ) : (
-                      <p className="text-sm text-gray-400">No expenses on this shift.</p>
+                      <p className="text-sm text-muted-foreground">No expenses on this shift.</p>
                     )}
                   </div>
                 </div>
@@ -1215,7 +1206,7 @@ export function ShiftSummaryPage() {
             <AlertDialogCancel disabled={busy}>Keep it</AlertDialogCancel>
             <AlertDialogAction
               disabled={busy}
-              className={confirmAction?.type === 'CANCEL' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}
+              className={confirmAction?.type === 'CANCEL' ? 'bg-danger hover:bg-danger/90 text-white' : 'bg-primary hover:bg-primary/90 text-white'}
               onClick={runConfirmAction}
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : confirmAction?.type === 'REOPEN' ? 'Reopen' : 'Cancel'}

@@ -136,8 +136,8 @@ export default function OrganizationsPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
-          <p className="text-sm text-gray-500 font-medium">{t('common.loading')}</p>
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground font-medium">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -149,38 +149,38 @@ export default function OrganizationsPage() {
       <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         {/* Welcome Section */}
         <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 mb-6 group hover:scale-110 transition-transform duration-300">
+          <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-primary/10 text-primary mb-6 group hover:scale-110 transition-transform duration-300">
             <Building2 size={48} className="transition-transform group-hover:rotate-12" />
           </div>
-          <h1 className="text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight mb-4">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             {t('organizations.welcomeTitle')}
           </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-8">
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
             {t('organizations.welcomeDesc')}
           </p>
 
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-blue-500/30 hover:scale-105 active:scale-95"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-blue-500/30 hover:scale-105 active:scale-95"
           >
             <Plus className="h-5 w-5" />
             {t('organizations.createOrganization')}
           </button>
         </div>
 
-        <div className="space-y-8 rounded-2xl bg-[#f2f4f7] px-4 py-10 dark:bg-zinc-950 sm:px-8 sm:py-12">
+        <div className="space-y-8 rounded-2xl bg-[#f2f4f7] px-4 py-10 sm:px-8 sm:py-12">
           <div className="mx-auto max-w-3xl text-center">
-            <h2 className="mb-3 text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
+            <h2 className="mb-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               {t('subscription.choosePlan')}
             </h2>
-            <p className="text-base text-gray-600 dark:text-zinc-400 sm:text-lg">
+            <p className="text-base text-muted-foreground sm:text-lg">
               {t('subscription.planDesc')}
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               {[t('subscription.trustSecure'), t('subscription.trustSupport'), t('subscription.trustActivate')].map((label) => (
                 <span
                   key={label}
-                  className="inline-flex items-center rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+                  className="inline-flex items-center rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-sm"
                 >
                   {label}
                 </span>
@@ -190,7 +190,7 @@ export default function OrganizationsPage() {
 
           {plansLoading ? (
             <div className="flex justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
             <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
@@ -207,7 +207,7 @@ export default function OrganizationsPage() {
               ))}
             </div>
           )}
-          <p className="text-center text-sm text-gray-500 dark:text-zinc-500">
+          <p className="text-center text-sm text-muted-foreground">
             {t('subscription.plansFootnote')}
           </p>
         </div>
@@ -230,16 +230,16 @@ export default function OrganizationsPage() {
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                 {t('organizations.myOrganizations') || 'My Organizations'}
               </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 {t('organizations.selectOrCreate') || 'Select an organization or create a new one'}
               </p>
             </div>
             <button
               onClick={() => setIsCreateModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white font-medium rounded-lg transition-colors"
             >
               <Plus className="h-4 w-4" />
               {t('organizations.createNew') || 'Create New'}
@@ -247,8 +247,8 @@ export default function OrganizationsPage() {
           </div>
 
           {error && (
-            <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <div className="mb-4 p-4 bg-danger/10 dark:bg-danger/20 border border-danger/25 dark:border-red-800 rounded-lg">
+              <p className="text-sm text-danger dark:text-red-400">{error}</p>
             </div>
           )}
 
@@ -259,28 +259,28 @@ export default function OrganizationsPage() {
                 <div
                   key={org.id}
                   onClick={() => onSelectOrg(org)}
-                  className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border-2 transition-all cursor-pointer hover:shadow-md group/card ${isCurrent
-                    ? 'border-blue-500 dark:border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600'
+                  className={`bg-card rounded-xl shadow-sm border-2 transition-all cursor-pointer hover:shadow-md group/card ${isCurrent
+                    ? 'border-primary bg-primary/50'
+                    : 'border-border hover:border-primary/30'
                     }`}
                 >
                   <div className="p-6">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                        <div className="p-3 rounded-lg bg-primary/15 text-primary">
                           <Building2 className="h-6 w-6" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                          <h3 className="text-lg font-semibold text-foreground truncate">
                             {org.name}
                           </h3>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                          <p className="text-sm text-muted-foreground">
                             {org.businessType.replace('_', ' ')}
                           </p>
                         </div>
                       </div>
                       {isCurrent && (
-                        <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full text-xs font-medium">
+                        <div className="flex items-center gap-1 px-2 py-1 bg-primary/15 text-primary rounded-full text-xs font-medium">
                           <Check className="h-3 w-3" />
                           {t('organizations.current') || 'Current'}
                         </div>
@@ -289,29 +289,29 @@ export default function OrganizationsPage() {
 
                     <div className="space-y-2">
                       {org.address && (
-                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                        <p className="text-sm text-muted-foreground truncate">
                           📍 {org.address}
                         </p>
                       )}
                       {org.phone && (
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <p className="text-sm text-muted-foreground">
                           📞 {org.phone}
                         </p>
                       )}
                       {org.email && (
-                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                        <p className="text-sm text-muted-foreground truncate">
                           ✉️ {org.email}
                         </p>
                       )}
                     </div>
 
-                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
                       <div className="flex flex-col">
-                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                        <span className="text-xs font-medium text-muted-foreground">
                           {t('organizations.role') || 'Role'}: {org.role}
                         </span>
                         {org.isOwner && (
-                          <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                          <span className="text-xs font-medium text-primary">
                             {t('organizations.owner') || 'Owner'}
                           </span>
                         )}
@@ -320,7 +320,7 @@ export default function OrganizationsPage() {
                       {(org.role === 'ADMIN' || org.isOwner) && (
                         <button
                           onClick={(e) => handleConfigure(e, org)}
-                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors group"
+                          className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors group"
                           title={t('common.configure') || 'Configure'}
                         >
                           <Settings className="h-4 w-4 group-hover:rotate-45 transition-transform" />
@@ -345,11 +345,11 @@ export default function OrganizationsPage() {
 
   // Fallback
   return (
-    <div className="min-h-screen bg-gray-50/50 dark:bg-gray-900 p-6">
+    <div className="min-h-screen bg-surface-subtle/50 p-6">
       <div className="max-w-4xl mx-auto">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-12">
+        <div className="bg-card rounded-2xl shadow-sm border border-border p-12">
           <div className="flex flex-col items-center justify-center text-center">
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               {t('organizations.noOrganizations') || 'No organizations found'}
             </p>
           </div>

@@ -87,7 +87,7 @@ export function FilterBar({
     <div className={cn('space-y-3', className)}>
       {/* ── Search row ─────────────────────────────── */}
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           ref={searchRef}
           value={searchValue}
@@ -99,7 +99,7 @@ export function FilterBar({
           <button
             type="button"
             onClick={() => onSearchChange('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700"
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-muted-foreground"
           >
             <X className="h-4 w-4" />
           </button>
@@ -115,14 +115,14 @@ export function FilterBar({
               variant="secondary"
               className="h-8 gap-1.5 rounded-lg px-3 text-xs font-medium"
             >
-              <span className="text-gray-400">
+              <span className="text-muted-foreground">
                 {filterGroups.find(g => g.id === filter.groupId)?.label ?? filter.groupId}:
               </span>
               <span>{filter.label}</span>
               <button
                 type="button"
                 onClick={() => onRemoveFilter(filter)}
-                className="ml-0.5 rounded-sm p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-gray-600"
+                className="ml-0.5 rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-muted-foreground"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -132,7 +132,7 @@ export function FilterBar({
           <button
             type="button"
             onClick={onClearAll}
-            className="h-8 rounded-lg px-2.5 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+            className="h-8 rounded-lg px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             Clear all
           </button>
@@ -181,7 +181,7 @@ function AddFilterPopover({
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 gap-1.5 text-xs font-medium text-gray-500"
+          className="h-8 gap-1.5 text-xs font-medium text-muted-foreground"
         >
           <Plus className="h-3.5 w-3.5" />
           Add Filter
@@ -191,7 +191,7 @@ function AddFilterPopover({
         {!selectedGroup ? (
           /* ── Group list ───────────────────────────── */
           <div className="space-y-0.5">
-            <p className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            <p className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               Filter by
             </p>
             {filterGroups.map(g => {
@@ -201,10 +201,10 @@ function AddFilterPopover({
                   key={g.id}
                   type="button"
                   onClick={() => setSelectedGroup(g.id)}
-                  className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                  className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
                 >
                   <span>{g.label}</span>
-                  {isActive && <Check className="h-3.5 w-3.5 text-blue-500" />}
+                  {isActive && <Check className="h-3.5 w-3.5 text-primary" />}
                 </button>
               )
             })}
@@ -215,7 +215,7 @@ function AddFilterPopover({
             <button
               type="button"
               onClick={() => setSelectedGroup(null)}
-              className="mb-1 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="mb-1 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted"
             >
               ← {filterGroups.find(g => g.id === selectedGroup)?.label}
             </button>
@@ -230,17 +230,17 @@ function AddFilterPopover({
                   type="button"
                   onClick={() => handleSelect(opt.value, opt.label)}
                   disabled={isActive}
-                  className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-300 dark:hover:bg-gray-800"
+                  className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <span>{opt.label}</span>
-                  {isActive && <Check className="h-3.5 w-3.5 text-blue-500" />}
+                  {isActive && <Check className="h-3.5 w-3.5 text-primary" />}
                 </button>
               )
             })}
 
             {group?.type === 'range' && (
               <div className="px-2 py-2">
-                <p className="text-xs text-gray-500">Range filter (coming soon)</p>
+                <p className="text-xs text-muted-foreground">Range filter (coming soon)</p>
               </div>
             )}
           </div>

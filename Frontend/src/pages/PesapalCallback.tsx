@@ -140,7 +140,7 @@ export const PesapalCallback = () => {
     if (status === 'checking' || status === 'idle') {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-                <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-md w-full">
+                <div className="bg-card rounded-2xl shadow-2xl p-12 max-w-md w-full">
                     <div className="relative w-24 h-24 mx-auto mb-6">
                         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full animate-ping opacity-20"></div>
                         <div className="relative bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full p-6">
@@ -150,7 +150,7 @@ export const PesapalCallback = () => {
                     <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                         Processing Payment
                     </h2>
-                    <p className="text-gray-600 mb-4">
+                    <p className="text-muted-foreground mb-4">
                         Please wait while we verify your payment...
                     </p>
                 </div>
@@ -163,9 +163,9 @@ export const PesapalCallback = () => {
     if (status === 'success' && transaction) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
-                <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-lg w-full">
+                <div className="bg-card rounded-2xl shadow-2xl p-12 max-w-lg w-full">
                     <div className="relative mb-6">
-                        <div className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-20"></div>
+                        <div className="absolute inset-0 bg-success rounded-full animate-ping opacity-20"></div>
                         <div className="relative bg-gradient-to-r from-green-500 to-emerald-500 p-6 rounded-full mx-auto w-24 h-24 flex items-center justify-center">
                             <CheckCircle2 className="h-12 w-12 text-white animate-bounce" />
                         </div>
@@ -175,26 +175,26 @@ export const PesapalCallback = () => {
                         Payment Successful! 🎉
                     </h2>
 
-                    <p className="text-gray-600 mb-2 text-lg">
+                    <p className="text-muted-foreground mb-2 text-lg">
                         Thank you for your payment of{" "}
-                        <span className="font-bold text-green-600">
+                        <span className="font-bold text-success">
                             {transaction.amount} {transaction.currency}
                         </span>
                     </p>
 
-                    <p className="text-gray-700 font-medium mb-6">
+                    <p className="text-foreground font-medium mb-6">
                         Redirecting you to your dashboard...
                     </p>
 
                     {/* Progress Bar */}
-                    <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div className="w-full bg-muted rounded-full h-3">
                         <div
                             className="h-3 rounded-full bg-gradient-to-r from-green-500 to-emerald-600 transition-all duration-75"
                             style={{ width: `${progress}%` }}
                         ></div>
                     </div>
 
-                    <p className="mt-3 text-sm text-gray-600">
+                    <p className="mt-3 text-sm text-muted-foreground">
                         {Math.min(Math.floor(progress), 100)}%
                     </p>
                 </div>
@@ -206,24 +206,24 @@ export const PesapalCallback = () => {
     /** ❌ ERROR SCREEN */
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50">
-            <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-lg w-full">
+            <div className="bg-card rounded-2xl shadow-2xl p-12 max-w-lg w-full">
                 <div className="relative mb-6">
-                    <div className="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-20"></div>
+                    <div className="absolute inset-0 bg-danger rounded-full animate-ping opacity-20"></div>
                     <div className="relative bg-gradient-to-r from-red-500 to-orange-500 p-6 rounded-full mx-auto w-24 h-24 flex items-center justify-center">
                         <XCircle className="h-12 w-12 text-white" />
                     </div>
                 </div>
 
-                <h2 className="text-3xl font-bold mb-3 text-gray-900">
+                <h2 className="text-3xl font-bold mb-3 text-foreground">
                     {transaction?.payment_status_description === 'FAILED'
                         ? 'Payment Failed'
                         : 'Payment Processing'}
                 </h2>
 
                 {error ? (
-                    <p className="text-gray-600 mb-6 text-lg">{error}</p>
+                    <p className="text-muted-foreground mb-6 text-lg">{error}</p>
                 ) : (
-                    <p className="text-gray-600 mb-6">
+                    <p className="text-muted-foreground mb-6">
                         {transaction?.description || 'There was an issue processing your payment.'}
                     </p>
                 )}
@@ -232,7 +232,7 @@ export const PesapalCallback = () => {
                     <Button
                         variant="outline"
                         onClick={handleClose}
-                        className="flex-1 h-12 border-2 border-gray-300 hover:border-gray-400"
+                        className="flex-1 h-12 border-2 border-border hover:border-gray-400"
                     >
                         Close
                     </Button>

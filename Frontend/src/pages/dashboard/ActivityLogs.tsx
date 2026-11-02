@@ -253,21 +253,21 @@ const ActivityLogs = () => {
         const baseClasses = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border';
 
         if (type.includes('CREATE') || type === 'USER_INVITE' || type === 'USER_ACCEPT_INVITE' || type.includes('INCREASED') || type.includes('APPROVED')) {
-            return `${baseClasses} bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700`;
+            return `${baseClasses} bg-success/10 dark:bg-success/30 text-success dark:text-emerald-300 border-success/25 dark:border-emerald-700`;
         }
         if (type.includes('UPDATE') || type.includes('ADJUSTMENT') || type === 'SETTINGS_UPDATE' || type === 'TAX_CONFIG_CHANGED') {
-            return `${baseClasses} bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700`;
+            return `${baseClasses} bg-primary/10 text-primary border-primary/30`;
         }
         if (type.includes('DELETE') || type.includes('ARCHIVED') || type.includes('CANCELLED') || type.includes('REJECTED') || type.includes('FAILED') || type.includes('DISABLED') || type.includes('DECREASED') || type === 'LOW_STOCK_ALERT') {
-            return `${baseClasses} bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-700`;
+            return `${baseClasses} bg-danger/10 dark:bg-danger/30 text-danger dark:text-red-300 border-danger/25 dark:border-red-700`;
         }
         if (type.includes('LOGIN') || type.includes('LOGOUT') || type.includes('PASSWORD') || type.includes('ROLE')) {
-            return `${baseClasses} bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700`;
+            return `${baseClasses} bg-purple-500/10 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-500/25 dark:border-purple-700`;
         }
         if (type.includes('COMPLETED') || type.includes('RECEIVED')) {
-            return `${baseClasses} bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-700`;
+            return `${baseClasses} bg-indigo-500/10 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-500/25 dark:border-indigo-700`;
         }
-        return `${baseClasses} bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600`;
+        return `${baseClasses} bg-surface-subtle text-foreground border-border`;
     };
 
     const formatActivityType = (type: string) => {
@@ -317,9 +317,7 @@ const ActivityLogs = () => {
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-                            <Activity className="h-8 w-8 text-primary" />
-                            {t('logs.activityLogs')}
+                        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t('logs.activityLogs')}
                         </h1>
 
                     </div>
@@ -363,9 +361,7 @@ const ActivityLogs = () => {
             <div className="flex flex-col gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
-                            <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
-                            {t('logs.activityLogs')}
+                        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t('logs.activityLogs')}
                         </h1>
 
                         <p className="text-muted-foreground mt-1 text-sm sm:text-base">
@@ -411,7 +407,7 @@ const ActivityLogs = () => {
 
             {/* Filters */}
             <Card>
-                <CardHeader className="pb-4 bg-white dark:bg-gray-900 dark:text-white">
+                <CardHeader className="pb-4 bg-card dark:text-white">
                     <div className="flex flex-col space-y-4">
                         <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-2">
                             <div className="relative flex-1">
@@ -425,7 +421,7 @@ const ActivityLogs = () => {
                                 />
 
                             </div>
-                            <Button type="submit" size="default" disabled={isRefreshing} className="sm:w-auto w-full bg-blue-600 hover:bg-blue-700 text-white">
+                            <Button type="submit" size="default" disabled={isRefreshing} className="sm:w-auto w-full bg-primary hover:bg-primary/90 text-white">
                                 {t('common.search')}
                             </Button>
 
@@ -481,11 +477,11 @@ const ActivityLogs = () => {
                                     }}
                                     disabled={isRefreshing}
                                 >
-                                    <SelectTrigger className="w-full sm:w-[160px] bg-white dark:bg-gray-800 dark:text-white">
+                                    <SelectTrigger className="w-full sm:w-[160px] bg-card dark:text-white">
                                         <Filter className="mr-2 h-4 w-4" />
                                         <SelectValue placeholder={t('logs.activityType')} />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-white dark:bg-gray-800 dark:text-white">
+                                    <SelectContent className="bg-card dark:text-white">
                                         {activityTypes.map((type) => (
                                             <SelectItem key={type} value={type}>
                                                 {t(`logs.types.${type}`)}
@@ -503,11 +499,11 @@ const ActivityLogs = () => {
                                     }}
                                     disabled={isRefreshing}
                                 >
-                                    <SelectTrigger className="w-full sm:w-[160px] bg-white dark:bg-gray-800 dark:text-white">
+                                    <SelectTrigger className="w-full sm:w-[160px] bg-card dark:text-white">
                                         <Filter className="mr-2 h-4 w-4" />
                                         <SelectValue placeholder={t('logs.entityType')} />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-white dark:bg-gray-800 dark:text-white" >
+                                    <SelectContent className="bg-card dark:text-white" >
                                         {entityTypes.map((type) => (
                                             <SelectItem key={type} value={type}>
                                                 {type === 'all' ? t('logs.entities.all') : t(`logs.entities.${type}`)}
@@ -561,14 +557,14 @@ const ActivityLogs = () => {
                                 </TableRow>
                             ) : logs.length > 0 ? (
                                 logs.map((log) => (
-                                    <TableRow key={log.id} className="hover:bg-muted/30 border-b dark:border-gray-800">
+                                    <TableRow key={log.id} className="hover:bg-muted/30 border-b">
                                         <TableCell className="py-3">
                                             <div className="flex items-center gap-2 sm:gap-3">
                                                 <div className="flex-shrink-0 h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center overflow-hidden">
                                                     <User className="h-4 w-4 text-primary" />
                                                 </div>
                                                 <div className="min-w-0 flex-1">
-                                                    <div className="font-semibold text-sm truncate dark:text-gray-200">{log.user?.name || 'System'}</div>
+                                                    <div className="font-semibold text-sm truncate">{log.user?.name || 'System'}</div>
                                                     <div className="text-xs text-muted-foreground truncate hidden sm:block">
                                                         {log.user?.email || 'system@example.com'}
                                                     </div>
@@ -576,7 +572,7 @@ const ActivityLogs = () => {
                                             </div>
                                         </TableCell>
                                         <TableCell className="py-3 max-w-[200px]">
-                                            <div className="line-clamp-2 text-sm dark:text-gray-300">{log.description || '—'}</div>
+                                            <div className="line-clamp-2 text-sm">{log.description || '—'}</div>
                                         </TableCell>
                                         <TableCell className="py-3">
                                             <Badge
@@ -594,7 +590,7 @@ const ActivityLogs = () => {
                                             {log.entityType ? (
                                                 <Badge
                                                     variant="secondary"
-                                                    className="whitespace-nowrap text-[10px] sm:text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-none shadow-none"
+                                                    className="whitespace-nowrap text-[10px] sm:text-xs bg-muted text-foreground border-none shadow-none"
                                                 >
                                                     <span className="hidden sm:inline">{t(`logs.entities.${log.entityType}`)}</span>
                                                     <span className="sm:hidden">{log.entityType}</span>
@@ -606,7 +602,7 @@ const ActivityLogs = () => {
 
                                         <TableCell className="py-3">
                                             <div className="flex flex-col items-start">
-                                                <div className="text-xs sm:text-sm font-medium dark:text-gray-300">
+                                                <div className="text-xs sm:text-sm font-medium">
                                                     {format(new Date(log.createdAt), 'MMM d, yyyy')}
                                                 </div>
                                                 <div className="text-xs text-muted-foreground">
@@ -619,7 +615,7 @@ const ActivityLogs = () => {
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => handleViewDetails(log)}
-                                                className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary transition-colors dark:text-gray-400"
+                                                className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary transition-colors"
                                             >
                                                 <span className="sr-only">{t('common.view')}</span>
                                                 <ChevronRight className="h-4 w-4" />
@@ -632,7 +628,7 @@ const ActivityLogs = () => {
                                     <TableCell colSpan={6} className="h-32 text-center">
                                         <div className="flex flex-col items-center justify-center py-10">
                                             <Activity className="h-10 w-10 text-muted-foreground/30 mb-3" />
-                                            <h3 className="text-lg font-medium dark:text-gray-200">{t('logs.noLogsFound')}</h3>
+                                            <h3 className="text-lg font-medium">{t('logs.noLogsFound')}</h3>
                                             <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">
                                                 {t('logs.adjustSearch')}
                                             </p>
@@ -646,13 +642,13 @@ const ActivityLogs = () => {
 
                 {/* Pagination */}
                 {pagination.totalPages > 1 && (
-                    <div className="border-t dark:border-gray-800 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="border-t px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div className="text-sm text-muted-foreground order-2 sm:order-1">
-                            {t('logs.showing')} <span className="font-semibold text-foreground dark:text-gray-200">{(page - 1) * limit + 1}</span> {t('logs.to')}{' '}
-                            <span className="font-semibold text-foreground dark:text-gray-200">
+                            {t('logs.showing')} <span className="font-semibold text-foreground">{(page - 1) * limit + 1}</span> {t('logs.to')}{' '}
+                            <span className="font-semibold text-foreground">
                                 {Math.min(page * limit, pagination.total)}
                             </span>{' '}
-                            {t('logs.of')} <span className="font-semibold text-foreground dark:text-gray-200">{pagination.total}</span> {t('logs.logs')}
+                            {t('logs.of')} <span className="font-semibold text-foreground">{pagination.total}</span> {t('logs.logs')}
                         </div>
 
                         <div className="flex items-center space-x-2 order-1 sm:order-2">
@@ -661,7 +657,7 @@ const ActivityLogs = () => {
                                 size="sm"
                                 onClick={() => setPage(p => Math.max(1, p - 1))}
                                 disabled={page === 1 || isRefreshing}
-                                className="h-9 px-3 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300"
+                                className="h-9 px-3 bg-card"
                             >
                                 <ChevronLeft className="h-4 w-4 mr-1" />
                                 {t('common.previous')}
@@ -689,7 +685,7 @@ const ActivityLogs = () => {
                                                 "h-9 w-9 p-0",
                                                 page === pageNum
                                                     ? "bg-primary text-primary-foreground font-bold"
-                                                    : "dark:text-gray-400 hover:bg-primary/10 hover:text-primary"
+                                                    : " hover:bg-primary/10 hover:text-primary"
                                             )}
                                             onClick={() => setPage(pageNum)}
                                             disabled={isRefreshing}
@@ -705,7 +701,7 @@ const ActivityLogs = () => {
                                 size="sm"
                                 onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
                                 disabled={page >= pagination.totalPages || isRefreshing}
-                                className="h-9 px-3 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300"
+                                className="h-9 px-3 bg-card"
                             >
                                 {t('common.next')}
                                 <ChevronRight className="h-4 w-4 ml-1" />
@@ -717,8 +713,8 @@ const ActivityLogs = () => {
 
             {/* Details Dialog */}
             <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DrawerContent className="max-w-2xl overflow-hidden flex flex-col p-0 border-none bg-white dark:bg-gray-900 shadow-2xl">
-                    <DrawerHeader className="p-6 pb-4 border-b dark:border-gray-800">
+                <DrawerContent className="max-w-2xl overflow-hidden flex flex-col p-0 border-none bg-card shadow-2xl">
+                    <DrawerHeader className="p-6 pb-4 border-b">
                         <DrawerTitle className="flex items-center gap-3 text-xl font-bold dark:text-white">
                             <div className="p-2 rounded-lg bg-primary/10">
                                 <Activity className="h-6 w-6 text-primary" />
@@ -736,7 +732,7 @@ const ActivityLogs = () => {
                                     {t('logs.basicInfo')}
                                 </h3>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-muted/30 dark:bg-gray-800/50 p-4 rounded-xl">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-muted/30 p-4 rounded-xl">
                                     <DetailItem
                                         label={t('logs.activityType')}
                                         value={formatActivityType(selectedLog.type)}
@@ -776,7 +772,7 @@ const ActivityLogs = () => {
                                     />
                                 </div>
 
-                                <div className="bg-muted/30 dark:bg-gray-800/50 p-4 rounded-xl space-y-4">
+                                <div className="bg-muted/30 p-4 rounded-xl space-y-4">
                                     <DetailItem
                                         label={t('inventory.description')}
                                         value={selectedLog.description || t('common.na')}
@@ -801,7 +797,7 @@ const ActivityLogs = () => {
                                     {t('logs.userInfo')}
                                 </h3>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-muted/30 dark:bg-gray-800/50 p-4 rounded-xl">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-muted/30 p-4 rounded-xl">
                                     <DetailItem
                                         label={t('common.name')}
                                         value={selectedLog.user?.name || 'System'}
@@ -831,8 +827,8 @@ const ActivityLogs = () => {
                                         {t('logs.requestData')}
                                     </h3>
 
-                                    <div className="bg-muted/30 dark:bg-gray-800/50 p-1 rounded-xl overflow-hidden border dark:border-gray-800">
-                                        <div className="flex items-center justify-between px-4 py-2 bg-muted/50 dark:bg-gray-800 border-b dark:border-gray-700">
+                                    <div className="bg-muted/30 p-1 rounded-xl overflow-hidden border">
+                                        <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b">
                                             <span className="text-xs font-mono text-muted-foreground">JSON Payload</span>
                                             <Button
                                                 variant="ghost"
@@ -844,8 +840,8 @@ const ActivityLogs = () => {
                                                 {t('common.copy')}
                                             </Button>
                                         </div>
-                                        <div className="p-4 bg-white dark:bg-gray-900/50 overflow-x-auto">
-                                            <pre className="text-xs font-mono text-gray-800 dark:text-gray-300 leading-relaxed whitespace-pre-wrap break-all">
+                                        <div className="p-4 bg-card overflow-x-auto">
+                                            <pre className="text-xs font-mono text-foreground leading-relaxed whitespace-pre-wrap break-all">
                                                 {JSON.stringify(selectedLog.metadata, null, 2)}
                                             </pre>
                                         </div>
@@ -855,7 +851,7 @@ const ActivityLogs = () => {
                         </div>
                     )}
 
-                    <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t dark:border-gray-800 flex justify-end">
+                    <div className="p-4 bg-surface-subtle border-t flex justify-end">
                         <Button variant="secondary" onClick={() => setIsDialogOpen(false)}>
                             {t('common.close')}
                         </Button>

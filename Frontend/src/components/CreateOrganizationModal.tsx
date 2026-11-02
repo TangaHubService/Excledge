@@ -89,17 +89,17 @@ export default function CreateOrganizationModal({
 
   return (
     <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DrawerContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-        <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4">
+      <DrawerContent className="bg-card border-border">
+        <DrawerHeader className="border-b border-border pb-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20">
-              <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Building2 className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <DrawerTitle className="text-xl font-semibold text-gray-900 dark:text-white">
+              <DrawerTitle className="text-xl font-semibold text-foreground">
                 Create Your Organization
               </DrawerTitle>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-muted-foreground">
                 Set up your organization to get started
               </p>
             </div>
@@ -111,8 +111,8 @@ export default function CreateOrganizationModal({
           <div className="mx-6 mt-4 p-4 border rounded-lg">
             <p
               className={`text-sm ${toast.type === "error"
-                ? "text-red-800 dark:text-red-400"
-                : "text-green-800 dark:text-green-400"
+                ? "text-danger dark:text-red-400"
+                : "text-success dark:text-green-400"
                 }`}
             >
               {toast.message}
@@ -127,7 +127,7 @@ export default function CreateOrganizationModal({
             <div className="space-y-2">
               <label
                 htmlFor="name"
-                className="block text-sm font-medium text-gray-900 dark:text-white"
+                className="block text-sm font-medium text-foreground"
               >
                 Organization Name *
               </label>
@@ -136,13 +136,13 @@ export default function CreateOrganizationModal({
                 type="text"
                 placeholder="e.g., AgaciroPlus"
                 {...register("name")}
-                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${errors.name
+                className={`w-full px-3 py-2 border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 ${errors.name
                   ? "border-red-500 focus:ring-red-400"
-                  : "border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
+                  : "border-border focus:ring-ring"
                   }`}
               />
               {errors.name && (
-                <p className="text-sm text-red-500">{errors.name.message}</p>
+                <p className="text-sm text-danger">{errors.name.message}</p>
               )}
             </div>
 
@@ -150,16 +150,16 @@ export default function CreateOrganizationModal({
             <div className="space-y-2">
               <label
                 htmlFor="businessType"
-                className="block text-sm font-medium text-gray-900 dark:text-white"
+                className="block text-sm font-medium text-foreground"
               >
                 Business Type *
               </label>
               <select
                 id="businessType"
                 {...register("businessType")}
-                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${errors.businessType
+                className={`w-full px-3 py-2 border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 ${errors.businessType
                   ? "border-red-500 focus:ring-red-400"
-                  : "border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
+                  : "border-border focus:ring-ring"
                   }`}
               >
                 <option value="">Select Business Type</option>
@@ -174,7 +174,7 @@ export default function CreateOrganizationModal({
                 <option value="OTHER">Other</option>
               </select>
               {errors.businessType && (
-                <p className="text-sm text-red-500">
+                <p className="text-sm text-danger">
                   {errors.businessType.message}
                 </p>
               )}
@@ -182,7 +182,7 @@ export default function CreateOrganizationModal({
                 <div className="mt-3 space-y-2">
                   <label
                     htmlFor="otherBusinessType"
-                    className="block text-sm font-medium text-gray-900 dark:text-white"
+                    className="block text-sm font-medium text-foreground"
                   >
                     Specify Business Type *
                   </label>
@@ -191,13 +191,13 @@ export default function CreateOrganizationModal({
                     type="text"
                     placeholder="e.g., Car Wash"
                     {...register("otherBusinessType")}
-                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${errors.otherBusinessType
+                    className={`w-full px-3 py-2 border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 ${errors.otherBusinessType
                       ? "border-red-500 focus:ring-red-400"
-                      : "border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
+                      : "border-border focus:ring-ring"
                       }`}
                   />
                   {errors.otherBusinessType && (
-                    <p className="text-sm text-red-500">{errors.otherBusinessType.message}</p>
+                    <p className="text-sm text-danger">{errors.otherBusinessType.message}</p>
                   )}
                 </div>
               )}
@@ -207,7 +207,7 @@ export default function CreateOrganizationModal({
             <div className="space-y-2">
               <label
                 htmlFor="address"
-                className="block text-sm font-medium text-gray-900 dark:text-white"
+                className="block text-sm font-medium text-foreground"
               >
                 Address
               </label>
@@ -216,13 +216,13 @@ export default function CreateOrganizationModal({
                 type="text"
                 placeholder="KG 123 St, Kigali"
                 {...register("address")}
-                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${errors.address
+                className={`w-full px-3 py-2 border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 ${errors.address
                   ? "border-red-500 focus:ring-red-400"
-                  : "border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
+                  : "border-border focus:ring-ring"
                   }`}
               />
               {errors.address && (
-                <p className="text-sm text-red-500">{errors.address.message}</p>
+                <p className="text-sm text-danger">{errors.address.message}</p>
               )}
             </div>
 
@@ -230,7 +230,7 @@ export default function CreateOrganizationModal({
             <div className="space-y-2">
               <label
                 htmlFor="phone"
-                className="block text-sm font-medium text-gray-900 dark:text-white"
+                className="block text-sm font-medium text-foreground"
               >
                 Phone Number
               </label>
@@ -250,7 +250,7 @@ export default function CreateOrganizationModal({
             <div className="space-y-2">
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-gray-900 dark:text-white"
+                className="block text-sm font-medium text-foreground"
               >
                 Email
               </label>
@@ -259,13 +259,13 @@ export default function CreateOrganizationModal({
                 type="email"
                 placeholder="Enter organization email"
                 {...register("email")}
-                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${errors.email
+                className={`w-full px-3 py-2 border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 ${errors.email
                   ? "border-red-500 focus:ring-red-400"
-                  : "border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
+                  : "border-border focus:ring-ring"
                   }`}
               />
               {errors.email && (
-                <p className="text-sm text-red-500">{errors.email.message}</p>
+                <p className="text-sm text-danger">{errors.email.message}</p>
               )}
             </div>
 
@@ -274,14 +274,14 @@ export default function CreateOrganizationModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition-colors"
+                className="flex-1 px-4 py-2 border border-border hover:bg-muted text-foreground font-medium rounded-lg transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
+                className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
               >
                 {isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

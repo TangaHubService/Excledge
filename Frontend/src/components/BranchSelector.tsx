@@ -319,9 +319,9 @@ export const BranchSelector: React.FC<BranchSelectorProps> = ({ toolbar = false 
             {canAccessAllBranches && (
               <DropdownMenuRadioItem
                 value="all"
-                className="flex items-center gap-3 py-3 pl-3 pr-2 focus:bg-violet-50 dark:focus:bg-violet-900/20"
+                className="flex items-center gap-3 py-3 pl-3 pr-2 focus:bg-violet-500/10 dark:focus:bg-violet-900/20"
               >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400">
                   <Layers className="h-4 w-4" />
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col">
@@ -329,7 +329,7 @@ export const BranchSelector: React.FC<BranchSelectorProps> = ({ toolbar = false 
                     <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
                       All Branches
                     </span>
-                    <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                    <span className="rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-bold text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
                       ALL
                     </span>
                   </div>

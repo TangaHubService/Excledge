@@ -43,7 +43,7 @@ export function PaginationBar({
       )}
     >
       {/* Items per page + count */}
-      <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+      <div className="flex items-center gap-3 text-sm text-muted-foreground">
         {onPageSizeChange && (
           <div className="flex items-center gap-1.5">
             <span className="hidden sm:inline">Rows per page:</span>
@@ -86,7 +86,7 @@ export function PaginationBar({
         <div className="hidden items-center gap-1 sm:flex">
           {pages.map((page, i) =>
             page === '...' ? (
-              <span key={`ellipsis-${i}`} className="px-1 text-xs text-gray-400">
+              <span key={`ellipsis-${i}`} className="px-1 text-xs text-muted-foreground">
                 …
               </span>
             ) : (
@@ -106,7 +106,7 @@ export function PaginationBar({
         </div>
 
         {/* Mobile: page indicator */}
-        <span className="text-xs text-gray-500 sm:hidden">
+        <span className="text-xs text-muted-foreground sm:hidden">
           Page {currentPage} of {totalPages}
         </span>
 

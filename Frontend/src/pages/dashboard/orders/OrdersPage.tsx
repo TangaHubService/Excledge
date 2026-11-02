@@ -8,7 +8,7 @@ export const OrdersPage: React.FC = () => {
     const organizationId = apiClient.getOrganizationId();
 
     if (!organizationId) {
-        return <div className="p-8 text-center text-gray-500">{t('common.loading')}</div>;
+        return <div className="p-8 text-center text-muted-foreground">{t('common.loading')}</div>;
     }
 
     return <OrdersList organizationId={organizationId} />;

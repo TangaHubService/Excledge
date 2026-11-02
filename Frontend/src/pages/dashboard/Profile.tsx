@@ -131,7 +131,7 @@ export function Profile() {
 
 
     return (
-        <div className="container mx-auto max-w-6xl p-6 space-y-10 dark:bg-gray-900 dark:text-white">
+        <div className="container mx-auto max-w-6xl p-6 space-y-10 dark:text-white">
             {/* HEADER */}
             <div className="bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 text-white p-8 rounded-2xl shadow-md">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -146,9 +146,9 @@ export function Profile() {
                             )}
                         </div>
                         <div>
-                            <h1 className="text-2xl font-semibold">{profile.name}</h1>
+                            <h1 className="text-2xl font-semibold tracking-tight text-foreground">{profile.name}</h1>
                             <p className="opacity-90">{profile.email}</p>
-                            <span className="inline-block mt-2 px-3 py-1 text-xs font-medium rounded-full bg-white/20">
+                            <span className="inline-block mt-2 px-3 py-1 text-xs font-medium rounded-full bg-card/20">
                                 {profile.role}
                             </span>
                         </div>
@@ -156,7 +156,7 @@ export function Profile() {
 
                     {!isEditing ? (
                         <Button
-                            className="bg-white text-blue-700 hover:bg-blue-50"
+                            className="bg-white text-blue-700 shadow-sm hover:bg-white/90"
                             onClick={() => setIsEditing(true)}
                         >
                             <Pencil className="h-4 w-4 mr-2" />
@@ -173,7 +173,7 @@ export function Profile() {
                                     setPreviewImage(null);
                                     if (profile.profileImage) setImagePreview(profile.profileImage);
                                 }}
-                                className="bg-white/10 text-white border-white/30 hover:bg-white/20"
+                                className="border-white/30 bg-white/10 text-white hover:bg-white/20"
                             >
                                 <X className="h-4 w-4 mr-2" />
                                 {t('common.cancel')}
@@ -182,7 +182,7 @@ export function Profile() {
                             <Button
                                 onClick={handleSubmit(onSubmit)}
                                 disabled={isSaving}
-                                className="bg-white text-blue-700 hover:bg-blue-50"
+                                className="bg-white text-blue-700 shadow-sm hover:bg-white/90"
                             >
                                 {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
                                 {t('common.save')}
@@ -194,23 +194,23 @@ export function Profile() {
             </div>
 
             {/* BODY */}
-            <div className="dark:bg-gray-900 dark:text-white">
+            <div className=" dark:text-white">
                 {/* LEFT */}
                 <div className="space-y-6 flex flex-col md:flex-row md:col-span-2 gap-4 py-8">
-                    <Card className="rounded-2xl border border-gray-200 shadow-sm w-full md:w-1/2">
+                    <Card className="rounded-2xl border border-border shadow-sm w-full md:w-1/2">
                         <CardHeader>
                             <CardTitle className="text-lg font-semibold">{t('common.profilePicture')}</CardTitle>
                         </CardHeader>
 
                         <CardContent className="flex flex-col items-center space-y-4">
                             <div className="relative">
-                                <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-indigo-100 bg-gray-50 flex items-center justify-center">
+                                <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-indigo-500/25 bg-surface-subtle flex items-center justify-center">
                                     {previewImage ? (
                                         <img src={previewImage} alt={profile.name} className="object-cover w-full h-full" />
                                     ) : profile.profileImage ? (
                                         <img src={profile.profileImage} alt={profile.name} className="object-cover w-full h-full" />
                                     ) : (
-                                        <span className="text-2xl font-bold text-gray-500">{getInitials(profile.name)}</span>
+                                        <span className="text-2xl font-bold text-muted-foreground">{getInitials(profile.name)}</span>
                                     )}
                                 </div>
                                 {isEditing && (
@@ -226,7 +226,7 @@ export function Profile() {
                             </div>
                         </CardContent>
                     </Card>
-                    <Card className="rounded-2xl border border-gray-200 shadow-sm w-full md:w-1/2 dark:bg-gray-800 dark:border-gray-700">
+                    <Card className="rounded-2xl border border-border shadow-sm w-full md:w-1/2">
                         <CardHeader>
                             <CardTitle className="text-lg font-semibold text-indigo-600 dark:text-indigo-400">{t('common.organization')}</CardTitle>
                         </CardHeader>
@@ -235,13 +235,13 @@ export function Profile() {
                             {profile.organizations.length > 0 ? (
                                 <div className="space-y-4 dark:text-white">
                                     {profile.organizations.map((org) => (
-                                        <div key={org.id} className="border border-gray-100 rounded-lg p-3 bg-indigo-50/40 dark:bg-gray-700/40 dark:border-gray-600">
+                                        <div key={org.id} className="border border-border rounded-lg p-3 bg-indigo-50/40">
                                             <h3 className="font-medium text-sm text-indigo-700 dark:text-indigo-300">{org.name}</h3>
-                                            <p className="text-xs text-gray-600 dark:text-gray-400">{org.businessType}</p>
-                                            <p className="text-xs mt-1 text-gray-700 dark:text-gray-300">{org.address}</p>
-                                            <p className="text-xs text-gray-700 dark:text-gray-300">{org.phone}</p>
-                                            <p className="text-xs text-gray-700 dark:text-gray-300">{org.email}</p>
-                                            <span className="inline-block mt-2 text-xs px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded dark:bg-indigo-900/30 dark:text-indigo-300">
+                                            <p className="text-xs text-muted-foreground">{org.businessType}</p>
+                                            <p className="text-xs mt-1 text-foreground">{org.address}</p>
+                                            <p className="text-xs text-foreground">{org.phone}</p>
+                                            <p className="text-xs text-foreground">{org.email}</p>
+                                            <span className="inline-block mt-2 text-xs px-2 py-0.5 bg-indigo-500/15 text-indigo-800 rounded dark:bg-indigo-900/30 dark:text-indigo-300">
                                                 {org.role} {org.isOwner && `(${t('common.owner')})`}
                                             </span>
                                         </div>
@@ -249,7 +249,7 @@ export function Profile() {
                                     ))}
                                 </div>
                             ) : (
-                                <p className="text-gray-500 text-sm">{t('messages.noOrganizationFound')}</p>
+                                <p className="text-muted-foreground text-sm">{t('messages.noOrganizationFound')}</p>
                             )}
                         </CardContent>
 
@@ -258,7 +258,7 @@ export function Profile() {
 
                 {/* RIGHT */}
                 <div className="col-span-2">
-                    <Card className="rounded-2xl border border-gray-200 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                    <Card className="rounded-2xl border border-border shadow-sm">
                         <CardHeader>
                             <CardTitle className="text-lg font-semibold text-indigo-600 dark:text-indigo-400">{t('common.profileInfo')}</CardTitle>
                         </CardHeader>
@@ -275,7 +275,7 @@ export function Profile() {
 
                                             className="mt-1 focus:ring-indigo-500"
                                         />
-                                        {errors.name && <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>}
+                                        {errors.name && <p className="text-sm text-danger mt-1">{errors.name.message}</p>}
                                     </div>
 
                                     <div>
@@ -286,9 +286,9 @@ export function Profile() {
                                             type="email"
                                             value={profile.email}
                                             disabled
-                                            className="mt-1 bg-gray-100 dark:bg-gray-800"
+                                            className="mt-1 bg-muted"
                                         />
-                                        <p className="text-xs text-gray-500 mt-1">
+                                        <p className="text-xs text-muted-foreground mt-1">
                                             {t('messages.contactSupportEmail')}
                                         </p>
                                     </div>
@@ -305,7 +305,7 @@ export function Profile() {
                                             error={errors.phone ? String(errors.phone.message) : ''}
                                             className="mt-1"
                                         />
-                                        {errors.phone && <p className="text-sm text-red-500 mt-1">{errors.phone.message}</p>}
+                                        {errors.phone && <p className="text-sm text-danger mt-1">{errors.phone.message}</p>}
                                     </div>
 
                                     <div>
@@ -314,8 +314,8 @@ export function Profile() {
                                             <span
 
                                                 className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium ${profile.isActive
-                                                    ? "bg-green-100 text-green-800"
-                                                    : "bg-red-100 text-red-800"
+                                                    ? "bg-success/15 text-success"
+                                                    : "bg-danger/15 text-danger"
                                                     }`}
                                             >
                                                 {profile.isActive ? t('common.active') : t('common.inactive')}

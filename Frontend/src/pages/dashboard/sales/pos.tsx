@@ -12,7 +12,7 @@ import {
 import {
   ShoppingCart, Loader2, UserPlus, Search, X, WifiOff,
   Package, Minus, Plus, Trash2, Star,
-  ChevronRight, FileText,
+  ChevronRight, FileText, User,
 } from 'lucide-react'
 import PhoneInputWithCountryCode from '../../../components/PhoneInputWithCountryCode'
 import {
@@ -89,26 +89,48 @@ function productsFromInventoryResponse(res: unknown): Product[] {
 // ── ProductCard ───────────────────────────────────────────────────────────────
 
 const ProductCard = memo(({
-  product, onAddToCart, isFavorite, onToggleFavorite, allowZeroStock = false,
+  product, onAddToCart, isFavorite, onToggleFavorite, allowZeroStock = false, cartQty = 0,
 }: {
   product: Product
   onAddToCart: (p: Product) => void
   isFavorite: boolean
   onToggleFavorite: (id: string) => void
   allowZeroStock?: boolean
+  /** Quantity of this product already in the cart; > 0 highlights the card. */
+  cartQty?: number
 }) => {
+  const inCart = cartQty > 0
+  // Weighed goods can be fractional (e.g. 1.5 kg); keep the badge short.
+  const qtyLabel = cartQty > 99 ? '99+' : String(Math.round(cartQty * 1000) / 1000)
   const isService = product.itemType === 'SERVICE'
   const isLowStock = !isService && product.quantity > 0 && product.quantity <= 5
   const isOutOfStock = !isService && product.quantity <= 0
   const canAdd = !isOutOfStock || allowZeroStock
 
   return (
-    <div className="relative flex flex-col rounded-2xl border border-gray-100 bg-white overflow-hidden group transition-all duration-200 hover:shadow-md hover:border-blue-200">
+    <div className={cn(
+      'group relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-card transition-all duration-150',
+      inCart ? 'border-primary ring-2 ring-primary/30' : 'border-border/80',
+      canAdd ? cn('hover:-translate-y-0.5 hover:shadow-dropdown', !inCart && 'hover:border-primary/40') : 'opacity-60',
+    )}>
+      {/* Selected quantity */}
+      {inCart && (
+        <span
+          className="num absolute right-2 top-2 z-20 flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground shadow-md ring-2 ring-card animate-in zoom-in-50 duration-150"
+          aria-label={`${qtyLabel} in cart`}
+        >
+          {qtyLabel}
+        </span>
+      )}
       {/* Favorite button */}
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onToggleFavorite(product.id) }}
-        className="absolute top-2 right-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur-sm text-gray-300 hover:text-amber-400 transition-colors"
+        className={cn(
+          'absolute top-2 z-10 rounded-full bg-card/90 p-1 text-muted-foreground/50 shadow-sm backdrop-blur-sm transition-all hover:text-amber-400',
+          inCart ? 'right-10' : 'right-2',
+          !isFavorite && 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+        )}
       >
         <Star className={cn('h-3.5 w-3.5', isFavorite && 'text-amber-400 fill-amber-400')} />
       </button>
@@ -118,13 +140,31 @@ const ProductCard = memo(({
         type="button"
         onClick={() => canAdd && onAddToCart(product)}
         disabled={!canAdd}
-        className="w-full h-24 flex items-center justify-center bg-blue-50 overflow-hidden flex-shrink-0 disabled:cursor-not-allowed"
+        className={cn(
+          'relative flex h-24 w-full flex-shrink-0 items-center justify-center overflow-hidden disabled:cursor-not-allowed',
+          inCart ? 'bg-primary/10' : 'bg-surface-subtle',
+        )}
       >
         {product.imageUrl ? (
-          <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+          <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
         ) : (
-          <span className="text-3xl font-bold text-blue-300">
+          <span className="text-3xl font-semibold text-primary/30">
             {product.name.charAt(0).toUpperCase()}
+          </span>
+        )}
+        {/* Stock state as a corner pill so it reads before the name */}
+        <span className={cn(
+          'num absolute left-2 top-2 rounded-md px-1.5 py-0.5 text-[10px] font-semibold backdrop-blur-sm',
+          isService ? 'bg-card/90 text-muted-foreground'
+            : isOutOfStock ? (allowZeroStock ? 'bg-warning/15 text-warning' : 'bg-danger/15 text-danger')
+            : isLowStock ? 'bg-warning/15 text-warning'
+            : 'bg-card/90 text-success',
+        )}>
+          {isService ? 'Service' : isOutOfStock ? (allowZeroStock ? `${product.quantity} in stock` : 'Out of stock') : isLowStock ? `Low · ${product.quantity}` : `${product.quantity} in stock`}
+        </span>
+        {canAdd && (
+          <span className="absolute bottom-2 right-2 flex h-7 w-7 translate-y-1 items-center justify-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-md transition-all group-hover:translate-y-0 group-hover:opacity-100">
+            <Plus className="h-4 w-4" />
           </span>
         )}
       </button>
@@ -136,23 +176,17 @@ const ProductCard = memo(({
         disabled={!canAdd}
         className="flex flex-col flex-1 p-3 text-left disabled:cursor-not-allowed"
       >
-        <p className="text-xs font-semibold text-gray-800 line-clamp-2 leading-snug mb-2 flex-1">
+        <p className="mb-2 line-clamp-2 flex-1 text-[0.8125rem] font-medium leading-snug text-foreground">
           {product.name}
         </p>
         {product.pkgUnitCd && (
-          <p className="text-[10px] text-gray-400 mb-0.5">
+          <p className="mb-0.5 text-[10px] text-muted-foreground">
             {PACKAGING_UNIT_LABELS[product.pkgUnitCd] || product.pkgUnitCd}
             {product.packagingQty ? ` × ${product.packagingQty}` : ''}
           </p>
         )}
-        <p className="text-sm font-bold text-blue-600 tabular-nums">
-          {(product.unitPrice ?? product.price ?? 0).toLocaleString()} <span className="text-xs font-normal text-gray-400">RWF</span>
-        </p>
-        <p className={cn(
-          'text-[10px] mt-1 font-medium',
-          isOutOfStock ? (allowZeroStock ? 'text-amber-500' : 'text-red-500') : isLowStock ? 'text-amber-500' : 'text-emerald-500',
-        )}>
-          {isService ? 'Service' : isOutOfStock ? (allowZeroStock ? `${product.quantity} in stock` : 'Out of stock') : isLowStock ? `Low: ${product.quantity} left` : `${product.quantity} in stock`}
+        <p className="num text-sm font-semibold text-foreground">
+          {(product.unitPrice ?? product.price ?? 0).toLocaleString()} <span className="text-[11px] font-normal text-muted-foreground">RWF</span>
         </p>
       </button>
     </div>
@@ -186,13 +220,13 @@ const CartItemRow = memo(({
   const effectiveTaxCode = vatRegistered ? (item.product.taxCode || '—') : 'D'
 
   return (
-    <div className="flex items-center gap-3 py-3.5 border-b border-gray-50 last:border-b-0">
+    <div className="flex items-center gap-3 border-b border-border/60 py-3 last:border-b-0">
       {/* Thumbnail */}
-      <div className="h-11 w-11 rounded-xl flex-shrink-0 overflow-hidden flex items-center justify-center bg-blue-50">
+      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-subtle">
         {item.product.imageUrl ? (
           <img src={item.product.imageUrl} alt={item.product.name} className="h-full w-full object-cover" />
         ) : (
-          <span className="text-sm font-bold text-blue-400">
+          <span className="text-sm font-semibold text-primary/40">
             {item.product.name.charAt(0).toUpperCase()}
           </span>
         )}
@@ -200,21 +234,27 @@ const CartItemRow = memo(({
 
       {/* Name + Price */}
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold text-gray-800 truncate">{item.product.name}</p>
-        <p className="text-xs text-blue-600 font-medium tabular-nums mt-0.5">
-          {item.unitPrice.toLocaleString()} RWF
-        </p>
-        <span className={`inline-block mt-0.5 rounded px-1 py-px text-[10px] font-bold ${effectiveTaxCode === 'B' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
-          {effectiveTaxCode}
-        </span>
+        <p className="truncate text-[0.8125rem] font-medium text-foreground">{item.product.name}</p>
+        <div className="mt-0.5 flex items-center gap-1.5">
+          <span
+            className={cn(
+              'rounded px-1 text-[10px] font-semibold leading-4',
+              effectiveTaxCode === 'B' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+            )}
+            title="Tax code"
+          >
+            {effectiveTaxCode}
+          </span>
+          <span className="num text-xs text-muted-foreground">{item.unitPrice.toLocaleString()} each</span>
+        </div>
       </div>
 
       {/* Qty Controls */}
-      <div className="flex items-center gap-1.5 flex-shrink-0">
+      <div className="flex flex-shrink-0 items-center overflow-hidden rounded-lg border border-border">
         <button
           type="button"
           onClick={() => onUpdateQuantity(item.product.id, Math.max(1, item.quantity - 1))}
-          className="h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600 transition-colors"
+          className="flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <Minus className="h-3 w-3" />
         </button>
@@ -228,14 +268,15 @@ const CartItemRow = memo(({
             onChange={e => setQuantityInput(e.target.value)}
             onBlur={commitQty}
             onKeyDown={e => e.key === 'Enter' && commitQty()}
-            className="w-9 px-1 py-0.5 text-xs border rounded-lg text-center bg-white border-blue-300 text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="num h-7 w-10 border-x border-border bg-background px-1 text-center text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring/50"
             autoFocus
           />
         ) : (
           <button
             type="button"
             onClick={() => setEditingQty(true)}
-            className="w-9 text-xs text-center font-bold text-gray-800 hover:text-blue-600 transition-colors"
+            className="num h-7 w-10 border-x border-border text-center text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+            title="Edit quantity"
           >
             {item.quantity}
           </button>
@@ -244,14 +285,14 @@ const CartItemRow = memo(({
         <button
           type="button"
           onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
-          className="h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600 transition-colors"
+          className="flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <Plus className="h-3 w-3" />
         </button>
       </div>
 
       {/* Line total + remove */}
-      <div className="flex flex-col items-end gap-1 flex-shrink-0 min-w-[60px]">
+      <div className="flex min-w-[64px] flex-shrink-0 flex-col items-end gap-1">
         {priceEditable ? (
           <input
             type="number"
@@ -263,15 +304,17 @@ const CartItemRow = memo(({
               const n = parseFloat(v)
               if (!isNaN(n) && n >= 0) onUpdatePrice(item.product.id, n)
             }}
-            className="w-16 text-right text-[11px] border rounded-lg px-1.5 py-0.5 bg-white border-gray-200 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="num w-[4.5rem] rounded-md border border-input bg-background px-1.5 py-0.5 text-right text-[11px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
+            title="Unit price"
           />
         ) : (
-          <p className="text-xs font-bold tabular-nums text-gray-800">{lineTotal} <span className="text-gray-400 font-normal">RWF</span></p>
+          <p className="num text-[0.8125rem] font-semibold text-foreground">{lineTotal}</p>
         )}
         <button
           type="button"
           onClick={() => onRemove(item.product.id)}
-          className="text-gray-300 hover:text-red-500 transition-colors"
+          className="rounded p-0.5 text-muted-foreground/60 transition-colors hover:bg-danger/10 hover:text-danger"
+          aria-label="Remove item"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -437,6 +480,8 @@ export default function SalesForm() {
   const [selectedCustomer, setSelectedCustomer] = useState('')
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false)
+  // Below lg the order panel is a bottom sheet; this controls whether it is raised.
+  const [isCartSheetOpen, setIsCartSheetOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
@@ -1041,6 +1086,16 @@ export default function SalesForm() {
     navigate('/dashboard/sales')
   }, [navigate])
 
+  useEffect(() => {
+    if (cart.length === 0) setIsCartSheetOpen(false)
+  }, [cart.length])
+
+  const cartQtyById = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const item of cart) m.set(item.product.id, (m.get(item.product.id) ?? 0) + Number(item.quantity))
+    return m
+  }, [cart])
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -1059,34 +1114,35 @@ export default function SalesForm() {
       )}
 
       {/* POS Shell */}
-      <div className="flex h-[calc(100vh-8.5rem)] -mx-4 sm:-mx-6 lg:-mx-8 overflow-hidden bg-[#F8F9FC]">
+      <div className="-mx-4 flex h-[calc(100vh-8.5rem)] overflow-hidden border-y border-border/80 bg-background sm:-mx-6 lg:-mx-8">
 
         {/* ── LEFT: product browser ─────────────────────────────────────── */}
         <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
 
           {/* Search bar row */}
-          <div className="flex items-center gap-3 px-5 py-3.5 bg-white border-b border-gray-100 flex-shrink-0">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <div className="flex flex-shrink-0 flex-wrap items-center gap-2 border-b border-border/80 bg-card px-3 pb-3 pt-3 sm:gap-3 sm:px-5 sm:pt-4">
+            <div className="relative min-w-[12rem] flex-1">
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 ref={searchInputRef}
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
                 placeholder="Search or scan barcode..."
-                className="w-full pl-10 pr-10 h-10 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+                className="h-11 w-full rounded-xl border border-input bg-surface-subtle pl-10 pr-10 text-sm text-foreground transition-all placeholder:text-muted-foreground focus:border-primary/50 focus:bg-background focus:outline-none focus:ring-4 focus:ring-ring/15"
               />
               {searchTerm && (
                 <button
                   type="button"
                   onClick={() => setSearchTerm('')}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Clear search"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
-            <div className="flex items-center rounded-lg bg-gray-100 p-0.5 flex-shrink-0">
+            <div className="flex flex-shrink-0 items-center rounded-lg bg-muted p-0.5">
               {(['ALL', 'PRODUCT', 'SERVICE'] as const).map(type => (
                 <button
                   key={type}
@@ -1095,31 +1151,31 @@ export default function SalesForm() {
                   className={cn(
                     'px-3 py-1.5 rounded-md text-xs font-semibold transition-all duration-150',
                     productTypeFilter === type
-                      ? 'bg-white text-blue-600 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700',
+                      ? 'bg-card text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
                   {type === 'ALL' ? 'All' : type === 'PRODUCT' ? 'Products' : 'Services'}
                 </button>
               ))}
             </div>
-            <span className="text-xs text-gray-400 whitespace-nowrap tabular-nums bg-gray-100 px-2.5 py-1 rounded-lg">
+            <span className="num hidden whitespace-nowrap text-xs text-muted-foreground lg:inline">
               {inStockProducts.length} items
             </span>
           </div>
 
           {/* Category filter tabs */}
-          <div className="flex items-center gap-2 px-5 py-3 bg-white border-b border-gray-100 flex-shrink-0 overflow-x-auto scrollbar-none">
+          <div className="flex flex-shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/80 bg-card px-3 pb-3 sm:px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {CATEGORIES.map(cat => (
               <button
                 key={cat}
                 type="button"
                 onClick={() => setActiveCategory(cat)}
                 className={cn(
-                  'flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-150',
+                  'flex-shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150',
                   activeCategory === cat
-                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700',
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground',
                 )}
               >
                 {cat}
@@ -1128,19 +1184,21 @@ export default function SalesForm() {
           </div>
 
           {/* Product grid */}
-          <div ref={productsRef} className="flex-1 overflow-y-auto p-5">
+          <div ref={productsRef} className="flex-1 overflow-y-auto p-3 sm:p-5">
             {isLoading ? (
               <div className="flex h-48 items-center justify-center">
-                <Loader2 className="h-7 w-7 animate-spin text-blue-500" />
+                <Loader2 className="h-7 w-7 animate-spin text-primary" />
               </div>
             ) : inStockProducts.length === 0 ? (
-              <div className="flex flex-col h-48 items-center justify-center text-gray-400 gap-2">
-                <Package className="h-10 w-10" />
-                <p className="text-sm">{t('pos.noProductsFound')}</p>
+              <div className="flex h-56 flex-col items-center justify-center gap-3 text-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                  <Package className="h-6 w-6" />
+                </span>
+                <p className="text-sm text-muted-foreground">{t('pos.noProductsFound')}</p>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3.5">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                   {inStockProducts.slice(0, displayedCount).map(p => (
                     <ProductCard
                       key={p.id}
@@ -1149,11 +1207,12 @@ export default function SalesForm() {
                       isFavorite={favorites.has(p.id)}
                       onToggleFavorite={toggleFavorite}
                       allowZeroStock={trainingMode}
+                      cartQty={cartQtyById.get(p.id) ?? 0}
                     />
                   ))}
                 </div>
                 {inStockProducts.length > displayedCount && (
-                  <p className="mt-4 text-center text-xs text-gray-400">
+                  <p className="mt-4 text-center text-xs text-muted-foreground">
                     Showing {displayedCount} of {inStockProducts.length} — scroll to load more
                   </p>
                 )}
@@ -1162,36 +1221,80 @@ export default function SalesForm() {
           </div>
 
           {/* Bottom Action Bar */}
-          <div className="flex items-center gap-3 px-5 py-3 bg-white border-t border-gray-100 flex-shrink-0">
+          <div className="flex flex-shrink-0 items-center gap-3 border-t border-border/80 bg-card px-3 py-2.5 sm:px-5">
             <button
               type="button"
               onClick={() => setCart([])}
               disabled={cart.length === 0}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 hover:bg-red-50 hover:text-red-600 text-sm font-medium text-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Clear cart"
+              className="flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-danger/10 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Trash2 className="h-4 w-4" />
-              Clear Cart
+              <span className="hidden sm:inline">Clear Cart</span>
             </button>
 
             {isSyncing && (
-              <div className="ml-auto flex items-center gap-1.5 text-xs text-amber-600">
+              <div className="ml-auto flex items-center gap-1.5 text-xs text-warning">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Syncing…
               </div>
             )}
+
+            {/* Small screens: open the order sheet */}
+            <button
+              type="button"
+              onClick={() => setIsCartSheetOpen(true)}
+              className={cn(
+                'flex h-11 items-center gap-3 whitespace-nowrap rounded-xl bg-primary pl-3 pr-4 text-sm font-semibold text-primary-foreground shadow-sm transition-all active:scale-[0.99] lg:hidden',
+                !isSyncing && 'ml-auto',
+                cart.length === 0 && 'bg-muted text-muted-foreground shadow-none',
+              )}
+            >
+              <span className="relative">
+                <ShoppingCart className="h-5 w-5" />
+                {cart.length > 0 && (
+                  <span className="num absolute -right-2 -top-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-card px-1 text-[10px] font-bold text-primary">
+                    {cart.length}
+                  </span>
+                )}
+              </span>
+              <span>{cart.length > 0 ? 'Review order' : 'Cart empty'}</span>
+              {cart.length > 0 && <span className="num font-semibold opacity-90">{total.toLocaleString()} RWF</span>}
+            </button>
           </div>
         </div>
 
+        {/* Backdrop for the small-screen order sheet */}
+        {isCartSheetOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] lg:hidden"
+            onClick={() => setIsCartSheetOpen(false)}
+            aria-hidden
+          />
+        )}
+
         {/* ── RIGHT: current order ──────────────────────────────────────── */}
-        <div className="w-[340px] xl:w-[375px] flex flex-col flex-shrink-0 bg-white border-l border-gray-100">
+        <div
+          className={cn(
+            'fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col rounded-t-2xl border-t border-border/80 bg-card shadow-modal transition-transform duration-300 ease-out',
+            'lg:static lg:z-auto lg:max-h-none lg:w-[340px] lg:flex-shrink-0 lg:translate-y-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-none xl:w-[380px]',
+            isCartSheetOpen ? 'translate-y-0' : 'translate-y-full',
+          )}
+          role="region"
+          aria-label="Current order"
+        >
+          {/* Sheet grab handle (small screens) */}
+          <div className="flex justify-center pt-2 lg:hidden" aria-hidden>
+            <span className="h-1 w-10 rounded-full bg-border" />
+          </div>
 
           {/* Order header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+          <div className="flex flex-shrink-0 items-center justify-between border-b border-border/80 px-5 py-3.5">
             <div className="flex items-center gap-2.5">
-              <ShoppingCart className="h-4 w-4 text-gray-500" />
-              <h2 className="text-sm font-bold text-gray-900">Current Order</h2>
+              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+              <h2 className="panel-title">Current order</h2>
               {cart.length > 0 && (
-                <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                <span className="num inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
                   {cart.length}
                 </span>
               )}
@@ -1201,42 +1304,50 @@ export default function SalesForm() {
                 <button
                   type="button"
                   onClick={() => setCart([])}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-danger/10 hover:text-danger"
                   title="Clear cart"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => setIsCartSheetOpen(false)}
+                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+                aria-label="Close order"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           </div>
 
           {/* Customer selector */}
-          <div className="px-5 py-3.5 border-b border-gray-100 flex-shrink-0">
+          <div className="flex-shrink-0 border-b border-border/80 px-5 py-3.5">
             <div ref={customerDropdownRef} className="relative">
               <button
                 type="button"
                 onClick={() => setShowCustomerDropdown(prev => !prev)}
                 className={cn(
-                  'w-full flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-sm text-left transition-all',
-                  'bg-gray-50 border-gray-200',
-                  'hover:border-blue-300',
-                  showCustomerDropdown && 'border-blue-500 ring-2 ring-blue-500/20 bg-white',
+                  'flex w-full items-center gap-2 rounded-xl border px-3.5 py-2.5 text-left text-sm transition-all',
+                  'border-input bg-surface-subtle hover:border-primary/40',
+                  !selectedCustomer && 'border-dashed',
+                  showCustomerDropdown && 'border-primary/60 bg-background ring-4 ring-ring/15',
                 )}
               >
-                <Search className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                <span className={cn('flex-1 truncate text-xs', selectedCustomerObj ? 'text-gray-800 font-medium' : 'text-gray-400')}>
+                <User className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                <span className={cn('flex-1 truncate text-xs', selectedCustomerObj ? 'font-medium text-foreground' : 'text-muted-foreground')}>
                   {selectedCustomerObj ? selectedCustomerObj.name : 'Search customer or member…'}
                 </span>
                 {selectedCustomerObj && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium flex-shrink-0">
+                  <span className="flex-shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium capitalize text-primary">
                     {selectedCustomerObj.type}
                   </span>
                 )}
               </button>
 
               {showCustomerDropdown && (
-                <div className="absolute top-full mt-1.5 inset-x-0 z-50 rounded-xl border border-gray-200 bg-white shadow-xl">
-                  <div className="p-2 border-b border-gray-100">
+                <div className="panel absolute inset-x-0 top-full z-50 mt-1.5 shadow-dropdown">
+                  <div className="border-b border-border/80 p-2">
                     <Input
                       value={customerSearch}
                       onChange={e => setCustomerSearch(e.target.value)}
@@ -1247,20 +1358,19 @@ export default function SalesForm() {
                   </div>
                   <ul className="max-h-44 overflow-y-auto py-1">
                     {filteredCustomers.length === 0 ? (
-                      <li className="px-3 py-2 text-xs text-gray-400">No customers found</li>
+                      <li className="px-3 py-2 text-xs text-muted-foreground">No customers found</li>
                     ) : filteredCustomers.map(c => (
                       <li key={c.id}>
                         <button
                           type="button"
                           onClick={() => { setSelectedCustomer(c.id); setShowCustomerDropdown(false); setCustomerSearch('') }}
                           className={cn(
-                            'w-full px-3 py-2 text-xs text-left transition-colors',
-                            'hover:bg-gray-50',
-                            c.id === selectedCustomer && 'bg-blue-50 text-blue-700 font-medium',
+                            'w-full px-3 py-2 text-left text-xs transition-colors hover:bg-muted',
+                            c.id === selectedCustomer && 'bg-primary/10',
                           )}
                         >
-                          <span className="block font-medium text-gray-900">{c.name}</span>
-                          {c.phone && <span className="text-gray-500">{c.phone}</span>}
+                          <span className="block font-medium text-foreground">{c.name}</span>
+                          {c.phone && <span className="text-muted-foreground">{c.phone}</span>}
                         </button>
                       </li>
                     ))}
@@ -1272,7 +1382,7 @@ export default function SalesForm() {
             <button
               type="button"
               onClick={() => setIsAddCustomerOpen(true)}
-              className="mt-2 flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
+              className="mt-2 flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
             >
               <UserPlus className="h-3 w-3" />
               Add New Customer
@@ -1282,9 +1392,14 @@ export default function SalesForm() {
           {/* Cart items */}
           <div className="flex-1 overflow-y-auto px-5">
             {cart.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-36 text-gray-300 gap-2">
-                <ShoppingCart className="h-10 w-10" />
-                <p className="text-xs text-gray-400">Cart is empty — click a product to add</p>
+              <div className="flex h-full min-h-[10rem] flex-col items-center justify-center gap-3 text-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground">
+                  <ShoppingCart className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-foreground">Cart is empty</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Tap a product or scan a barcode</p>
+                </div>
               </div>
             ) : cart.map(item => (
               <CartItemRow
@@ -1300,33 +1415,40 @@ export default function SalesForm() {
           </div>
 
           {/* Order summary + checkout */}
-          <div className="border-t border-gray-100 px-5 py-4 space-y-3 flex-shrink-0 bg-white">
+          <div className="flex-shrink-0 space-y-2.5 border-t border-border/80 bg-surface-subtle px-5 py-4">
             {/* Subtotal */}
-            <div className="flex items-center justify-between text-xs text-gray-500">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>Subtotal</span>
-              <span className="font-semibold text-gray-800 tabular-nums">{subtotal.toLocaleString()} RWF</span>
+              <span className="num font-medium text-foreground">{subtotal.toLocaleString()} RWF</span>
             </div>
 
             {/* Tax */}
-            <div className="flex items-center justify-between text-xs text-gray-500">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{vatRegistered ? (taxAmount > 0 ? `VAT (${vatLabelRate}%)` : 'VAT (0%)') : 'VAT (Not registered — D)'}</span>
-              <span className="font-semibold text-gray-800 tabular-nums">{taxAmount.toLocaleString()} RWF</span>
+              <span className="num font-medium text-foreground">{taxAmount.toLocaleString()} RWF</span>
             </div>
 
             {/* Total */}
-            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-              <span className="text-sm font-bold text-gray-900">Total</span>
-              <span className="text-lg font-extrabold text-blue-600 tabular-nums">
-                {total.toLocaleString()} <span className="text-xs font-normal text-gray-400">RWF</span>
+            <div className="flex items-baseline justify-between border-t border-border/80 pt-3">
+              <span className="text-sm font-semibold text-foreground">Total</span>
+              <span className="num text-2xl font-semibold tracking-tight text-foreground">
+                {total.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">RWF</span>
               </span>
             </div>
+
+            {cart.length > 0 && !selectedCustomer && (
+              <p className="flex items-center gap-1.5 text-xs text-warning">
+                <User className="h-3.5 w-3.5" />
+                Select a customer to continue
+              </p>
+            )}
 
             {/* Process Payment button */}
             <button
               type="button"
               onClick={handleOpenPayment}
               disabled={cart.length === 0 || !selectedCustomer || isSubmitting}
-              className="w-full h-11 flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold transition-all shadow-md shadow-blue-500/30 hover:shadow-lg hover:shadow-blue-500/40 active:scale-[0.99]"
+              className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSubmitting ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Processing…</>
@@ -1341,7 +1463,7 @@ export default function SalesForm() {
               type="button"
               onClick={handleCreateProforma}
               disabled={cart.length === 0 || !selectedCustomer || isSubmitting}
-              className="w-full h-10 flex items-center justify-center gap-2 rounded-xl border border-blue-200 text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold transition-colors"
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-border bg-card text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSubmitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

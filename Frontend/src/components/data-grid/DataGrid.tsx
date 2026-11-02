@@ -173,13 +173,13 @@ export function DataGrid<T extends { id: number | string }>({
   return (
     <div className={cn('w-full', className)}>
       {/* ── Desktop table ─────────────────────────── */}
-      <div className="hidden overflow-x-auto rounded-xl border bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800 sm:block">
+      <div className="hidden overflow-x-auto rounded-xl border bg-card shadow-sm sm:block">
         <table className="w-full text-left text-sm">
           {/* ── Header ─────────────────────────────── */}
           <thead>
             <tr
               className={cn(
-                'border-b bg-gray-50/80 dark:border-zinc-700 dark:bg-zinc-800/80',
+                'border-b bg-surface-subtle/80',
                 stickyHeader && 'sticky top-0 z-10',
               )}
             >
@@ -198,8 +198,8 @@ export function DataGrid<T extends { id: number | string }>({
                 <th
                   key={col.id}
                   className={cn(
-                    'h-11 px-4 text-caption font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400',
-                    isSortable(col) && 'cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200',
+                    'h-11 px-4 text-caption font-semibold uppercase tracking-wider text-muted-foreground',
+                    isSortable(col) && 'cursor-pointer select-none hover:text-foreground',
                     col.align === 'right' && 'text-right',
                     col.align === 'center' && 'text-center',
                     col.hideOnMobile && 'hidden lg:table-cell',
@@ -218,12 +218,12 @@ export function DataGrid<T extends { id: number | string }>({
                   <div className="inline-flex items-center gap-1">
                     <span>{col.header}</span>
                     {isSortable(col) && (
-                      <span className="shrink-0 text-gray-300 dark:text-gray-600">
+                      <span className="shrink-0 text-muted-foreground/60">
                         {currentSortField === columnSortKey(col) ? (
                           currentSortDir === 'asc' ? (
-                            <ChevronUp className="h-3.5 w-3.5 text-blue-500" />
+                            <ChevronUp className="h-3.5 w-3.5 text-primary" />
                           ) : (
-                            <ChevronDown className="h-3.5 w-3.5 text-blue-500" />
+                            <ChevronDown className="h-3.5 w-3.5 text-primary" />
                           )
                         ) : (
                           <ChevronsUpDown className="h-3.5 w-3.5" />
@@ -237,7 +237,7 @@ export function DataGrid<T extends { id: number | string }>({
           </thead>
 
           {/* ── Body ───────────────────────────────── */}
-          <tbody className="divide-y divide-gray-100 dark:divide-zinc-700">
+          <tbody className="divide-y divide-border">
             {loading ? (
               <SkeletonRows columns={columns} rowCount={skeletonRows} showCheckbox={!!onSelectionChange} />
             ) : data.length === 0 ? (
@@ -256,8 +256,8 @@ export function DataGrid<T extends { id: number | string }>({
                     key={key}
                     className={cn(
                       'transition-colors',
-                      isSelected && 'bg-blue-50 dark:bg-blue-900/10',
-                      onRowClick && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-700/50',
+                      isSelected && 'bg-primary/10',
+                      onRowClick && 'cursor-pointer hover:bg-muted',
                       typeof rowClassName === 'function' ? rowClassName(row) : rowClassName,
                     )}
                     onClick={() => onRowClick?.(row)}
@@ -275,7 +275,7 @@ export function DataGrid<T extends { id: number | string }>({
                       <td
                         key={col.id}
                         className={cn(
-                          'h-11 px-4 text-body text-gray-700 dark:text-gray-300',
+                          'h-11 px-4 text-body text-foreground',
                           col.align === 'right' && 'text-right',
                           col.align === 'center' && 'text-center',
                           col.hideOnMobile && 'hidden lg:table-cell',
@@ -298,7 +298,7 @@ export function DataGrid<T extends { id: number | string }>({
       <div className="space-y-3 sm:hidden">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="rounded-xl border bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+            <div key={i} className="rounded-xl border bg-card p-4 shadow-sm">
               <div className="space-y-3">
                 {columns.slice(0, 4).map(col => (
                   <div key={col.id}>
@@ -310,7 +310,7 @@ export function DataGrid<T extends { id: number | string }>({
             </div>
           ))
         ) : data.length === 0 ? (
-          <div className="rounded-xl border bg-white p-8 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+          <div className="rounded-xl border bg-card p-8 shadow-sm">
             <EmptyContent title={emptyTitle} description={emptyDescription} action={emptyAction} />
           </div>
         ) : (
@@ -321,9 +321,9 @@ export function DataGrid<T extends { id: number | string }>({
               <div
                 key={key}
                 className={cn(
-                  'rounded-xl border bg-white p-4 shadow-sm transition-colors dark:border-zinc-700 dark:bg-zinc-800',
-                  isSelected && 'ring-2 ring-blue-500',
-                  onRowClick && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-700',
+                  'rounded-xl border bg-card p-4 shadow-sm transition-colors',
+                  isSelected && 'ring-2 ring-ring',
+                  onRowClick && 'cursor-pointer hover:bg-muted',
                 )}
                 onClick={() => onRowClick?.(row)}
               >
@@ -332,12 +332,12 @@ export function DataGrid<T extends { id: number | string }>({
                     .filter(col => !col.hideOnMobile)
                     .map(col => (
                       <div key={col.id} className="flex items-start justify-between gap-2">
-                        <span className="shrink-0 text-caption font-medium text-gray-500">
+                        <span className="shrink-0 text-caption font-medium text-muted-foreground">
                           {col.header}
                         </span>
                         <span
                           className={cn(
-                            'text-right text-body text-gray-900 dark:text-gray-100',
+                            'text-right text-body text-foreground',
                             col.align === 'left' && 'text-left',
                           )}
                         >
@@ -424,10 +424,10 @@ function EmptyContent({
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 text-center">
-      <PackageX className="h-10 w-10 text-gray-300 dark:text-gray-600" />
+      <PackageX className="h-10 w-10 text-muted-foreground/60" />
       <div>
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{title}</p>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
       {action && <div className="mt-2">{action}</div>}
     </div>

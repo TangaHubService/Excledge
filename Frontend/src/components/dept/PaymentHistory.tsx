@@ -72,7 +72,7 @@ export function PaymentHistory({
     const hasActiveFilters = Object.values(filters).some(value => value !== undefined && value !== '');
     return (
         <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-md">
+            <div className="flex flex-col sm:flex-row gap-4 p-4 bg-muted rounded-md">
                 <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div>
                         <label className="text-sm font-medium mb-1 block">{t('debtManagement.paymentMethod')}</label>
@@ -83,7 +83,7 @@ export function PaymentHistory({
                             <SelectTrigger>
                                 <SelectValue placeholder={t('debtManagement.allMethods')} />
                             </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-gray-800 dark:text-white">
+                            <SelectContent className="bg-card dark:text-white">
                                 <SelectItem value="all">{t('debtManagement.allMethods')}</SelectItem>
                                 {PAYMENT_METHODS.map((method) => (
                                     <SelectItem key={method.value} value={method.value}>
@@ -186,14 +186,14 @@ export function PaymentHistory({
 
             {isLoading ? (
                 <div className="p-4 text-center text-muted-foreground flex items-center justify-center">
-                    <div className="animate-spin inline-block mr-2 h-5 w-5 text-gray-300" role="status" aria-label="Loading payment history">
+                    <div className="animate-spin inline-block mr-2 h-5 w-5 text-muted-foreground/60" role="status" aria-label="Loading payment history">
                         <span className="sr-only">{t('pos.processing')}</span>
                     </div>
                     <span>{t('debtManagement.failedToLoadHistory')}...</span>
                 </div>
             ) : payments && payments.length > 0 ? (
                 <Table>
-                    <TableHeader className="bg-gray-100 dark:bg-gray-700 dark:border-gray-700">
+                    <TableHeader className="bg-muted">
                         <TableRow>
                             <TableHead>{t('debtManagement.date')}</TableHead>
                             <TableHead>{t('debtManagement.saleNumber')}</TableHead>
@@ -203,13 +203,13 @@ export function PaymentHistory({
                             <TableHead>{t('debtManagement.recordedBy')}</TableHead>
                         </TableRow>
                     </TableHeader>
-                    <TableBody className="dark:text-gray-300">
+                    <TableBody className="">
                         {payments.map((payment) => (
-                            <TableRow key={payment.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 dark:border-gray-700">
-                                <TableCell className="dark:text-gray-300 dark:border-gray-700">
+                            <TableRow key={payment.id} className="hover:bg-muted">
+                                <TableCell className="">
                                     {format(new Date(payment.paymentDate), 'MMM d, yyyy h:mm a')}
                                 </TableCell>
-                                <TableCell className="dark:text-white dark:border-gray-700">
+                                <TableCell className="dark:text-white">
                                     {payment.sale?.saleNumber || 'N/A'}
                                 </TableCell>
                                 <TableCell className="font-medium">
@@ -226,7 +226,7 @@ export function PaymentHistory({
                 </Table>
             ) : (
                 <div className="text-muted-foreground text-sm p-4 text-center flex items-center justify-center">
-                    <span className="text-gray-300" aria-label="No payment history found">{t('debtManagement.noPaymentHistoryFound')}</span>
+                    <span className="text-muted-foreground/60" aria-label="No payment history found">{t('debtManagement.noPaymentHistoryFound')}</span>
                 </div>
             )}
         </div>

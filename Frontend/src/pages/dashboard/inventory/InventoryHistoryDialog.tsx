@@ -89,9 +89,9 @@ export default function InventoryHistoryDialog({
 
   const getMovementTypeColor = (direction: string) => {
     if (direction === 'IN') {
-      return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      return 'bg-success/15 text-success dark:bg-success dark:text-green-200';
     } else {
-      return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+      return 'bg-danger/15 text-danger dark:bg-danger dark:text-red-200';
     }
   };
 
@@ -104,11 +104,11 @@ export default function InventoryHistoryDialog({
       <DrawerContent
         className={`sm:max-w-[900px] overflow-hidden flex flex-col ${theme === "dark"
           ? "bg-gray-900 border-gray-700 text-gray-100"
-          : "bg-white border-gray-200"
+          : "bg-card border-border"
           }`}
       >
         <DrawerHeader>
-          <DrawerTitle className={theme === "dark" ? "text-white" : "text-gray-900"}>
+          <DrawerTitle className={theme === "dark" ? "text-white" : "text-foreground"}>
             {t('inventory.inventoryHistory')} {productName && `- ${productName}`}
           </DrawerTitle>
         </DrawerHeader>
@@ -116,12 +116,12 @@ export default function InventoryHistoryDialog({
         <div className="flex-1 overflow-y-auto py-4">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : error ? (
-            <div className="text-center py-8 text-red-500">{error}</div>
+            <div className="text-center py-8 text-danger">{error}</div>
           ) : history.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-muted-foreground">
               {t('inventory.noHistory')}
             </div>
           ) : (
@@ -143,7 +143,7 @@ export default function InventoryHistoryDialog({
                   {history.map((entry) => (
                     <TableRow
                       key={entry.id}
-                      className={theme === "dark" ? "border-gray-700 hover:bg-gray-800" : "hover:bg-gray-50"}
+                      className={theme === "dark" ? "border-gray-700 hover:bg-gray-800" : "hover:bg-muted"}
                     >
                       <TableCell className="text-xs whitespace-nowrap">
                         {formatDate(entry.createdAt)}
@@ -158,9 +158,9 @@ export default function InventoryHistoryDialog({
                           {entry.direction === 'IN' ? (
                             <TrendingUp className="h-4 w-4 text-green-500" />
                           ) : (
-                            <TrendingDown className="h-4 w-4 text-red-500" />
+                            <TrendingDown className="h-4 w-4 text-danger" />
                           )}
-                          <span className={entry.direction === 'IN' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                          <span className={entry.direction === 'IN' ? 'text-success dark:text-green-400' : 'text-danger dark:text-red-400'}>
                             {entry.direction}
                           </span>
                         </div>

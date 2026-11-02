@@ -29,11 +29,11 @@ export function StepIndicator({ steps, activeStep, onStepClick }: StepIndicatorP
                 disabled={!isClickable}
                 className={cn(
                   'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all min-w-0',
-                  isActive && 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100',
-                  !isActive && step.status === 'complete' && 'text-emerald-600 dark:text-emerald-400',
-                  !isActive && step.status === 'error' && 'text-red-600 dark:text-red-400',
-                  !isActive && step.status === 'incomplete' && 'text-gray-400 dark:text-gray-500',
-                  isClickable && !isActive && 'hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer',
+                  isActive && 'bg-muted text-foreground',
+                  !isActive && step.status === 'complete' && 'text-success dark:text-emerald-400',
+                  !isActive && step.status === 'error' && 'text-danger dark:text-red-400',
+                  !isActive && step.status === 'incomplete' && 'text-muted-foreground',
+                  isClickable && !isActive && 'hover:bg-muted cursor-pointer',
                   !isClickable && 'cursor-default',
                 )}
                 aria-current={isActive ? 'step' : undefined}
@@ -42,10 +42,10 @@ export function StepIndicator({ steps, activeStep, onStepClick }: StepIndicatorP
                 <span
                   className={cn(
                     'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
-                    step.status === 'complete' && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-                    step.status === 'error' && 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-                    step.status === 'incomplete' && isActive && 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900',
-                    step.status === 'incomplete' && !isActive && 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500',
+                    step.status === 'complete' && 'bg-success/15 text-success dark:bg-success/40 dark:text-emerald-300',
+                    step.status === 'error' && 'bg-danger/15 text-danger dark:bg-danger/40 dark:text-red-300',
+                    step.status === 'incomplete' && isActive && 'bg-gray-900 text-white',
+                    step.status === 'incomplete' && !isActive && 'bg-muted text-muted-foreground',
                   )}
                 >
                   {step.status === 'complete' ? (
@@ -67,8 +67,8 @@ export function StepIndicator({ steps, activeStep, onStepClick }: StepIndicatorP
                   className={cn(
                     'h-px flex-1 min-w-[8px] mx-1',
                     step.status === 'complete'
-                      ? 'bg-emerald-300 dark:bg-emerald-700'
-                      : 'bg-gray-200 dark:bg-gray-700',
+                      ? 'bg-emerald-300 dark:bg-success'
+                      : 'bg-muted',
                   )}
                   aria-hidden="true"
                 />

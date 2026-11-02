@@ -71,7 +71,7 @@ export const PesapalPaymentForm = ({
             <div className="space-y-4">
                 <div className="relative w-full h-[500px] border rounded-lg overflow-hidden">
                     {isIframeLoading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+                        <div className="absolute inset-0 flex items-center justify-center bg-surface-subtle">
                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         </div>
                     )}
@@ -111,7 +111,7 @@ export const PesapalPaymentForm = ({
                 <Button type="button" variant="outline" onClick={onBack} disabled={isLoading}>
                     Back
                 </Button>
-                <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
+                <Button type="submit" disabled={isLoading} className="bg-primary hover:bg-primary/90 text-white">
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Proceed
                 </Button>

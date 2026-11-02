@@ -12,7 +12,7 @@ interface AppShellSkeletonProps {
  */
 export function AppShellSkeleton({ sidebarCollapsed = false, variant = 'dashboard' }: AppShellSkeletonProps) {
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-100 dark:bg-zinc-900">
+    <div className="flex h-screen overflow-hidden bg-muted">
       {/* ── Sidebar ─────────────────────────────────── */}
       <aside
         className={cn(
@@ -22,9 +22,9 @@ export function AppShellSkeleton({ sidebarCollapsed = false, variant = 'dashboar
       >
         {/* Logo area */}
         <div className="flex h-14 shrink-0 items-center border-b border-white/15 px-3">
-          <Skeleton className="h-9 w-9 shrink-0 rounded-lg bg-white/10" />
+          <Skeleton className="h-9 w-9 shrink-0 rounded-lg bg-card/10" />
           {!sidebarCollapsed && (
-            <Skeleton className="ml-2 h-5 w-24 bg-white/10" />
+            <Skeleton className="ml-2 h-5 w-24 bg-card/10" />
           )}
         </div>
 
@@ -32,7 +32,7 @@ export function AppShellSkeleton({ sidebarCollapsed = false, variant = 'dashboar
         <div className={cn('py-3', sidebarCollapsed ? 'px-2' : 'px-3')}>
           <Skeleton
             className={cn(
-              'rounded-lg bg-white/10',
+              'rounded-lg bg-card/10',
               sidebarCollapsed ? 'h-10 w-10' : 'h-[52px] w-full',
             )}
           />
@@ -44,7 +44,7 @@ export function AppShellSkeleton({ sidebarCollapsed = false, variant = 'dashboar
             <Skeleton
               key={i}
               className={cn(
-                'h-10 rounded-lg bg-white/5',
+                'h-10 rounded-lg bg-card/5',
                 sidebarCollapsed ? 'w-10' : 'w-full',
               )}
             />
@@ -55,7 +55,7 @@ export function AppShellSkeleton({ sidebarCollapsed = false, variant = 'dashboar
         <div className={cn('border-t border-white/15 py-3', sidebarCollapsed ? 'px-2' : 'px-3')}>
           <Skeleton
             className={cn(
-              'h-10 rounded-lg bg-white/5',
+              'h-10 rounded-lg bg-card/5',
               sidebarCollapsed ? 'w-10' : 'w-full',
             )}
           />
@@ -66,13 +66,13 @@ export function AppShellSkeleton({ sidebarCollapsed = false, variant = 'dashboar
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header */}
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center border-b border-white/10 bg-gradient-to-b from-[#0f2744] via-[#0c2035] to-[#0a1628] px-4 lg:px-6">
-          <Skeleton className="h-9 w-9 shrink-0 rounded-lg bg-white/10 lg:hidden" />
-          <Skeleton className="ml-2 h-9 w-9 shrink-0 rounded-lg bg-white/10" />
+          <Skeleton className="h-9 w-9 shrink-0 rounded-lg bg-card/10 lg:hidden" />
+          <Skeleton className="ml-2 h-9 w-9 shrink-0 rounded-lg bg-card/10" />
           <div className="ml-auto flex items-center gap-3">
-            <Skeleton className="h-9 w-[160px] rounded-md bg-white/10" />
-            <Skeleton className="h-9 w-9 rounded-md bg-white/10" />
-            <Skeleton className="h-9 w-9 rounded-md bg-white/10" />
-            <Skeleton className="h-9 w-[120px] rounded-md bg-white/10" />
+            <Skeleton className="h-9 w-[160px] rounded-md bg-card/10" />
+            <Skeleton className="h-9 w-9 rounded-md bg-card/10" />
+            <Skeleton className="h-9 w-9 rounded-md bg-card/10" />
+            <Skeleton className="h-9 w-[120px] rounded-md bg-card/10" />
           </div>
         </header>
 
@@ -113,7 +113,7 @@ function DashboardSkeletonContent() {
       {/* KPI row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[1, 2, 3, 4].map(i => (
-          <div key={i} className="rounded-xl border bg-white p-5 shadow-sm dark:bg-zinc-800 dark:border-zinc-700">
+          <div key={i} className="rounded-xl border bg-card p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <Skeleton className="h-10 w-10 rounded-lg" />
               <Skeleton className="h-5 w-16 rounded-full" />
@@ -126,18 +126,18 @@ function DashboardSkeletonContent() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border bg-white p-6 shadow-sm dark:bg-zinc-800 dark:border-zinc-700">
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
           <Skeleton className="h-5 w-36" />
           <Skeleton className="mt-6 h-64 w-full rounded-lg" />
         </div>
-        <div className="rounded-xl border bg-white p-6 shadow-sm dark:bg-zinc-800 dark:border-zinc-700">
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
           <Skeleton className="h-5 w-36" />
           <Skeleton className="mt-6 h-64 w-full rounded-lg" />
         </div>
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border bg-white shadow-sm dark:bg-zinc-800 dark:border-zinc-700">
+      <div className="rounded-xl border bg-card shadow-sm">
         <div className="border-b px-6 py-4">
           <Skeleton className="h-5 w-40" />
         </div>
@@ -165,7 +165,7 @@ function ListSkeleton() {
         <Skeleton className="h-10 w-32 rounded-lg" />
       </div>
       <Skeleton className="h-11 w-full rounded-lg" />
-      <div className="rounded-xl border bg-white shadow-sm dark:bg-zinc-800 dark:border-zinc-700">
+      <div className="rounded-xl border bg-card shadow-sm">
         <div className="divide-y">
           {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
             <div key={i} className="flex items-center gap-4 px-6 py-4">
@@ -186,7 +186,7 @@ function FormSkeleton() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <Skeleton className="h-7 w-48" />
-      <div className="rounded-xl border bg-white p-6 shadow-sm dark:bg-zinc-800 dark:border-zinc-700">
+      <div className="rounded-xl border bg-card p-6 shadow-sm">
         <div className="space-y-5">
           {[1, 2, 3, 4].map(i => (
             <div key={i}>

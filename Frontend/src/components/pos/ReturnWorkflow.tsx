@@ -97,9 +97,9 @@ const CONDITION_LABELS: Record<RestockCondition, string> = {
 }
 
 const CONDITION_COLORS: Record<RestockCondition, string> = {
-  SELLABLE: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300',
-  DAMAGED: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300',
-  EXPIRED: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300',
+  SELLABLE: 'bg-success/10 text-success border-success/25 dark:bg-success/20 dark:text-emerald-300',
+  DAMAGED: 'bg-danger/10 text-danger border-danger/25 dark:bg-danger/20 dark:text-red-300',
+  EXPIRED: 'bg-warning/10 text-warning border-warning/30 dark:bg-warning/20 dark:text-amber-300',
 }
 
 /* ─── Component ─────────────────────────────────────── */
@@ -257,17 +257,17 @@ export function ReturnWorkflow({
                   <span
                     className={cn(
                       'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold',
-                      isDone && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-                      isActive && 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900',
-                      !isDone && !isActive && 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500',
+                      isDone && 'bg-success/15 text-success dark:bg-success/40 dark:text-emerald-300',
+                      isActive && 'bg-gray-900 text-white',
+                      !isDone && !isActive && 'bg-muted text-muted-foreground',
                     )}
                   >
                     {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
                   </span>
                   <span className={cn(
                     'text-xs font-medium hidden sm:inline',
-                    isActive && 'text-gray-900 dark:text-gray-100',
-                    !isActive && 'text-gray-400 dark:text-gray-500',
+                    isActive && 'text-foreground',
+                    !isActive && 'text-muted-foreground',
                   )}>
                     {STEP_LABELS[s]}
                   </span>
@@ -275,7 +275,7 @@ export function ReturnWorkflow({
                 {i < 2 && (
                   <div className={cn(
                     'h-px flex-1 min-w-[12px]',
-                    isDone ? 'bg-emerald-300' : 'bg-gray-200 dark:bg-gray-700',
+                    isDone ? 'bg-emerald-300' : 'bg-muted',
                   )} />
                 )}
               </React.Fragment>
@@ -287,10 +287,10 @@ export function ReturnWorkflow({
         <div className="flex-1 overflow-y-auto py-4 space-y-4">
           {/* Error */}
           {error && (
-            <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
-              <div className="flex-1 text-sm text-red-700 dark:text-red-300">{error}</div>
-              <button type="button" onClick={() => setError(null)} className="text-red-500 hover:bg-red-100 rounded p-1">
+            <div className="flex items-start gap-3 rounded-lg border border-danger/25 bg-danger/10 p-4 dark:border-red-800 dark:bg-danger/20">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
+              <div className="flex-1 text-sm text-danger dark:text-red-300">{error}</div>
+              <button type="button" onClick={() => setError(null)} className="text-danger hover:bg-danger/15 rounded p-1">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -301,7 +301,7 @@ export function ReturnWorkflow({
             <div className="space-y-4">
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
@@ -320,8 +320,8 @@ export function ReturnWorkflow({
               <div className="space-y-2">
                 {searchResults.length === 0 && !searching && searchQuery && (
                   <div className="flex flex-col items-center gap-2 py-8 text-center">
-                    <Receipt className="h-8 w-8 text-gray-300" />
-                    <p className="text-sm text-gray-500">No sales found matching your search.</p>
+                    <Receipt className="h-8 w-8 text-muted-foreground/60" />
+                    <p className="text-sm text-muted-foreground">No sales found matching your search.</p>
                   </div>
                 )}
                 {searchResults.map(sale => (
@@ -329,30 +329,30 @@ export function ReturnWorkflow({
                     key={sale.id}
                     type="button"
                     onClick={() => selectSale(sale)}
-                    className="flex w-full items-center gap-4 rounded-lg border bg-white p-4 text-left transition-colors hover:bg-gray-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                    className="flex w-full items-center gap-4 rounded-lg border bg-card p-4 text-left transition-colors hover:bg-muted"
                   >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
                       <Receipt className="h-5 w-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      <p className="text-sm font-medium text-foreground">
                         {sale.saleNumber}
                       </p>
-                      <p className="text-caption text-gray-500">
+                      <p className="text-caption text-muted-foreground">
                         {sale.customer?.name ?? 'Walk-in'} · {new Date(sale.createdAt).toLocaleDateString()}
                       </p>
                     </div>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    <span className="text-sm font-semibold text-foreground">
                       R{sale.totalAmount.toFixed(2)}
                     </span>
-                    <ArrowRight className="h-4 w-4 text-gray-400" />
+                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   </button>
                 ))}
               </div>
 
               {searching && (
                 <div className="flex justify-center py-4">
-                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               )}
             </div>
@@ -362,11 +362,11 @@ export function ReturnWorkflow({
           {step === 'select-items' && selectedSale && (
             <div className="space-y-4">
               {/* Sale info header */}
-              <div className="flex items-center gap-3 rounded-lg border bg-gray-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
-                <Receipt className="h-5 w-5 text-gray-400" />
+              <div className="flex items-center gap-3 rounded-lg border bg-surface-subtle p-3">
+                <Receipt className="h-5 w-5 text-muted-foreground" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">{selectedSale.saleNumber}</p>
-                  <p className="text-caption text-gray-500">
+                  <p className="text-caption text-muted-foreground">
                     {selectedSale.customer?.name ?? 'Walk-in'} · {new Date(selectedSale.createdAt).toLocaleDateString()}
                     {selectedSale.branch && ` · ${selectedSale.branch.name}`}
                   </p>
@@ -378,23 +378,23 @@ export function ReturnWorkflow({
                 {returnItems.map(item => (
                   <div
                     key={item.saleItemId}
-                    className="rounded-lg border bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800"
+                    className="rounded-lg border bg-card p-4"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        <p className="text-sm font-medium text-foreground">
                           {item.productName}
                         </p>
-                        <p className="text-caption text-gray-500">
+                        <p className="text-caption text-muted-foreground">
                           {item.batchNumber && `Batch: ${item.batchNumber} · `}
                           Unit price: R{item.unitPrice.toFixed(2)}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        <p className="text-sm font-medium text-foreground">
                           Sold: {item.maxQuantity}
                         </p>
-                        <p className="text-caption text-gray-500">
+                        <p className="text-caption text-muted-foreground">
                           Max R{(item.maxQuantity * item.unitPrice).toFixed(2)}
                         </p>
                       </div>
@@ -403,12 +403,12 @@ export function ReturnWorkflow({
                     {/* Quantity + Condition row */}
                     <div className="mt-3 flex items-end gap-3">
                       <div className="flex-1">
-                        <Label className="text-caption text-gray-500">Return quantity</Label>
+                        <Label className="text-caption text-muted-foreground">Return quantity</Label>
                         <div className="mt-1 flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => updateItem(item.saleItemId, 'quantity', Math.max(0, item.quantity - 1))}
-                            className="flex h-10 w-10 items-center justify-center rounded-md border bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800"
+                            className="flex h-10 w-10 items-center justify-center rounded-md border bg-card text-muted-foreground hover:bg-muted"
                           >
                             −
                           </button>
@@ -426,16 +426,16 @@ export function ReturnWorkflow({
                           <button
                             type="button"
                             onClick={() => updateItem(item.saleItemId, 'quantity', Math.min(item.maxQuantity, item.quantity + 1))}
-                            className="flex h-10 w-10 items-center justify-center rounded-md border bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800"
+                            className="flex h-10 w-10 items-center justify-center rounded-md border bg-card text-muted-foreground hover:bg-muted"
                           >
                             +
                           </button>
-                          <span className="text-caption text-gray-400 ml-1">/ {item.maxQuantity}</span>
+                          <span className="text-caption text-muted-foreground ml-1">/ {item.maxQuantity}</span>
                         </div>
                       </div>
 
                       <div className="w-44">
-                        <Label className="text-caption text-gray-500">Restocking condition</Label>
+                        <Label className="text-caption text-muted-foreground">Restocking condition</Label>
                         <Select
                           value={item.condition}
                           onValueChange={v => updateItem(item.saleItemId, 'condition', v)}
@@ -454,8 +454,8 @@ export function ReturnWorkflow({
                       </div>
 
                       <div className="w-24 text-right">
-                        <Label className="text-caption text-gray-500">Total</Label>
-                        <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        <Label className="text-caption text-muted-foreground">Total</Label>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
                           R{(item.quantity * item.unitPrice).toFixed(2)}
                         </p>
                       </div>
@@ -479,7 +479,7 @@ export function ReturnWorkflow({
               {/* Reason */}
               <div className="space-y-1.5">
                 <Label htmlFor="return-reason">
-                  Return reason <span className="text-red-500">*</span>
+                  Return reason <span className="text-danger">*</span>
                 </Label>
                 <Select value={reason} onValueChange={setReason}>
                   <SelectTrigger id="return-reason" className="h-11">
@@ -510,48 +510,48 @@ export function ReturnWorkflow({
           {step === 'confirm' && selectedSale && (
             <div className="space-y-4">
               {/* Warning */}
-              <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 dark:border-amber-800 dark:bg-warning/20">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
                 <div>
-                  <p className="font-medium text-amber-800 dark:text-amber-200">Confirm this return</p>
-                  <p className="mt-0.5 text-sm text-amber-700 dark:text-amber-300">
+                  <p className="font-medium text-warning dark:text-amber-200">Confirm this return</p>
+                  <p className="mt-0.5 text-sm text-warning dark:text-amber-300">
                     This will update inventory and the sales ledger. This action cannot be automatically reversed.
                   </p>
                 </div>
               </div>
 
               {/* Summary card */}
-              <div className="space-y-3 rounded-lg border bg-gray-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+              <div className="space-y-3 rounded-lg border bg-surface-subtle p-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Sale</span>
+                  <span className="text-sm text-muted-foreground">Sale</span>
                   <span className="text-sm font-medium">{selectedSale.saleNumber}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Items being returned</span>
+                  <span className="text-sm text-muted-foreground">Items being returned</span>
                   <span className="text-sm font-medium">{totalItems}</span>
                 </div>
                 {returnItems.filter(i => i.quantity > 0).map(item => (
                   <div key={item.saleItemId} className="flex items-center justify-between pl-4 text-sm">
-                    <span className="text-gray-500">{item.productName} × {item.quantity}</span>
+                    <span className="text-muted-foreground">{item.productName} × {item.quantity}</span>
                     <span>R{(item.quantity * item.unitPrice).toFixed(2)}</span>
                   </div>
                 ))}
                 <div className="border-t pt-2 flex items-center justify-between">
                   <span className="text-sm font-semibold">Total refund</span>
-                  <span className="text-lg font-bold text-amber-600">R{totalRefund.toFixed(2)}</span>
+                  <span className="text-lg font-bold text-warning">R{totalRefund.toFixed(2)}</span>
                 </div>
               </div>
 
               {/* Stock impact */}
               {returnItems.filter(i => i.quantity > 0 && i.condition === 'SELLABLE').length > 0 && (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-900/10">
+                <div className="rounded-lg border border-success/25 bg-success/10 p-3 dark:border-emerald-800 dark:bg-success/10">
                   <div className="flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-emerald-600" />
-                    <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                    <TrendingUp className="h-4 w-4 text-success" />
+                    <span className="text-sm font-medium text-success dark:text-emerald-300">
                       Stock impact
                     </span>
                   </div>
-                  <div className="mt-1 space-y-0.5 text-sm text-emerald-600 dark:text-emerald-400">
+                  <div className="mt-1 space-y-0.5 text-sm text-success dark:text-emerald-400">
                     {returnItems.filter(i => i.quantity > 0 && i.condition === 'SELLABLE').map(item => (
                       <p key={item.saleItemId}>
                         {item.productName}: +{item.quantity} units {item.batchNumber ? `to batch ${item.batchNumber}` : ''}
@@ -562,14 +562,14 @@ export function ReturnWorkflow({
               )}
 
               {returnItems.filter(i => i.quantity > 0 && i.condition !== 'SELLABLE').length > 0 && (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/10">
+                <div className="rounded-lg border border-danger/25 bg-danger/10 p-3 dark:border-red-800 dark:bg-danger/10">
                   <div className="flex items-center gap-2">
-                    <TrendingDown className="h-4 w-4 text-red-600" />
-                    <span className="text-sm font-medium text-red-700 dark:text-red-300">
+                    <TrendingDown className="h-4 w-4 text-danger" />
+                    <span className="text-sm font-medium text-danger dark:text-red-300">
                       Disposal impact
                     </span>
                   </div>
-                  <div className="mt-1 space-y-0.5 text-sm text-red-600 dark:text-red-400">
+                  <div className="mt-1 space-y-0.5 text-sm text-danger dark:text-red-400">
                     {returnItems.filter(i => i.quantity > 0 && i.condition !== 'SELLABLE').map(item => (
                       <p key={item.saleItemId}>
                         {item.productName}: {item.quantity} units → {item.condition === 'DAMAGED' ? 'disposal (damaged)' : 'disposal (expired)'}
@@ -580,8 +580,8 @@ export function ReturnWorkflow({
               )}
 
               {/* Reason summary */}
-              <p className="text-sm text-gray-500">
-                Reason: <span className="font-medium text-gray-700 dark:text-gray-300">{isOtherReason ? otherReason.trim() : reason}</span>
+              <p className="text-sm text-muted-foreground">
+                Reason: <span className="font-medium text-foreground">{isOtherReason ? otherReason.trim() : reason}</span>
               </p>
             </div>
           )}
@@ -589,12 +589,12 @@ export function ReturnWorkflow({
           {/* ── Step: Done ────────────────────────────────── */}
           {step === 'done' && (
             <div className="flex flex-col items-center gap-3 py-8 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-                <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success/15 dark:bg-success/30">
+                <CheckCircle2 className="h-8 w-8 text-success dark:text-emerald-400" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Return Complete</h3>
-                <p className="text-sm text-gray-500">
+                <h3 className="text-lg font-semibold text-foreground">Return Complete</h3>
+                <p className="text-sm text-muted-foreground">
                   {totalItems} item(s) returned · R{totalRefund.toFixed(2)} refunded
                 </p>
               </div>
@@ -620,7 +620,7 @@ export function ReturnWorkflow({
           </Button>
 
           {step === 'search' && searchResults.length > 0 && (
-            <p className="text-sm text-gray-500">{searchResults.length} sale(s) found</p>
+            <p className="text-sm text-muted-foreground">{searchResults.length} sale(s) found</p>
           )}
 
           {step === 'select-items' && (
@@ -640,7 +640,7 @@ export function ReturnWorkflow({
               type="button"
               onClick={handleSubmit}
               disabled={submitting}
-              className="h-11 gap-1.5 bg-amber-600 hover:bg-amber-700"
+              className="h-11 gap-1.5 bg-warning hover:bg-warning/90"
             >
               {submitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

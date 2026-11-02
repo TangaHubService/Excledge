@@ -31,11 +31,11 @@ function getLevel(current: number, max: number): number {
 }
 
 const LEVEL_COLORS: Record<number, string> = {
-  0: 'bg-red-400 dark:bg-red-500',
-  1: 'bg-amber-400 dark:bg-amber-500',
-  2: 'bg-amber-400 dark:bg-amber-500',
-  3: 'bg-emerald-400 dark:bg-emerald-500',
-  4: 'bg-emerald-500 dark:bg-emerald-400',
+  0: 'bg-red-400 dark:bg-danger',
+  1: 'bg-amber-400 dark:bg-warning',
+  2: 'bg-amber-400 dark:bg-warning',
+  3: 'bg-emerald-400 dark:bg-success',
+  4: 'bg-success dark:bg-emerald-400',
 }
 
 export function StockBar({ current, max, min, size = 'md', className }: StockBarProps) {
@@ -54,7 +54,7 @@ export function StockBar({ current, max, min, size = 'md', className }: StockBar
           className={cn(
             'rounded-full transition-colors',
             DOT_CLASSES[size],
-            dot <= level ? LEVEL_COLORS[level] : 'bg-gray-200 dark:bg-gray-700',
+            dot <= level ? LEVEL_COLORS[level] : 'bg-muted',
           )}
           aria-hidden="true"
         />

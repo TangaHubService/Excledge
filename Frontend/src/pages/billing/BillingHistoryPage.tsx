@@ -60,7 +60,7 @@ const BillingHistoryPage = () => {
             case 'PENDING':
                 return <Clock className="h-4 w-4 text-yellow-500" />;
             case 'FAILED':
-                return <XCircle className="h-4 w-4 text-red-500" />;
+                return <XCircle className="h-4 w-4 text-danger" />;
             default:
                 return null;
         }
@@ -70,13 +70,13 @@ const BillingHistoryPage = () => {
     const getStatusColor = (status: string): string => {
         switch (status?.toUpperCase()) {
             case 'COMPLETED':
-                return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+                return 'bg-success/15 text-success dark:bg-success/30 dark:text-green-400';
             case 'PENDING':
-                return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-500';
+                return 'bg-warning/15 text-warning dark:bg-warning/30 dark:text-yellow-500';
             case 'FAILED':
-                return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-500';
+                return 'bg-danger/15 text-danger dark:bg-danger/30 dark:text-danger';
             default:
-                return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+                return 'bg-muted text-foreground';
         }
     };
 
@@ -150,7 +150,7 @@ const BillingHistoryPage = () => {
     // Error state
     if (error) {
         return (
-            <div className="p-4 bg-red-50 text-red-700 rounded-md flex items-center">
+            <div className="p-4 bg-danger/10 text-danger rounded-md flex items-center">
                 <AlertCircle className="h-5 w-5 mr-2" />
                 <span>{error}</span>
             </div>
@@ -195,17 +195,17 @@ const BillingHistoryPage = () => {
                             </TableHeader>
                             <TableBody>
                                 {payments.filter(Boolean).map((payment) => (
-                                    <TableRow key={payment.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition border-b border-gray-100 dark:border-gray-700">
-                                        <TableCell className="font-medium text-gray-900 dark:text-gray-200">
+                                    <TableRow key={payment.id} className="hover:bg-muted transition border-b border-border">
+                                        <TableCell className="font-medium text-foreground">
                                             {format(new Date(payment.createdAt), 'MMM d, yyyy')}
                                         </TableCell>
-                                        <TableCell className="text-gray-700 dark:text-gray-300">
+                                        <TableCell className="text-foreground">
                                             {payment.subscription?.plan?.name || t('billing.subscriptionPayment')}
                                         </TableCell>
-                                        <TableCell className="text-gray-600 dark:text-gray-400">
+                                        <TableCell className="text-muted-foreground">
                                             {payment.metadata?.payment_method || payment.paymentMethod || '—'}
                                         </TableCell>
-                                        <TableCell className="font-semibold text-gray-900 dark:text-gray-100">
+                                        <TableCell className="font-semibold text-foreground">
                                             {formatCurrency(payment.amount, payment.currency)}
                                             {payment.metadata?.fee && (
                                                 <span className="text-xs text-muted-foreground block">
@@ -227,7 +227,7 @@ const BillingHistoryPage = () => {
                                                 size="sm"
                                                 onClick={() => handleDownloadInvoice(payment)}
                                                 disabled={isDownloading === payment.id}
-                                                className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-blue-600 dark:hover:text-blue-400"
+                                                className="h-8 w-8 p-0 hover:bg-muted hover:text-primary"
                                             >
                                                 {isDownloading === payment.id ? (
                                                     <Loader2 className="h-4 w-4 animate-spin" />

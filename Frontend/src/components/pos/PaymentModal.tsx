@@ -142,43 +142,43 @@ export function PaymentModal({
     >
       {/* Panel */}
       <div
-        className="relative flex flex-col bg-white h-full w-full max-w-[420px] shadow-2xl overflow-y-auto"
+        className="relative flex flex-col bg-card h-full w-full max-w-[420px] shadow-2xl overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
 
         {/* ── Header ────────────────────────────────────────────── */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4">
-          <h2 className="text-lg font-bold text-gray-900">Process Payment</h2>
+          <h2 className="text-lg font-bold text-foreground">Process Payment</h2>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            className="p-1.5 rounded-full text-muted-foreground hover:text-muted-foreground hover:bg-muted transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* ── Total / Paid / Remaining bar ──────────────────────── */}
-        <div className="mx-6 mb-6 grid grid-cols-3 divide-x divide-gray-100 rounded-2xl border border-gray-100 bg-gray-50 overflow-hidden">
+        <div className="mx-6 mb-6 grid grid-cols-3 divide-x divide-border rounded-2xl border border-border bg-surface-subtle overflow-hidden">
           <div className="flex flex-col items-center py-4 px-2">
-            <p className="text-[11px] font-medium text-gray-400 mb-1">Total</p>
-            <p className="text-base font-bold text-gray-900 tabular-nums">
+            <p className="text-[11px] font-medium text-muted-foreground mb-1">Total</p>
+            <p className="text-base font-bold text-foreground tabular-nums">
               {totalAmount.toLocaleString()}
-              <span className="ml-1 text-xs font-normal text-gray-400">RWF</span>
+              <span className="ml-1 text-xs font-normal text-muted-foreground">RWF</span>
             </p>
           </div>
           <div className="flex flex-col items-center py-4 px-2">
-            <p className="text-[11px] font-medium text-gray-400 mb-1">Paid</p>
-            <p className="text-base font-bold text-emerald-600 tabular-nums">
+            <p className="text-[11px] font-medium text-muted-foreground mb-1">Paid</p>
+            <p className="text-base font-bold text-success tabular-nums">
               {totalPaid.toLocaleString()}
-              <span className="ml-1 text-xs font-normal text-gray-400">RWF</span>
+              <span className="ml-1 text-xs font-normal text-muted-foreground">RWF</span>
             </p>
           </div>
           <div className="flex flex-col items-center py-4 px-2">
-            <p className="text-[11px] font-medium text-gray-400 mb-1">Remaining</p>
-            <p className={`text-base font-bold tabular-nums ${remaining > 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
+            <p className="text-[11px] font-medium text-muted-foreground mb-1">Remaining</p>
+            <p className={`text-base font-bold tabular-nums ${remaining > 0 ? 'text-danger' : 'text-success'}`}>
               {remaining.toLocaleString()}
-              <span className="ml-1 text-xs font-normal text-gray-400">RWF</span>
+              <span className="ml-1 text-xs font-normal text-muted-foreground">RWF</span>
             </p>
           </div>
         </div>
@@ -195,8 +195,8 @@ export function PaymentModal({
                   onClick={() => setCurrentIndex(idx)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
                     idx === currentIndex
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-gray-100 text-gray-600 border-gray-200 hover:border-blue-300'
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-muted text-muted-foreground border-border hover:border-primary/30'
                   }`}
                 >
                   {M && <M.icon className="h-3 w-3" />}
@@ -218,7 +218,7 @@ export function PaymentModal({
 
         {/* ── Payment Method label ──────────────────────────────── */}
         <div className="px-6 mb-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             Payment Method {payments.length > 1 ? `(${currentIndex + 1}/${payments.length})` : ''}
           </p>
         </div>
@@ -234,11 +234,11 @@ export function PaymentModal({
                 onClick={() => selectMethod(m.value)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
                   selected
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:bg-blue-50/50'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border bg-card text-muted-foreground hover:border-primary/30 hover:bg-primary/50'
                 }`}
               >
-                <span className={`p-1.5 rounded-lg ${selected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                <span className={`p-1.5 rounded-lg ${selected ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
                   <m.icon className="h-4 w-4" />
                 </span>
                 {m.label}
@@ -255,11 +255,11 @@ export function PaymentModal({
                 onClick={() => selectMethod(m.value)}
                 className={`col-span-2 flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
                   selected
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:bg-blue-50/50'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border bg-card text-muted-foreground hover:border-primary/30 hover:bg-primary/50'
                 }`}
               >
-                <span className={`p-1.5 rounded-lg ${selected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                <span className={`p-1.5 rounded-lg ${selected ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
                   <m.icon className="h-4 w-4" />
                 </span>
                 {m.label}
@@ -270,7 +270,7 @@ export function PaymentModal({
 
         {/* ── Amount input ──────────────────────────────────────── */}
         <div className="px-6 mb-4">
-          <label className="block text-xs font-semibold text-gray-500 mb-2">
+          <label className="block text-xs font-semibold text-muted-foreground mb-2">
             Amount ({PAYMENT_METHODS.find(m => m.value === current?.method)?.label ?? 'Cash'})
           </label>
           <div className="relative">
@@ -280,10 +280,10 @@ export function PaymentModal({
               value={current?.amount || ''}
               onChange={e => setAmount(parseFloat(e.target.value) || 0)}
               placeholder="0"
-              className="w-full h-12 pl-4 pr-16 rounded-xl border-2 border-gray-200 text-gray-900 text-sm font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-white"
+              className="w-full h-12 pl-4 pr-16 rounded-xl border-2 border-border text-foreground text-sm font-bold focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring/20 transition-all bg-card"
               autoFocus
             />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400">
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
               RWF
             </span>
           </div>
@@ -295,14 +295,14 @@ export function PaymentModal({
               value={current?.reference || ''}
               onChange={e => update(currentIndex, 'reference', e.target.value)}
               placeholder={t('pos.referencePlaceholder') || 'Transaction reference (optional)'}
-              className="mt-2 w-full h-10 px-4 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-blue-400 transition-all bg-gray-50"
+              className="mt-2 w-full h-10 px-4 rounded-xl border border-border text-sm text-foreground focus:outline-none focus:border-primary transition-all bg-surface-subtle"
             />
           )}
         </div>
 
         {/* ── Quick Amounts ─────────────────────────────────────── */}
         <div className="px-6 mb-4">
-          <p className="text-xs font-semibold text-gray-500 mb-2">Quick Amounts</p>
+          <p className="text-xs font-semibold text-muted-foreground mb-2">Quick Amounts</p>
           <div className="flex flex-wrap gap-2">
             {quickAmounts.map(amt => (
               <button
@@ -311,8 +311,8 @@ export function PaymentModal({
                 onClick={() => setAmount(amt)}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
                   current?.amount === amt
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/30'
-                    : 'bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:text-blue-600'
+                    ? 'bg-primary text-white border-primary shadow-sm shadow-blue-500/30'
+                    : 'bg-card text-foreground border-border hover:border-primary hover:text-primary'
                 }`}
               >
                 {amt.toLocaleString()}
@@ -327,7 +327,7 @@ export function PaymentModal({
             type="button"
             onClick={addPaymentMethod}
             disabled={totalPaid >= totalAmount}
-            className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <Plus className="h-4 w-4" />
             Add Another Payment Method
@@ -335,9 +335,9 @@ export function PaymentModal({
         </div>
 
         {/* ── Remaining pill ────────────────────────────────────── */}
-        <div className="mx-6 mb-6 flex items-center justify-between px-5 py-3.5 rounded-xl bg-indigo-50 border border-indigo-100">
+        <div className="mx-6 mb-6 flex items-center justify-between px-5 py-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/25">
           <span className="text-sm font-semibold text-indigo-700">Remaining</span>
-          <span className={`text-base font-extrabold tabular-nums ${remaining > 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
+          <span className={`text-base font-extrabold tabular-nums ${remaining > 0 ? 'text-danger' : 'text-success'}`}>
             {remaining.toLocaleString()} RWF
           </span>
         </div>
@@ -349,7 +349,7 @@ export function PaymentModal({
               type="button"
               onClick={onClose}
               disabled={isProcessing}
-              className="flex-1 h-11 rounded-xl border-2 border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              className="flex-1 h-11 rounded-xl border-2 border-border text-sm font-semibold text-foreground hover:bg-muted transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
@@ -357,7 +357,7 @@ export function PaymentModal({
               type="button"
               onClick={handleProcess}
               disabled={isProcessing || totalPaid <= 0}
-              className="flex-1 h-11 flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-all shadow-md shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 h-11 flex items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary/90 text-white text-sm font-bold transition-all shadow-md shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isProcessing ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Processing…</>
@@ -368,7 +368,7 @@ export function PaymentModal({
           </div>
 
           {/* Secure note */}
-          <div className="flex items-center justify-center gap-1.5 text-[11px] text-gray-400">
+          <div className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
             <Lock className="h-3 w-3" />
             Payments are secure and encrypted
           </div>

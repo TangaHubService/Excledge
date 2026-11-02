@@ -311,9 +311,9 @@ function DailyReportCard() {
             {report.reportType === "Z" && (
               <div className="md:col-span-2 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs">
                 {report.vsdcConfirmation?.checked && !report.vsdcConfirmation.error ? (
-                  <><CheckCircle2 className="size-4 text-emerald-600" /> VSDC confirmed the Z-report for {report.vsdcConfirmation.rptDe}.</>
+                  <><CheckCircle2 className="size-4 text-success" /> VSDC confirmed the Z-report for {report.vsdcConfirmation.rptDe}.</>
                 ) : (
-                  <><AlertTriangle className="size-4 text-amber-600" /> {report.vsdcConfirmation?.error ?? "VSDC confirmation not available."}</>
+                  <><AlertTriangle className="size-4 text-warning" /> {report.vsdcConfirmation?.error ?? "VSDC confirmation not available."}</>
                 )}
               </div>
             )}
@@ -534,7 +534,7 @@ function ElectronicJournalCard() {
                   <TableCell className="font-mono text-xs">{e.invoiceNumber ?? e.ebmInvoiceNumber ?? "—"}</TableCell>
                   <TableCell>{e.rcptLabel ?? "NS"}</TableCell>
                   <TableCell className="text-right tabular-nums">{e.sdcRcptNo ?? "—"} / {e.totalRcptNo ?? "—"}</TableCell>
-                  <TableCell className="text-center">{e.ejSent ? <CheckCircle2 className="mx-auto size-4 text-emerald-600" /> : <AlertTriangle className="mx-auto size-4 text-amber-600" />}</TableCell>
+                  <TableCell className="text-center">{e.ejSent ? <CheckCircle2 className="mx-auto size-4 text-success" /> : <AlertTriangle className="mx-auto size-4 text-warning" />}</TableCell>
                   <TableCell className="text-right"><ChevronRight className="size-4 text-muted-foreground" /></TableCell>
                 </TableRow>
               ))}
@@ -572,7 +572,7 @@ function ElectronicJournalCard() {
                     <span>VAT</span><span className="tabular-nums">{money(selected.detail.slip?.vatAmount)}</span>
                   </div>
                 </div>
-                <div className={`mt-2 flex items-center gap-2 rounded-md px-3 py-2 text-xs ${selected.detail.checks?.journalTotalMatchesSlip ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400" : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"}`}>
+                <div className={`mt-2 flex items-center gap-2 rounded-md px-3 py-2 text-xs ${selected.detail.checks?.journalTotalMatchesSlip ? "bg-success/10 text-success dark:bg-success/40 dark:text-emerald-400" : "bg-warning/10 text-warning dark:bg-warning/40 dark:text-amber-400"}`}>
                   {selected.detail.checks?.journalTotalMatchesSlip
                     ? <><CheckCircle2 className="size-4" /> Journal total matches the printed slip.</>
                     : <><AlertTriangle className="size-4" /> Could not confirm the journal total against the slip.</>}
@@ -735,7 +735,7 @@ function MasterDataCard() {
               <b className="text-foreground">{diff.rraOnly.length}</b> at RRA only
             </p>
             {diff.localOnly.length + diff.mismatched.length + diff.rraOnly.length === 0 ? (
-              <p className="rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+              <p className="rounded-md bg-success/10 px-3 py-2 text-xs text-success dark:bg-success/40 dark:text-emerald-400">
                 Everything is in sync with RRA.
               </p>
             ) : (
@@ -755,7 +755,7 @@ function MasterDataCard() {
                         <TableCell>{it.name}</TableCell>
                         <TableCell className="font-mono text-xs">{it.itemCd ?? "—"}</TableCell>
                         <TableCell>
-                          <span className={it.ebmSyncStatus === "FAILED" ? "text-red-600" : "text-amber-600"}>
+                          <span className={it.ebmSyncStatus === "FAILED" ? "text-danger" : "text-warning"}>
                             {it.ebmSyncStatus === "FAILED" ? "Sync failed" : "Not at RRA"}
                           </span>
                         </TableCell>
@@ -770,7 +770,7 @@ function MasterDataCard() {
                       <TableRow key={`m-${m.productId}-${m.field}-${i}`}>
                         <TableCell>{m.productName}</TableCell>
                         <TableCell className="font-mono text-xs">{m.itemCd}</TableCell>
-                        <TableCell className="text-amber-600">
+                        <TableCell className="text-warning">
                           {m.field}: <span className="font-mono">{String(m.local ?? "—")}</span> → RRA <span className="font-mono">{String(m.rra ?? "—")}</span>
                         </TableCell>
                         <TableCell className="text-right">
@@ -812,7 +812,7 @@ function MasterDataCard() {
                 <div key={n.id} className={`flex items-start justify-between gap-3 p-3 text-sm ${n.readAt ? "" : "bg-muted/40"}`}>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      {!n.readAt && <span className="size-2 shrink-0 rounded-full bg-blue-600" />}
+                      {!n.readAt && <span className="size-2 shrink-0 rounded-full bg-primary" />}
                       <span className="font-medium">#{n.noticeNo} — {n.title ?? "(untitled)"}</span>
                     </div>
                     {n.cont && <p className="mt-0.5 line-clamp-2 text-muted-foreground">{n.cont}</p>}
@@ -820,7 +820,7 @@ function MasterDataCard() {
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {n.dtlUrl && (
-                      <a href={n.dtlUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">Open</a>
+                      <a href={n.dtlUrl} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Open</a>
                     )}
                     {!n.readAt && (
                       <button type="button" onClick={() => markRead(n.noticeNo)} className="text-xs text-muted-foreground hover:text-foreground">Mark read</button>
@@ -961,20 +961,20 @@ function StockSyncCard() {
           </Button>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span title="Inventory ledger rows waiting to be sent to VSDC">
-              <b className="text-amber-600 tabular-nums">{sc.PENDING ?? 0}</b> pending sync
+              <b className="text-warning tabular-nums">{sc.PENDING ?? 0}</b> pending sync
             </span>
-            <span><b className="text-emerald-600 tabular-nums">{sc.SYNCED ?? 0}</b> synced</span>
-            <span><b className="text-amber-600 tabular-nums">{sc.FAILED ?? 0}</b> failed</span>
+            <span><b className="text-success tabular-nums">{sc.SYNCED ?? 0}</b> synced</span>
+            <span><b className="text-warning tabular-nums">{sc.FAILED ?? 0}</b> failed</span>
           </div>
         </div>
 
         {(sc.PENDING ?? 0) > 0 ? (
           <div className="space-y-2">
-            <div className="text-sm font-medium text-amber-800 dark:text-amber-300">
+            <div className="text-sm font-medium text-warning dark:text-amber-300">
               Pending stock sync ({sc.PENDING}) — SALE rows wait until their invoice is fiscalized; other rows send when you press “Sync stock now”
             </div>
             {(stock?.pending?.length ?? 0) > 0 ? (
-              <div className="overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-900/50">
+              <div className="overflow-x-auto rounded-lg border border-warning/30 dark:border-amber-900/50">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1002,7 +1002,7 @@ function StockSyncCard() {
                         <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
                           {new Date(row.createdAt).toLocaleString()}
                         </TableCell>
-                        <TableCell className="max-w-[18rem] text-sm text-amber-700 dark:text-amber-400">
+                        <TableCell className="max-w-[18rem] text-sm text-warning dark:text-amber-400">
                           {stockPendingReason(row)}
                         </TableCell>
                       </TableRow>
@@ -1011,7 +1011,7 @@ function StockSyncCard() {
                 </Table>
               </div>
             ) : (
-              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-400">
+              <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning dark:border-amber-900/50 dark:bg-warning/30 dark:text-amber-400">
                 {sc.PENDING} ledger row(s) are PENDING, but details could not be loaded. Refresh the page or press “Sync stock now”.
               </p>
             )}
@@ -1019,7 +1019,7 @@ function StockSyncCard() {
         ) : null}
 
         {stock?.failures?.length ? (
-          <div className="max-h-48 space-y-1 overflow-auto rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+          <div className="max-h-48 space-y-1 overflow-auto rounded-md bg-warning/10 px-3 py-2 text-xs text-warning dark:bg-warning/40 dark:text-amber-400">
             <div className="font-medium">Stock movements RRA rejected ({sc.FAILED ?? stock.failures.length}) — fix the cause, then press “Sync stock now”:</div>
             {stock.failures.map((f) => (
               <div key={f.id}>
@@ -1239,7 +1239,7 @@ function ImportDeclarationsCard() {
               </SelectContent>
             </Select>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm text-sky-950">
+          <div className="inline-flex items-center gap-2 rounded-md border border-sky-500/25 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-950">
             <span className="text-xs font-semibold uppercase tracking-wide text-sky-700">Last request</span>
             <span className="font-mono font-semibold tabular-nums">
               {lastReq ? formatLastReqDt(lastReq) : "—"}
@@ -1249,7 +1249,7 @@ function ImportDeclarationsCard() {
             Showing <b className="text-foreground tabular-nums">{imports.length}</b>
             {statusFilter !== "ALL" ? ` ${statusFilter.toLowerCase()}` : ""} line(s)
             {pendingCount > 0 && statusFilter !== "PENDING" ? (
-              <> · <b className="text-amber-600 tabular-nums">{pendingCount}</b> pending overall</>
+              <> · <b className="text-warning tabular-nums">{pendingCount}</b> pending overall</>
             ) : null}
           </div>
         </div>
@@ -1307,7 +1307,7 @@ function ImportDeclarationsCard() {
                       </span>
                     </TableCell>
                     <TableCell className="overflow-hidden">
-                      <span className={im.status === "APPROVED" ? "text-emerald-600" : im.status === "REJECTED" ? "text-muted-foreground" : "text-amber-600"}>
+                      <span className={im.status === "APPROVED" ? "text-success" : im.status === "REJECTED" ? "text-muted-foreground" : "text-warning"}>
                         {im.status}
                       </span>
                     </TableCell>
@@ -1374,7 +1374,7 @@ function ImportDeclarationsCard() {
               {action.kind === "approve" && (
                 <>
                   {!action.line.hsCd?.trim() && (
-                    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-400">
+                    <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning dark:border-amber-900/50 dark:bg-warning/30 dark:text-amber-400">
                       This line has no HS code from RRA. Approval is blocked until RRA supplies one.
                     </p>
                   )}
@@ -1520,8 +1520,8 @@ function PurchasesImportDetailReportCard() {
             {importation?.summary && (
               <>
                 <span><b className="text-foreground tabular-nums">{importation.summary.lines ?? 0}</b> import lines</span>
-                <span className="text-amber-600"><b className="tabular-nums">{importation.summary.PENDING ?? 0}</b> pending</span>
-                <span className="text-emerald-600"><b className="tabular-nums">{importation.summary.APPROVED ?? 0}</b> approved</span>
+                <span className="text-warning"><b className="tabular-nums">{importation.summary.PENDING ?? 0}</b> pending</span>
+                <span className="text-success"><b className="tabular-nums">{importation.summary.APPROVED ?? 0}</b> approved</span>
               </>
             )}
           </div>
@@ -1586,7 +1586,7 @@ function PurchasesImportDetailReportCard() {
                     <TableCell className="font-mono text-xs">{i.hsCd ?? "—"}</TableCell>
                     <TableCell className="text-right tabular-nums">{i.qty != null ? Number(i.qty) : "—"}</TableCell>
                     <TableCell>
-                      <span className={i.status === "APPROVED" ? "text-emerald-600" : i.status === "REJECTED" ? "text-muted-foreground" : "text-amber-600"}>{i.status}</span>
+                      <span className={i.status === "APPROVED" ? "text-success" : i.status === "REJECTED" ? "text-muted-foreground" : "text-warning"}>{i.status}</span>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1786,9 +1786,9 @@ export function FiscalReportsPage() {
   };
 
   return (
-    <div className="space-y-5 p-4 md:p-6">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-h1 font-semibold">Fiscal reports</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Fiscal reports</h1>
         <p className="text-body-sm text-muted-foreground">
           RRA CIS/VSDC daily X/Z reports, the PLU report, the electronic journal, RRA master data, stock sync, and import declarations. B2B purchases live under Purchases in the sidebar.
         </p>
@@ -1801,7 +1801,7 @@ export function FiscalReportsPage() {
               <TabsTrigger key={value} value={value} className="flex-none gap-1.5 px-3 py-1.5">
                 <Icon className="size-4" />
                 {label}
-                {dotFor(value) && <span className="ml-0.5 size-1.5 rounded-full bg-blue-600" aria-hidden="true" />}
+                {dotFor(value) && <span className="ml-0.5 size-1.5 rounded-full bg-primary" aria-hidden="true" />}
               </TabsTrigger>
             ))}
           </TabsList>

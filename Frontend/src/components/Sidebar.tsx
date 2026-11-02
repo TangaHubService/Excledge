@@ -220,6 +220,21 @@ function resolveNavigation(
   return settings ? filterNavBySettings(roleFiltered, settings) : roleFiltered;
 }
 
+/** Monogram tile used when an organization has no uploaded logo. */
+function OrgMark({ name }: { name: string }) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(w => w[0]?.toUpperCase())
+    .join("");
+  return (
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-400 to-blue-600 text-[0.8125rem] font-semibold text-white shadow-sm ring-1 ring-white/20">
+      {initials || "•"}
+    </div>
+  );
+}
+
 /* ─── Component ─────────────────────────────────────── */
 
 export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
@@ -413,14 +428,12 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
             className={cn(
               "dashboard-nav-item w-full",
               isCollapsed ? "justify-center px-2" : "justify-between px-3",
-              isActive
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-200 hover:bg-white/10 hover:text-white",
+              isActive ? "dashboard-nav-item-active" : "dashboard-nav-item-idle",
             )}
             title={isCollapsed ? t(item.name) : undefined}
           >
             <span className={cn("flex min-w-0 items-center gap-3", !isCollapsed && "flex-1")}>
-              {item.icon && <item.icon className="h-5 w-5 shrink-0" />}
+              {item.icon && <item.icon className="h-[18px] w-[18px] shrink-0" />}
               {!isCollapsed && <span className="truncate text-left">{t(item.name)}</span>}
             </span>
             {!isCollapsed &&
@@ -437,13 +450,11 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
             className={cn(
               "dashboard-nav-item",
               isCollapsed ? "justify-center px-2" : "px-3",
-              isActive
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-200 hover:bg-white/10 hover:text-white",
+              isActive ? "dashboard-nav-item-active" : "dashboard-nav-item-idle",
             )}
             title={isCollapsed ? t(item.name) : undefined}
           >
-            {item.icon && <item.icon className="h-5 w-5 shrink-0" />}
+            {item.icon && <item.icon className="h-[18px] w-[18px] shrink-0" />}
             {!isCollapsed && t(item.name)}
           </Link>
         )}
@@ -457,10 +468,10 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
                 to={sub.href}
                 onClick={onClose}
                 className={cn(
-                  "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                  "flex items-center gap-2 rounded-lg px-3 py-1.5 text-[0.8125rem] transition-colors",
                   isActiveRoute(sub.href)
-                    ? "bg-white/15 font-medium text-white"
-                    : "text-slate-300 hover:bg-white/10 hover:text-white",
+                    ? "bg-white/[0.09] font-medium text-white"
+                    : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
                 )}
               >
                 <sub.icon className="h-4 w-4 shrink-0" />
@@ -494,7 +505,7 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
         )}
       >
         {/* ── Logo / Organization area ───────────────── */}
-        <div className="flex h-14 shrink-0 items-center border-b border-white/15 px-3 lg:px-4">
+        <div className="flex h-14 shrink-0 items-center border-b border-white/[0.08] px-3">
           {organization ? (
             isSystemOwner() ? (
               <Link
@@ -506,12 +517,10 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
                   <img
                     src={organization.avatar}
                     alt={organization.name}
-                    className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-white/25"
+                    className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-white/15"
                   />
                 ) : (
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-800/90 ring-1 ring-white/15">
-                    <Package className="h-5 w-5 text-white" />
-                  </div>
+                  <OrgMark name={organization.name} />
                 )}
                 {!isCollapsed && (
                   <span className="truncate text-sm font-semibold text-white">{organization.name}</span>
@@ -529,17 +538,20 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
                       <img
                         src={organization.avatar}
                         alt={organization.name}
-                        className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-white/25"
+                        className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-white/15"
                       />
                     ) : (
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-800/90 ring-1 ring-white/15">
-                        <Package className="h-5 w-5 text-white" />
-                      </div>
+                      <OrgMark name={organization.name} />
                     )}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-white">{organization.name}</p>
+                    <div className="min-w-0 flex-1 leading-tight">
+                      <p className="truncate text-[0.8125rem] font-semibold text-white">{organization.name}</p>
+                      {organization.businessType && (
+                        <p className="truncate text-[0.6875rem] capitalize text-slate-400">
+                          {organization.businessType.toLowerCase().replace(/_/g, " ")}
+                        </p>
+                      )}
                     </div>
-                    <ChevronDown className="h-4 w-4 shrink-0 text-slate-300" />
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -581,12 +593,10 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
                   <img
                     src={organization.avatar}
                     alt={organization.name}
-                    className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-white/25"
+                    className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-white/15"
                   />
                 ) : (
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-800/90 ring-1 ring-white/15">
-                    <Package className="h-5 w-5 text-white" />
-                  </div>
+                  <OrgMark name={organization.name} />
                 )}
               </div>
             )
@@ -642,8 +652,10 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
                     type="button"
                     onClick={() => toggleGroup(block.header.id)}
                     className={cn(
-                      "flex w-full items-center justify-between gap-2 rounded-lg pb-1.5 pt-4 first:pt-0",
-                      isCollapsed ? "px-2" : "px-3",
+                      "group/sec flex w-full items-center justify-between gap-2 rounded-lg pb-1.5 pt-5",
+                      isCollapsed ? "px-2 pt-3" : "px-3",
+                      // Icon-only mode: a hairline stands in for the hidden section label.
+                      isCollapsed && "mb-2 border-b border-white/[0.08]",
                     )}
                     aria-expanded={!isGroupCollapsed}
                     aria-current={isGroupActive ? "true" : undefined}
@@ -666,11 +678,12 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
                             {t(block.header.name)}
                           </span>
                         </span>
-                        {isGroupCollapsed ? (
-                          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                        ) : (
-                          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                        )}
+                        <ChevronDown
+                          className={cn(
+                            "h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform duration-200 group-hover/sec:text-slate-300",
+                            isGroupCollapsed && "-rotate-90",
+                          )}
+                        />
                       </>
                     )}
                   </button>
@@ -704,17 +717,17 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
         )}
 
         {/* ── Logout ──────────────────────────────────── */}
-        <div className={cn("border-t border-white/15", isCollapsed ? "p-2" : "p-3")}>
+        <div className={cn("border-t border-white/[0.08]", isCollapsed ? "p-2" : "p-3")}>
           <button
             type="button"
             onClick={logout}
             className={cn(
-              "dashboard-nav-item w-full text-red-200 hover:bg-red-600/25 hover:text-white",
+              "dashboard-nav-item w-full text-slate-400 hover:bg-red-500/15 hover:text-red-200",
               isCollapsed ? "justify-center px-2" : "gap-3 px-3",
             )}
             title={isCollapsed ? t("auth.logout") : undefined}
           >
-            <LogOut className="h-5 w-5 shrink-0" />
+            <LogOut className="h-[18px] w-[18px] shrink-0" />
             {!isCollapsed && t("auth.logout")}
           </button>
         </div>

@@ -23,20 +23,20 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdat
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border-l-4 border-red-400 p-4">
+      <div className="bg-danger/10 border-l-4 border-red-400 p-4">
         <div className="flex">
           <div className="flex-shrink-0">
             <XCircle className="h-5 w-5 text-red-400" aria-hidden="true" />
           </div>
           <div className="ml-3">
-            <p className="text-sm text-red-700">{error}</p>
+            <p className="text-sm text-danger">{error}</p>
           </div>
         </div>
       </div>
@@ -55,21 +55,21 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdat
   const getStatusBadge = (status: string) => {
     const statusMap: { [key: string]: { color: string; icon: React.ReactNode } } = {
       COMPLETED: {
-        color: 'bg-green-100 text-green-800',
+        color: 'bg-success/15 text-success',
         icon: <CheckCircle className="h-4 w-4 mr-1" />,
       },
       PENDING: {
-        color: 'bg-yellow-100 text-yellow-800',
+        color: 'bg-warning/15 text-warning',
         icon: <Clock className="h-4 w-4 mr-1" />,
       },
       FAILED: {
-        color: 'bg-red-100 text-red-800',
+        color: 'bg-danger/15 text-danger',
         icon: <XCircle className="h-4 w-4 mr-1" />,
       },
     };
 
     const statusConfig = statusMap[status] || {
-      color: 'bg-gray-100 text-gray-800',
+      color: 'bg-muted text-foreground',
       icon: null,
     };
 
@@ -146,74 +146,74 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdat
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-900 dark:text-white">Payments</h2>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">View and manage payment history.</p>
+        <h2 className="text-lg font-medium text-foreground">Payments</h2>
+        <p className="mt-1 text-sm text-muted-foreground">View and manage payment history.</p>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg border border-gray-200 dark:border-gray-700">
+      <div className="bg-card shadow overflow-hidden sm:rounded-lg border border-border">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-900">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-surface-subtle">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   ID
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Organization
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Amount
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Date
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Paid On
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="divide-y divide-border">
               {payments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-4 text-gray-500 dark:text-gray-400">
+                  <td colSpan={7} className="text-center py-4 text-muted-foreground">
                     No payments found
                   </td>
                 </tr>
               ) : (
                 payments.map((payment) => (
-                  <tr key={payment.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                  <tr key={payment.id} className="hover:bg-muted">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                       #{payment.id}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
+                      <div className="text-sm font-medium text-foreground">
                         {payment.subscription?.organization?.name || 'N/A'}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900 dark:text-white font-medium">
+                      <div className="text-sm text-foreground font-medium">
                         {formatCurrency(payment.amount)}
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       {getStatusBadge(payment.status)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                    <td className="px-6 py-4 text-sm text-muted-foreground">
                       {new Date(payment.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                    <td className="px-6 py-4 text-sm text-muted-foreground">
                       {payment.processedAt || payment.metadata?.processedAt ? (
                         new Date(payment.processedAt || payment.metadata.processedAt).toLocaleDateString()
                       ) : payment.status === 'COMPLETED' ? (
                         new Date(payment.updatedAt).toLocaleDateString()
                       ) : (
-                        <span className="text-gray-400 dark:text-gray-500">Not paid</span>
+                        <span className="text-muted-foreground">Not paid</span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -221,7 +221,7 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdat
                         <button
                           onClick={() => handleDownloadInvoice(payment)}
                           disabled={downloadingId === payment.id}
-                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary disabled:opacity-50"
                           title="Download invoice"
                         >
                           {downloadingId === payment.id ? (
@@ -251,7 +251,7 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdat
                             <button
                               onClick={async () => { setUpdatingId(payment.id); await onUpdatePaymentStatus(payment.id, 'COMPLETED'); setUpdatingId(null); }}
                               disabled={updatingId === payment.id}
-                              className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 text-xs text-success hover:text-success dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50"
                               title="Mark as Paid"
                             >
                               <CheckCircle className="h-3.5 w-3.5" />
@@ -260,7 +260,7 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdat
                             <button
                               onClick={async () => { setUpdatingId(payment.id); await onUpdatePaymentStatus(payment.id, 'FAILED'); setUpdatingId(null); }}
                               disabled={updatingId === payment.id}
-                              className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 text-xs text-danger hover:text-danger dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
                               title="Mark as Failed"
                             >
                               <XCircle className="h-3.5 w-3.5" />
@@ -269,7 +269,7 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdat
                             <button
                               onClick={async () => { setUpdatingId(payment.id); await onUpdatePaymentStatus(payment.id, 'CANCELED'); setUpdatingId(null); }}
                               disabled={updatingId === payment.id}
-                              className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
                               title="Cancel"
                             >
                               <Ban className="h-3.5 w-3.5" />

@@ -18,7 +18,7 @@ export const InventoryTableSkeleton = () => {
       {/* Stats Cards Skeleton */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[1, 2, 3, 4].map((item) => (
-          <div key={item} className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+          <div key={item} className="bg-card rounded-lg p-4 shadow">
             <div className="flex items-center justify-between">
               <div>
                 <Skeleton className="h-5 w-24 mb-2" />
@@ -35,9 +35,9 @@ export const InventoryTableSkeleton = () => {
       </div>
 
       {/* Table Skeleton */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+      <div className="bg-card rounded-lg shadow overflow-hidden">
         {/* Table Header */}
-        <div className="grid grid-cols-12 gap-4 p-4 border-b dark:border-gray-700">
+        <div className="grid grid-cols-12 gap-4 p-4 border-b">
           {['Product', 'Category', 'Stock', 'Status', 'Price', 'Value', 'Actions'].map((_, i) => (
             <Skeleton 
               key={i} 
@@ -47,7 +47,7 @@ export const InventoryTableSkeleton = () => {
         </div>
         
         {/* Table Rows */}
-        <div className="divide-y dark:divide-gray-700">
+        <div className="divide-y">
           {[...Array(5)].map((_, rowIndex) => (
             <div key={rowIndex} className="grid grid-cols-12 gap-4 p-4 items-center">
               <div className="col-span-3 flex items-center space-x-3">
@@ -78,7 +78,7 @@ export const InventoryCardSkeleton = () => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       {[1, 2, 3, 4].map((item) => (
-        <div key={item} className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow">
+        <div key={item} className="bg-card rounded-lg p-6 shadow">
           <div className="flex items-center justify-between mb-4">
             <Skeleton className="h-6 w-24" />
             <Skeleton className="h-8 w-8 rounded-full" />

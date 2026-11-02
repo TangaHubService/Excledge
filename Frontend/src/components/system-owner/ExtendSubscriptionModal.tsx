@@ -39,18 +39,18 @@ const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+      <div className="relative bg-card rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          className="absolute top-4 right-4 text-muted-foreground hover:text-muted-foreground"
         >
           <X className="h-5 w-5" />
         </button>
 
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+        <h3 className="text-lg font-semibold text-foreground mb-2">
           Extend Subscription
         </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+        <p className="text-sm text-muted-foreground mb-6">
           {organizationName}
         </p>
 
@@ -61,8 +61,8 @@ const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = ({
               onClick={() => setMode('months')}
               className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                 mode === 'months'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  ? 'bg-primary text-white'
+                  : 'bg-muted text-foreground'
               }`}
             >
               Add Months
@@ -72,8 +72,8 @@ const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = ({
               onClick={() => setMode('date')}
               className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                 mode === 'date'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  ? 'bg-primary text-white'
+                  : 'bg-muted text-foreground'
               }`}
             >
               Set End Date
@@ -82,7 +82,7 @@ const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = ({
 
           {mode === 'months' ? (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground mb-1">
                 Months to Add
               </label>
               <input
@@ -90,19 +90,19 @@ const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = ({
                 min={1}
                 value={monthsToAdd}
                 onChange={(e) => setMonthsToAdd(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                className="w-full px-3 py-2 border border-border rounded-md shadow-sm focus:ring-ring focus:border-primary dark:text-white"
               />
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground mb-1">
                 New End Date
               </label>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                className="w-full px-3 py-2 border border-border rounded-md shadow-sm focus:ring-ring focus:border-primary dark:text-white"
                 required
               />
             </div>
@@ -112,14 +112,14 @@ const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
+              className="px-4 py-2 text-sm font-medium text-foreground bg-muted rounded-md hover:bg-muted"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting || (mode === 'date' && !endDate)}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary/90 disabled:opacity-50"
             >
               {submitting ? 'Extending...' : 'Extend'}
             </button>

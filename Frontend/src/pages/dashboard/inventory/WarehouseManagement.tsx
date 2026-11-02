@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
+import { PageHeader } from "../../../components/common/PageHeader";
 
 interface Warehouse {
   id: number;
@@ -159,35 +160,23 @@ export default function WarehouseManagement() {
   const defaultWarehouse = warehouses.find((w) => w.isDefault);
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
       {/* Page Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-700 via-gray-700 to-zinc-700 p-6 text-white shadow-lg">
-        <div className="pointer-events-none absolute inset-0 bg-black/10" />
-        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-              <WarehouseIcon className="h-7 w-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                {t('inventory.warehouseManagement') || 'Warehouse Management'}
-              </h1>
-              <p className="text-sm text-white/70 mt-0.5">
-                Manage your storage locations and warehouse settings
-              </p>
-            </div>
-          </div>
-          <Button
-            onClick={() => handleOpenDialog()}
-            className="gap-2 bg-white text-gray-800 hover:bg-white/90 font-semibold shadow-sm self-start sm:self-auto"
-          >
-            <Plus className="h-4 w-4" />
-            {t('inventory.addWarehouse') || 'Add Warehouse'}
-          </Button>
-        </div>
-        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-        <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
-      </div>
+      <PageHeader
+        title={t('inventory.warehouseManagement') || 'Warehouse Management'}
+        description={<>Manage your storage locations and warehouse settings</>}
+        actions={
+          <>
+            <Button
+              onClick={() => handleOpenDialog()}
+              className="gap-2 bg-card text-foreground hover:bg-card/90 font-semibold shadow-sm self-start sm:self-auto"
+            >
+              <Plus className="h-4 w-4" />
+              {t('inventory.addWarehouse') || 'Add Warehouse'}
+            </Button>
+          </>
+        }
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -196,38 +185,38 @@ export default function WarehouseManagement() {
             label: 'Total Warehouses',
             value: warehouses.length,
             icon: Building2,
-            light: 'bg-slate-50 dark:bg-slate-900/30',
-            text: 'text-slate-600 dark:text-slate-400',
+            light: 'bg-surface-subtle',
+            text: 'text-muted-foreground',
           },
           {
             label: 'Active',
             value: activeCount,
             icon: WarehouseIcon,
-            light: 'bg-emerald-50 dark:bg-emerald-900/20',
-            text: 'text-emerald-600 dark:text-emerald-400',
+            light: 'bg-success/10 dark:bg-success/20',
+            text: 'text-success dark:text-emerald-400',
           },
           {
             label: 'Default Warehouse',
             value: defaultWarehouse?.name ?? 'None set',
             icon: Star,
-            light: 'bg-amber-50 dark:bg-amber-900/20',
-            text: 'text-amber-600 dark:text-amber-400',
+            light: 'bg-warning/10 dark:bg-warning/20',
+            text: 'text-warning dark:text-amber-400',
             isText: true,
           },
         ].map(({ label, value, icon: Icon, light, text, isText }) => (
           <div
             key={label}
-            className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4"
+            className="bg-card rounded-xl border border-border shadow-sm p-4 flex items-center gap-4"
           >
             <div className={`flex h-11 w-11 items-center justify-center rounded-xl flex-shrink-0 ${light}`}>
               <Icon className={`h-5 w-5 ${text}`} />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+              <p className="text-xs font-medium text-muted-foreground">{label}</p>
               {isText ? (
-                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{value}</p>
+                <p className="text-sm font-semibold text-foreground truncate">{value}</p>
               ) : (
-                <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">{value}</p>
+                <p className="text-2xl font-bold text-foreground tabular-nums">{value}</p>
               )}
             </div>
           </div>
@@ -235,31 +224,31 @@ export default function WarehouseManagement() {
       </div>
 
       {/* Table Card */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-border">
+          <h2 className="text-base font-semibold text-foreground">
             {t('inventory.warehouses') || 'Warehouses'}
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             {warehouses.length} warehouse{warehouses.length !== 1 ? 's' : ''} configured
           </p>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : error ? (
-          <div className="text-center py-12 text-red-500">{error}</div>
+          <div className="text-center py-12 text-danger">{error}</div>
         ) : warehouses.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-20 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900/30">
-              <WarehouseIcon className="h-8 w-8 text-slate-400" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-subtle">
+              <WarehouseIcon className="h-8 w-8 text-muted-foreground" />
             </div>
-            <p className="text-base font-semibold text-gray-700 dark:text-gray-300">
+            <p className="text-base font-semibold text-foreground">
               No warehouses found
             </p>
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-muted-foreground">
               Create your first warehouse using the button above.
             </p>
           </div>
@@ -267,11 +256,11 @@ export default function WarehouseManagement() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-gray-50 dark:bg-gray-700/50">
+                <TableRow className="bg-surface-subtle">
                   {['Name', 'Code', 'Address', 'Status', 'Default', 'Actions'].map((h) => (
                     <TableHead
                       key={h}
-                      className="whitespace-nowrap text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                      className="whitespace-nowrap text-xs font-semibold text-muted-foreground uppercase tracking-wider"
                     >
                       {h}
                     </TableHead>
@@ -282,35 +271,35 @@ export default function WarehouseManagement() {
                 {warehouses.map((warehouse) => (
                   <TableRow
                     key={warehouse.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                    className="hover:bg-muted transition-colors"
                   >
                     <TableCell className="whitespace-nowrap">
                       <div className="flex items-center gap-2.5">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 flex-shrink-0">
-                          <WarehouseIcon className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted flex-shrink-0">
+                          <WarehouseIcon className="h-4 w-4 text-muted-foreground" />
                         </div>
-                        <span className="font-semibold text-sm text-gray-900 dark:text-white">
+                        <span className="font-semibold text-sm text-foreground">
                           {warehouse.name}
                         </span>
                       </div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {warehouse.code ? (
-                        <span className="font-mono text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded">
+                        <span className="font-mono text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded">
                           {warehouse.code}
                         </span>
                       ) : (
-                        <span className="text-gray-400">—</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                       {warehouse.address ? (
                         <span className="flex items-center gap-1.5">
-                          <MapPin className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                          <MapPin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                           {warehouse.address}
                         </span>
                       ) : (
-                        <span className="text-gray-400">—</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -325,8 +314,8 @@ export default function WarehouseManagement() {
                         <span
                           className={`text-xs font-medium ${
                             warehouse.isActive
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-gray-400'
+                              ? 'text-success dark:text-emerald-400'
+                              : 'text-muted-foreground'
                           }`}
                         >
                           {warehouse.isActive ? 'Active' : 'Inactive'}
@@ -335,7 +324,7 @@ export default function WarehouseManagement() {
                     </TableCell>
                     <TableCell>
                       {warehouse.isDefault && (
-                        <Badge className="border-transparent bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 gap-1">
+                        <Badge className="border-transparent bg-warning/15 text-warning dark:bg-warning/40 dark:text-amber-300 gap-1">
                           <Star className="h-3 w-3" />
                           Default
                         </Badge>
@@ -347,7 +336,7 @@ export default function WarehouseManagement() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleOpenDialog(warehouse)}
-                          className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
                           title="Edit"
                         >
                           <Edit className="h-4 w-4" />
@@ -356,7 +345,7 @@ export default function WarehouseManagement() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setWarehouseToDelete(warehouse)}
-                          className="h-8 w-8 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-danger hover:bg-danger/10 dark:hover:bg-danger/20"
                           title="Delete"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -374,7 +363,7 @@ export default function WarehouseManagement() {
       {/* Create/Edit Drawer */}
       <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DrawerContent className="sm:max-w-[500px]">
-          <DrawerHeader className="border-b border-gray-100 dark:border-gray-700 pb-4">
+          <DrawerHeader className="border-b border-border pb-4">
             <DrawerTitle className="text-lg font-semibold">
               {editingWarehouse ? 'Edit Warehouse' : 'Add Warehouse'}
             </DrawerTitle>
@@ -384,7 +373,7 @@ export default function WarehouseManagement() {
             <div className="space-y-4 p-6">
               <div className="space-y-2">
                 <Label htmlFor="wh-name">
-                  Name <span className="text-red-500">*</span>
+                  Name <span className="text-danger">*</span>
                 </Label>
                 <Input
                   id="wh-name"
@@ -398,7 +387,7 @@ export default function WarehouseManagement() {
               <div className="space-y-2">
                 <Label htmlFor="wh-code">
                   Code{' '}
-                  <span className="text-gray-400 text-xs">(optional)</span>
+                  <span className="text-muted-foreground text-xs">(optional)</span>
                 </Label>
                 <Input
                   id="wh-code"
@@ -411,7 +400,7 @@ export default function WarehouseManagement() {
               <div className="space-y-2">
                 <Label htmlFor="wh-address">
                   Address{' '}
-                  <span className="text-gray-400 text-xs">(optional)</span>
+                  <span className="text-muted-foreground text-xs">(optional)</span>
                 </Label>
                 <Input
                   id="wh-address"
@@ -434,7 +423,7 @@ export default function WarehouseManagement() {
               </div>
             </div>
 
-            <DrawerFooter className="border-t border-gray-100 dark:border-gray-700 flex-row gap-3">
+            <DrawerFooter className="border-t border-border flex-row gap-3">
               <Button
                 type="button"
                 variant="outline"

@@ -10,6 +10,7 @@ import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Textarea } from '../../../components/ui/textarea';
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, DrawerFooter } from '../../../components/ui/drawer';
+import { PageHeader } from "../../../components/common/PageHeader";
 
 interface CashFlowItem {
     date: string;
@@ -142,7 +143,7 @@ export const CashFlowReport = () => {
 
     const sortHeader = (label: string, key: string, align = '') => (
         <th
-            className={`py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer select-none ${align}`}
+            className={`py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer select-none ${align}`}
             aria-sort={sortBy === key ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
             onClick={() => {
                 setSortOrder(sortBy === key && sortOrder === 'asc' ? 'desc' : 'asc');
@@ -152,8 +153,8 @@ export const CashFlowReport = () => {
             <span className={`inline-flex items-center gap-1 ${align === 'text-right' ? 'justify-end w-full' : align === 'text-center' ? 'justify-center w-full' : ''}`}>
                 {label}
                 {sortBy !== key ? <ChevronsUpDown className="size-3 opacity-40" /> : sortOrder === 'asc'
-                    ? <ChevronUp className="size-3 text-blue-600" />
-                    : <ChevronDown className="size-3 text-blue-600" />}
+                    ? <ChevronUp className="size-3 text-primary" />
+                    : <ChevronDown className="size-3 text-primary" />}
             </span>
         </th>
     );
@@ -239,48 +240,38 @@ export const CashFlowReport = () => {
     };
 
     return (
-        <div className="space-y-6 p-4 md:p-6">
+        <div className="space-y-6">
             {/* Page Header */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 text-white shadow-lg">
-                <div className="pointer-events-none absolute inset-0 bg-black/10" />
-                <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-                            <Activity className="h-7 w-7 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold tracking-tight">{t('cashFlowReport.title') || 'Cash Flow Report'}</h1>
-                            <p className="text-sm text-white/70 mt-0.5">{t('cashFlowReport.description') || 'Track details of money entering and leaving your business'}</p>
-                        </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 shrink-0 self-start sm:self-auto">
-                        <Button
-                            onClick={() => setIsExpenseModalOpen(true)}
-                            className="bg-red-600 hover:bg-red-700 text-white shadow-sm font-semibold gap-2 border border-transparent"
-                        >
-                            <PlusCircle className="size-4" />
-                            {t('cashFlowReport.recordExpense')}
-                        </Button>
-                        <Button
-                            onClick={openPaymentModal}
-                            className="bg-white text-blue-700 hover:bg-white/90 shadow-sm font-semibold gap-2"
-                        >
-                            <Receipt className="size-4" />
-                            {t('cashFlowReport.recordSupplierPayment')}
-                        </Button>
-                    </div>
-                </div>
-                <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-                <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
-            </div>
+            <PageHeader
+              title={t('cashFlowReport.title') || 'Cash Flow Report'}
+              description={t('cashFlowReport.description') || 'Track details of money entering and leaving your business'}
+              actions={
+                <>
+                  <Button
+                      onClick={() => setIsExpenseModalOpen(true)}
+                      className="bg-danger hover:bg-danger/90 text-white shadow-sm font-semibold gap-2 border border-transparent"
+                  >
+                      <PlusCircle className="size-4" />
+                      {t('cashFlowReport.recordExpense')}
+                  </Button>
+                  <Button
+                      onClick={openPaymentModal}
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                      <Receipt className="size-4" />
+                      {t('cashFlowReport.recordSupplierPayment')}
+                  </Button>
+                </>
+              }
+            />
 
             {/* Balance Verification Alert */}
             {verification && !verification.balanced && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-5 py-4 flex items-center gap-4 shadow-xs">
-                    <AlertTriangle className="text-red-600 dark:text-red-400 shrink-0 size-5" />
+                <div className="bg-danger/10 dark:bg-danger/20 border border-danger/25 dark:border-red-800 rounded-xl px-5 py-4 flex items-center gap-4 shadow-xs">
+                    <AlertTriangle className="text-danger dark:text-red-400 shrink-0 size-5" />
                     <div className="min-w-0">
-                        <h3 className="text-red-800 dark:text-red-200 font-semibold text-sm">Balance Mismatch Detected!</h3>
-                        <p className="text-red-700 dark:text-red-300 text-xs leading-relaxed mt-0.5">
+                        <h3 className="text-danger dark:text-red-200 font-semibold text-sm">Balance Mismatch Detected!</h3>
+                        <p className="text-danger dark:text-red-300 text-xs leading-relaxed mt-0.5">
                             {verification.formula}: Calculated {formatCurrency(verification.calculated)} &middot; Actual {formatCurrency(verification.actual)}
                         </p>
                     </div>
@@ -288,11 +279,11 @@ export const CashFlowReport = () => {
             )}
 
             {verification && verification.balanced && (
-                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl px-5 py-4 flex items-center gap-4 shadow-xs">
-                    <CheckCircle className="text-green-600 dark:text-green-400 shrink-0 size-5" />
+                <div className="bg-success/10 dark:bg-success/20 border border-success/25 dark:border-green-800 rounded-xl px-5 py-4 flex items-center gap-4 shadow-xs">
+                    <CheckCircle className="text-success dark:text-green-400 shrink-0 size-5" />
                     <div className="min-w-0">
-                        <h3 className="text-green-800 dark:text-green-200 font-semibold text-sm">Balance Verified</h3>
-                        <p className="text-green-700 dark:text-green-300 text-xs leading-relaxed mt-0.5">
+                        <h3 className="text-success dark:text-green-200 font-semibold text-sm">Balance Verified</h3>
+                        <p className="text-success dark:text-green-300 text-xs leading-relaxed mt-0.5">
                             {verification.formula} = {formatCurrency(verification.calculated)}
                         </p>
                     </div>
@@ -300,32 +291,32 @@ export const CashFlowReport = () => {
             )}
 
             {/* Filters */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+            <div className="bg-card rounded-xl border border-border shadow-sm p-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('common.startDate')}</Label>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('common.startDate')}</Label>
                         <Input
                             type="date"
                             value={startDate}
                             onChange={(e) => setStartDate(e.target.value)}
-                            className="bg-white dark:bg-gray-850 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            className="bg-card dark:text-white focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('common.endDate')}</Label>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('common.endDate')}</Label>
                         <Input
                             type="date"
                             value={endDate}
                             onChange={(e) => setEndDate(e.target.value)}
-                            className="bg-white dark:bg-gray-850 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            className="bg-card dark:text-white focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payment Method</Label>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Payment Method</Label>
                         <select
                             value={transactionType}
                             onChange={(e) => setTransactionType(e.target.value)}
-                            className="h-9 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1 text-sm text-gray-900 dark:text-gray-100 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            className="h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
                         >
                             <option value="ALL">All Methods</option>
                             <option value="CASH">Cash</option>
@@ -334,11 +325,11 @@ export const CashFlowReport = () => {
                         </select>
                     </div>
                     <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Category</Label>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</Label>
                         <select
                             value={categoryFilter}
                             onChange={(e) => setCategoryFilter(e.target.value)}
-                            className="h-9 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1 text-sm text-gray-900 dark:text-gray-100 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            className="h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
                         >
                             <option value="ALL">All Categories</option>
                             <option value="Sales">Sales</option>
@@ -358,58 +349,58 @@ export const CashFlowReport = () => {
                         label: t('cashFlowReport.openingBalance'),
                         value: formatCurrency(summary.openingBalance),
                         icon: DollarSign,
-                        light: 'bg-purple-50 dark:bg-purple-900/20',
+                        light: 'bg-purple-500/10 dark:bg-purple-900/20',
                         text: 'text-purple-600 dark:text-purple-400',
                     },
                     {
                         label: t('cashFlowReport.totalInflows'),
                         value: formatCurrency(summary.totalInflows),
                         icon: TrendingUp,
-                        light: 'bg-green-50 dark:bg-green-900/20',
-                        text: 'text-green-600 dark:text-green-400',
+                        light: 'bg-success/10 dark:bg-success/20',
+                        text: 'text-success dark:text-green-400',
                     },
                     {
                         label: t('cashFlowReport.totalOutflows'),
                         value: formatCurrency(summary.totalOutflows),
                         icon: TrendingDown,
-                        light: 'bg-red-50 dark:bg-red-900/20',
-                        text: 'text-red-600 dark:text-red-400',
+                        light: 'bg-danger/10 dark:bg-danger/20',
+                        text: 'text-danger dark:text-red-400',
                     },
                     {
                         label: t('cashFlowReport.netCashFlow'),
                         value: formatCurrency(summary.netCashFlow),
                         icon: Activity,
-                        light: summary.netCashFlow >= 0 ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20',
-                        text: summary.netCashFlow >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
+                        light: summary.netCashFlow >= 0 ? 'bg-success/10 dark:bg-success/20' : 'bg-danger/10 dark:bg-danger/20',
+                        text: summary.netCashFlow >= 0 ? 'text-success dark:text-green-400' : 'text-danger dark:text-red-400',
                     },
                     {
                         label: t('cashFlowReport.closingBalance'),
                         value: formatCurrency(summary.closingBalance),
                         icon: DollarSign,
-                        light: 'bg-blue-50 dark:bg-blue-900/20',
-                        text: 'text-blue-600 dark:text-blue-400',
+                        light: 'bg-primary/10',
+                        text: 'text-primary',
                         ring: true
                     }
                 ].map(({ label, value, icon: Icon, light, text, ring }) => (
                     <div
                         key={label}
-                        className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4 ${ring ? 'ring-2 ring-blue-500/25' : ''}`}
+                        className={`bg-card rounded-xl border border-border shadow-sm p-4 flex items-center gap-4 ${ring ? 'ring-2 ring-ring/25' : ''}`}
                     >
                         <div className={`flex h-11 w-11 items-center justify-center rounded-xl flex-shrink-0 ${light}`}>
                             <Icon className={`h-5 w-5 ${text}`} />
                         </div>
                         <div>
-                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
-                            <p className="text-lg font-bold text-gray-900 dark:text-white truncate tabular-nums">{value}</p>
+                            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                            <p className="text-lg font-bold text-foreground truncate tabular-nums">{value}</p>
                         </div>
                     </div>
                 ))}
             </div>
 
             {/* Cash Flow Table */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-                    <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-border">
+                    <h2 className="text-base font-semibold text-foreground">
                         {t('cashFlowReport.transactionHistory') || 'Transaction History'}
                     </h2>
                 </div>
@@ -423,7 +414,7 @@ export const CashFlowReport = () => {
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead>
-                                    <tr className="border-b bg-gray-50/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-650 text-left">
+                                    <tr className="border-b bg-surface-subtle/50 border-border text-left">
                                         {sortHeader('Date', 'date')}
                                         {sortHeader('Description', 'description')}
                                         {sortHeader('Category', 'category')}
@@ -433,56 +424,56 @@ export const CashFlowReport = () => {
                                         {sortHeader('Balance', 'balance', 'text-right')}
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                    <tr className="bg-blue-50/20 dark:bg-blue-900/10">
-                                        <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white">{startDate}</td>
-                                        <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white" colSpan={4}>{t('cashFlowReport.openingBalance')}</td>
-                                        <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-white">
+                                <tbody className="divide-y divide-border">
+                                    <tr className="bg-primary/20">
+                                        <td className="py-3 px-4 font-semibold text-foreground">{startDate}</td>
+                                        <td className="py-3 px-4 font-semibold text-foreground" colSpan={4}>{t('cashFlowReport.openingBalance')}</td>
+                                        <td className="py-3 px-4 text-right font-bold text-foreground">
                                             {formatCurrency(summary.openingBalance)}
                                         </td>
-                                        <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-white">
+                                        <td className="py-3 px-4 text-right font-bold text-foreground">
                                             {formatCurrency(summary.openingBalance)}
                                         </td>
                                     </tr>
 
                                     {filteredTransactions.map((transaction, index) => (
-                                        <tr key={index} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
-                                            <td className="py-3 px-4 text-gray-500 dark:text-gray-400">{transaction.date}</td>
-                                            <td className="py-3 px-4 text-gray-900 dark:text-white font-medium">{transaction.description || '-'}</td>
-                                            <td className="py-3 px-4 text-gray-600 dark:text-gray-300">
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300">
+                                        <tr key={index} className="hover:bg-surface-subtle/50 transition-colors">
+                                            <td className="py-3 px-4 text-muted-foreground">{transaction.date}</td>
+                                            <td className="py-3 px-4 text-foreground font-medium">{transaction.description || '-'}</td>
+                                            <td className="py-3 px-4 text-muted-foreground">
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
                                                     {transaction.category || '-'}
                                                 </span>
                                             </td>
-                                            <td className="py-3 px-4 text-gray-500 dark:text-gray-450">{transaction.subcategory || '-'}</td>
+                                            <td className="py-3 px-4 text-muted-foreground">{transaction.subcategory || '-'}</td>
                                             <td className="py-3 px-4 text-center">
                                                 <span className={`px-2.5 py-0.5 text-xs rounded-full font-semibold ${transaction.type === 'INFLOW'
-                                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                    ? 'bg-success/15 text-success dark:bg-success/30 dark:text-green-400'
+                                                    : 'bg-danger/15 text-danger dark:bg-danger/30 dark:text-red-400'
                                                     }`}>
                                                     {transaction.type}
                                                 </span>
                                             </td>
                                             <td className={`py-3 px-4 text-right font-bold font-mono ${transaction.type === 'INFLOW'
-                                                ? 'text-green-600 dark:text-green-400'
-                                                : 'text-red-600 dark:text-red-400'
+                                                ? 'text-success dark:text-green-400'
+                                                : 'text-danger dark:text-red-400'
                                                 }`}>
                                                 {transaction.type === 'INFLOW' ? '+' : ''}{formatCurrency(Math.abs(transaction.amount))}
                                             </td>
-                                            <td className="py-3 px-4 text-right font-bold text-gray-800 dark:text-gray-300 font-mono text-xs">
+                                            <td className="py-3 px-4 text-right font-bold text-foreground font-mono text-xs">
                                                 {formatCurrency(transaction.balance)}
                                             </td>
                                         </tr>
                                     ))}
 
                                     {/* Closing Balance */}
-                                    <tr className="bg-blue-50/20 dark:bg-blue-900/10 border-t border-gray-200 dark:border-gray-700">
-                                        <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white">{endDate}</td>
-                                        <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white" colSpan={4}>{t('cashFlowReport.closingBalance')}</td>
-                                        <td className="py-3 px-4 text-right font-bold text-blue-600 dark:text-blue-400">
+                                    <tr className="bg-primary/20 border-t border-border">
+                                        <td className="py-3 px-4 font-semibold text-foreground">{endDate}</td>
+                                        <td className="py-3 px-4 font-semibold text-foreground" colSpan={4}>{t('cashFlowReport.closingBalance')}</td>
+                                        <td className="py-3 px-4 text-right font-bold text-primary">
                                             {formatCurrency(summary.closingBalance)}
                                         </td>
-                                        <td className="py-3 px-4 text-right font-bold text-blue-600 dark:text-blue-400 text-base">
+                                        <td className="py-3 px-4 text-right font-bold text-primary text-base">
                                             {formatCurrency(summary.closingBalance)}
                                         </td>
                                     </tr>
@@ -495,7 +486,7 @@ export const CashFlowReport = () => {
 
             {/* Add Expense Modal */}
             <Drawer open={isExpenseModalOpen} onOpenChange={setIsExpenseModalOpen}>
-                <DrawerContent className="sm:max-w-[500px] bg-white dark:bg-gray-900 dark:text-white">
+                <DrawerContent className="sm:max-w-[500px] bg-card dark:text-white">
                     <DrawerHeader>
                         <DrawerTitle>{t('expenses.addExpense')}</DrawerTitle>
                         <DrawerDescription>
@@ -510,10 +501,10 @@ export const CashFlowReport = () => {
                                     value={expenseForm.category}
                                     onValueChange={(v) => setExpenseForm({ ...expenseForm, category: v })}
                                 >
-                                    <SelectTrigger className="bg-white dark:bg-gray-800">
+                                    <SelectTrigger className="bg-card">
                                         <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-white dark:bg-gray-800 border dark:border-gray-700">
+                                    <SelectContent className="bg-card border">
                                         <SelectItem value="SALARIES">{t('expenses.categories.SALARIES')}</SelectItem>
                                         <SelectItem value="RENT">{t('expenses.categories.RENT')}</SelectItem>
                                         <SelectItem value="UTILITIES">{t('expenses.categories.UTILITIES')}</SelectItem>
@@ -530,7 +521,7 @@ export const CashFlowReport = () => {
                                         value={expenseForm.otherCategory}
                                         onChange={(e) => setExpenseForm({ ...expenseForm, otherCategory: e.target.value })}
                                         placeholder={t('expenses.specifyCategory')}
-                                        className="bg-white dark:bg-gray-800 mt-2"
+                                        className="bg-card mt-2"
                                     />
                                 )}
                             </div>
@@ -543,7 +534,7 @@ export const CashFlowReport = () => {
                                     value={expenseForm.amount}
                                     onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
                                     placeholder="0"
-                                    className="bg-white dark:bg-gray-800"
+                                    className="bg-card"
                                 />
                             </div>
                         </div>
@@ -555,10 +546,10 @@ export const CashFlowReport = () => {
                                     value={expenseForm.paymentMethod}
                                     onValueChange={(v) => setExpenseForm({ ...expenseForm, paymentMethod: v })}
                                 >
-                                    <SelectTrigger className="bg-white dark:bg-gray-800">
+                                    <SelectTrigger className="bg-card">
                                         <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-white dark:bg-gray-800 border dark:border-gray-700">
+                                    <SelectContent className="bg-card border">
                                         <SelectItem value="CASH">{t('pos.paymentMethods.CASH')}</SelectItem>
                                         <SelectItem value="MOBILE_MONEY">{t('pos.paymentMethods.MOBILE_MONEY')}</SelectItem>
                                         <SelectItem value="BANK">Bank Transfer</SelectItem>
@@ -574,7 +565,7 @@ export const CashFlowReport = () => {
                                     required
                                     value={expenseForm.expenseDate}
                                     onChange={(e) => setExpenseForm({ ...expenseForm, expenseDate: e.target.value })}
-                                    className="bg-white dark:bg-gray-800"
+                                    className="bg-card"
                                 />
                             </div>
                         </div>
@@ -587,7 +578,7 @@ export const CashFlowReport = () => {
                                 value={expenseForm.description}
                                 onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
                                 placeholder="What was this for?"
-                                className="bg-white dark:bg-gray-800"
+                                className="bg-card"
                             />
                         </div>
 
@@ -598,7 +589,7 @@ export const CashFlowReport = () => {
                                 value={expenseForm.reference}
                                 onChange={(e) => setExpenseForm({ ...expenseForm, reference: e.target.value })}
                                 placeholder="Invoice or Receipt #"
-                                className="bg-white dark:bg-gray-800"
+                                className="bg-card"
                             />
                         </div>
 
@@ -606,7 +597,7 @@ export const CashFlowReport = () => {
                             <Button type="button" variant="outline" onClick={() => setIsExpenseModalOpen(false)}>
                                 {t('common.cancel')}
                             </Button>
-                            <Button type="submit" disabled={isSubmitting} className="bg-red-600 hover:bg-red-700 text-white">
+                            <Button type="submit" disabled={isSubmitting} className="bg-danger hover:bg-danger/90 text-white">
                                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 {t('common.save')}
                             </Button>
@@ -617,7 +608,7 @@ export const CashFlowReport = () => {
 
             {/* Record Supplier Payment Modal */}
             <Drawer open={isPaymentModalOpen} onOpenChange={setIsPaymentModalOpen}>
-                <DrawerContent className="sm:max-w-[500px] bg-white dark:bg-gray-900 dark:text-white">
+                <DrawerContent className="sm:max-w-[500px] bg-card dark:text-white">
                     <DrawerHeader>
                         <DrawerTitle>{t('supplierPayments.recordPayment')}</DrawerTitle>
                         <DrawerDescription>
@@ -632,12 +623,12 @@ export const CashFlowReport = () => {
                                 onValueChange={(v) => setPaymentForm({ ...paymentForm, purchaseOrderId: v })}
                                 required
                             >
-                                <SelectTrigger className="bg-white dark:bg-gray-800">
+                                <SelectTrigger className="bg-card">
                                     <SelectValue placeholder="Select Purchase Order" />
                                 </SelectTrigger>
-                                <SelectContent className="bg-white dark:bg-gray-800 max-h-[200px] border dark:border-gray-700">
+                                <SelectContent className="bg-card max-h-[200px] border">
                                     {purchaseOrders.length === 0 ? (
-                                        <div className="p-2 text-sm text-gray-500 text-center">No orders found</div>
+                                        <div className="p-2 text-sm text-muted-foreground text-center">No orders found</div>
                                     ) : (
                                         purchaseOrders.map(po => (
                                             <SelectItem key={po.id} value={po.id.toString()}>
@@ -656,10 +647,10 @@ export const CashFlowReport = () => {
                                     value={paymentForm.paymentMethod}
                                     onValueChange={(v) => setPaymentForm({ ...paymentForm, paymentMethod: v })}
                                 >
-                                    <SelectTrigger className="bg-white dark:bg-gray-800">
+                                    <SelectTrigger className="bg-card">
                                         <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-white dark:bg-gray-800 border dark:border-gray-700">
+                                    <SelectContent className="bg-card border">
                                         <SelectItem value="CASH">{t('pos.paymentMethods.CASH')}</SelectItem>
                                         <SelectItem value="MOBILE_MONEY">{t('pos.paymentMethods.MOBILE_MONEY')}</SelectItem>
                                         <SelectItem value="BANK">Bank Transfer</SelectItem>
@@ -676,7 +667,7 @@ export const CashFlowReport = () => {
                                     value={paymentForm.amount}
                                     onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
                                     placeholder="0"
-                                    className="bg-white dark:bg-gray-800"
+                                    className="bg-card"
                                 />
                             </div>
                         </div>
@@ -690,7 +681,7 @@ export const CashFlowReport = () => {
                                     required
                                     value={paymentForm.paymentDate}
                                     onChange={(e) => setPaymentForm({ ...paymentForm, paymentDate: e.target.value })}
-                                    className="bg-white dark:bg-gray-800"
+                                    className="bg-card"
                                 />
                             </div>
                             <div className="space-y-2">
@@ -700,7 +691,7 @@ export const CashFlowReport = () => {
                                     value={paymentForm.reference}
                                     onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
                                     placeholder="TXN ID"
-                                    className="bg-white dark:bg-gray-800"
+                                    className="bg-card"
                                 />
                             </div>
                         </div>
@@ -712,7 +703,7 @@ export const CashFlowReport = () => {
                                 value={paymentForm.notes}
                                 onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
                                 placeholder="Additional details..."
-                                className="bg-white dark:bg-gray-800"
+                                className="bg-card"
                             />
                         </div>
 
@@ -720,7 +711,7 @@ export const CashFlowReport = () => {
                             <Button type="button" variant="outline" onClick={() => setIsPaymentModalOpen(false)}>
                                 {t('common.cancel')}
                             </Button>
-                            <Button type="submit" disabled={isSubmitting || !paymentForm.purchaseOrderId} className="bg-blue-600 hover:bg-blue-700 text-white">
+                            <Button type="submit" disabled={isSubmitting || !paymentForm.purchaseOrderId} className="bg-primary hover:bg-primary/90 text-white">
                                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 {t('supplierPayments.recordPayment')}
                             </Button>

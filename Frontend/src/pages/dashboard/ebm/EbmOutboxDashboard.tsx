@@ -176,7 +176,7 @@ function EbmCredentialsCard() {
     <Card>
       <CardHeader className="p-5 pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <ShieldCheck className="h-4 w-4 text-blue-600" />
+          <ShieldCheck className="h-4 w-4 text-primary" />
           EBM / VSDC Credentials
         </CardTitle>
         <CardDescription className="text-sm">
@@ -367,10 +367,10 @@ function EbmCredentialsCard() {
         )}
 
         {errorMsg && (
-          <p className="text-xs text-red-600 font-medium">{errorMsg}</p>
+          <p className="text-xs text-danger font-medium">{errorMsg}</p>
         )}
         {savedMsg && (
-          <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+          <p className="text-xs text-success font-medium flex items-center gap-1">
             <CheckCircle className="h-3 w-3" /> {savedMsg}
           </p>
         )}
@@ -489,9 +489,9 @@ export function EbmOutboxDashboard() {
   const getStatusIcon = (status: EbmOutboxStatus) => {
     switch (status) {
       case 'SUCCEEDED': return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'FAILED': return <XCircle className="h-4 w-4 text-red-500" />;
-      case 'DEAD_LETTER': return <AlertTriangle className="h-4 w-4 text-rose-500" />;
-      case 'PROCESSING': return <Clock className="h-4 w-4 text-blue-500" />;
+      case 'FAILED': return <XCircle className="h-4 w-4 text-danger" />;
+      case 'DEAD_LETTER': return <AlertTriangle className="h-4 w-4 text-danger" />;
+      case 'PROCESSING': return <Clock className="h-4 w-4 text-primary" />;
       default: return <Clock className="h-4 w-4 text-yellow-500" />;
     }
   };
@@ -500,7 +500,7 @@ export function EbmOutboxDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">EBM / VSDC Outbox Queue</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">EBM / VSDC Outbox Queue</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Monitor fiscalisation status of all sales submitted to the RRA VSDC gateway
           </p>
@@ -587,7 +587,7 @@ export function EbmOutboxDashboard() {
                       <TableCell className="text-xs max-w-[240px]" title={entry.lastError ?? ''}>
                         {entry.status === 'DEAD_LETTER' ? (
                           <div className="space-y-0.5">
-                            <span className="text-rose-600 font-semibold flex items-center gap-1">
+                            <span className="text-danger font-semibold flex items-center gap-1">
                               <AlertTriangle className="h-3 w-3 shrink-0" />
                               UN-FISCALIZED
                             </span>
@@ -598,7 +598,7 @@ export function EbmOutboxDashboard() {
                         ) : entry.status === 'FAILED' || entry.status === 'PROCESSING' ? (
                           <span className="truncate block">{entry.lastError ?? '—'}</span>
                         ) : entry.sdcDateTime ? (
-                          <span className="text-green-600">SDC: {new Date(entry.sdcDateTime).toLocaleString()}</span>
+                          <span className="text-success">SDC: {new Date(entry.sdcDateTime).toLocaleString()}</span>
                         ) : '—'}
                       </TableCell>
                       <TableCell className="text-right">
@@ -637,7 +637,7 @@ export function EbmOutboxDashboard() {
                             <Button
                               variant="destructive"
                               size="sm"
-                              className="bg-rose-600 hover:bg-rose-700 text-white"
+                              className="bg-danger hover:bg-danger/90 text-white"
                               onClick={() => setReversalEntry(entry)}
                             >
                               Request Reversal

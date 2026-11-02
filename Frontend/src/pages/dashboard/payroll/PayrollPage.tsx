@@ -18,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../../components/ui
 import { DataTable, type ColumnDef } from '../../../components/ui/data-table'
 import { StatusBadge } from '../../../components/ui/status-badge'
 import { cn } from '../../../lib/utils'
+import { PageHeader } from "../../../components/common/PageHeader";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -100,14 +101,14 @@ function errorMessage(e: unknown, fallback: string) {
 
 function Kpi({ icon: Icon, label, value, sub, color }: { icon: React.ElementType; label: string; value: string; sub?: string; color: string }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-card border border-gray-200 dark:border-gray-700 shadow-card p-4 flex items-center gap-4">
+    <div className="bg-card rounded-card border border-border shadow-card p-4 flex items-center gap-4">
       <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0', color)}>
         <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0">
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{label}</p>
-        <p className="text-lg font-bold tabular-nums text-gray-900 dark:text-white truncate">{value}</p>
-        {sub && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{sub}</p>}
+        <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+        <p className="text-lg font-bold tabular-nums text-foreground truncate">{value}</p>
+        {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
       </div>
     </div>
   )
@@ -115,7 +116,7 @@ function Kpi({ icon: Icon, label, value, sub, color }: { icon: React.ElementType
 
 function Row({ label, value, strong, muted }: { label: string; value: string; strong?: boolean; muted?: boolean }) {
   return (
-    <div className={cn('flex justify-between py-1 text-sm', strong && 'font-semibold border-t border-gray-100 dark:border-gray-700 mt-1 pt-2', muted && 'text-gray-500')}>
+    <div className={cn('flex justify-between py-1 text-sm', strong && 'font-semibold border-t border-border mt-1 pt-2', muted && 'text-muted-foreground')}>
       <span>{label}</span>
       <span className="tabular-nums">{value}</span>
     </div>
@@ -212,19 +213,19 @@ function EmployeeDrawer({ open, onOpenChange, initial }: { open: boolean; onOpen
           </div>
 
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Monthly pay (RWF)</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Monthly pay (RWF)</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {field('basicSalary', 'Basic salary *', { type: 'number', min: 0 })}
               {field('housingAllowance', 'Housing', { type: 'number', min: 0 })}
               {field('transportAllowance', 'Transport', { type: 'number', min: 0 })}
               {field('otherAllowance', 'Other', { type: 'number', min: 0 })}
             </div>
-            <p className="text-[11px] text-gray-400 mt-1.5">Transport allowance is taxed for PAYE but excluded from RSSB contributions.</p>
+            <p className="text-[11px] text-muted-foreground mt-1.5">Transport allowance is taxed for PAYE but excluded from RSSB contributions.</p>
           </div>
 
           {preview.data && (
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900/30">
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Payslip preview</p>
+            <div className="rounded-lg border border-border p-4 bg-surface-subtle">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Payslip preview</p>
               <Row label="Gross pay" value={rwf(preview.data.grossPay)} />
               <Row label="PAYE" value={`− ${rwf(preview.data.paye)}`} muted />
               <Row label="Pension (employee 6%)" value={`− ${rwf(preview.data.employeePension)}`} muted />
@@ -259,9 +260,9 @@ function EmployeeDrawer({ open, onOpenChange, initial }: { open: boolean; onOpen
             {form.paymentMethod !== 'CASH' && field('bankAccount', form.paymentMethod === 'BANK' ? 'Account number' : 'Mobile number')}
           </div>
 
-          <DrawerFooter className="flex-row pt-2 px-0 border-t border-gray-100 dark:border-gray-700">
+          <DrawerFooter className="flex-row pt-2 px-0 border-t border-border">
             <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={!valid || save.isPending} className="flex-1 bg-blue-600 hover:bg-blue-700">
+            <Button type="submit" disabled={!valid || save.isPending} className="flex-1 bg-primary hover:bg-primary/90">
               {save.isPending ? 'Saving…' : initial ? 'Save changes' : 'Add employee'}
             </Button>
           </DrawerFooter>
@@ -298,8 +299,8 @@ function RunDrawer({ runId, onClose, canApprove }: { runId: number | null; onClo
   const slipColumns: ColumnDef<Payslip>[] = [
     { key: 'employee', header: 'Employee', render: s => (
       <div>
-        <p className="font-medium text-gray-900 dark:text-white">{s.employee.fullName}</p>
-        <p className="text-[11px] text-gray-400">{s.employee.employeeNumber}{s.employee.jobTitle ? ` · ${s.employee.jobTitle}` : ''}</p>
+        <p className="font-medium text-foreground">{s.employee.fullName}</p>
+        <p className="text-[11px] text-muted-foreground">{s.employee.employeeNumber}{s.employee.jobTitle ? ` · ${s.employee.jobTitle}` : ''}</p>
       </div>
     ) },
     { key: 'grossPay', header: 'Gross', className: 'text-right tabular-nums', headerClassName: 'text-right', render: s => rwf(s.grossPay) },
@@ -333,52 +334,52 @@ function RunDrawer({ runId, onClose, canApprove }: { runId: number | null; onClo
           </DrawerTitle>
         </DrawerHeader>
         {isLoading || !run ? (
-          <p className="text-sm text-gray-500 py-8 text-center">Loading payroll…</p>
+          <p className="text-sm text-muted-foreground py-8 text-center">Loading payroll…</p>
         ) : (
           <div className="space-y-5 pt-1">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <Kpi icon={Users} label="Employees" value={String(run.employeeCount)} color="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400" />
-              <Kpi icon={Wallet} label="Gross pay" value={rwf(run.grossPay)} color="bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400" />
-              <Kpi icon={Banknote} label="Net pay" value={rwf(run.netPay)} color="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400" />
-              <Kpi icon={Landmark} label="Cost to business" value={rwf(run.employerCost)} color="bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400" />
+              <Kpi icon={Users} label="Employees" value={String(run.employeeCount)} color="bg-primary/10 text-primary" />
+              <Kpi icon={Wallet} label="Gross pay" value={rwf(run.grossPay)} color="bg-warning/10 text-warning dark:bg-warning/20 dark:text-amber-400" />
+              <Kpi icon={Banknote} label="Net pay" value={rwf(run.netPay)} color="bg-success/10 text-success dark:bg-success/20 dark:text-emerald-400" />
+              <Kpi icon={Landmark} label="Cost to business" value={rwf(run.employerCost)} color="bg-violet-500/10 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400" />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Owed to RRA and RSSB</p>
+              <div className="rounded-lg border border-border p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Owed to RRA and RSSB</p>
                 <Row label="PAYE" value={rwf(run.paye)} />
                 <Row label="RSSB withheld from staff" value={rwf(run.employeeRssb)} />
                 <Row label="RSSB paid by the business" value={rwf(run.employerRssb)} />
                 <Row label="CBHI" value={rwf(run.cbhi)} />
                 <Row label="Total" value={rwf(Number(run.paye) + Number(run.employeeRssb) + Number(run.employerRssb) + Number(run.cbhi))} strong />
               </div>
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm space-y-1.5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Progress</p>
+              <div className="rounded-lg border border-border p-4 text-sm space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Progress</p>
                 <p>Rules: <span className="font-medium">{run.rulesVersion}</span></p>
                 <p>Approved: {run.approvedAt ? format(new Date(run.approvedAt), 'dd MMM yyyy HH:mm') : '—'}</p>
                 <p>Paid: {run.paidAt ? `${format(new Date(run.paidAt), 'dd MMM yyyy HH:mm')} by ${METHOD_LABELS[run.paymentMethod ?? 'BANK'].toLowerCase()}` : '—'}</p>
                 {run.status !== 'DRAFT' && run.status !== 'CANCELLED' && (
-                  <p className="text-xs text-gray-500 pt-1">Sent to Accounting automatically when approved and when paid.</p>
+                  <p className="text-xs text-muted-foreground pt-1">Sent to Accounting automatically when approved and when paid.</p>
                 )}
               </div>
             </div>
 
             <DataTable columns={slipColumns} data={run.payslips ?? []} keyExtractor={s => s.id} emptyTitle="No payslips" />
 
-            <DrawerFooter className="flex-row flex-wrap gap-2 pt-2 px-0 border-t border-gray-100 dark:border-gray-700">
+            <DrawerFooter className="flex-row flex-wrap gap-2 pt-2 px-0 border-t border-border">
               {run.status === 'DRAFT' && (
                 <>
                   <Button variant="outline" disabled={act.isPending} onClick={() => act.mutate('recalculate')} className="gap-2">
                     <RefreshCw className="h-4 w-4" /> Recalculate
                   </Button>
-                  <Button variant="outline" disabled={act.isPending} onClick={() => setConfirm('cancel')} className="gap-2 text-red-600">
+                  <Button variant="outline" disabled={act.isPending} onClick={() => setConfirm('cancel')} className="gap-2 text-danger">
                     <XCircle className="h-4 w-4" /> Cancel
                   </Button>
                   <Button
                     disabled={act.isPending || !canApprove}
                     title={canApprove ? undefined : 'Only an administrator can approve payroll'}
                     onClick={() => setConfirm('approve')}
-                    className="gap-2 bg-blue-600 hover:bg-blue-700 ml-auto"
+                    className="gap-2 bg-primary hover:bg-primary/90 ml-auto"
                   >
                     <CheckCircle2 className="h-4 w-4" /> Approve
                   </Button>
@@ -394,7 +395,7 @@ function RunDrawer({ runId, onClose, canApprove }: { runId: number | null; onClo
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button disabled={act.isPending} onClick={() => setConfirm('pay')} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+                  <Button disabled={act.isPending} onClick={() => setConfirm('pay')} className="gap-2 bg-success hover:bg-success/90">
                     <Banknote className="h-4 w-4" /> Record payment
                   </Button>
                 </div>
@@ -414,7 +415,7 @@ function RunDrawer({ runId, onClose, canApprove }: { runId: number | null; onClo
                 <AlertDialogFooter>
                   <AlertDialogCancel>Back</AlertDialogCancel>
                   <AlertDialogAction
-                    className={confirm === 'cancel' ? 'bg-red-600 hover:bg-red-700' : undefined}
+                    className={confirm === 'cancel' ? 'bg-danger hover:bg-danger/90' : undefined}
                     onClick={() => { act.mutate(confirm); setConfirm(null) }}
                   >
                     {confirmText[confirm].action}
@@ -459,15 +460,15 @@ function PrepareRunDrawer({ open, onOpenChange, onCreated }: { open: boolean; on
             <Input type="month" value={month} onChange={e => setMonth(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label>Notes <span className="text-gray-400 text-xs">(optional)</span></Label>
+            <Label>Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
             <Input value={notes} onChange={e => setNotes(e.target.value)} maxLength={500} />
           </div>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             A payslip is calculated for every active employee hired by the end of the month. You can still edit employees and recalculate until the payroll is approved.
           </p>
-          <DrawerFooter className="flex-row pt-2 px-0 border-t border-gray-100 dark:border-gray-700">
+          <DrawerFooter className="flex-row pt-2 px-0 border-t border-border">
             <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={!month || create.isPending} className="flex-1 bg-blue-600 hover:bg-blue-700">
+            <Button type="submit" disabled={!month || create.isPending} className="flex-1 bg-primary hover:bg-primary/90">
               {create.isPending ? 'Preparing…' : 'Prepare payroll'}
             </Button>
           </DrawerFooter>
@@ -503,11 +504,11 @@ export default function PayrollPage() {
   const lastPaid = (runs.data ?? []).find(r => r.status === 'PAID')
 
   const employeeColumns: ColumnDef<Employee>[] = [
-    { key: 'employeeNumber', header: 'No.', sortable: true, className: 'text-xs text-gray-500 whitespace-nowrap' },
+    { key: 'employeeNumber', header: 'No.', sortable: true, className: 'text-xs text-muted-foreground whitespace-nowrap' },
     { key: 'fullName', header: 'Name', sortable: true, render: e => (
       <div>
-        <p className="font-medium text-gray-900 dark:text-white">{e.fullName}</p>
-        {e.jobTitle && <p className="text-[11px] text-gray-400">{e.jobTitle}</p>}
+        <p className="font-medium text-foreground">{e.fullName}</p>
+        {e.jobTitle && <p className="text-[11px] text-muted-foreground">{e.jobTitle}</p>}
       </div>
     ) },
     { key: 'gross', header: 'Monthly gross', className: 'text-right tabular-nums', headerClassName: 'text-right',
@@ -527,35 +528,27 @@ export default function PayrollPage() {
   ]
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 p-6 text-white shadow-lg">
-        <div className="pointer-events-none absolute inset-0 bg-black/10" />
-        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-              <Banknote className="h-7 w-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Payroll</h1>
-              <p className="text-sm text-white/70 mt-0.5">Monthly salaries with PAYE, RSSB and CBHI, posted to Accounting on approval and payment.</p>
-            </div>
-          </div>
-          <div className="flex gap-2 self-start sm:self-auto">
-            <Button onClick={() => { setEditing(null); setEmployeeOpen(true) }} variant="outline" className="gap-2 bg-white/10 text-white border-white/30 hover:bg-white/20">
+    <div className="space-y-6">
+      <PageHeader
+        title="Payroll"
+        description={<>Monthly salaries with PAYE, RSSB and CBHI, posted to Accounting on approval and payment.</>}
+        actions={
+          <>
+            <Button onClick={() => { setEditing(null); setEmployeeOpen(true) }} className="gap-2 bg-card/10 text-white border-white/30 hover:bg-card/20">
               <Plus className="h-4 w-4" /> Add employee
             </Button>
-            <Button onClick={() => setPrepareOpen(true)} disabled={activeEmployees.length === 0} className="gap-2 bg-white text-emerald-700 hover:bg-white/90 font-semibold">
+            <Button onClick={() => setPrepareOpen(true)} disabled={activeEmployees.length === 0} className="gap-2 bg-card text-success hover:bg-card/90 font-semibold">
               <CalendarDays className="h-4 w-4" /> Prepare payroll
             </Button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Kpi icon={Users} label="Active employees" value={String(activeEmployees.length)} color="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400" />
-        <Kpi icon={Wallet} label="Monthly gross salaries" value={rwf(monthlyGross)} color="bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400" />
+        <Kpi icon={Users} label="Active employees" value={String(activeEmployees.length)} color="bg-primary/10 text-primary" />
+        <Kpi icon={Wallet} label="Monthly gross salaries" value={rwf(monthlyGross)} color="bg-warning/10 text-warning dark:bg-warning/20 dark:text-amber-400" />
         <Kpi icon={Banknote} label="Last payroll paid" value={lastPaid ? rwf(lastPaid.netPay) : '—'} sub={lastPaid ? periodLabel(lastPaid) : 'No payroll paid yet'}
-          color="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400" />
+          color="bg-success/10 text-success dark:bg-success/20 dark:text-emerald-400" />
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>

@@ -8,10 +8,10 @@ function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
       type={type}
       data-slot="input"
       className={cn(
-        'placeholder:text-gray-400 dark:placeholder:text-gray-500 selection:bg-blue-600 selection:text-white border-gray-300 dark:border-gray-600 dark:bg-gray-800/50 h-9 w-full min-w-0 rounded-md border bg-white px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm',
-        'focus-visible:border-blue-500 focus-visible:ring-blue-500/30 focus-visible:ring-[3px]',
-        'aria-invalid:ring-red-500/20 dark:aria-invalid:ring-red-500/40 aria-invalid:border-red-500',
-        'dark:text-gray-100',
+        'placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground border-input h-10 w-full min-w-0 rounded-lg border bg-background px-3 py-1 text-base text-foreground transition-[color,box-shadow,border-color] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60 md:text-sm',
+        'focus-visible:border-primary/60 focus-visible:ring-4 focus-visible:ring-ring/15',
+        'aria-invalid:border-danger aria-invalid:ring-4 aria-invalid:ring-danger/15',
+        '',
         className,
       )}
       {...props}

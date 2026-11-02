@@ -36,7 +36,7 @@ function DrawerOverlay({
     <DialogPrimitive.Overlay
       data-slot="drawer-overlay"
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]",
         className
       )}
       {...props}
@@ -61,7 +61,7 @@ function DrawerContent({
         data-slot="drawer-content"
         aria-describedby={undefined}
         className={cn(
-          "bg-white dark:bg-gray-900 data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 gap-4 border p-6 shadow-lg duration-200 overflow-y-auto",
+          "bg-card text-foreground border-border data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 gap-4 border p-6 shadow-modal duration-200 overflow-y-auto",
           side === "right"
             ? "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-full max-w-lg border-l"
             : "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-full max-w-lg border-r",
@@ -73,7 +73,7 @@ function DrawerContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="drawer-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="ring-offset-background focus:ring-ring/50 text-muted-foreground hover:bg-muted hover:text-foreground absolute top-4 right-4 rounded-md p-1 transition-colors focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XIcon />
             <span className="sr-only">Close</span>
@@ -114,7 +114,7 @@ function DrawerTitle({
   return (
     <DialogPrimitive.Title
       data-slot="drawer-title"
-      className={cn("text-lg leading-none font-semibold", className)}
+      className={cn("text-lg leading-tight font-semibold tracking-tight", className)}
       {...props}
     />
   )

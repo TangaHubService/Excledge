@@ -19,13 +19,13 @@ interface User {
 
 const roleColors = {
   Admin:
-    "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 border-red-200 dark:border-red-800",
+    "bg-danger/15 text-danger dark:bg-danger/20 dark:text-red-400 border-danger/25 dark:border-red-800",
   Manager:
-    "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+    "bg-primary/15 text-primary border-primary/30",
   Accountant:
-    "bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+    "bg-purple-500/15 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400 border-purple-500/25 dark:border-purple-800",
   Pharmacist:
-    "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600",
+    "bg-muted text-foreground border-border",
 };
 
 /** API returns `{ users, pagination }`; older clients may expect a bare array or `{ data }`. */
@@ -105,7 +105,7 @@ export const UserManagement = () => {
   const sortHeader = (label: string, key: string) => (
     <button
       type="button"
-      className="inline-flex items-center gap-1 hover:text-blue-600"
+      className="inline-flex items-center gap-1 hover:text-primary"
       onClick={() => {
         setSortOrder(sortBy === key && sortOrder === 'asc' ? 'desc' : 'asc');
         setSortBy(key);
@@ -113,8 +113,8 @@ export const UserManagement = () => {
     >
       {label}
       {sortBy !== key ? <ChevronsUpDown className="h-3.5 w-3.5 opacity-40" /> : sortOrder === 'asc'
-        ? <ChevronUp className="h-3.5 w-3.5 text-blue-600" />
-        : <ChevronDown className="h-3.5 w-3.5 text-blue-600" />}
+        ? <ChevronUp className="h-3.5 w-3.5 text-primary" />
+        : <ChevronDown className="h-3.5 w-3.5 text-primary" />}
     </button>
   );
 
@@ -242,30 +242,30 @@ export const UserManagement = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+      <div className="">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Header Skeleton */}
           <div className="flex items-center justify-between mb-6">
             <div>
-              <div className="h-8 bg-gray-200 dark:bg-gray-800 rounded w-64 mb-2"></div>
-              <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-48"></div>
+              <div className="h-8 bg-muted rounded w-64 mb-2"></div>
+              <div className="h-4 bg-muted rounded w-48"></div>
             </div>
-            <div className="h-10 bg-gray-200 dark:bg-gray-800 rounded-md w-32"></div>
+            <div className="h-10 bg-muted rounded-md w-32"></div>
           </div>
 
           {/* Search and Filter Skeleton */}
           <div className="flex items-center justify-between mb-6">
             <div className="w-1/3">
-              <div className="h-10 bg-gray-200 dark:bg-gray-800 rounded-md"></div>
+              <div className="h-10 bg-muted rounded-md"></div>
             </div>
             <div className="flex space-x-2">
-              <div className="h-10 bg-gray-200 dark:bg-gray-800 rounded-md w-24"></div>
-              <div className="h-10 bg-gray-200 dark:bg-gray-800 rounded-md w-32"></div>
+              <div className="h-10 bg-muted rounded-md w-24"></div>
+              <div className="h-10 bg-muted rounded-md w-32"></div>
             </div>
           </div>
 
           {/* Table Skeleton */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+          <div className="bg-card rounded-lg shadow overflow-hidden">
             <TableSkeleton
               rows={5}
               columns={5}
@@ -279,22 +279,22 @@ export const UserManagement = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+    <div className="">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               {t('userManagement.title')}
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               {t('userManagement.description')}
             </p>
           </div>
           {currentUserIsAdmin && (
             <button
               onClick={() => setIsDialogOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-medium rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white font-medium rounded-lg transition-colors"
             >
               <Plus className="h-4 w-4" />
               {t('userManagement.addUser')}
@@ -303,9 +303,9 @@ export const UserManagement = () => {
         </div>
 
         {/* Role Permissions Info */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+        <div className="bg-card rounded-lg border border-border">
+          <div className="p-6 border-b border-border">
+            <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
               <Shield className="h-5 w-5" />
               {t('userManagement.rolePermissions')}
             </h2>
@@ -314,26 +314,26 @@ export const UserManagement = () => {
           <div className="p-6">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-2">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 border-red-200 dark:border-red-800">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border bg-danger/15 text-danger dark:bg-danger/20 dark:text-red-400 border-danger/25 dark:border-red-800">
                   {t('userManagement.roles.admin')}
                 </span>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   {t('userManagement.roles.adminDesc')}
                 </p>
               </div>
               <div className="space-y-2">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400 border-purple-200 dark:border-purple-800">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border bg-purple-500/15 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400 border-purple-500/25 dark:border-purple-800">
                   {t('userManagement.roles.accountant')}
                 </span>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   {t('userManagement.roles.accountantDesc')}
                 </p>
               </div>
               <div className="space-y-2">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border bg-muted text-foreground border-border">
                   {t('userManagement.roles.seller')}
                 </span>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   {t('userManagement.roles.sellerDesc')}
                 </p>
               </div>
@@ -342,23 +342,23 @@ export const UserManagement = () => {
         </div>
 
         {/* Users Table */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="bg-card rounded-lg border border-border">
+          <div className="p-6 border-b border-border">
             <div className="flex gap-4 items-center">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder={t('userManagement.searchUsers')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                  className="w-full pl-9 pr-3 py-2 border border-border rounded-lg bg-card text-foreground placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'disabled')}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                className="px-3 py-2 border border-border rounded-lg bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="all">{t('common.all') || 'All'}</option>
                 <option value="active">{t('common.active') || 'Active'}</option>
@@ -371,22 +371,22 @@ export const UserManagement = () => {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-foreground">
                       {sortHeader(t('userManagement.user'), 'name')}
                     </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-foreground">
                       {sortHeader('Email', 'email')}
                     </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-foreground">
                       {sortHeader('Role', 'role')}
                     </th>
 
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-foreground">
                       {sortHeader('Status', 'status')}
                     </th>
 
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-foreground">
                       Actions
                     </th>
                   </tr>
@@ -395,26 +395,26 @@ export const UserManagement = () => {
                   {filteredUsers.map((user) => (
                     <tr
                       key={user.id}
-                      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                      className="border-b border-border hover:bg-muted"
                     >
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 dark:bg-blue-500">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary">
                             <User className="h-5 w-5 text-white" />
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-900 dark:text-white">
+                            <span className="font-medium text-foreground">
                               {user.name}
                             </span>
                             {isCurrentUser(user.id) && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-primary/15 text-primary border border-primary/30">
                                 {t('userManagement.you')}
                               </span>
                             )}
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-gray-600 dark:text-gray-400">
+                      <td className="py-3 px-4 text-muted-foreground">
                         {user.email}
                       </td>
                       <td className="py-3 px-4">
@@ -428,8 +428,8 @@ export const UserManagement = () => {
                       <td className="py-3 px-4">
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border ${user.isActive === true
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 border-green-200 dark:border-green-800"
-                            : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600"
+                            ? "bg-success/15 text-success dark:bg-success/20 dark:text-green-400 border-success/25 dark:border-green-800"
+                            : "bg-muted text-foreground border-border"
                             }`}
                         >
                           {user.isActive ? t('common.active') : t('userManagement.disable')}d
@@ -448,8 +448,8 @@ export const UserManagement = () => {
                               }}
                               disabled={!canEdit(user.id, user.role)}
                               className={`px-3 py-1 text-sm rounded-lg transition-colors ${canEdit(user.id, user.role)
-                                ? 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                : 'text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60'
+                                ? 'text-foreground hover:bg-muted'
+                                : 'text-muted-foreground cursor-not-allowed opacity-60'
                                 }`}
                             >
                               Edit
@@ -471,7 +471,7 @@ export const UserManagement = () => {
                                 toast.error(e instanceof Error ? e.message : 'RRA user sync failed');
                               }
                             }}
-                            className="px-3 py-1 text-sm rounded-lg transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            className="px-3 py-1 text-sm rounded-lg transition-colors text-foreground hover:bg-muted"
                             title="Push this user account to VSDC"
                           >
                             Sync RRA
@@ -486,7 +486,7 @@ export const UserManagement = () => {
                               size="small"
                               aria-label={user?.isActive ? t('userManagement.disable') : t('userManagement.enable')}
                             />
-                            <span className="text-sm text-gray-500 dark:text-gray-400">
+                            <span className="text-sm text-muted-foreground">
                               {disablingUserId === user.id
                                 ? (user?.isActive ? t('userManagement.disabling') : t('userManagement.enabling'))
                                 : (user?.isActive ? t('userManagement.disable') : t('userManagement.enable'))}
@@ -503,7 +503,7 @@ export const UserManagement = () => {
                             <button
                               onClick={() => handleReactivateUser(user.id)}
                               disabled={reactivatingUserId === user.id}
-                              className="px-3 py-1 text-sm rounded-lg transition-colors bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 border border-green-200 dark:border-green-800"
+                              className="px-3 py-1 text-sm rounded-lg transition-colors bg-success/15 text-success hover:bg-green-200 dark:bg-success/20 dark:text-green-400 dark:hover:bg-success/30 border border-success/25 dark:border-green-800"
                             >
                               {reactivatingUserId === user.id ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -524,26 +524,26 @@ export const UserManagement = () => {
 
         {/* Add User Dialog */}
         <Drawer open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DrawerContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 w-full max-w-md mx-auto">
-            <DrawerHeader className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 p-6">
-              <DrawerTitle className="text-xl font-semibold text-gray-900 dark:text-white">
+          <DrawerContent className="bg-card border-border w-full max-w-md mx-auto">
+            <DrawerHeader className="flex items-center justify-between border-b border-border p-6">
+              <DrawerTitle className="text-xl font-semibold text-foreground">
                 {editingUserId ? t('userManagement.editUser') : t('userManagement.addUser')}
               </DrawerTitle>
               <DrawerClose asChild>
-                <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
-                  <X className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                <button className="p-2 hover:bg-muted rounded-lg transition-colors">
+                  <X className="h-5 w-5 text-muted-foreground" />
                 </button>
               </DrawerClose>
             </DrawerHeader>
             <div className="p-6 space-y-4">
-              <em className="text-sm text-gray-600 dark:text-gray-400">
+              <em className="text-sm text-muted-foreground">
                 {editingUserId
                   ? t('userManagement.updateUserRole')
                   : t('userManagement.inviteUserDesc')}
                 {currentUserIsAdmin && " " + t('userManagement.adminNote')}
               </em>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-900 dark:text-white">
+                <label className="block text-sm font-medium text-foreground">
                   Email
                 </label>
                 <input
@@ -553,18 +553,18 @@ export const UserManagement = () => {
                   value={formData.email}
                   onChange={handleInputChange}
                   disabled={!!editingUserId}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 disabled:opacity-60"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-900 dark:text-white">
+                <label className="block text-sm font-medium text-foreground">
                   Role
                 </label>
                 <select
                   name="role"
                   value={formData.role}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">{t('userManagement.selectRole')}</option>
                   {currentUserIsAdmin && <option value="ADMIN">ADMIN</option>}
@@ -573,20 +573,20 @@ export const UserManagement = () => {
                   <option value="SELLER">SELLER</option>
                 </select>
                 {currentUserIsAdmin && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-muted-foreground">
                     {t('userManagement.onlyAdminsNote')}
                   </p>
                 )}
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-900 dark:text-white">
+                <label className="block text-sm font-medium text-foreground">
                   Branch (optional)
                 </label>
                 <select
                   name="branchId"
                   value={formData.branchId}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">All branches (org-wide access)</option>
                   {branches.map((b) => (
@@ -595,13 +595,13 @@ export const UserManagement = () => {
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   Leave empty for org-wide access. Selecting a branch restricts the user to that branch only.
                 </p>
               </div>
               <button
                 onClick={handleSubmit}
-                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-medium rounded-lg transition-colors"
+                className="w-full px-4 py-2 bg-primary hover:bg-primary/90 text-white font-medium rounded-lg transition-colors"
               >
                 {inviteLoading ? (
                   <span className="flex items-center justify-center gap-2">

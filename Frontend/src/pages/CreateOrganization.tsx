@@ -75,15 +75,15 @@ export default function CreateOrganizationPage() {
       className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat transition-all duration-500 py-12 px-4"
       style={{ backgroundImage: "url('/auth-bg.png')" }}
     >
-      <div className="absolute inset-0 bg-blue-900/10 backdrop-blur-[2px]"></div>
+      <div className="absolute inset-0 bg-primary/10 backdrop-blur-[2px]"></div>
 
       <div className="relative w-full max-w-xl">
         {/* Toast */}
         {toast && (
           <div
             className={`mb-4 p-4 border rounded-lg ${toast.type === "error"
-              ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-400"
-              : "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-400"
+              ? "bg-danger/10 dark:bg-danger/20 border-danger/25 dark:border-red-800 text-danger dark:text-red-400"
+              : "bg-success/10 dark:bg-success/20 border-success/25 dark:border-green-800 text-success dark:text-green-400"
               }`}
           >
             <p className="text-sm">{toast.message}</p>
@@ -91,17 +91,17 @@ export default function CreateOrganizationPage() {
         )}
 
         {/* Create Organization Card */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="bg-card rounded-lg shadow-sm border border-border">
           <div className="p-6 pb-4">
             <div className="flex items-center gap-3 mb-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20">
-                <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <Building2 className="h-5 w-5 text-primary" />
               </div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              <h2 className="text-xl font-semibold text-foreground">
                 Create Your Organization
               </h2>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               Set up your organization to get started
             </p>
           </div>
@@ -112,7 +112,7 @@ export default function CreateOrganizationPage() {
               <div className="space-y-2">
                 <label
                   htmlFor="name"
-                  className="block text-sm font-medium text-gray-900 dark:text-white"
+                  className="block text-sm font-medium text-foreground"
                 >
                   Organization Name *
                 </label>
@@ -121,29 +121,29 @@ export default function CreateOrganizationPage() {
                   type="text"
                   placeholder="e.g., AgaciroPlus"
                   {...register("name")}
-                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${errors.name
+                  className={`w-full px-3 py-2 border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 ${errors.name
                     ? "border-red-500 focus:ring-red-400"
-                    : "border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
+                    : "border-border focus:ring-ring"
                     }`}
                 />
                 {errors.name && (
-                  <p className="text-sm text-red-500">{errors.name.message}</p>
+                  <p className="text-sm text-danger">{errors.name.message}</p>
                 )}
               </div>
               {/* businessType */}
               <div className="space-y-2">
                 <label
                   htmlFor="businessType"
-                  className="block text-sm font-medium text-gray-900 dark:text-white"
+                  className="block text-sm font-medium text-foreground"
                 >
                   Business Type *
                 </label>
                 <select
                   id="businessType"
                   {...register("businessType")}
-                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${errors.businessType
+                  className={`w-full px-3 py-2 border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 ${errors.businessType
                     ? "border-red-500 focus:ring-red-400"
-                    : "border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
+                    : "border-border focus:ring-ring"
                     }`}
                 >
                   <option value="">Select Business Type</option>
@@ -158,7 +158,7 @@ export default function CreateOrganizationPage() {
                   <option value="OTHER">Other</option>
                 </select>
                 {errors.businessType && (
-                  <p className="text-sm text-red-500">
+                  <p className="text-sm text-danger">
                     {errors.businessType.message}
                   </p>
                 )}
@@ -166,7 +166,7 @@ export default function CreateOrganizationPage() {
                   <div className="mt-3 space-y-2">
                     <label
                       htmlFor="otherBusinessType"
-                      className="block text-sm font-medium text-gray-900 dark:text-white"
+                      className="block text-sm font-medium text-foreground"
                     >
                       Specify Business Type *
                     </label>
@@ -175,13 +175,13 @@ export default function CreateOrganizationPage() {
                       type="text"
                       placeholder="e.g., Car Wash"
                       {...register("otherBusinessType")}
-                      className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${errors.otherBusinessType
+                      className={`w-full px-3 py-2 border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 ${errors.otherBusinessType
                         ? "border-red-500 focus:ring-red-400"
-                        : "border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
+                        : "border-border focus:ring-ring"
                         }`}
                     />
                     {errors.otherBusinessType && (
-                      <p className="text-sm text-red-500">{errors.otherBusinessType.message}</p>
+                      <p className="text-sm text-danger">{errors.otherBusinessType.message}</p>
                     )}
                   </div>
                 )}
@@ -190,7 +190,7 @@ export default function CreateOrganizationPage() {
               <div className="space-y-2">
                 <label
                   htmlFor="address"
-                  className="block text-sm font-medium text-gray-900 dark:text-white"
+                  className="block text-sm font-medium text-foreground"
                 >
                   Address
                 </label>
@@ -199,13 +199,13 @@ export default function CreateOrganizationPage() {
                   type="text"
                   placeholder="KG 123 St, Kigali"
                   {...register("address")}
-                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${errors.address
+                  className={`w-full px-3 py-2 border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 ${errors.address
                     ? "border-red-500 focus:ring-red-400"
-                    : "border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
+                    : "border-border focus:ring-ring"
                     }`}
                 />
                 {errors.address && (
-                  <p className="text-sm text-red-500">
+                  <p className="text-sm text-danger">
                     {errors.address.message}
                   </p>
                 )}
@@ -215,7 +215,7 @@ export default function CreateOrganizationPage() {
               <div className="space-y-2">
                 <label
                   htmlFor="phone"
-                  className="block text-sm font-medium text-gray-900 dark:text-white"
+                  className="block text-sm font-medium text-foreground"
                 >
                   Phone Number
                 </label>
@@ -228,7 +228,7 @@ export default function CreateOrganizationPage() {
                   className="w-full"
                 />
                 {errors.phone && (
-                  <p className="text-sm text-red-500">{errors.phone.message}</p>
+                  <p className="text-sm text-danger">{errors.phone.message}</p>
                 )}
               </div>
 
@@ -236,7 +236,7 @@ export default function CreateOrganizationPage() {
               <div className="space-y-2">
                 <label
                   htmlFor="email"
-                  className="block text-sm font-medium text-gray-900 dark:text-white"
+                  className="block text-sm font-medium text-foreground"
                 >
                   Email
                 </label>
@@ -245,13 +245,13 @@ export default function CreateOrganizationPage() {
                   type="email"
                   placeholder="Enter organization email"
                   {...register("email")}
-                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${errors.email
+                  className={`w-full px-3 py-2 border rounded-lg bg-card text-foreground focus:outline-none focus:ring-2 ${errors.email
                     ? "border-red-500 focus:ring-red-400"
-                    : "border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400"
+                    : "border-border focus:ring-ring"
                     }`}
                 />
                 {errors.email && (
-                  <p className="text-sm text-red-500">{errors.email.message}</p>
+                  <p className="text-sm text-danger">{errors.email.message}</p>
                 )}
               </div>
 
@@ -259,7 +259,7 @@ export default function CreateOrganizationPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
+                className="w-full px-4 py-2 bg-primary hover:bg-primary/90 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
               >
                 {isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

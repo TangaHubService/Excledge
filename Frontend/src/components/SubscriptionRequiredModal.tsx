@@ -59,11 +59,11 @@ export const SubscriptionRequiredModal: React.FC<SubscriptionRequiredModalProps>
         <Dialog open={open} onOpenChange={(next) => { if (!next) dismiss(); }}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                    <DialogTitle className="flex items-center gap-2 text-danger dark:text-red-400">
                         <AlertTriangle className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
                         <span>{"⚠️"} {t('billing.noActiveSubscription')}</span>
                     </DialogTitle>
-                    <DialogDescription className="pt-2 text-gray-700 dark:text-gray-300">
+                    <DialogDescription className="pt-2 text-foreground">
                         <span className="block">{t('billing.subscriptionRequiredMessage')}</span>
                         <span className="block mt-2">{t('billing.subscriptionRequiredCta')}</span>
                     </DialogDescription>
@@ -72,14 +72,14 @@ export const SubscriptionRequiredModal: React.FC<SubscriptionRequiredModalProps>
                     <button
                         type="button"
                         onClick={dismiss}
-                        className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        className="px-4 py-2 text-sm font-medium rounded-lg border border-border text-foreground hover:bg-muted transition-colors"
                     >
                         {t('common.close')}
                     </button>
                     <button
                         type="button"
                         onClick={handleSubscribeNow}
-                        className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                        className="px-4 py-2 text-sm font-medium rounded-lg bg-primary hover:bg-primary/90 text-white transition-colors"
                     >
                         {t('billing.subscribeNow')}
                     </button>

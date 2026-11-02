@@ -39,22 +39,23 @@ const fmtCurrency = (amount: string | number) =>
 // ── method pill colours ───────────────────────────────────────────────────────
 
 const methodStyle: Record<string, string> = {
-  CASH:         'bg-emerald-100 text-emerald-700',
-  MOBILE_MONEY: 'bg-orange-100 text-orange-700',
-  INSURANCE:    'bg-blue-100 text-blue-700',
-  CREDIT_CARD:  'bg-purple-100 text-purple-700',
-  CARD:         'bg-purple-100 text-purple-700',
-  DEBT:         'bg-red-100 text-red-600',
-  MIXED:        'bg-amber-100 text-amber-700',
+  CASH:         'bg-success/10 text-success',
+  MOBILE_MONEY: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
+  INSURANCE:    'bg-primary/10 text-primary',
+  CREDIT_CARD:  'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  CARD:         'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  DEBT:         'bg-danger/10 text-danger',
+  MIXED:        'bg-warning/10 text-warning',
 };
 
+// Status pills carry a leading dot (see StatusPill) so colour isn't the only signal.
 const statusStyle: Record<string, string> = {
-  COMPLETED:         'bg-emerald-100 text-emerald-700',
-  PENDING:           'bg-yellow-100 text-yellow-700',
-  PROCESSING:        'bg-blue-100 text-blue-700',
-  CANCELLED:         'bg-red-100 text-red-600',
-  REFUNDED:          'bg-purple-100 text-purple-700',
-  PARTIALLY_REFUNDED:'bg-violet-100 text-violet-700',
+  COMPLETED:         'bg-success/10 text-success',
+  PENDING:           'bg-warning/10 text-warning',
+  PROCESSING:        'bg-primary/10 text-primary',
+  CANCELLED:         'bg-danger/10 text-danger',
+  REFUNDED:          'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  PARTIALLY_REFUNDED:'bg-violet-500/10 text-violet-600 dark:text-violet-400',
 };
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -116,24 +117,27 @@ interface KpiCardProps {
   iconBg: string;
   label: string;
   value: string;
-  trend: string;
-  trendUp?: boolean;
+  caption: string;
 }
 
-const KpiCard: React.FC<KpiCardProps> = ({ icon, iconBg, label, value, trend, trendUp }) => (
-  <div className="flex items-center gap-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex-1 min-w-[180px]">
-    <div className={cn('p-3 rounded-xl', iconBg)}>
+const KpiCard: React.FC<KpiCardProps> = ({ icon, iconBg, label, value, caption }) => (
+  <div className="panel flex items-start gap-3.5 p-4">
+    <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', iconBg)}>
       {icon}
     </div>
-    <div>
-      <p className="text-xs font-medium text-gray-500 mb-0.5">{label}</p>
-      <p className="text-2xl font-bold text-gray-900 leading-tight">{value}</p>
-      <p className={cn('text-xs font-semibold flex items-center gap-0.5 mt-0.5', trendUp ? 'text-emerald-600' : 'text-gray-400')}>
-        {trendUp && <ArrowUpRight className="h-3 w-3" />}
-        {trend}
-      </p>
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="num mt-1 truncate text-xl font-semibold leading-tight tracking-tight text-foreground">{value}</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">{caption}</p>
     </div>
   </div>
+);
+
+const StatusPill: React.FC<{ className?: string; children: React.ReactNode }> = ({ className, children }) => (
+  <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-medium', className)}>
+    <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+    {children}
+  </span>
 );
 
 // ── main component ────────────────────────────────────────────────────────────
@@ -483,86 +487,87 @@ export default function SalesPage() {
   return (
     <div className="space-y-6">
       {/* ── Page header ─────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
-          <div className="p-2.5 rounded-2xl bg-blue-50">
-            <TrendingUp className="h-6 w-6 text-blue-600" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t('sales.salesHistory')}</h1>
-            <p className="text-sm text-gray-500 mt-0.5">{t('sales.salesHistoryDesc')}</p>
-          </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t('sales.salesHistory')}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t('sales.salesHistoryDesc')}</p>
         </div>
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/pos')}
+          className="flex h-10 items-center gap-2 self-start rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 sm:self-auto"
+        >
+          <Plus className="h-4 w-4" />
+          New sale
+        </button>
       </div>
 
       {/* ── KPI cards ───────────────────────────────────────────────────── */}
-      <div className="flex gap-4 flex-wrap">
+      {/* Amount/customers/items are summed from the rows on screen, so they
+          say "on this page"; receipts uses the server total for the filters. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard
-          icon={<TrendingUp className="h-5 w-5 text-blue-600" />}
-          iconBg="bg-blue-50"
-          label="Total Sales"
+          icon={<TrendingUp className="h-4 w-4" />}
+          iconBg="bg-chart-sales/10 text-chart-sales"
+          label="Sales amount"
           value={`RF ${stats.totalSales.toLocaleString()}`}
-          trend="12% vs last week"
-          trendUp
+          caption="On this page"
         />
         <KpiCard
-          icon={<Users className="h-5 w-5 text-emerald-600" />}
-          iconBg="bg-emerald-50"
-          label="Total Customers"
-          value={stats.totalCustomers.toString()}
-          trend="8% vs last week"
-          trendUp
+          icon={<Users className="h-4 w-4" />}
+          iconBg="bg-success/10 text-success"
+          label="Customers"
+          value={stats.totalCustomers.toLocaleString()}
+          caption="On this page"
         />
         <KpiCard
-          icon={<Package className="h-5 w-5 text-violet-600" />}
-          iconBg="bg-violet-50"
-          label="Total Items Sold"
-          value={stats.totalItemsSold.toString()}
-          trend="14% vs last week"
-          trendUp
+          icon={<Package className="h-4 w-4" />}
+          iconBg="bg-violet-500/10 text-violet-600 dark:text-violet-400"
+          label="Items sold"
+          value={stats.totalItemsSold.toLocaleString()}
+          caption="On this page"
         />
         <KpiCard
-          icon={<Receipt className="h-5 w-5 text-amber-600" />}
-          iconBg="bg-amber-50"
-          label="Total Receipts"
-          value={stats.totalReceipts.toString()}
-          trend="0% vs last week"
-          trendUp={false}
+          icon={<Receipt className="h-4 w-4" />}
+          iconBg="bg-warning/10 text-warning"
+          label="Receipts"
+          value={totalCount.toLocaleString()}
+          caption="Matching filters"
         />
       </div>
 
       {/* ── Filter bar ──────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+      <div className="panel p-4">
         <div className="flex flex-wrap items-end gap-3">
           {/* Start Date */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Start Date</label>
+            <label className="text-xs font-medium text-muted-foreground">Start Date</label>
             <input
               type="date"
               value={startDate}
               onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
-              className="h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all w-38"
+              className="h-9 w-38 rounded-lg border border-input bg-background px-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-ring/15"
             />
           </div>
 
           {/* End Date */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">End Date</label>
+            <label className="text-xs font-medium text-muted-foreground">End Date</label>
             <input
               type="date"
               value={endDate}
               onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
-              className="h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all w-38"
+              className="h-9 w-38 rounded-lg border border-input bg-background px-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-ring/15"
             />
           </div>
 
           {/* Status */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Status</label>
+            <label className="text-xs font-medium text-muted-foreground">Status</label>
             <select
               value={statusFilter}
               onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-              className="h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+              className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-ring/15"
             >
               <option value="">All Statuses</option>
               <option value="COMPLETED">Completed</option>
@@ -571,13 +576,13 @@ export default function SalesPage() {
             </select>
           </div>
 
-{/* Method */}
+          {/* Method */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Method</label>
+            <label className="text-xs font-medium text-muted-foreground">Method</label>
             <select
               value={paymentFilter}
               onChange={e => { setPaymentFilter(e.target.value); setCurrentPage(1); }}
-              className="h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+              className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-ring/15"
             >
               <option value="">All Methods</option>
               <option value="CASH">Cash</option>
@@ -591,11 +596,11 @@ export default function SalesPage() {
 
           {/* Receipt Type (RcptLabel) */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Receipt Type</label>
+            <label className="text-xs font-medium text-muted-foreground">Receipt Type</label>
             <select
               value={rcptLabelFilter}
               onChange={e => { setRcptLabelFilter(e.target.value); setCurrentPage(1); }}
-              className="h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+              className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-ring/15"
             >
               <option value="">All Types</option>
               <option value="NS">Normal Sale</option>
@@ -607,66 +612,56 @@ export default function SalesPage() {
           </div>
 
           {/* Reset */}
-          {(startDate || endDate || statusFilter || paymentFilter || searchTerm) && (
+          {(startDate || endDate || statusFilter || paymentFilter || rcptLabelFilter || searchTerm) && (
             <button
               type="button"
               onClick={resetFilters}
-              className="h-9 px-3 rounded-xl text-sm font-medium text-gray-500 hover:text-red-500 hover:bg-red-50 border border-gray-200 transition-colors flex items-center gap-1.5"
+              className="flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" /> Reset
             </button>
           )}
 
           {/* Search + New Sale */}
-          <div className="flex items-center gap-2 ml-auto">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="search"
-                placeholder="Search sales by invoice, customer..."
-                value={searchTerm}
-                onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                className="h-9 pl-9 pr-4 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 w-64 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/pos')}
-              className="h-9 flex items-center gap-2 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm shadow-blue-500/20"
-            >
-              <Plus className="h-4 w-4" />
-              New Sale
-              <ChevronRight className="h-3.5 w-3.5 opacity-70" />
-            </button>
+          <div className="relative w-full sm:ml-auto sm:w-auto">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="search"
+              placeholder="Search invoice or customer…"
+              value={searchTerm}
+              onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground transition-all placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-ring/15 sm:w-64"
+            />
           </div>
         </div>
       </div>
 
       {/* ── Table ───────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="panel overflow-hidden">
         {isLoading ? (
           <div className="p-6">
             <TableSkeleton rows={6} columns={9} rowHeight="h-4" />
           </div>
         ) : sales.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-3">
-            <Receipt className="h-12 w-12" />
-            <p className="text-sm">{t('sales.noSalesFound')}</p>
+          <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              <Receipt className="h-6 w-6" />
+            </span>
+            <p className="text-sm text-muted-foreground">{t('sales.noSalesFound')}</p>
           </div>
         ) : (
           <Table>
-            <TableHeader className="bg-gray-50 border-b border-gray-100">
+            <TableHeader className="border-b border-border/80 bg-surface-subtle">
               <TableRow className="hover:bg-transparent">
-                {['Time', 'Sale Number', 'Customer', 'Items', 'Tax', 'Method', 'Paid', 'Debt', 'Status', 'Type', 'Total', 'Actions'].map(h => (
-                  <TableHead key={h} className="text-xs font-semibold text-gray-600 whitespace-nowrap py-3">
-                    <span className="flex items-center gap-1">
-                      {h}
-                      {['Time', 'Sale Number', 'Customer', 'Items', 'Method', 'Paid', 'Debt', 'Status', 'Total'].includes(h) && (
-                        <svg className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                          <path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" />
-                        </svg>
-                      )}
-                    </span>
+                {['Time', 'Invoice', 'Customer', 'Items', 'Tax', 'Method', 'Paid', 'Debt', 'Status', 'Type', 'Total', ''].map((h, i) => (
+                  <TableHead
+                    key={h || `col-${i}`}
+                    className={cn(
+                      'h-10 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
+                      ['Items', 'Tax', 'Paid', 'Debt', 'Total'].includes(h) && 'text-right',
+                    )}
+                  >
+                    {h}
                   </TableHead>
                 ))}
               </TableRow>
@@ -681,106 +676,100 @@ export default function SalesPage() {
                 return (
                   <TableRow
                     key={sale.id}
-                    className="border-t border-gray-50 hover:bg-gray-50/60 transition-colors cursor-pointer"
+                    className="cursor-pointer border-b border-border/60 transition-colors hover:bg-muted/50"
                     onClick={() => handleViewSale(sale.id)}
                   >
                     {/* Time */}
-                    <TableCell className="py-3.5 text-xs text-gray-500 whitespace-nowrap">
-                      <p className="font-medium text-gray-700">{format(new Date(sale.createdAt), 'EEE, MMM d')}</p>
-                      <p>{format(new Date(sale.createdAt), 'HH:mm')}</p>
+                    <TableCell className="whitespace-nowrap py-3 text-xs text-muted-foreground">
+                      <p className="font-medium text-foreground">{format(new Date(sale.createdAt), 'EEE, MMM d')}</p>
+                      <p className="num">{format(new Date(sale.createdAt), 'HH:mm')}</p>
                     </TableCell>
 
                     {/* Sale number */}
-                    <TableCell className="py-3.5">
+                    <TableCell className="py-3">
                       <button
                         onClick={e => { e.stopPropagation(); handleViewSale(sale.id); }}
-                        className="text-xs font-mono font-semibold text-blue-600 hover:text-blue-700 hover:underline whitespace-nowrap"
+                        className="whitespace-nowrap font-mono text-xs font-medium text-primary hover:underline"
                       >
                         {sale.invoiceNumber || sale.saleNumber}
                       </button>
                     </TableCell>
 
                     {/* Customer */}
-                    <TableCell className="py-3.5">
-                      <div className="flex items-center gap-2">
-                        <div className="h-7 w-7 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
-                          <UserCircle className="h-4 w-4 text-blue-400" />
+                    <TableCell className="py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">
+                          {sale.customer.name?.charAt(0)?.toUpperCase() || <UserCircle className="h-4 w-4" />}
                         </div>
                         <div>
-                          <p className="text-xs font-semibold text-gray-800 whitespace-nowrap">{sale.customer.name}</p>
-                          {sale.customer.phone && <p className="text-[10px] text-gray-400">{sale.customer.phone}</p>}
+                          <p className="whitespace-nowrap text-xs font-medium text-foreground">{sale.customer.name}</p>
+                          {sale.customer.phone && <p className="text-[10px] text-muted-foreground">{sale.customer.phone}</p>}
                         </div>
                       </div>
                     </TableCell>
 
                     {/* Items */}
-                    <TableCell className="py-3.5 text-sm font-medium text-gray-700">{itemCount}</TableCell>
+                    <TableCell className="num py-3 text-right text-sm text-foreground">{itemCount}</TableCell>
 
                     {/* Tax */}
-                    <TableCell className="py-3.5">
+                    <TableCell className="py-3 text-right">
                       {vat > 0 ? (
-                        <span className="text-xs font-semibold text-blue-600 tabular-nums">RF {vat.toLocaleString()}</span>
+                        <span className="num text-xs text-muted-foreground">{vat.toLocaleString()}</span>
                       ) : (
-                        <span className="text-gray-300 text-sm">—</span>
+                        <span className="text-sm text-muted-foreground/50">—</span>
                       )}
                     </TableCell>
 
                     {/* Method */}
-                    <TableCell className="py-3.5">
+                    <TableCell className="py-3">
                       <span className={cn(
-                        'inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wide',
-                        methodStyle[sale.paymentType] ?? 'bg-gray-100 text-gray-600',
+                        'inline-flex items-center whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-medium',
+                        methodStyle[sale.paymentType] ?? 'bg-muted text-muted-foreground',
                       )}>
-                        {sale.paymentType === 'MOBILE_MONEY' ? 'MOBILE\nMONEY' : getPaymentMethodLabel(sale.paymentType)}
+                        {getPaymentMethodLabel(sale.paymentType)}
                       </span>
                     </TableCell>
 
                     {/* Paid */}
-                    <TableCell className="py-3.5">
-                      <div>
-                        <span className="text-sm font-semibold text-gray-800 tabular-nums">{fmtCurrency(paid)}</span>
-                        {sale.paymentType === 'MIXED' && <p className="text-[10px] text-gray-400 mt-0.5">Total</p>}
-                      </div>
+                    <TableCell className="py-3 text-right">
+                      <span className="num whitespace-nowrap text-sm text-foreground">{fmtCurrency(paid)}</span>
                     </TableCell>
 
                     {/* Debt */}
-                    <TableCell className="py-3.5">
+                    <TableCell className="py-3 text-right">
                       {debt > 0 ? (
-                        <span className="text-sm font-bold text-rose-500 tabular-nums">{fmtCurrency(debt)}</span>
+                        <span className="num whitespace-nowrap text-sm font-medium text-danger">{fmtCurrency(debt)}</span>
                       ) : (
-                        <span className="text-gray-300 text-sm">—</span>
+                        <span className="text-sm text-muted-foreground/50">—</span>
                       )}
                     </TableCell>
 
                     {/* Status */}
-                    <TableCell className="py-3.5">
-                      <span className={cn(
-                        'inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold',
-                        statusStyle[sale.status] ?? 'bg-gray-100 text-gray-600',
-                      )}>
+                    <TableCell className="py-3">
+                      <StatusPill className={statusStyle[sale.status] ?? 'bg-muted text-muted-foreground'}>
                         {sale.status.charAt(0) + sale.status.slice(1).toLowerCase().replace('_', ' ')}
-                      </span>
+                      </StatusPill>
                     </TableCell>
 
                     {/* Receipt Type (RcptLabel) */}
-                    <TableCell className="py-3.5">
+                    <TableCell className="whitespace-nowrap py-3">
                       {sale.rcptLabel ? (
                         <span className={cn(
-                          'inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide',
-                          (sale as any).rcptLabel === 'CS' || (sale as any).rcptLabel === 'CR' ? 'bg-blue-100 text-blue-700' :
-                          (sale as any).rcptLabel === 'PS' ? 'bg-yellow-100 text-yellow-700' :
-                          (sale as any).rcptLabel === 'TS' || (sale as any).rcptLabel === 'TR' ? 'bg-violet-100 text-violet-700' :
-                          'bg-gray-100 text-gray-700',
+                          'inline-flex items-center rounded border px-1.5 py-px font-mono text-[10px] font-semibold',
+                          (sale as any).rcptLabel === 'CS' || (sale as any).rcptLabel === 'CR' ? 'border-primary/30 text-primary' :
+                          (sale as any).rcptLabel === 'PS' ? 'border-warning/40 text-warning' :
+                          (sale as any).rcptLabel === 'TS' || (sale as any).rcptLabel === 'TR' ? 'border-violet-500/40 text-violet-600 dark:text-violet-400' :
+                          'border-border text-muted-foreground',
                         )}>
                           {(sale as any).rcptLabel}
                         </span>
                       ) : (
-                        <span className="text-gray-300 text-sm">—</span>
+                        <span className="text-sm text-muted-foreground/50">—</span>
                       )}
                       {(sale.status === 'CONVERTED' || sale.convertedSale) && (
                         <button
                           onClick={e => { e.stopPropagation(); if (sale.convertedSale) handleViewSale(String(sale.convertedSale.id)); }}
-                          className="ml-1 inline-flex items-center px-1.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                          className="ml-1 inline-flex items-center rounded bg-success/10 px-1.5 py-px text-[10px] font-semibold text-success hover:bg-success/20"
                           title={sale.convertedSale?.invoiceNumber ? `Converted → ${sale.convertedSale.invoiceNumber}` : 'Converted'}
                         >
                           Converted
@@ -789,16 +778,16 @@ export default function SalesPage() {
                     </TableCell>
 
                     {/* Total */}
-                    <TableCell className="py-3.5">
-                      <span className="text-sm font-bold text-gray-900 tabular-nums">{fmtCurrency(sale.totalAmount)}</span>
+                    <TableCell className="py-3 text-right">
+                      <span className="num whitespace-nowrap text-sm font-semibold text-foreground">{fmtCurrency(sale.totalAmount)}</span>
                     </TableCell>
 
                     {/* Actions */}
-                    <TableCell className="py-3.5" onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center gap-1">
+                    <TableCell className="py-3" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-0.5">
                         <button
                           onClick={() => handleViewSale(sale.id)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                           title="View details"
                         >
                           <Eye className="h-4 w-4" />
@@ -806,16 +795,17 @@ export default function SalesPage() {
                         <div className="relative">
                           <button
                             onClick={e => { e.stopPropagation(); setOpenRowMenu(openRowMenu === sale.id ? null : sale.id); }}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            aria-label="More actions"
                           >
                             <MoreHorizontal className="h-4 w-4" />
                           </button>
                           {openRowMenu === sale.id && (
-                            <div className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-100 z-30 py-1 text-sm">
+                            <div className="panel absolute right-0 z-30 mt-1 w-48 p-1 text-sm shadow-dropdown">
                               <button
                                 onClick={() => { handleDownloadInvoice(sale, 'A4'); setOpenRowMenu(null); }}
                                 disabled={isDownloadingInvoice === sale.id}
-                                className="w-full text-left px-3 py-2 flex items-center gap-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-foreground transition-colors hover:bg-muted"
                               >
                                 {isDownloadingInvoice === sale.id
                                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -825,7 +815,7 @@ export default function SalesPage() {
                               <button
                                 onClick={() => { handleDownloadInvoice(sale, 'A5'); setOpenRowMenu(null); }}
                                 disabled={isDownloadingInvoice === sale.id}
-                                className="w-full text-left px-3 py-2 flex items-center gap-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-foreground transition-colors hover:bg-muted"
                               >
                                 <Download className="h-3.5 w-3.5" />
                                 Download A5
@@ -833,7 +823,7 @@ export default function SalesPage() {
                               <button
                                 onClick={() => { handleDownloadInvoice(sale, '80mm'); setOpenRowMenu(null); }}
                                 disabled={isDownloadingInvoice === sale.id}
-                                className="w-full text-left px-3 py-2 flex items-center gap-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-foreground transition-colors hover:bg-muted"
                               >
                                 {isDownloadingInvoice === sale.id
                                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -846,16 +836,17 @@ export default function SalesPage() {
                                   onClick={() => { handlePrintReceiptCopy(sale, copyFormat); setOpenRowMenu(null); }}
                                   disabled={isDownloadingInvoice === sale.id}
                                   title="Reprint as a COPY (CS for a sale, CR for a refund) with the original fiscal data"
-                                  className="w-full text-left px-3 py-2 flex items-center gap-2 text-blue-700 hover:bg-blue-50 transition-colors"
+                                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-foreground transition-colors hover:bg-muted"
                                 >
                                   <Copy className="h-3.5 w-3.5" />
                                   Print copy {copyFormat}
                                 </button>
                               ))}
+                              <div className="my-1 border-t border-border/70" />
                               {sale.rcptLabel === 'PS' && sale.status !== 'CONVERTED' && !sale.convertedSale && (
                                 <button
                                   onClick={() => { setProformaToConvert(sale); setOpenRowMenu(null); }}
-                                  className="w-full text-left px-3 py-2 flex items-center gap-2 text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-success transition-colors hover:bg-success/10"
                                 >
                                   <ArrowUpRight className="h-3.5 w-3.5" />
                                   Convert to sale
@@ -864,7 +855,7 @@ export default function SalesPage() {
                               {(sale.status === 'COMPLETED' || sale.status === 'PARTIALLY_REFUNDED') && (sale.rcptLabel === 'NS' || sale.rcptLabel === 'TS' || sale.rcptLabel == null) && !sale.isProforma && (
                                 <button
                                   onClick={() => { handleOpenRefundModal(sale); setOpenRowMenu(null); }}
-                                  className="w-full text-left px-3 py-2 flex items-center gap-2 text-amber-600 hover:bg-amber-50 transition-colors"
+                                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-warning transition-colors hover:bg-warning/10"
                                 >
                                   <RefreshCw className="h-3.5 w-3.5" />
                                   Refund Sale
@@ -873,7 +864,7 @@ export default function SalesPage() {
                               {sale.status === 'COMPLETED' && sale.rcptLabel !== 'PS' && (
                                 <button
                                   onClick={() => { handleOpenCancelModal(sale); setOpenRowMenu(null); }}
-                                  className="w-full text-left px-3 py-2 flex items-center gap-2 text-red-600 hover:bg-red-50 transition-colors"
+                                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-danger transition-colors hover:bg-danger/10"
                                 >
                                   <X className="h-3.5 w-3.5" />
                                   Cancel Sale (Void)
@@ -893,15 +884,15 @@ export default function SalesPage() {
 
         {/* ── Pagination ───────────────────────────────────────────── */}
         {!isLoading && totalCount > 0 && (
-          <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 bg-gray-50/50">
-            <p className="text-xs text-gray-500">
+          <div className="flex flex-col gap-3 border-t border-border/80 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="num text-xs text-muted-foreground">
               Showing {firstShown}–{lastShown} of {totalCount} transactions
             </p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
                 disabled={currentPage <= 1 || isLoading}
-                className="h-8 w-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -912,10 +903,10 @@ export default function SalesPage() {
                     key={page}
                     onClick={() => setCurrentPage(page)}
                     className={cn(
-                      'h-8 w-8 rounded-lg text-xs font-semibold transition-colors',
+                      'num h-8 min-w-[2rem] rounded-lg px-2 text-xs font-medium transition-colors',
                       currentPage === page
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'border border-gray-200 text-gray-600 hover:bg-gray-100',
+                        ? 'bg-foreground text-background'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                     )}
                   >
                     {page}
@@ -926,7 +917,7 @@ export default function SalesPage() {
               <button
                 onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
                 disabled={currentPage >= totalPages || isLoading}
-                className="h-8 w-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -935,7 +926,7 @@ export default function SalesPage() {
               <select
                 value={pageSize}
                 onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                className="h-8 pl-2 pr-6 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none"
+                className="ml-1 h-8 rounded-lg border border-border bg-background pl-2 pr-2 text-xs font-medium text-muted-foreground transition-all focus:outline-none focus:ring-4 focus:ring-ring/15"
               >
                 {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n} / page</option>)}
               </select>
@@ -946,10 +937,10 @@ export default function SalesPage() {
 
       {/* ── Sale detail drawer ───────────────────────────────────────────── */}
       <Drawer open={!!selectedSale} onOpenChange={open => !open && setSelectedSale(null)}>
-        <DrawerContent className="max-h-[100vh] overflow-y-auto bg-white p-0 sm:max-w-2xl">
-          <DrawerHeader className="border-b border-slate-200 px-5 py-4 pr-12">
-            <DrawerTitle className="text-base font-bold text-slate-900">Sale Details</DrawerTitle>
-            <DrawerDescription className="mt-0.5 text-xs text-slate-400">
+        <DrawerContent className="max-h-[100vh] overflow-y-auto bg-card p-0 sm:max-w-2xl">
+          <DrawerHeader className="border-b border-border/80 px-5 py-4 pr-12">
+            <DrawerTitle className="text-base font-semibold text-foreground">Sale details</DrawerTitle>
+            <DrawerDescription className="mt-0.5 font-mono text-xs text-muted-foreground">
               {selectedSale?.invoiceNumber || selectedSale?.saleNumber}
             </DrawerDescription>
           </DrawerHeader>
@@ -957,53 +948,55 @@ export default function SalesPage() {
           {selectedSale && (
             <div className="space-y-5 px-5 py-5">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sale number</p>
-                  <p className="mt-1 break-all font-mono text-sm font-semibold text-slate-800">{selectedSale.saleNumber}</p>
+                <div className="rounded-xl border border-border/80 bg-surface-subtle p-3">
+                  <p className="eyebrow">Sale number</p>
+                  <p className="mt-1 break-all font-mono text-sm font-medium text-foreground">{selectedSale.saleNumber}</p>
                 </div>
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Date & time</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-800">{format(new Date(selectedSale.createdAt), 'dd MMM yyyy')}</p>
-                  <p className="text-xs text-slate-500">{format(new Date(selectedSale.createdAt), 'HH:mm')}</p>
+                <div className="rounded-xl border border-border/80 bg-surface-subtle p-3">
+                  <p className="eyebrow">Date & time</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{format(new Date(selectedSale.createdAt), 'dd MMM yyyy')}</p>
+                  <p className="num text-xs text-muted-foreground">{format(new Date(selectedSale.createdAt), 'HH:mm')}</p>
                 </div>
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Status</p>
-                  <span className={cn('mt-1 inline-flex rounded-md px-2 py-1 text-[11px] font-bold', statusStyle[selectedSale.status] ?? 'bg-gray-100 text-gray-600')}>
-                    {selectedSale.status.replace('_', ' ')}
-                  </span>
+                <div className="rounded-xl border border-border/80 bg-surface-subtle p-3">
+                  <p className="eyebrow">Status</p>
+                  <div className="mt-1">
+                    <StatusPill className={statusStyle[selectedSale.status] ?? 'bg-muted text-muted-foreground'}>
+                      {selectedSale.status.charAt(0) + selectedSale.status.slice(1).toLowerCase().replace('_', ' ')}
+                    </StatusPill>
+                  </div>
                 </div>
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Payment</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-800">{getPaymentMethodLabel(selectedSale.paymentType)}</p>
+                <div className="rounded-xl border border-border/80 bg-surface-subtle p-3">
+                  <p className="eyebrow">Payment</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{getPaymentMethodLabel(selectedSale.paymentType)}</p>
                 </div>
-                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sold by</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-800">{selectedSale.user?.name || '—'}</p>
+                <div className="rounded-xl border border-border/80 bg-surface-subtle p-3">
+                  <p className="eyebrow">Sold by</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{selectedSale.user?.name || '—'}</p>
                 </div>
-                <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-500">Total</p>
-                  <p className="mt-1 text-base font-bold text-blue-700">{fmtCurrency(selectedSale.totalAmount)}</p>
+                <div className="rounded-xl border border-primary/25 bg-primary/[0.06] p-3">
+                  <p className="eyebrow text-primary">Total</p>
+                  <p className="num mt-1 text-lg font-semibold text-foreground">{fmtCurrency(selectedSale.totalAmount)}</p>
                 </div>
               </div>
 
-              <section className="rounded-xl border border-slate-200">
-                <div className="border-b border-slate-100 px-4 py-3">
-                  <h3 className="text-sm font-bold text-slate-800">Customer</h3>
+              <section className="rounded-xl border border-border/80">
+                <div className="border-b border-border/70 px-4 py-3">
+                  <h3 className="panel-title">Customer</h3>
                 </div>
                 <div className="grid gap-3 px-4 py-3 text-sm sm:grid-cols-3">
-                  <div><p className="text-xs text-slate-400">Name</p><p className="mt-1 font-semibold text-slate-800">{selectedSale.customer?.name || 'Walk-in customer'}</p></div>
-                  <div><p className="text-xs text-slate-400">Phone</p><p className="mt-1 font-medium text-slate-700">{selectedSale.customer?.phone || '—'}</p></div>
-                  <div><p className="text-xs text-slate-400">Email</p><p className="mt-1 break-all font-medium text-slate-700">{selectedSale.customer?.email || '—'}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Name</p><p className="mt-1 font-medium text-foreground">{selectedSale.customer?.name || 'Walk-in customer'}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Phone</p><p className="mt-1 text-foreground">{selectedSale.customer?.phone || '—'}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Email</p><p className="mt-1 break-all text-foreground">{selectedSale.customer?.email || '—'}</p></div>
                 </div>
               </section>
 
-              <section className="overflow-hidden rounded-xl border border-slate-200">
-                <div className="border-b border-slate-100 px-4 py-3">
-                  <h3 className="text-sm font-bold text-slate-800">Items</h3>
+              <section className="overflow-hidden rounded-xl border border-border/80">
+                <div className="border-b border-border/70 px-4 py-3">
+                  <h3 className="panel-title">Items</h3>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[560px] text-sm">
-                    <thead className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                    <thead className="bg-surface-subtle text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                       <tr>
                         <th className="px-4 py-2.5">Item</th>
                         <th className="px-3 py-2.5 text-center">Qty</th>
@@ -1012,11 +1005,11 @@ export default function SalesPage() {
                         <th className="px-4 py-2.5 text-right">Total</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-border/70">
                       {selectedSale.saleItems.map((item) => (
-                        <tr key={item.id} className="text-slate-700">
-                          <td className="px-4 py-3 font-medium text-slate-800">{item.serviceName || item.product?.name || 'Item'}</td>
-                          <td className="px-3 py-3 text-center">{item.quantity}</td>
+                        <tr key={item.id} className="text-foreground">
+                          <td className="px-4 py-3 font-medium">{item.serviceName || item.product?.name || 'Item'}</td>
+                          <td className="num px-3 py-3 text-center">{item.quantity}</td>
                           <td className="px-3 py-3 text-right tabular-nums">{fmtCurrency(item.unitPrice)}</td>
                           <td className="px-3 py-3 text-right tabular-nums">{Number(item.taxAmount || 0) > 0 ? fmtCurrency(item.taxAmount || 0) : '—'}</td>
                           <td className="px-4 py-3 text-right font-semibold tabular-nums">{fmtCurrency(item.totalPrice)}</td>
@@ -1027,29 +1020,29 @@ export default function SalesPage() {
                 </div>
               </section>
 
-              <section className="rounded-xl border border-slate-200 p-4">
+              <section className="rounded-xl border border-border/80 p-4">
                 <div className="flex items-center justify-between gap-4 text-sm">
-                  <span className="font-medium text-slate-500">Paid</span>
-                  <span className="font-semibold text-slate-800">{fmtCurrency(Number(selectedSale.cashAmount || 0) + Number(selectedSale.insuranceAmount || 0))}</span>
+                  <span className="text-muted-foreground">Paid</span>
+                  <span className="num font-semibold text-foreground">{fmtCurrency(Number(selectedSale.cashAmount || 0) + Number(selectedSale.insuranceAmount || 0))}</span>
                 </div>
                 {Number(selectedSale.debtAmount || 0) > 0 && (
-                  <div className="mt-3 flex items-center justify-between gap-4 border-t border-slate-100 pt-3 text-sm">
-                    <span className="font-medium text-slate-500">Outstanding debt</span>
-                    <span className="font-semibold text-rose-600">{fmtCurrency(selectedSale.debtAmount)}</span>
+                  <div className="mt-3 flex items-center justify-between gap-4 border-t border-border/70 pt-3 text-sm">
+                    <span className="text-muted-foreground">Outstanding debt</span>
+                    <span className="num font-semibold text-danger">{fmtCurrency(selectedSale.debtAmount)}</span>
                   </div>
                 )}
               </section>
             </div>
           )}
 
-          <DrawerFooter className="flex-row flex-wrap items-center gap-2 border-t border-slate-200 px-5 py-4">
+          <DrawerFooter className="flex-row flex-wrap items-center gap-2 border-t border-border/80 px-5 py-4">
             <button
               onClick={() => setSelectedSale(null)}
-              className="h-10 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 transition-colors hover:bg-white"
+              className="h-10 rounded-lg border border-border px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               {t('common.close')}
             </button>
-            <div className="flex items-center rounded-lg border border-slate-200 p-0.5">
+            <div className="flex items-center rounded-lg bg-muted p-0.5">
               {(['A4', 'A5', '80mm'] as const).map((option) => (
                 <button
                   key={option}
@@ -1057,7 +1050,7 @@ export default function SalesPage() {
                   onClick={() => setInvoiceFormat(option)}
                   className={cn(
                     'rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors',
-                    invoiceFormat === option ? 'bg-[#1d57c8] text-white' : 'text-slate-500 hover:bg-slate-100'
+                    invoiceFormat === option ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   {option}
@@ -1068,7 +1061,7 @@ export default function SalesPage() {
               <button
                 onClick={() => handleDownloadInvoice(selectedSale, invoiceFormat)}
                 disabled={isDownloadingInvoice === selectedSale?.id}
-                className="flex-1 h-10 flex items-center justify-center gap-2 rounded-xl bg-[#1d57c8] text-sm font-semibold text-white transition-colors hover:bg-[#1748b3]"
+                className="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 {isDownloadingInvoice === selectedSale?.id
                   ? <Loader2 className="h-4 w-4 animate-spin" />
@@ -1081,7 +1074,7 @@ export default function SalesPage() {
                 onClick={() => handleDownloadReceiptCopy(selectedSale, invoiceFormat)}
                 disabled={isDownloadingInvoice === selectedSale.id}
                 title="Reprint as a COPY (CS for a sale, CR for a refund) with the original fiscal data"
-                className="h-10 flex items-center justify-center gap-2 rounded-xl border border-[#1d57c8] px-4 text-sm font-semibold text-[#1d57c8] transition-colors hover:bg-blue-50"
+                className="flex h-10 items-center justify-center gap-2 rounded-lg border border-border px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted"
               >
                 <Copy className="h-4 w-4" />
                 Download Copy ({selectedSale.rcptLabel === 'NR' ? 'CR' : 'CS'})
@@ -1117,51 +1110,51 @@ export default function SalesPage() {
 
       {/* ── Refund drawer ────────────────────────────────────────────────── */}
       <Drawer open={isRefundModalOpen} onOpenChange={setIsRefundModalOpen}>
-        <DrawerContent className="sm:max-w-lg bg-white">
+        <DrawerContent className="bg-card sm:max-w-lg">
           <DrawerHeader>
             <DrawerTitle>{t('sales.processRefund', { number: saleToRefund?.saleNumber })}</DrawerTitle>
             <DrawerDescription>{t('sales.refundDesc')}</DrawerDescription>
           </DrawerHeader>
           <div className="space-y-4 px-5 py-4 max-h-[65vh] overflow-y-auto">
             {refundDetailLoading && (
-              <div className="flex items-center gap-2 text-sm text-gray-500">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 {t('sales.refundLoading') || 'Loading refundable details…'}
               </div>
             )}
             {!refundDetailLoading && Array.isArray(refundDetail?.errors) && refundDetail.errors.length > 0 && (
-              <div className="p-4 bg-red-50 border border-red-100 rounded-xl space-y-1">
+              <div className="p-4 bg-danger/10 border border-danger/20 rounded-xl space-y-1">
                 {refundDetail.errors.map((e: string, i: number) => (
-                  <p key={i} className="text-sm text-red-800 font-medium">{e}</p>
+                  <p key={i} className="text-sm text-danger font-medium">{e}</p>
                 ))}
               </div>
             )}
             {refundDetail?.refundLabel === 'TR' && (
-              <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl text-sm font-semibold text-orange-800">
+              <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl text-sm font-semibold text-orange-700 dark:text-orange-300">
                 TRAINING REFUND (TR) — not an official receipt. No stock, customer balance or accounting record changes.
               </div>
             )}
             {refundDetail?.original && (
-              <div className="p-4 bg-gray-50 border border-gray-100 rounded-xl text-sm space-y-1">
-                <p className="font-semibold text-gray-800">{t('sales.refundOriginal') || 'Original transaction (being refunded)'}</p>
-                <p className="text-gray-600">#{refundDetail.original.saleNumber} · INV {refundDetail.original.invoiceNumber ?? '—'}{refundDetail.original.vsdcInvcNo != null ? ` · VSDC ${refundDetail.original.vsdcInvcNo}` : ''}</p>
-                <p className="text-gray-600">{refundDetail.original.customer?.name ?? ''}{refundDetail.original.customer?.TIN ? ` · TIN ${refundDetail.original.customer.TIN}` : ''}</p>
-                <p className="text-gray-600">{t('sales.refundOriginalTotal') || 'Original total'}: RF {Number(refundDetail.original.totalAmount || 0).toLocaleString('en-RW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <div className="space-y-1 rounded-xl border border-border/80 bg-surface-subtle p-4 text-sm">
+                <p className="font-semibold text-foreground">{t('sales.refundOriginal') || 'Original transaction (being refunded)'}</p>
+                <p className="text-muted-foreground">#{refundDetail.original.saleNumber} · INV {refundDetail.original.invoiceNumber ?? '—'}{refundDetail.original.vsdcInvcNo != null ? ` · VSDC ${refundDetail.original.vsdcInvcNo}` : ''}</p>
+                <p className="text-muted-foreground">{refundDetail.original.customer?.name ?? ''}{refundDetail.original.customer?.TIN ? ` · TIN ${refundDetail.original.customer.TIN}` : ''}</p>
+                <p className="text-muted-foreground">{t('sales.refundOriginalTotal') || 'Original total'}: RF {Number(refundDetail.original.totalAmount || 0).toLocaleString('en-RW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
             )}
             {Array.isArray(refundDetail?.lines) && refundDetail.lines.length > 0 && (
               <div className="space-y-2">
-                <p className="text-sm font-semibold text-gray-800">{t('sales.refundSelectItems') || 'Select items and quantities to refund'}</p>
+                <p className="text-sm font-semibold text-foreground">{t('sales.refundSelectItems') || 'Select items and quantities to refund'}</p>
                 {refundDetail.lines.map((l: any) => (
-                  <div key={l.saleItemId} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl">
+                  <div key={l.saleItemId} className="flex items-center gap-3 rounded-xl border border-border/80 p-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{l.productName ?? l.serviceName ?? `#${l.saleItemId}`}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-sm font-medium text-foreground truncate">{l.productName ?? l.serviceName ?? `#${l.saleItemId}`}</p>
+                      <p className="text-xs text-muted-foreground">
                         {t('sales.refundSold') || 'Sold'}: {l.quantity} · {t('sales.refunded') || 'Refunded'}: {l.refunded} · {t('sales.refundRemaining') || 'Remaining'}: {l.remaining}{l.taxCode ? ` · ${l.taxCode}` : ''}
                       </p>
                     </div>
                     <div className="w-24">
-                      <Label className="text-xs text-gray-500">{t('sales.refundQtyToRefund') || 'Qty'}</Label>
+                      <Label className="text-xs text-muted-foreground">{t('sales.refundQtyToRefund') || 'Qty'}</Label>
                       <Input
                         type="number"
                         min={0}
@@ -1175,16 +1168,16 @@ export default function SalesPage() {
                     </div>
                   </div>
                 ))}
-                <p className="text-sm text-gray-700 text-right">
+                <p className="text-sm text-foreground text-right">
                   {t('sales.refundTotalPreview') || 'Refund total'}: <span className="font-semibold">RF {refundPreviewTotal.toLocaleString('en-RW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </p>
               </div>
             )}
             {Array.isArray(refundDetail?.priorRefunds) && refundDetail.priorRefunds.length > 0 && (
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-gray-800">{t('sales.refundPriorRefunds') || 'Prior refunds'}</p>
+                <p className="text-sm font-semibold text-foreground">{t('sales.refundPriorRefunds') || 'Prior refunds'}</p>
                 {refundDetail.priorRefunds.map((r: any) => (
-                  <p key={r.id} className="text-xs text-gray-600">
+                  <p key={r.id} className="text-xs text-muted-foreground">
                     #{r.saleNumber} · RF {Number(r.totalAmount || 0).toLocaleString('en-RW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {r.fiscalStatus ?? r.status}
                   </p>
                 ))}
@@ -1196,7 +1189,7 @@ export default function SalesPage() {
                 id="refundRsnCd"
                 value={refundRsnCd}
                 onChange={e => setRefundRsnCd(e.target.value)}
-                className="w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="w-full rounded-md border border-amber-200 bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500"
               >
                 {(refundReasons.length ? refundReasons : [
                   { code: '01', name: 'Missing Quantity' },
@@ -1241,10 +1234,10 @@ export default function SalesPage() {
               />
             </div>
           </div>
-          <DrawerFooter className="flex-row gap-2 border-t border-gray-100 px-5 py-4">
+          <DrawerFooter className="flex-row gap-2 border-t border-border/80 px-5 py-4">
             <button
               onClick={() => setIsRefundModalOpen(false)}
-              className="flex-1 h-10 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              className="h-10 flex-1 rounded-lg border border-border text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               {t('common.cancel')}
             </button>
@@ -1262,7 +1255,7 @@ export default function SalesPage() {
 
       {/* ── Cancel (Void) drawer ──────────────────────────────────────────── */}
       <Drawer open={isCancelModalOpen} onOpenChange={setIsCancelModalOpen}>
-        <DrawerContent className="sm:max-w-lg bg-white">
+        <DrawerContent className="bg-card sm:max-w-lg">
           <DrawerHeader>
             <DrawerTitle>{t('sales.processCancel', { number: saleToCancel?.saleNumber }) || `Cancel Sale ${saleToCancel?.saleNumber ?? ''}`}</DrawerTitle>
             <DrawerDescription>
@@ -1270,8 +1263,8 @@ export default function SalesPage() {
             </DrawerDescription>
           </DrawerHeader>
           <div className="space-y-4 px-5 py-4">
-            <div className="p-4 bg-red-50 border border-red-100 rounded-xl">
-              <p className="text-sm text-red-800 font-medium">
+            <div className="p-4 bg-danger/10 border border-danger/20 rounded-xl">
+              <p className="text-sm text-danger font-medium">
                 {t('sales.cancelWarning') || 'Only use this when the sale was made in error (e.g. wrong items or customer). For genuine returns, use Refund Sale instead.'}
               </p>
             </div>
@@ -1286,10 +1279,10 @@ export default function SalesPage() {
               />
             </div>
           </div>
-          <DrawerFooter className="flex-row gap-2 border-t border-gray-100 px-5 py-4">
+          <DrawerFooter className="flex-row gap-2 border-t border-border/80 px-5 py-4">
             <button
               onClick={() => setIsCancelModalOpen(false)}
-              className="flex-1 h-10 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              className="h-10 flex-1 rounded-lg border border-border text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               {t('common.cancel')}
             </button>

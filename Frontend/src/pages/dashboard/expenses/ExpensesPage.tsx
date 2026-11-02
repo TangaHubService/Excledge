@@ -24,6 +24,7 @@ import type { SortDir } from '../../../components/ui/data-table'
 import { StatusBadge } from '../../../components/ui/status-badge'
 import { cn } from '../../../lib/utils'
 import { useBranch } from '../../../context/BranchContext'
+import { PageHeader } from "../../../components/common/PageHeader";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -165,7 +166,7 @@ function ExpenseFormDialog({
           <div className="grid grid-cols-2 gap-4">
             {/* Category */}
             <div className="space-y-1.5 col-span-2 sm:col-span-1">
-              <Label>Category <span className="text-red-500">*</span></Label>
+              <Label>Category <span className="text-danger">*</span></Label>
               <Select value={form.category} onValueChange={v => set('category', v)}>
                 <SelectTrigger className={cn(errors.category && 'border-red-400')}>
                   <SelectValue placeholder="Select category" />
@@ -176,7 +177,7 @@ function ExpenseFormDialog({
                   ))}
                 </SelectContent>
               </Select>
-              {errors.category && <p className="text-xs text-red-500">{errors.category}</p>}
+              {errors.category && <p className="text-xs text-danger">{errors.category}</p>}
               {isOtherCategory && (
                 <>
                   <Input
@@ -185,14 +186,14 @@ function ExpenseFormDialog({
                     placeholder="Specify the category"
                     className={cn('mt-1.5', errors.otherCategory && 'border-red-400')}
                   />
-                  {errors.otherCategory && <p className="text-xs text-red-500">{errors.otherCategory}</p>}
+                  {errors.otherCategory && <p className="text-xs text-danger">{errors.otherCategory}</p>}
                 </>
               )}
             </div>
 
             {/* Amount */}
             <div className="space-y-1.5 col-span-2 sm:col-span-1">
-              <Label>Amount (RWF) <span className="text-red-500">*</span></Label>
+              <Label>Amount (RWF) <span className="text-danger">*</span></Label>
               <Input
                 type="number"
                 min={0}
@@ -201,12 +202,12 @@ function ExpenseFormDialog({
                 placeholder="0"
                 className={cn(errors.amount && 'border-red-400')}
               />
-              {errors.amount && <p className="text-xs text-red-500">{errors.amount}</p>}
+              {errors.amount && <p className="text-xs text-danger">{errors.amount}</p>}
             </div>
 
             {/* Payment method */}
             <div className="space-y-1.5 col-span-2 sm:col-span-1">
-              <Label>Payment Method <span className="text-red-500">*</span></Label>
+              <Label>Payment Method <span className="text-danger">*</span></Label>
               <Select value={form.paymentMethod} onValueChange={v => set('paymentMethod', v)}>
                 <SelectTrigger>
                   <SelectValue />
@@ -221,31 +222,31 @@ function ExpenseFormDialog({
 
             {/* Date */}
             <div className="space-y-1.5 col-span-2 sm:col-span-1">
-              <Label>Expense Date <span className="text-red-500">*</span></Label>
+              <Label>Expense Date <span className="text-danger">*</span></Label>
               <Input
                 type="date"
                 value={form.expenseDate}
                 onChange={e => set('expenseDate', e.target.value)}
                 className={cn(errors.expenseDate && 'border-red-400')}
               />
-              {errors.expenseDate && <p className="text-xs text-red-500">{errors.expenseDate}</p>}
+              {errors.expenseDate && <p className="text-xs text-danger">{errors.expenseDate}</p>}
             </div>
 
             {/* Description */}
             <div className="space-y-1.5 col-span-2">
-              <Label>Description <span className="text-red-500">*</span></Label>
+              <Label>Description <span className="text-danger">*</span></Label>
               <Input
                 value={form.description}
                 onChange={e => set('description', e.target.value)}
                 placeholder="Brief description of the expense"
                 className={cn(errors.description && 'border-red-400')}
               />
-              {errors.description && <p className="text-xs text-red-500">{errors.description}</p>}
+              {errors.description && <p className="text-xs text-danger">{errors.description}</p>}
             </div>
 
             {/* Reference */}
             <div className="space-y-1.5 col-span-2 sm:col-span-1">
-              <Label>Reference <span className="text-gray-400 text-xs">(optional)</span></Label>
+              <Label>Reference <span className="text-muted-foreground text-xs">(optional)</span></Label>
               <Input
                 value={form.reference}
                 onChange={e => set('reference', e.target.value)}
@@ -255,7 +256,7 @@ function ExpenseFormDialog({
 
             {/* Notes */}
             <div className="space-y-1.5 col-span-2 sm:col-span-1">
-              <Label>Notes <span className="text-gray-400 text-xs">(optional)</span></Label>
+              <Label>Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
               <Input
                 value={form.notes}
                 onChange={e => set('notes', e.target.value)}
@@ -264,11 +265,11 @@ function ExpenseFormDialog({
             </div>
           </div>
 
-          <DrawerFooter className="flex-row pt-2 px-0 border-t border-gray-100 dark:border-gray-700">
+          <DrawerFooter className="flex-row pt-2 px-0 border-t border-border">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
               Cancel
             </Button>
-            <Button type="submit" disabled={saving} className="flex-1 bg-blue-600 hover:bg-blue-700">
+            <Button type="submit" disabled={saving} className="flex-1 bg-primary hover:bg-primary/90">
               {saving ? 'Saving…' : initial ? 'Save Changes' : 'Record Expense'}
             </Button>
           </DrawerFooter>
@@ -284,14 +285,14 @@ function KpiCard({ icon: Icon, label, value, sub, color }: {
   icon: React.ElementType; label: string; value: string; sub?: string; color: string
 }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-card border border-gray-200 dark:border-gray-700 shadow-card p-4 flex items-center gap-4">
+    <div className="bg-card rounded-card border border-border shadow-card p-4 flex items-center gap-4">
       <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0', color)}>
         <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0">
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{label}</p>
-        <p className="text-lg font-bold tabular-nums text-gray-900 dark:text-white truncate">{value}</p>
-        {sub && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{sub}</p>}
+        <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+        <p className="text-lg font-bold tabular-nums text-foreground truncate">{value}</p>
+        {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
       </div>
     </div>
   )
@@ -400,7 +401,7 @@ export default function ExpensesPage() {
       key: 'expenseDate',
       header: 'Date',
       sortable: true,
-      className: 'whitespace-nowrap text-xs text-gray-500 dark:text-gray-400',
+      className: 'whitespace-nowrap text-xs text-muted-foreground',
       render: row => format(new Date(row.expenseDate), 'dd MMM yyyy'),
     },
     {
@@ -408,7 +409,7 @@ export default function ExpensesPage() {
       header: 'Category',
       sortValue: row => CATEGORY_LABELS[row.category] ?? row.category,
       render: row => (
-        <span className="text-xs font-medium text-gray-700 dark:text-gray-200">
+        <span className="text-xs font-medium text-foreground">
           {CATEGORY_LABELS[row.category] ?? row.category}
         </span>
       ),
@@ -418,7 +419,7 @@ export default function ExpensesPage() {
       header: 'Description',
       className: 'max-w-[240px]',
       render: row => (
-        <span className="text-sm text-gray-900 dark:text-white truncate block max-w-[240px]" title={row.description}>
+        <span className="text-sm text-foreground truncate block max-w-[240px]" title={row.description}>
           {row.description}
         </span>
       ),
@@ -438,7 +439,7 @@ export default function ExpensesPage() {
       headerClassName: 'text-right',
       className: 'text-right',
       render: row => (
-        <span className="font-semibold tabular-nums text-gray-900 dark:text-white">
+        <span className="font-semibold tabular-nums text-foreground">
           {formatCurrency(row.amount)}
         </span>
       ),
@@ -447,7 +448,7 @@ export default function ExpensesPage() {
       key: 'user',
       header: 'Recorded By',
       sortValue: row => row.user?.name,
-      className: 'text-xs text-gray-500 dark:text-gray-400',
+      className: 'text-xs text-muted-foreground',
       render: row => row.user?.name ?? '—',
     },
     {
@@ -459,14 +460,14 @@ export default function ExpensesPage() {
           <button
             type="button"
             onClick={e => { e.stopPropagation(); openEdit(row) }}
-            className="p-1 rounded text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+            className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
             onClick={e => { e.stopPropagation(); setDeletingId(row.id) }}
-            className="p-1 rounded text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            className="p-1 rounded text-muted-foreground hover:text-danger dark:hover:text-red-400 hover:bg-danger/10 dark:hover:bg-danger/20 transition-colors"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -487,33 +488,23 @@ export default function ExpensesPage() {
   const hasFilters = categoryFilter !== 'ALL' || methodFilter !== 'ALL' || startDate || endDate || search
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
       {/* Page header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 p-6 text-white shadow-lg">
-        <div className="pointer-events-none absolute inset-0 bg-black/10" />
-        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-              <TrendingDown className="h-7 w-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
-              <p className="text-sm text-white/70 mt-0.5">
-                Track and manage operational expenses across your branches.
-              </p>
-            </div>
-          </div>
-          <Button
-            onClick={openCreate}
-            className="gap-2 bg-white text-amber-700 hover:bg-white/90 font-semibold shadow-sm self-start sm:self-auto"
-          >
-            <Plus className="h-4 w-4" />
-            Record Expense
-          </Button>
-        </div>
-        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-        <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
-      </div>
+      <PageHeader
+        title="Expenses"
+        description={<>Track and manage operational expenses across your branches.</>}
+        actions={
+          <>
+            <Button
+              onClick={openCreate}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+              Record Expense
+            </Button>
+          </>
+        }
+      />
 
       {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -522,30 +513,30 @@ export default function ExpensesPage() {
           label="Total Expenses"
           value={formatCurrency(summary.totalExpenses)}
           sub={`${summary.count} transaction${summary.count !== 1 ? 's' : ''}`}
-          color="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
+          color="bg-danger/10 dark:bg-danger/20 text-danger dark:text-red-400"
         />
         <KpiCard
           icon={Receipt}
           label="This Page"
           value={String(filtered.length)}
           sub="matching records"
-          color="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+          color="bg-primary/10 text-primary"
         />
         <KpiCard
           icon={DollarSign}
           label="Page Total"
           value={formatCurrency(filtered.reduce((s, e) => s + Number(e.amount), 0))}
           sub="sum of visible rows"
-          color="bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400"
+          color="bg-warning/10 dark:bg-warning/20 text-warning dark:text-amber-400"
         />
       </div>
 
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 rounded-card border border-gray-200 dark:border-gray-700 shadow-card p-4">
+      <div className="bg-card rounded-card border border-border shadow-card p-4">
         <div className="flex flex-wrap gap-3 items-end">
           {/* Search */}
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1) }}
@@ -585,7 +576,7 @@ export default function ExpensesPage() {
               className="w-36"
               placeholder="From"
             />
-            <span className="text-gray-400 text-sm">–</span>
+            <span className="text-muted-foreground text-sm">–</span>
             <Input
               type="date"
               value={endDate}
@@ -600,7 +591,7 @@ export default function ExpensesPage() {
             <button
               type="button"
               onClick={clearFilters}
-              className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-danger dark:hover:text-red-400 transition-colors"
             >
               <X className="h-3.5 w-3.5" /> Clear
             </button>
@@ -653,7 +644,7 @@ export default function ExpensesPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-danger hover:bg-danger/90"
               onClick={() => {
                 if (deletingId !== null) {
                   deleteMutation.mutate(deletingId)

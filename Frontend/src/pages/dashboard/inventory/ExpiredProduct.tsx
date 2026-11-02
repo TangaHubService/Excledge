@@ -8,13 +8,21 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { format } from "date-fns";
+import { differenceInCalendarDays, format } from "date-fns";
 import { apiClient } from "../../../lib/api-client";
 import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
-import { ChevronLeft, ChevronRight, Calendar, AlertCircle, Eye, DollarSign } from "lucide-react";
+import { CalendarX2, Eye, Coins, CalendarCheck } from "lucide-react";
 import ViewProductDialog from "./ViewProductDialog";
 import { type Product } from "../../../types";
 import { cn } from "../../../lib/utils";
+import { TablePager } from "../../../components/common/TablePager";
+
+const RANGES = [
+  { days: 7, label: "7 days" },
+  { days: 30, label: "30 days" },
+  { days: 90, label: "90 days" },
+  { days: 365, label: "1 year" },
+];
 
 export default function ExpiredProducts() {
   const { t } = useTranslation();
@@ -55,101 +63,108 @@ export default function ExpiredProducts() {
     fetchExpiredProducts();
   }, [days, currentPage, limit, t]);
 
-  const totalLossValuation = products.reduce((acc, p) => acc + p.quantity * (Number(p.unitPrice) || 0), 0);
+  // Summed from the rows on screen only, so the card says "on this page".
+  const pageLoss = products.reduce((acc, p) => acc + p.quantity * (Number(p.unitPrice) || 0), 0);
 
   return (
     <div className="space-y-6">
       {/* ── Page Header ─────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-900/30">
-            <Calendar className="h-6 w-6 text-rose-600 dark:text-rose-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Expired Products</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              Review and audit products past their expiration dates
-            </p>
-          </div>
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Expired products</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Products past their expiry date that should be removed from sale
+          </p>
         </div>
 
-        {/* Days filter select */}
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-gray-500">Expired in:</span>
-          <select
-            value={days.toString()}
-            onChange={(e) => {
-              setDays(Number(e.target.value));
-              setCurrentPage(1);
-            }}
-            className="h-9 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all shadow-sm"
-          >
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option>
-            <option value="365">Last 1 year</option>
-          </select>
+          <span className="text-xs text-muted-foreground">Expired in the last</span>
+          <div className="flex rounded-lg bg-muted p-0.5">
+            {RANGES.map((r) => (
+              <button
+                key={r.days}
+                type="button"
+                onClick={() => { setDays(r.days); setCurrentPage(1); }}
+                className={cn(
+                  "whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  days === r.days ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* ── KPI Stat Cards ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">TOTAL EXPIRED ITEMS</p>
-              <h3 className="text-3xl font-extrabold text-rose-600 tracking-tight">{totalItems}</h3>
-              <p className="text-xs text-gray-400 mt-1">Products needing disposal</p>
-            </div>
-            <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-900/30 text-rose-600">
-              <AlertCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="flex items-center gap-1 mt-4 text-xs font-semibold text-rose-600">
-            <span>Action required</span>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="panel flex items-start gap-3.5 p-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-danger/10 text-danger">
+            <CalendarX2 className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Expired items</p>
+            <p className="num mt-1 text-xl font-semibold leading-tight text-foreground">{totalItems.toLocaleString()}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">In the selected period · need disposal</p>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">ESTIMATED LOSS VALUATION</p>
-              <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
-                {totalLossValuation.toLocaleString()} <span className="text-xs font-normal text-gray-400">Frw</span>
-              </h3>
-              <p className="text-xs text-gray-400 mt-1">Total value of expired inventory</p>
-            </div>
-            <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-900/30 text-amber-600">
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="flex items-center gap-1 mt-4 text-xs font-semibold text-amber-600">
-            <span>Audit report generated</span>
+        <div className="panel flex items-start gap-3.5 p-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning">
+            <Coins className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Value at selling price</p>
+            <p className="num mt-1 text-xl font-semibold leading-tight text-foreground">
+              {pageLoss.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Frw</span>
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">On this page</p>
           </div>
         </div>
       </div>
 
       {/* ── Table Container ─────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+      <div className="panel overflow-hidden">
         {loading ? (
-          <div className="p-6 space-y-3">
+          <div className="space-y-3 p-6">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-10 w-full bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />
+              <div key={i} className="h-10 w-full animate-pulse rounded-lg bg-muted" />
             ))}
           </div>
         ) : error ? (
-          <div className="py-12 text-center text-rose-500 text-sm">{error}</div>
+          <div className="py-16 text-center text-sm text-danger">{error}</div>
         ) : products.length === 0 ? (
-          <div className="py-20 flex flex-col items-center justify-center text-gray-400 gap-2">
-            <Calendar className="h-10 w-10 text-gray-300" />
-            <p className="text-sm font-medium">{t("messages.noData")}</p>
+          <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-success/10 text-success">
+              <CalendarCheck className="h-6 w-6" />
+            </span>
+            <div>
+              <p className="text-sm font-medium text-foreground">No expired products</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Nothing expired in this period.</p>
+            </div>
           </div>
         ) : (
           <Table>
-            <TableHeader className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
+            <TableHeader className="border-b border-border/80 bg-surface-subtle">
               <TableRow className="hover:bg-transparent">
-                {["ID", "Product Name", "Batch Number", "Expiry Date", "Qty", "Unit Price", "Valuation Loss", "Action"].map((h) => (
-                  <TableHead key={h} className="text-xs font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap py-3.5">
+                {[
+                  { h: "ID" },
+                  { h: "Product" },
+                  { h: "Batch" },
+                  { h: "Expired" },
+                  { h: "Qty", right: true },
+                  { h: "Unit price", right: true },
+                  { h: "Value", right: true },
+                  { h: "" },
+                ].map(({ h, right }, i) => (
+                  <TableHead
+                    key={h || `col-${i}`}
+                    className={cn(
+                      "h-10 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-muted-foreground",
+                      right && "text-right",
+                    )}
+                  >
                     {h}
                   </TableHead>
                 ))}
@@ -157,40 +172,41 @@ export default function ExpiredProducts() {
             </TableHeader>
             <TableBody>
               {products.map((prod) => {
-                const loss = prod.quantity * Number(prod.unitPrice);
+                const loss = prod.quantity * (Number(prod.unitPrice) || 0);
+                const ago = prod.expiryDate ? differenceInCalendarDays(new Date(), new Date(prod.expiryDate)) : null;
 
                 return (
-                  <TableRow
-                    key={prod.id}
-                    className="border-t border-gray-50 dark:border-gray-700/50 hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors"
-                  >
-                    <TableCell className="py-3.5 text-xs font-mono font-semibold text-blue-600 dark:text-blue-400">
-                      #{prod.id}
+                  <TableRow key={prod.id} className="border-b border-border/60 transition-colors hover:bg-muted/50">
+                    <TableCell className="py-3 font-mono text-xs font-medium text-primary">#{prod.id}</TableCell>
+                    <TableCell className="py-3 text-[0.8125rem] font-medium text-foreground">{prod.name}</TableCell>
+                    <TableCell className="py-3 font-mono text-xs text-muted-foreground">
+                      {prod.batchNumber || <span className="font-sans text-muted-foreground/50">—</span>}
                     </TableCell>
-                    <TableCell className="py-3.5 text-xs font-bold text-gray-900 dark:text-white">
-                      {prod.name}
+                    <TableCell className="whitespace-nowrap py-3 text-xs">
+                      {prod.expiryDate ? (
+                        <>
+                          <p className="font-medium text-danger">{format(new Date(prod.expiryDate), "MMM d, yyyy")}</p>
+                          {ago !== null && ago >= 0 && (
+                            <p className="num text-[11px] text-muted-foreground">
+                              {ago === 0 ? "Today" : `${ago} day${ago === 1 ? "" : "s"} ago`}
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <span className="font-medium text-danger">Expired</span>
+                      )}
                     </TableCell>
-                    <TableCell className="py-3.5 text-xs font-mono text-gray-500">
-                      {prod.batchNumber || "—"}
+                    <TableCell className="num py-3 text-right text-sm text-foreground">{prod.quantity.toLocaleString()}</TableCell>
+                    <TableCell className="num whitespace-nowrap py-3 text-right text-sm text-foreground">
+                      {(Number(prod.unitPrice) || 0).toLocaleString()} <span className="text-[11px] text-muted-foreground">Frw</span>
                     </TableCell>
-                    <TableCell className="py-3.5 text-xs whitespace-nowrap">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-600 border border-rose-100">
-                        {prod.expiryDate ? format(new Date(prod.expiryDate), "MMM dd, yyyy") : "Expired"}
-                      </span>
+                    <TableCell className="num whitespace-nowrap py-3 text-right text-sm font-medium text-danger">
+                      {loss.toLocaleString()} <span className="text-[11px] font-normal text-muted-foreground">Frw</span>
                     </TableCell>
-                    <TableCell className="py-3.5 text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-200">
-                      {prod.quantity}
-                    </TableCell>
-                    <TableCell className="py-3.5 text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-200">
-                      {Number(prod.unitPrice).toLocaleString()} Frw
-                    </TableCell>
-                    <TableCell className="py-3.5 text-xs font-bold tabular-nums text-rose-600">
-                      {loss.toLocaleString()} Frw
-                    </TableCell>
-                    <TableCell className="py-3.5">
+                    <TableCell className="py-3 text-right">
                       <button
                         onClick={() => setViewProduct(prod)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                         title="View details"
                       >
                         <Eye className="h-4 w-4" />
@@ -203,62 +219,16 @@ export default function ExpiredProducts() {
           </Table>
         )}
 
-        {/* ── Pagination Footer ────────────────────────────────────────────── */}
-        {!loading && products.length > 0 && (
-          <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Showing {(currentPage - 1) * limit + 1} to {Math.min(currentPage * limit, totalItems)} of {totalItems} expired items
-            </p>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                disabled={currentPage === 1}
-                className="h-8 w-8 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                const pNum = i + 1;
-                return (
-                  <button
-                    key={pNum}
-                    onClick={() => setCurrentPage(pNum)}
-                    className={cn(
-                      "h-8 w-8 rounded-lg text-xs font-semibold transition-colors",
-                      currentPage === pNum
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    )}
-                  >
-                    {pNum}
-                  </button>
-                );
-              })}
-
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="h-8 w-8 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-
-              <select
-                value={limit}
-                onChange={(e) => {
-                  setLimit(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="h-8 pl-2 pr-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-medium text-gray-600 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none"
-              >
-                {[10, 20, 50, 100].map((num) => (
-                  <option key={num} value={num}>{num} / page</option>
-                ))}
-              </select>
-            </div>
-          </div>
+        {!loading && !error && products.length > 0 && (
+          <TablePager
+            page={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={limit}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(n) => { setLimit(n); setCurrentPage(1); }}
+            noun="expired items"
+          />
         )}
       </div>
 

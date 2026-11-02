@@ -42,16 +42,16 @@ class ErrorBoundary extends Component<Props, State> {
             }
 
             return (
-                <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-                    <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-red-100">
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-6">
-                            <AlertTriangle className="h-8 w-8 text-red-600" />
+                <div className="min-h-screen bg-surface-subtle flex items-center justify-center p-4">
+                    <div className="max-w-md w-full bg-card rounded-2xl shadow-xl p-8 text-center border border-danger/25">
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-danger/15 rounded-full mb-6">
+                            <AlertTriangle className="h-8 w-8 text-danger" />
                         </div>
 
-                        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                        <h1 className="text-2xl font-bold text-foreground mb-2">
                             Something went wrong
                         </h1>
-                        <p className="text-gray-600 mb-8 text-sm leading-relaxed">
+                        <p className="text-muted-foreground mb-8 text-sm leading-relaxed">
                             We encountered an unexpected error. Don't worry, your data is safe.
                             Please try refreshing the page or return to the dashboard.
                         </p>
@@ -59,7 +59,7 @@ class ErrorBoundary extends Component<Props, State> {
                         <div className="flex flex-col gap-3">
                             <Button
                                 onClick={this.handleReload}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2 h-11"
+                                className="w-full bg-primary hover:bg-primary/90 text-white gap-2 h-11"
                             >
                                 <RotateCcw className="h-4 w-4" />
                                 Refresh Page
@@ -68,7 +68,7 @@ class ErrorBoundary extends Component<Props, State> {
                             <Button
                                 variant="outline"
                                 onClick={this.handleReset}
-                                className="w-full border-gray-200 text-gray-700 hover:bg-gray-50 gap-2 h-11"
+                                className="w-full border-border text-foreground hover:bg-muted gap-2 h-11"
                             >
                                 <Home className="h-4 w-4" />
                                 Back to Dashboard

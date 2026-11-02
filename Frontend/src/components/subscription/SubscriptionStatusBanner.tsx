@@ -9,10 +9,10 @@ interface SubscriptionStatusBannerProps {
 }
 
 const LEVEL_STYLES: Record<string, string> = {
-    yellow: 'bg-yellow-50 border-yellow-300 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-300',
-    orange: 'bg-orange-50 border-orange-300 text-orange-800 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-300',
-    red: 'bg-red-50 border-red-300 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300',
-    expired: 'bg-red-100 border-red-400 text-red-900 dark:bg-red-900/30 dark:border-red-700 dark:text-red-200',
+    yellow: 'bg-warning/10 border-warning/30 text-warning dark:bg-warning/20 dark:border-yellow-800 dark:text-yellow-300',
+    orange: 'bg-orange-500/10 border-orange-300 text-orange-800 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-300',
+    red: 'bg-danger/10 border-danger/25 text-danger dark:bg-danger/20 dark:border-red-800 dark:text-red-300',
+    expired: 'bg-danger/15 border-red-400 text-danger dark:bg-danger/30 dark:border-red-700 dark:text-red-200',
 };
 
 /** Renders the yellow/orange/red/expired subscription warning banner (spec section 11). */
@@ -35,7 +35,7 @@ export const SubscriptionStatusBanner = ({
             <AlertTriangle className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
             <span>{warningMessage}</span>
             {graceDayLabel && (
-                <span className="ml-auto flex-shrink-0 rounded-full bg-white/60 dark:bg-black/20 px-2.5 py-0.5 text-xs font-semibold">
+                <span className="ml-auto flex-shrink-0 rounded-full bg-card/60 px-2.5 py-0.5 text-xs font-semibold">
                     {graceDayLabel}
                 </span>
             )}

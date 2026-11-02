@@ -11,15 +11,15 @@ export function VsdcStatusBanner() {
   const isBlocked = status === 'blocked';
 
   const bgColor = isBlocked
-    ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-800'
-    : 'bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-800';
+    ? 'bg-danger/10 dark:bg-danger/20 border-danger/25 dark:border-red-800'
+    : 'bg-orange-500/10 dark:bg-orange-900/20 border-orange-300 dark:border-orange-800';
 
   const textColor = isBlocked
-    ? 'text-red-900 dark:text-red-100'
+    ? 'text-danger dark:text-red-100'
     : 'text-orange-900 dark:text-orange-100';
 
   const iconColor = isBlocked
-    ? 'text-red-600 dark:text-red-400'
+    ? 'text-danger dark:text-red-400'
     : 'text-orange-600 dark:text-orange-400';
 
   const Icon = isBlocked ? ShieldAlert : WifiOff;

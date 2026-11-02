@@ -201,17 +201,17 @@ export default function InventorySummaryDashboard() {
   const totalCostLabel = totals ? formatCurrency(totals.totalCost) : '';
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           {t('inventory.inventorySummary') || 'Inventory Summary Dashboard'}
         </h1>
       </div>
 
       {/* Filters */}
-      <Card className="border-none shadow-lg bg-white dark:bg-gray-800 overflow-hidden">
-        <CardHeader className="border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-blue-600/5 to-indigo-600/5">
-          <CardTitle className="text-gray-900 dark:text-white">
+      <Card className="border-none shadow-lg bg-card overflow-hidden">
+        <CardHeader className="border-b border-border bg-gradient-to-r from-blue-600/5 to-indigo-600/5">
+          <CardTitle className="text-foreground">
             {t('common.filters') || 'Filters'}
           </CardTitle>
         </CardHeader>
@@ -259,7 +259,7 @@ export default function InventorySummaryDashboard() {
                 onChange={(e) => setFromDate(e.target.value || 'inception')}
                 placeholder={t('inventory.fromInception') || 'From inception'}
               />
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs text-muted-foreground">
                 {t('inventory.leaveEmptyForInception') || 'Leave empty for "from inception"'}
               </p>
             </div>
@@ -269,10 +269,10 @@ export default function InventorySummaryDashboard() {
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : error ? (
-        <div className="text-center py-12 text-red-500">{error}</div>
+        <div className="text-center py-12 text-danger">{error}</div>
       ) : summaryData && Array.isArray(summaryData.summary) ? (
         <>
           {/* Summary Cards */}
@@ -280,16 +280,16 @@ export default function InventorySummaryDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Card className="min-w-0 overflow-hidden border-none shadow-lg bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/40 dark:to-gray-800 ring-1 ring-emerald-100 dark:ring-emerald-900/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                  <CardTitle className="text-sm font-medium text-success dark:text-emerald-400">
                     {t('inventory.totalStockIn') || 'Total Stock IN'}
                   </CardTitle>
-                  <div className="rounded-full bg-emerald-100 dark:bg-emerald-900/50 p-2 shrink-0">
-                    <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <div className="rounded-full bg-success/15 dark:bg-success/50 p-2 shrink-0">
+                    <TrendingUp className="h-4 w-4 text-success dark:text-emerald-400" />
                   </div>
                 </CardHeader>
                 <CardContent className="min-w-0">
                   <div
-                    className={`font-bold tabular-nums tracking-tight text-gray-900 dark:text-white break-all leading-tight ${metricClassName(totalInLabel)}`}
+                    className={`font-bold tabular-nums tracking-tight text-foreground break-all leading-tight ${metricClassName(totalInLabel)}`}
                     title={totalInLabel}
                   >
                     {totalInLabel}
@@ -299,16 +299,16 @@ export default function InventorySummaryDashboard() {
 
               <Card className="min-w-0 overflow-hidden border-none shadow-lg bg-gradient-to-br from-rose-50 to-white dark:from-rose-950/40 dark:to-gray-800 ring-1 ring-rose-100 dark:ring-rose-900/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-rose-700 dark:text-rose-400">
+                  <CardTitle className="text-sm font-medium text-danger dark:text-rose-400">
                     {t('inventory.totalStockOut') || 'Total Stock OUT'}
                   </CardTitle>
-                  <div className="rounded-full bg-rose-100 dark:bg-rose-900/50 p-2 shrink-0">
-                    <TrendingDown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                  <div className="rounded-full bg-danger/15 dark:bg-danger/50 p-2 shrink-0">
+                    <TrendingDown className="h-4 w-4 text-danger dark:text-rose-400" />
                   </div>
                 </CardHeader>
                 <CardContent className="min-w-0">
                   <div
-                    className={`font-bold tabular-nums tracking-tight text-gray-900 dark:text-white break-all leading-tight ${metricClassName(totalOutLabel)}`}
+                    className={`font-bold tabular-nums tracking-tight text-foreground break-all leading-tight ${metricClassName(totalOutLabel)}`}
                     title={totalOutLabel}
                   >
                     {totalOutLabel}
@@ -321,13 +321,13 @@ export default function InventorySummaryDashboard() {
                   <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-400">
                     {t('inventory.currentStock') || 'Current Stock'}
                   </CardTitle>
-                  <div className="rounded-full bg-purple-100 dark:bg-purple-900/50 p-2 shrink-0">
+                  <div className="rounded-full bg-purple-500/15 dark:bg-purple-900/50 p-2 shrink-0">
                     <Package className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                   </div>
                 </CardHeader>
                 <CardContent className="min-w-0">
                   <div
-                    className={`font-bold tabular-nums tracking-tight text-gray-900 dark:text-white break-all leading-tight ${metricClassName(totalStockLabel)}`}
+                    className={`font-bold tabular-nums tracking-tight text-foreground break-all leading-tight ${metricClassName(totalStockLabel)}`}
                     title={totalStockLabel}
                   >
                     {totalStockLabel}
@@ -335,18 +335,18 @@ export default function InventorySummaryDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="min-w-0 overflow-hidden border-none shadow-lg bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/40 dark:to-gray-800 ring-1 ring-blue-100 dark:ring-blue-900/50">
+              <Card className="min-w-0 overflow-hidden border-none shadow-lg bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/40 dark:to-gray-800 ring-1 ring-ring">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-400">
+                  <CardTitle className="text-sm font-medium text-primary">
                     {t('inventory.totalCost') || 'Total Cost'}
                   </CardTitle>
-                  <div className="rounded-full bg-blue-100 dark:bg-blue-900/50 p-2 shrink-0">
-                    <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <div className="rounded-full bg-primary/15 p-2 shrink-0">
+                    <DollarSign className="h-4 w-4 text-primary" />
                   </div>
                 </CardHeader>
                 <CardContent className="min-w-0">
                   <div
-                    className={`font-bold tabular-nums tracking-tight text-gray-900 dark:text-white break-all leading-tight ${metricClassName(totalCostLabel)}`}
+                    className={`font-bold tabular-nums tracking-tight text-foreground break-all leading-tight ${metricClassName(totalCostLabel)}`}
                     title={totalCostLabel}
                   >
                     {totalCostLabel}
@@ -357,12 +357,12 @@ export default function InventorySummaryDashboard() {
           )}
 
           {/* Summary Table */}
-          <Card className="border-none shadow-lg bg-white dark:bg-gray-800 overflow-hidden">
-            <CardHeader className="border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-indigo-600/5 to-purple-600/5">
-              <CardTitle className="text-gray-900 dark:text-white">
+          <Card className="border-none shadow-lg bg-card overflow-hidden">
+            <CardHeader className="border-b border-border bg-gradient-to-r from-indigo-600/5 to-purple-600/5">
+              <CardTitle className="text-foreground">
                 {t('inventory.inventorySummary') || 'Inventory Summary by Product & Branch'}
                 {summaryData.fromDate && summaryData.fromDate !== 'inception' && (
-                  <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
                     ({t('common.from') || 'From'} {summaryData.fromDate})
                   </span>
                 )}
@@ -372,7 +372,7 @@ export default function InventorySummaryDashboard() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-gray-100 dark:border-gray-700">
+                    <TableRow className="border-border">
                       <TableHead>{t('common.product') || 'Product'}</TableHead>
                       <TableHead>{t('inventory.branch') || 'Branch'}</TableHead>
                       <TableHead className="text-right">{t('inventory.totalIn') || 'Total IN'}</TableHead>
@@ -398,24 +398,24 @@ export default function InventorySummaryDashboard() {
                         return (
                           <TableRow
                             key={`${item.productId}-${item.branchId}-${index}`}
-                            className="border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                            className="border-border hover:bg-muted"
                           >
                             <TableCell className="font-medium">
                               {product?.name || `Product #${item.productId}`}
                               {product?.sku && (
-                                <div className="text-xs text-gray-500 dark:text-gray-400">SKU: {product.sku}</div>
+                                <div className="text-xs text-muted-foreground">SKU: {product.sku}</div>
                               )}
                             </TableCell>
                             <TableCell>
                               {branch ? branch.name : item.branchId === null ? (t('inventory.mainBranch') || 'Main Branch') : `Branch #${item.branchId}`}
                               {branch?.code && (
-                                <div className="text-xs text-gray-500 dark:text-gray-400">{branch.code}</div>
+                                <div className="text-xs text-muted-foreground">{branch.code}</div>
                               )}
                             </TableCell>
-                            <TableCell className="text-right text-emerald-600 dark:text-emerald-400 font-mono tabular-nums whitespace-nowrap">
+                            <TableCell className="text-right text-success dark:text-emerald-400 font-mono tabular-nums whitespace-nowrap">
                               +{formatNumber(item.totalIn)}
                             </TableCell>
-                            <TableCell className="text-right text-rose-600 dark:text-rose-400 font-mono tabular-nums whitespace-nowrap">
+                            <TableCell className="text-right text-danger dark:text-rose-400 font-mono tabular-nums whitespace-nowrap">
                               -{formatNumber(item.totalOut)}
                             </TableCell>
                             <TableCell className="text-right font-semibold font-mono tabular-nums whitespace-nowrap">
@@ -426,10 +426,10 @@ export default function InventorySummaryDashboard() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="space-y-1">
-                                <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                                <div className="text-xs text-success dark:text-emerald-400">
                                   IN: {toNum(item.movements?.IN)}
                                 </div>
-                                <div className="text-xs text-rose-600 dark:text-rose-400">
+                                <div className="text-xs text-danger dark:text-rose-400">
                                   OUT: {toNum(item.movements?.OUT)}
                                 </div>
                               </div>
@@ -438,10 +438,10 @@ export default function InventorySummaryDashboard() {
                               <div className="space-y-1 max-w-xs">
                                 {Object.entries(item.byType || {}).map(([type, stats]) => (
                                   <div key={type} className="text-xs">
-                                    <Badge variant="outline" className="mr-1 border-purple-200 text-purple-700 dark:border-purple-800 dark:text-purple-300">
+                                    <Badge variant="outline" className="mr-1 border-purple-500/25 text-purple-700 dark:border-purple-800 dark:text-purple-300">
                                       {type.replace(/_/g, ' ')}
                                     </Badge>
-                                    <span className="text-gray-500 dark:text-gray-400">
+                                    <span className="text-muted-foreground">
                                       {toNum(stats.count)} × {formatNumber(stats.quantity)}
                                     </span>
                                   </div>

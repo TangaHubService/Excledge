@@ -32,18 +32,18 @@ export default function ConfirmDialog({
         switch (variant) {
             case "destructive":
                 return {
-                    title: theme === "dark" ? "text-red-400" : "text-red-600",
-                    button: theme === "dark" ? "bg-red-600 hover:bg-red-700 text-white" : "bg-red-500 hover:bg-red-600 text-white"
+                    title: theme === "dark" ? "text-red-400" : "text-danger",
+                    button: theme === "dark" ? "bg-danger hover:bg-danger/90 text-white" : "bg-danger hover:bg-danger/90 text-white"
                 };
             case "warning":
                 return {
-                    title: theme === "dark" ? "text-amber-400" : "text-amber-600",
-                    button: theme === "dark" ? "bg-amber-600 hover:bg-amber-700 text-white" : "bg-amber-500 hover:bg-amber-600 text-white"
+                    title: theme === "dark" ? "text-amber-400" : "text-warning",
+                    button: theme === "dark" ? "bg-warning hover:bg-warning/90 text-white" : "bg-warning hover:bg-warning/90 text-white"
                 };
             default:
                 return {
-                    title: theme === "dark" ? "text-white" : "text-gray-900",
-                    button: "bg-blue-600 hover:bg-blue-700 text-white"
+                    title: theme === "dark" ? "text-white" : "text-foreground",
+                    button: "bg-primary hover:bg-primary/90 text-white"
                 };
         }
     };
@@ -55,14 +55,14 @@ export default function ConfirmDialog({
             <DialogContent
                 className={`sm:max-w-[425px] rounded-2xl shadow-lg border ${theme === "dark"
                     ? "bg-gray-900 border-gray-700 text-gray-100"
-                    : "bg-white border-gray-200 text-gray-800"
+                    : "bg-card border-border text-foreground"
                     }`}
             >
                 <DialogHeader>
                     <DialogTitle className={`text-xl font-semibold ${colors.title}`}>
                         {title}
                     </DialogTitle>
-                    <DialogDescription className={theme === "dark" ? "text-gray-400" : "text-gray-500"}>
+                    <DialogDescription className={theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"}>
                         {message}
                     </DialogDescription>
                 </DialogHeader>
@@ -73,8 +73,8 @@ export default function ConfirmDialog({
                         onClick={onClose}
                         disabled={loading}
                         className={`px-4 rounded-lg transition-colors ${theme === "dark"
-                            ? "border-gray-700 text-gray-300 hover:bg-gray-800"
-                            : "border-gray-300 text-gray-700 hover:bg-gray-100"
+                            ? "border-gray-700 text-muted-foreground/60 hover:bg-gray-800"
+                            : "border-border text-foreground hover:bg-muted"
                             }`}
                     >
                         {cancelText}

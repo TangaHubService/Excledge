@@ -378,7 +378,7 @@ export function OrganizationConfig() {
     if (loading) {
         return (
             <div className="flex h-[400px] items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
         );
     }
@@ -386,16 +386,16 @@ export function OrganizationConfig() {
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-2">
-                <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                     {t('nav.organizationConfig')}
                 </h1>
-                <p className="text-gray-500 dark:text-gray-400">
+                <p className="text-muted-foreground">
                     Manage your organization profile, contact information, and business branches.
                 </p>
             </div>
 
             <Tabs defaultValue="details" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 lg:w-[560px] bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+                <TabsList className="grid w-full grid-cols-3 lg:w-[560px] bg-muted p-1 rounded-xl">
                     <TabsTrigger value="details" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm">
                         <Building2 className="h-4 w-4 mr-2" />
                         Details
@@ -412,12 +412,12 @@ export function OrganizationConfig() {
 
                 {/* Organization Details Tab */}
                 <TabsContent value="details" className="mt-6">
-                    <Card className="border-none shadow-xl bg-white dark:bg-gray-800 overflow-hidden">
-                        <CardHeader className="bg-gradient-to-r from-blue-600/5 to-indigo-600/5 border-b border-gray-100 dark:border-gray-700">
+                    <Card className="border-none shadow-xl bg-card overflow-hidden">
+                        <CardHeader className="bg-gradient-to-r from-blue-600/5 to-indigo-600/5 border-b border-border">
                             <div className="flex items-center justify-between">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2">
-                                        <Info className="h-5 w-5 text-blue-600" />
+                                        <Info className="h-5 w-5 text-primary" />
                                         <CardTitle>Organization Profile</CardTitle>
                                     </div>
                                     <CardDescription>
@@ -425,7 +425,7 @@ export function OrganizationConfig() {
                                     </CardDescription>
                                 </div>
                                 <div className="relative group">
-                                    <div className="h-20 w-20 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden border-2 border-dashed border-gray-200 dark:border-gray-600 group-hover:border-blue-400 transition-colors">
+                                    <div className="h-20 w-20 rounded-2xl bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-border group-hover:border-primary transition-colors">
                                         {previewAvatar || organization?.avatar ? (
                                             <img
                                                 src={previewAvatar || organization?.avatar}
@@ -433,11 +433,11 @@ export function OrganizationConfig() {
                                                 className="h-full w-full object-cover"
                                             />
                                         ) : (
-                                            <Building2 className="h-8 w-8 text-gray-400" />
+                                            <Building2 className="h-8 w-8 text-muted-foreground" />
                                         )}
                                     </div>
                                     {isAuthorized && (
-                                        <label className="absolute -bottom-2 -right-2 bg-blue-600 text-white p-1.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors shadow-lg border-2 border-white dark:border-gray-800">
+                                        <label className="absolute -bottom-2 -right-2 bg-primary text-white p-1.5 rounded-lg cursor-pointer hover:bg-primary/90 transition-colors shadow-lg border-2 border-white">
                                             {isUploading ? (
                                                 <Loader2 className="h-3 w-3 animate-spin" />
                                             ) : (
@@ -460,7 +460,7 @@ export function OrganizationConfig() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
                                         <Label className="flex items-center gap-2">
-                                            <Building2 className="h-4 w-4 text-gray-400" />
+                                            <Building2 className="h-4 w-4 text-muted-foreground" />
                                             Organization Name
                                         </Label>
                                         <Input
@@ -473,7 +473,7 @@ export function OrganizationConfig() {
 
                                     <div className="space-y-2">
                                         <Label className="flex items-center gap-2">
-                                            <Fingerprint className="h-4 w-4 text-gray-400" />
+                                            <Fingerprint className="h-4 w-4 text-muted-foreground" />
                                             Organization Code / TIN
                                         </Label>
                                         <Input
@@ -485,13 +485,13 @@ export function OrganizationConfig() {
                                     </div>
 
                                     <div className="space-y-2 md:col-span-2">
-                                        <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-4 py-3">
+                                        <div className="flex items-center justify-between rounded-xl border border-border bg-surface-subtle px-4 py-3">
                                             <div>
-                                                <Label className="flex items-center gap-2 text-gray-800 dark:text-gray-200">
-                                                    <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                                <Label className="flex items-center gap-2 text-foreground">
+                                                    <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                                                     VAT Registered
                                                 </Label>
-                                                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                                <p className="mt-0.5 text-xs text-muted-foreground">
                                                     When off, every sale uses RRA tax code D (not VAT registered).
                                                     When on, each product's tax category (A/B/C) applies.
                                                 </p>
@@ -507,7 +507,7 @@ export function OrganizationConfig() {
                                     {organization?.vatRegistered && (
                                         <div className="space-y-2">
                                             <Label className="flex items-center gap-2">
-                                                <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                                                 VAT Registration Number (VRN)
                                             </Label>
                                             <Input
@@ -521,13 +521,13 @@ export function OrganizationConfig() {
                                     )}
 
                                     <div className="space-y-2 md:col-span-2">
-                                        <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-4 py-3">
+                                        <div className="flex items-center justify-between rounded-xl border border-border bg-surface-subtle px-4 py-3">
                                             <div>
-                                                <Label className="flex items-center gap-2 text-gray-800 dark:text-gray-200">
-                                                    <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                                <Label className="flex items-center gap-2 text-foreground">
+                                                    <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                                                     Tax Exempt Entity
                                                 </Label>
-                                                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                                <p className="mt-0.5 text-xs text-muted-foreground">
                                                     For legally tax-exempt organizations (e.g. NGO, diplomatic mission).
                                                     When on, every sale uses RRA tax code A (VAT exempt), regardless of
                                                     VAT-registration status or product tax category.
@@ -544,7 +544,7 @@ export function OrganizationConfig() {
                                     {organization?.isTaxExempt && (
                                         <div className="space-y-2 md:col-span-2">
                                             <Label className="flex items-center gap-2">
-                                                <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                                                 Exemption Reason / Certificate Reference
                                             </Label>
                                             <Input
@@ -559,10 +559,10 @@ export function OrganizationConfig() {
 
                                     <div className="space-y-2 md:col-span-2">
                                         <Label className="flex items-center gap-2">
-                                            <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                                             RRA tax bands
                                         </Label>
-                                        <div className="rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800 text-sm">
+                                        <div className="rounded-xl border border-border divide-y divide-border text-sm">
                                             {[
                                                 { code: 'A', rate: '0%', label: 'Exempt' },
                                                 { code: 'B', rate: '18%', label: 'Standard VAT' },
@@ -575,7 +575,7 @@ export function OrganizationConfig() {
                                                 </div>
                                             ))}
                                         </div>
-                                        <p className="text-xs text-gray-400">
+                                        <p className="text-xs text-muted-foreground">
                                             Tax rates are fixed by Rwandan tax law and applied automatically per product tax code.
                                             They are not operator-editable; a rate change would require a system update and RRA re-certification.
                                         </p>
@@ -583,7 +583,7 @@ export function OrganizationConfig() {
 
                                     <div className="space-y-2 md:col-span-2">
                                         <Label className="flex items-center gap-2">
-                                            <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                                             RRA EBM / VSDC — device ID
                                         </Label>
                                         <Input
@@ -597,7 +597,7 @@ export function OrganizationConfig() {
 
                                     <div className="space-y-2">
                                         <Label className="flex items-center gap-2">
-                                            <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                                             RRA EBM / VSDC — device serial (dvcSrlNo)
                                         </Label>
                                         <Input
@@ -612,7 +612,7 @@ export function OrganizationConfig() {
 
                                     <div className="space-y-2">
                                         <Label className="flex items-center gap-2">
-                                            <ShieldCheck className="h-4 w-4 text-gray-400" />
+                                            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                                             MRC (Machine Registration Code)
                                         </Label>
                                         <Input
@@ -624,17 +624,17 @@ export function OrganizationConfig() {
                                             minLength={11}
                                             maxLength={11}
                                         />
-                                        <p className="text-xs text-gray-400">{t('companySettings.mrcHint')}</p>
+                                        <p className="text-xs text-muted-foreground">{t('companySettings.mrcHint')}</p>
                                     </div>
 
                                     <div className="space-y-2 md:col-span-2">
-                                        <div className="flex items-center justify-between rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-3">
+                                        <div className="flex items-center justify-between rounded-xl border border-warning/30 dark:border-amber-700 bg-warning/10 dark:bg-warning/20 px-4 py-3">
                                             <div>
-                                                <Label className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+                                                <Label className="flex items-center gap-2 text-warning dark:text-amber-300">
                                                     <FlaskConical className="h-4 w-4 text-amber-500" />
                                                     Training Mode
                                                 </Label>
-                                                <p className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-400/80">
+                                                <p className="mt-0.5 text-xs text-warning/80 dark:text-amber-400/80">
                                                     For staff practice only. While on, every sale prints as a Training
                                                     Sale (TS) and only TS receipts can be refunded (as TR). They go to
                                                     VSDC as training documents (no signature), print watermarked "not
@@ -652,7 +652,7 @@ export function OrganizationConfig() {
 
                                     <div className="space-y-2">
                                         <Label className="flex items-center gap-2">
-                                            <Mail className="h-4 w-4 text-gray-400" />
+                                            <Mail className="h-4 w-4 text-muted-foreground" />
                                             Email Address
                                         </Label>
                                         <Input
@@ -666,7 +666,7 @@ export function OrganizationConfig() {
 
                                     <div className="space-y-2">
                                         <Label className="flex items-center gap-2">
-                                            <Phone className="h-4 w-4 text-gray-400" />
+                                            <Phone className="h-4 w-4 text-muted-foreground" />
                                             Contact Phone
                                         </Label>
                                         <PhoneInputWithCountryCode
@@ -679,7 +679,7 @@ export function OrganizationConfig() {
 
                                     <div className="space-y-2">
                                         <Label className="flex items-center gap-2">
-                                            <MapPin className="h-4 w-4 text-gray-400" />
+                                            <MapPin className="h-4 w-4 text-muted-foreground" />
                                             Headquarters Address
                                         </Label>
                                         <Input
@@ -692,10 +692,10 @@ export function OrganizationConfig() {
 
                                     <div className="space-y-2">
                                         <Label className="flex items-center gap-2">
-                                            <Activity className="h-4 w-4 text-gray-400" />
+                                            <Activity className="h-4 w-4 text-muted-foreground" />
                                             Status
                                         </Label>
-                                        <div className="flex items-center h-10 px-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-700">
+                                        <div className="flex items-center h-10 px-3 bg-surface-subtle rounded-xl border border-border">
                                             <Badge variant={organization?.isActive ? "default" : "destructive"} className="rounded-full">
                                                 {organization?.isActive ? "Active" : "Inactive"}
                                             </Badge>
@@ -704,23 +704,23 @@ export function OrganizationConfig() {
 
                                     <div className="space-y-2">
                                         <Label className="flex items-center gap-2">
-                                            <Calendar className="h-4 w-4 text-gray-400" />
+                                            <Calendar className="h-4 w-4 text-muted-foreground" />
                                             Created On
                                         </Label>
                                         <Input
                                             value={organization?.createdAt ? new Date(organization.createdAt).toLocaleDateString() : 'N/A'}
                                             disabled
-                                            className="rounded-xl bg-gray-50 dark:bg-gray-900 grayscale opacity-60"
+                                            className="rounded-xl bg-surface-subtle grayscale opacity-60"
                                         />
                                     </div>
                                 </div>
 
                                 {isAuthorized && (
-                                    <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-gray-700">
+                                    <div className="flex justify-end pt-4 border-t border-border">
                                         <Button
                                             type="submit"
                                             disabled={isSavingOrg}
-                                            className="bg-blue-600 hover:bg-blue-700 text-white px-8 rounded-xl shadow-lg shadow-blue-500/20"
+                                            className="bg-primary hover:bg-primary/90 text-white px-8 rounded-xl shadow-lg shadow-blue-500/20"
                                         >
                                             {isSavingOrg ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                                             Save Changes
@@ -734,8 +734,8 @@ export function OrganizationConfig() {
 
                 {/* Branch Management Tab */}
                 <TabsContent value="branches" className="mt-6">
-                    <Card className="border-none shadow-xl bg-white dark:bg-gray-800">
-                        <CardHeader className="flex flex-row items-center justify-between border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-indigo-600/5 to-purple-600/5">
+                    <Card className="border-none shadow-xl bg-card">
+                        <CardHeader className="flex flex-row items-center justify-between border-b border-border bg-gradient-to-r from-indigo-600/5 to-purple-600/5">
                             <div>
                                 <CardTitle className="flex items-center gap-2">
                                     <GitBranch className="h-5 w-5 text-indigo-600" />
@@ -754,7 +754,7 @@ export function OrganizationConfig() {
                         </CardHeader>
                         <CardContent className="p-0">
                             <Table>
-                                <TableHeader className="bg-gray-50/50 dark:bg-gray-900/50">
+                                <TableHeader className="bg-surface-subtle/50">
                                     <TableRow>
                                         <TableHead className="pl-6">Name</TableHead>
                                         <TableHead>Code</TableHead>
@@ -766,25 +766,25 @@ export function OrganizationConfig() {
                                 <TableBody>
                                     {branches.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={5} className="text-center py-12 text-gray-500">
+                                            <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
                                                 No branches found for this organization.
                                             </TableCell>
                                         </TableRow>
                                     ) : (
                                         branches.map((branch) => (
-                                            <TableRow key={branch.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/30 transition-colors">
+                                            <TableRow key={branch.id} className="hover:bg-surface-subtle/50 transition-colors">
                                                 <TableCell className="font-medium pl-6">
                                                     <div className="flex items-center gap-2">
                                                         {branch.name}
                                                         {branch.isDefault && (
-                                                            <Badge variant="outline" className="rounded-full text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-700">
+                                                            <Badge variant="outline" className="rounded-full text-warning border-warning/30 dark:text-amber-400 dark:border-amber-700">
                                                                 Default
                                                             </Badge>
                                                         )}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <code className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                                                    <code className="text-xs bg-muted px-2 py-1 rounded">
                                                         {branch.code}
                                                     </code>
                                                 </TableCell>
@@ -817,11 +817,11 @@ export function OrganizationConfig() {
                                                                     onClick={() => handleSetDefaultBranch(branch)}
                                                                     disabled={branch.isDefault || branch.status !== 'ACTIVE'}
                                                                     title={branch.isDefault ? 'Default branch' : 'Set as Default'}
-                                                                    className="text-amber-500 hover:text-amber-600 hover:bg-amber-50 disabled:opacity-100"
+                                                                    className="text-amber-500 hover:text-warning hover:bg-warning/10 disabled:opacity-100"
                                                                 >
                                                                     <Star className={cn('h-4 w-4', branch.isDefault && 'fill-amber-500')} />
                                                                 </Button>
-                                                                <Button variant="ghost" size="sm" onClick={() => handleBranchEdit(branch)} className="text-blue-600 hover:bg-blue-50">
+                                                                <Button variant="ghost" size="sm" onClick={() => handleBranchEdit(branch)} className="text-primary hover:bg-primary/10">
                                                                     <Edit className="h-4 w-4" />
                                                                 </Button>
                                                             </>
@@ -841,14 +841,14 @@ export function OrganizationConfig() {
                 <TabsContent value="settings" className="mt-6 space-y-6">
                     {!settings ? (
                         <div className="flex h-[200px] items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         </div>
                     ) : (
                         <>
-                            <Card className="border-none shadow-xl bg-white dark:bg-gray-800 overflow-hidden">
-                                <CardHeader className="border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-blue-600/5 to-indigo-600/5">
+                            <Card className="border-none shadow-xl bg-card overflow-hidden">
+                                <CardHeader className="border-b border-border bg-gradient-to-r from-blue-600/5 to-indigo-600/5">
                                     <div className="flex items-center gap-2">
-                                        <LayoutGrid className="h-5 w-5 text-blue-600" />
+                                        <LayoutGrid className="h-5 w-5 text-primary" />
                                         <CardTitle>Sidebar Modules</CardTitle>
                                     </div>
                                     <CardDescription>
@@ -865,11 +865,11 @@ export function OrganizationConfig() {
                                         return (
                                         <div key={section.label} className="space-y-3">
                                             <div className="flex items-center justify-between">
-                                                <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                                                <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
                                                     {section.label}
                                                 </h4>
                                                 <div className="flex items-center gap-2">
-                                                    <Label htmlFor={`sidebar-section-${section.label}`} className="text-xs font-medium text-gray-400 dark:text-gray-500 cursor-pointer">
+                                                    <Label htmlFor={`sidebar-section-${section.label}`} className="text-xs font-medium text-muted-foreground cursor-pointer">
                                                         {allOn ? 'All shown' : 'Show all'}
                                                     </Label>
                                                     <Switch
@@ -885,7 +885,7 @@ export function OrganizationConfig() {
                                                 {visibleItems.map(({ key, label }) => (
                                                     <div
                                                         key={key}
-                                                        className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-gray-600 px-4 py-3"
+                                                        className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3"
                                                     >
                                                         <Label htmlFor={`sidebar-${key}`} className="cursor-pointer">
                                                             {label}
@@ -903,7 +903,7 @@ export function OrganizationConfig() {
                                                 <button
                                                     type="button"
                                                     onClick={() => setExpandedSections(prev => ({ ...prev, [section.label]: !isExpanded }))}
-                                                    className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                                                    className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary transition-colors"
                                                 >
                                                     <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                                     {isExpanded ? 'Show less' : `Show ${section.items.length - VISIBLE_ITEMS_CAP} more`}
@@ -915,8 +915,8 @@ export function OrganizationConfig() {
                                 </CardContent>
                             </Card>
 
-                            <Card className="border-none shadow-xl bg-white dark:bg-gray-800 overflow-hidden">
-                                <CardHeader className="border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-indigo-600/5 to-purple-600/5">
+                            <Card className="border-none shadow-xl bg-card overflow-hidden">
+                                <CardHeader className="border-b border-border bg-gradient-to-r from-indigo-600/5 to-purple-600/5">
                                     <div className="flex items-center gap-2">
                                         <ToggleLeft className="h-5 w-5 text-indigo-600" />
                                         <CardTitle>Feature Flags</CardTitle>
@@ -930,17 +930,17 @@ export function OrganizationConfig() {
                                         {(Object.keys(FEATURE_FLAG_LABELS) as (keyof IFeatureFlags)[]).map((key) => (
                                             <div
                                                 key={key}
-                                                className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 dark:border-gray-600 px-4 py-3"
+                                                className="flex items-center justify-between gap-4 rounded-xl border border-border px-4 py-3"
                                             >
                                                 <div className="space-y-0.5">
                                                     <Label htmlFor={`flag-${key}`} className="cursor-pointer">
                                                         {FEATURE_FLAG_LABELS[key].label}
                                                     </Label>
-                                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                    <p className="text-sm text-muted-foreground">
                                                         {FEATURE_FLAG_LABELS[key].description}
                                                     </p>
                                                     {settings.fiscalFlagsLocked && FISCAL_LOCKED_FLAGS.includes(key) && (
-                                                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                                                        <p className="text-xs text-warning dark:text-amber-400">
                                                             Locked while a VSDC device is configured (RRA requirement).
                                                         </p>
                                                     )}
@@ -961,8 +961,8 @@ export function OrganizationConfig() {
                                 </CardContent>
                             </Card>
 
-                            <Card className="border-none shadow-xl bg-white dark:bg-gray-800 overflow-hidden">
-                                <CardHeader className="border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-purple-600/5 to-pink-600/5">
+                            <Card className="border-none shadow-xl bg-card overflow-hidden">
+                                <CardHeader className="border-b border-border bg-gradient-to-r from-purple-600/5 to-pink-600/5">
                                     <div className="flex items-center gap-2">
                                         <SlidersHorizontal className="h-5 w-5 text-purple-600" />
                                         <CardTitle>Preferences</CardTitle>
@@ -1069,11 +1069,11 @@ export function OrganizationConfig() {
                                     </div>
 
                                     {isAuthorized && (
-                                        <div className="flex justify-end pt-6 mt-6 border-t border-gray-100 dark:border-gray-700">
+                                        <div className="flex justify-end pt-6 mt-6 border-t border-border">
                                             <Button
                                                 onClick={handleSettingsSave}
                                                 disabled={isSavingSettings}
-                                                className="bg-blue-600 hover:bg-blue-700 text-white px-8 rounded-xl shadow-lg shadow-blue-500/20"
+                                                className="bg-primary hover:bg-primary/90 text-white px-8 rounded-xl shadow-lg shadow-blue-500/20"
                                             >
                                                 {isSavingSettings ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                                                 Save Settings
@@ -1098,7 +1098,7 @@ export function OrganizationConfig() {
                             Enter the details for your business branch.
                         </DrawerDescription>
                     </DrawerHeader>
-                    <div className="p-6 space-y-4 bg-white dark:bg-gray-800">
+                    <div className="p-6 space-y-4 bg-card">
                         <div className="space-y-2">
                             <Label htmlFor="branch-name">Branch Name</Label>
                             <Input
@@ -1130,7 +1130,7 @@ export function OrganizationConfig() {
                             />
                         </div>
                     </div>
-                    <DrawerFooter className="p-6 bg-gray-50 dark:bg-gray-900/50 flex gap-2">
+                    <DrawerFooter className="p-6 bg-surface-subtle flex gap-2">
                         <Button variant="ghost" onClick={() => setBranchDialogOpen(false)} className="rounded-xl">
                             Cancel
                         </Button>

@@ -46,23 +46,23 @@ export function SearchableSelect({
           aria-expanded={open}
           disabled={disabled}
           className={cn(
-            'flex h-9 w-full items-center justify-between rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-sm transition-colors',
-            'focus:outline-none focus:ring-2 focus:ring-blue-500/20',
+            'flex h-9 w-full items-center justify-between rounded-md border border-border bg-card px-3 text-sm transition-colors',
+            'focus:outline-none focus:ring-2 focus:ring-ring/20',
             'disabled:cursor-not-allowed disabled:opacity-50',
             className,
           )}
         >
-          <span className={cn('truncate text-left', !selected && 'text-gray-400')}>
+          <span className={cn('truncate text-left', !selected && 'text-muted-foreground')}>
             {selected ? selected.label : placeholder}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg" align="start">
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-card border border-border shadow-lg" align="start">
         <Command className="bg-transparent">
-          <CommandInput placeholder={searchPlaceholder} className="bg-white dark:bg-gray-800" />
+          <CommandInput placeholder={searchPlaceholder} className="bg-card" />
           <CommandList className="max-h-60">
-            <CommandEmpty className="py-4 text-center text-sm text-gray-500">{emptyText}</CommandEmpty>
+            <CommandEmpty className="py-4 text-center text-sm text-muted-foreground">{emptyText}</CommandEmpty>
             <CommandGroup>
               {options.map((option) => (
                 <CommandItem
@@ -77,11 +77,11 @@ export function SearchableSelect({
                   <Check
                     className={cn('mr-2 h-4 w-4 shrink-0', value === option.value ? 'opacity-100' : 'opacity-0')}
                   />
-                  <span className={cn('truncate', option.emphasized && 'font-bold text-blue-600 dark:text-blue-400')}>
+                  <span className={cn('truncate', option.emphasized && 'font-bold text-primary')}>
                     {option.label}
                   </span>
                   {option.sublabel && (
-                    <span className="ml-2 truncate text-xs text-gray-400 dark:text-gray-500">{option.sublabel}</span>
+                    <span className="ml-2 truncate text-xs text-muted-foreground">{option.sublabel}</span>
                   )}
                 </CommandItem>
               ))}

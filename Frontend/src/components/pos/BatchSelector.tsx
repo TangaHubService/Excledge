@@ -47,10 +47,10 @@ function getExpiryStatus(expiryDate?: string): 'fresh' | 'warning' | 'expired' |
 }
 
 const EXPIRY_STYLES: Record<string, { dot: string; label: string; badge: string }> = {
-  fresh: { dot: 'bg-emerald-500', label: 'Fresh', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300' },
-  warning: { dot: 'bg-amber-500', label: 'Expiring soon', badge: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300' },
-  expired: { dot: 'bg-red-500', label: 'Expired', badge: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300' },
-  unknown: { dot: 'bg-gray-400', label: 'No expiry', badge: 'bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400' },
+  fresh: { dot: 'bg-success', label: 'Fresh', badge: 'bg-success/10 text-success border-success/25 dark:bg-success/20 dark:text-emerald-300' },
+  warning: { dot: 'bg-warning', label: 'Expiring soon', badge: 'bg-warning/10 text-warning border-warning/30 dark:bg-warning/20 dark:text-amber-300' },
+  expired: { dot: 'bg-danger', label: 'Expired', badge: 'bg-danger/10 text-danger border-danger/25 dark:bg-danger/20 dark:text-red-300' },
+  unknown: { dot: 'bg-gray-400', label: 'No expiry', badge: 'bg-surface-subtle text-muted-foreground border-border' },
 }
 
 /* ─── Component ─────────────────────────────────────── */
@@ -97,34 +97,34 @@ export function BatchSelector({
 
   /* ── Render ──────────────────────────────────────────── */
   return (
-    <div className="space-y-3 rounded-xl border bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+    <div className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{productName}</p>
+          <p className="text-sm font-medium text-foreground">{productName}</p>
           {unitPrice !== undefined && (
-            <p className="text-caption text-gray-500">Unit price: R{unitPrice.toFixed(2)}</p>
+            <p className="text-caption text-muted-foreground">Unit price: R{unitPrice.toFixed(2)}</p>
           )}
         </div>
       </div>
 
       {/* ── Selected batch (or recommended) ────────────── */}
       {selected && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-900/10">
+        <div className="rounded-lg border border-success/25 bg-success/10 p-3 dark:border-emerald-800 dark:bg-success/10">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
+                <span className="text-sm font-semibold text-success dark:text-emerald-200">
                   {selectedBatchId === recommended?.id ? 'Recommended (FIFO)' : 'Selected Batch'}
                 </span>
                 {selectedBatchId !== recommended?.id && (
-                  <Badge variant="outline" className="text-[10px] border-amber-200 bg-amber-50 text-amber-700">
+                  <Badge variant="outline" className="text-[10px] border-warning/30 bg-warning/10 text-warning">
                     Override
                   </Badge>
                 )}
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-emerald-700 dark:text-emerald-300">
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-success dark:text-emerald-300">
                 <span className="font-mono font-medium">{selected.batchNumber}</span>
                 <ExpiryBadge date={selected.expiryDate} />
                 <span>Avail: {selected.quantity.toLocaleString()}</span>
@@ -138,7 +138,7 @@ export function BatchSelector({
                   type="button"
                   onClick={() => onQuantityChange(Math.max(1, qtyNum - 1))}
                   disabled={qtyNum <= 1}
-                  className="flex h-9 w-9 items-center justify-center rounded-md border bg-white text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-30 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                  className="flex h-9 w-9 items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
                 >
                   −
                 </button>
@@ -157,7 +157,7 @@ export function BatchSelector({
                   type="button"
                   onClick={() => onQuantityChange(Math.min(maxQty, qtyNum + 1))}
                   disabled={qtyNum >= maxQty}
-                  className="flex h-9 w-9 items-center justify-center rounded-md border bg-white text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-30 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                  className="flex h-9 w-9 items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
                 >
                   +
                 </button>
@@ -173,7 +173,7 @@ export function BatchSelector({
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
-            className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
+            className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
           >
             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             Other Batches ({batches.filter(b => b.id !== selectedBatchId).length})
@@ -196,35 +196,35 @@ export function BatchSelector({
                         'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
                         isDisabled
                           ? 'cursor-not-allowed opacity-40'
-                          : 'hover:bg-gray-50 dark:hover:bg-gray-700',
+                          : 'hover:bg-muted',
                       )}
                     >
                       {/* Status icon */}
                       <span
                         className={cn(
                           'h-2 w-2 shrink-0 rounded-full',
-                          expiryStatus === 'expired' ? 'bg-red-500' :
-                          expiryStatus === 'warning' ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-600',
+                          expiryStatus === 'expired' ? 'bg-danger' :
+                          expiryStatus === 'warning' ? 'bg-warning' : 'bg-muted',
                         )}
                       />
 
                       {/* Batch info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                          <span className="text-sm font-medium text-foreground">
                             {batch.batchNumber}
                           </span>
                           {expiryStatus !== 'unknown' && (
                             <span className={cn(
                               'text-[10px] font-medium px-1 py-0.5 rounded',
-                              expiryStatus === 'warning' && 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-900/20',
-                              expiryStatus === 'expired' && 'text-red-600 bg-red-50 dark:text-red-300 dark:bg-red-900/20',
+                              expiryStatus === 'warning' && 'text-warning bg-warning/10 dark:text-amber-300 dark:bg-warning/20',
+                              expiryStatus === 'expired' && 'text-danger bg-danger/10 dark:text-red-300 dark:bg-danger/20',
                             )}>
                               {expiryStatus === 'warning' ? 'Expiring' : expiryStatus === 'expired' ? 'Expired' : ''}
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-caption text-gray-500">
+                        <div className="flex items-center gap-2 text-caption text-muted-foreground">
                           {batch.expiryDate && (
                             <span>Exp: {new Date(batch.expiryDate).toLocaleDateString()}</span>
                           )}
@@ -233,7 +233,7 @@ export function BatchSelector({
                       </div>
 
                       {batch.sellingPrice && (
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                        <span className="text-sm font-medium text-foreground">
                           R{batch.sellingPrice.toFixed(2)}
                         </span>
                       )}
@@ -248,7 +248,7 @@ export function BatchSelector({
       {/* ── Price override ──────────────────────────────── */}
       {onUnitPriceChange && (
         <div className="flex items-center gap-2 pt-1">
-          <label className="text-caption text-gray-500">Price:</label>
+          <label className="text-caption text-muted-foreground">Price:</label>
           <Input
             type="number"
             step="0.01"

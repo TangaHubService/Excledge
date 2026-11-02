@@ -96,12 +96,12 @@ export default function SaleSuccessModal({
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: "spring", stiffness: 260, damping: 16, delay: 0.1 }}
-                className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-emerald-100 ring-8 ring-emerald-50"
+                className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-success/15 ring-8 ring-emerald-50"
               >
                 <motion.svg
                   initial="hidden"
                   animate="visible"
-                  className="size-9 text-emerald-600"
+                  className="size-9 text-success"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -123,28 +123,28 @@ export default function SaleSuccessModal({
                 </motion.svg>
               </motion.div>
 
-              <DialogTitle className="text-lg font-bold text-gray-900">
+              <DialogTitle className="text-lg font-bold text-foreground">
                 Sale Completed Successfully!
               </DialogTitle>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 The transaction has been recorded successfully.
               </p>
 
               {/* Invoice reference */}
               {(saleData.invoiceNumber || saleData.receiptNumber) && (
-                <div className="mx-auto mt-4 flex max-w-xs items-center justify-between gap-2 rounded-xl bg-gray-50 px-4 py-2.5 text-sm">
-                  <div className="flex items-center gap-1.5 text-gray-500">
-                    <ReceiptText className="size-4 text-gray-400" />
+                <div className="mx-auto mt-4 flex max-w-xs items-center justify-between gap-2 rounded-xl bg-surface-subtle px-4 py-2.5 text-sm">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <ReceiptText className="size-4 text-muted-foreground" />
                     Invoice
                   </div>
-                  <span className="font-semibold text-gray-800 tabular-nums">
+                  <span className="font-semibold text-foreground tabular-nums">
                     {saleData.receiptNumber || saleData.invoiceNumber}
                   </span>
                 </div>
               )}
 
               {saleData.fiscalizationStatus === "pending" ? (
-                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-700">
+                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-warning/10 px-4 py-2.5 text-sm text-warning">
                   <Loader2 className="size-4 animate-spin" />
                   {t(
                     "pos.fiscalPending",
@@ -152,7 +152,7 @@ export default function SaleSuccessModal({
                   )}
                 </div>
               ) : saleData.fiscalizationStatus === "failed" ? (
-                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-700">
+                <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-warning/10 px-4 py-2.5 text-sm text-warning">
                   <AlertTriangle className="size-4 shrink-0" />
                   {t(
                     "pos.fiscalFailed",
@@ -160,7 +160,7 @@ export default function SaleSuccessModal({
                   )}
                 </div>
               ) : (
-                <p className="mt-4 text-sm text-emerald-700">
+                <p className="mt-4 text-sm text-success">
                   {t(
                     "pos.saleCompleted",
                     "Thank you! The sale has been completed successfully and inventory has been updated.",
@@ -180,7 +180,7 @@ export default function SaleSuccessModal({
                         onClick={onPrint}
                         size="lg"
                         disabled={printBlocked}
-                        className="flex-1 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                        className="flex-1 bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
                       >
                         {saleData.fiscalizationStatus === "pending"
                           ? <Loader2 className="size-4.5 animate-spin" />
@@ -190,7 +190,7 @@ export default function SaleSuccessModal({
                       <Button
                         onClick={onNewSale}
                         size="lg"
-                        className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
+                        className="flex-1 bg-success text-white hover:bg-success/90"
                       >
                         <Plus className="size-4.5" />
                         New Sale
@@ -233,7 +233,7 @@ export default function SaleSuccessModal({
                 <button
                   type="button"
                   onClick={onViewInvoice}
-                  className="mt-3 text-sm font-medium text-gray-500 underline-offset-4 transition-colors hover:text-blue-600 hover:underline"
+                  className="mt-3 text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-primary hover:underline"
                 >
                   View Invoice
                 </button>

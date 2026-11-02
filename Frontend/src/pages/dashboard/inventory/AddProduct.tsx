@@ -648,18 +648,18 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                 }}
                                 className={cn(
                                     'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all min-w-0',
-                                    currentStep === step.id && 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100',
-                                    currentStep !== step.id && idx < stepIndex && 'text-emerald-600 dark:text-emerald-400',
-                                    currentStep !== step.id && idx > stepIndex && 'text-gray-400 dark:text-gray-500',
-                                    idx < stepIndex && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50',
+                                    currentStep === step.id && 'bg-muted text-foreground',
+                                    currentStep !== step.id && idx < stepIndex && 'text-success dark:text-emerald-400',
+                                    currentStep !== step.id && idx > stepIndex && 'text-muted-foreground',
+                                    idx < stepIndex && 'cursor-pointer hover:bg-muted',
                                 )}
                                 aria-current={currentStep === step.id ? 'step' : undefined}
                             >
                                 <span className={cn(
                                     'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
-                                    idx < stepIndex && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-                                    currentStep === step.id && 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900',
-                                    idx > stepIndex && 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500',
+                                    idx < stepIndex && 'bg-success/15 text-success dark:bg-success/40 dark:text-emerald-300',
+                                    currentStep === step.id && 'bg-gray-900 text-white',
+                                    idx > stepIndex && 'bg-muted text-muted-foreground',
                                 )}>
                                     {idx < stepIndex ? <Check className="h-3 w-3" /> : idx + 1}
                                 </span>
@@ -668,7 +668,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                             {idx < visibleSteps.length - 1 && (
                                 <div className={cn(
                                     'h-px flex-1 min-w-[8px] mx-1',
-                                    idx < stepIndex ? 'bg-emerald-300 dark:bg-emerald-700' : 'bg-gray-200 dark:bg-gray-700',
+                                    idx < stepIndex ? 'bg-emerald-300 dark:bg-success' : 'bg-muted',
                                 )} aria-hidden="true" />
                             )}
                         </div>
@@ -679,11 +679,11 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                     {/* ══════ STEP 1: BASIC INFO ══════ */}
                     {currentStep === 'basic' && (
                         <div className="space-y-6">
-                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Basic Information</h2>
+                            <h2 className="text-base font-semibold text-foreground">Basic Information</h2>
 
                             <div ref={setSectionRef('item-type')}>
-                                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">
-                                    Item Type <span className="text-red-500">*</span>
+                                <label className="text-sm font-semibold text-foreground mb-3 block">
+                                    Item Type <span className="text-danger">*</span>
                                 </label>
                                 <div className="flex gap-2">
                                     <button
@@ -691,8 +691,8 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                         onClick={() => { setValue('itemType', 'PRODUCT'); setItemType('PRODUCT') }}
                                         className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                                             itemType === 'PRODUCT'
-                                                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                                ? 'bg-primary text-white shadow-md shadow-blue-500/20'
+                                                : 'bg-muted text-muted-foreground hover:bg-muted'
                                         }`}
                                     >
                                         <Package className="h-4 w-4" />
@@ -703,8 +703,8 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                         onClick={() => { setValue('itemType', 'RAW_MATERIAL'); setItemType('RAW_MATERIAL') }}
                                         className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                                             itemType === 'RAW_MATERIAL'
-                                                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                                ? 'bg-primary text-white shadow-md shadow-blue-500/20'
+                                                : 'bg-muted text-muted-foreground hover:bg-muted'
                                         }`}
                                     >
                                         <Boxes className="h-4 w-4" />
@@ -715,8 +715,8 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                         onClick={() => { setValue('itemType', 'SERVICE'); setItemType('SERVICE') }}
                                         className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                                             itemType === 'SERVICE'
-                                                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                                ? 'bg-primary text-white shadow-md shadow-blue-500/20'
+                                                : 'bg-muted text-muted-foreground hover:bg-muted'
                                         }`}
                                     >
                                         <Wrench className="h-4 w-4" />
@@ -726,26 +726,26 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                             </div>
 
                             <div ref={setSectionRef('product-image')}>
-                                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">Product Image</label>
+                                <label className="text-sm font-semibold text-foreground mb-3 block">Product Image</label>
                                 {imagePreview ? (
                                     <div className="relative">
                                         <img
                                             src={imagePreview}
                                             alt="Preview"
-                                            className="w-full h-36 object-cover rounded-xl border border-gray-200 dark:border-gray-700"
+                                            className="w-full h-36 object-cover rounded-xl border border-border"
                                         />
                                         <button
                                             type="button"
                                             onClick={removeImage}
-                                            className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full shadow-md hover:bg-red-600 transition-colors"
+                                            className="absolute top-2 right-2 p-1.5 bg-danger text-white rounded-full shadow-md hover:bg-danger/90 transition-colors"
                                         >
                                             <X className="h-3.5 w-3.5" />
                                         </button>
                                     </div>
                                 ) : (
-                                    <label className="flex flex-col items-center justify-center w-full h-28 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors bg-gray-50 dark:bg-gray-900/50">
-                                        <Upload className="h-6 w-6 text-gray-400 mb-1.5" />
-                                        <span className="text-xs text-gray-500">Click to upload image</span>
+                                    <label className="flex flex-col items-center justify-center w-full h-28 rounded-xl border-2 border-dashed border-border cursor-pointer hover:border-primary transition-colors bg-surface-subtle">
+                                        <Upload className="h-6 w-6 text-muted-foreground mb-1.5" />
+                                        <span className="text-xs text-muted-foreground">Click to upload image</span>
                                         <input type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
                                     </label>
                                 )}
@@ -754,8 +754,8 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                             <div ref={setSectionRef('product-info')}>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="space-y-1.5 md:col-span-2">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            {itemType === 'SERVICE' ? 'Service Name' : itemType === 'RAW_MATERIAL' ? 'Raw Material Name' : 'Product Name'} <span className="text-red-500">*</span>
+                                        <label className="text-sm font-medium text-foreground">
+                                            {itemType === 'SERVICE' ? 'Service Name' : itemType === 'RAW_MATERIAL' ? 'Raw Material Name' : 'Product Name'} <span className="text-danger">*</span>
                                         </label>
                                         <Popover open={namePopoverOpen} onOpenChange={setNamePopoverOpen}>
                                             <PopoverTrigger asChild>
@@ -763,21 +763,21 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                     type="button"
                                                     role="combobox"
                                                     aria-expanded={namePopoverOpen}
-                                                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                        errors.name ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                        errors.name ? 'border-red-400' : 'border-border'
                                                     }`}
                                                 >
-                                                    <span className={watch('name') ? 'truncate' : 'text-gray-400 truncate'}>
+                                                    <span className={watch('name') ? 'truncate' : 'text-muted-foreground truncate'}>
                                                         {watch('name') || (itemType === 'SERVICE' ? 'Select or type service name...' : itemType === 'RAW_MATERIAL' ? 'Select or type raw material name...' : 'Select or type product name...')}
                                                     </span>
                                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                 </button>
                                             </PopoverTrigger>
-                                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg" align="start">
+                                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-card border border-border shadow-lg" align="start">
                                                 <Command className="bg-transparent">
                                                     <CommandInput
                                                         placeholder="Search or type new..."
-                                                        className="bg-white dark:bg-gray-800"
+                                                        className="bg-card"
                                                         value={watch('name')}
                                                         onValueChange={(v) => {
                                                             setValue('name', v, { shouldValidate: true })
@@ -811,7 +811,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => setNamePopoverOpen(false)}
-                                                                    className="w-full text-left px-2 py-1.5 text-sm text-blue-600 hover:bg-accent rounded-sm"
+                                                                    className="w-full text-left px-2 py-1.5 text-sm text-primary hover:bg-primary/10 rounded-md"
                                                                 >
                                                                     Use "{watch('name')}"
                                                                 </button>
@@ -821,11 +821,11 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                 </Command>
                                             </PopoverContent>
                                         </Popover>
-                                        {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
+                                        {errors.name && <p className="text-xs text-danger mt-1">{errors.name.message}</p>}
                                     </div>
                                     <div className="space-y-1.5 md:col-span-2">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            Category <span className="text-red-500">*</span>
+                                        <label className="text-sm font-medium text-foreground">
+                                            Category <span className="text-danger">*</span>
                                         </label>
                                         <Popover open={categoryPopoverOpen} onOpenChange={setCategoryPopoverOpen}>
                                             <PopoverTrigger asChild>
@@ -833,21 +833,21 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                     type="button"
                                                     role="combobox"
                                                     aria-expanded={categoryPopoverOpen}
-                                                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                        errors.category ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                        errors.category ? 'border-red-400' : 'border-border'
                                                     }`}
                                                 >
-                                                    <span className={watch('category') ? '' : 'text-gray-400'}>
+                                                    <span className={watch('category') ? '' : 'text-muted-foreground'}>
                                                         {watch('category') || 'Select or type category...'}
                                                     </span>
                                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                 </button>
                                             </PopoverTrigger>
-                                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg" align="start">
+                                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-card border border-border shadow-lg" align="start">
                                                 <Command className="bg-transparent">
                                                     <CommandInput
                                                         placeholder="Search or type new..."
-                                                        className="bg-white dark:bg-gray-800"
+                                                        className="bg-card"
                                                         value={watch('category')}
                                                         onValueChange={(v) => {
                                                             setValue('category', v, { shouldValidate: true })
@@ -881,7 +881,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => setCategoryPopoverOpen(false)}
-                                                                    className="w-full text-left px-2 py-1.5 text-sm text-blue-600 hover:bg-accent rounded-sm"
+                                                                    className="w-full text-left px-2 py-1.5 text-sm text-primary hover:bg-primary/10 rounded-md"
                                                                 >
                                                                     Use "{watch('category')}"
                                                                 </button>
@@ -891,15 +891,15 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                 </Command>
                                             </PopoverContent>
                                         </Popover>
-                                        {errors.category && <p className="text-xs text-red-500 mt-1">{errors.category.message}</p>}
+                                        {errors.category && <p className="text-xs text-danger mt-1">{errors.category.message}</p>}
                                     </div>
                                     <div className="space-y-1.5 md:col-span-2">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                                        <label className="text-sm font-medium text-foreground">Description</label>
                                         <textarea
                                             {...register('description')}
                                             rows={3}
                                             placeholder={itemType === 'SERVICE' ? 'Describe the service details...' : 'Product description...'}
-                                            className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white resize-none"
+                                            className="w-full px-3.5 py-2.5 rounded-xl border border-border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white resize-none"
                                         />
                                     </div>
                                 </div>
@@ -910,16 +910,16 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                     {/* ══════ STEP 2: PRICING ══════ */}
                     {currentStep === 'pricing' && (
                         <div className="space-y-6">
-                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Pricing</h2>
+                            <h2 className="text-base font-semibold text-foreground">Pricing</h2>
 
                             <div ref={setSectionRef('pricing-tax')}>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            Sales Price <span className="text-red-500">*</span>
+                                        <label className="text-sm font-medium text-foreground">
+                                            Sales Price <span className="text-danger">*</span>
                                         </label>
                                         <div className="relative">
-                                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 dark:text-gray-400">RWF</span>
+                                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">RWF</span>
                                             <input
                                                 {...bindField('unitPrice', 'purchasePrice')}
                                                 type="number"
@@ -927,20 +927,20 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                 step="0.01"
                                                 min="0"
                                                 placeholder="0.00"
-                                                className={`w-full pl-14 pr-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                    errors.unitPrice ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                className={`w-full pl-14 pr-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                    errors.unitPrice ? 'border-red-400' : 'border-border'
                                                 }`}
                                             />
                                         </div>
-                                        {errors.unitPrice && <p className="text-xs text-red-500 mt-1">{errors.unitPrice.message}</p>}
+                                        {errors.unitPrice && <p className="text-xs text-danger mt-1">{errors.unitPrice.message}</p>}
                                     </div>
                                     {itemType !== 'SERVICE' && (
                                         <div className="space-y-1.5">
-                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <label className="text-sm font-medium text-foreground">
                                                 Purchase Price
                                             </label>
                                             <div className="relative">
-                                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 dark:text-gray-400">RWF</span>
+                                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">RWF</span>
                                                 <input
                                                     {...bindField('purchasePrice', 'taxCode')}
                                                     type="number"
@@ -948,13 +948,13 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                     step="0.01"
                                                     min="0"
                                                     placeholder="0.00"
-                                                    className={`w-full pl-14 pr-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                        errors.purchasePrice ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                    className={`w-full pl-14 pr-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                        errors.purchasePrice ? 'border-red-400' : 'border-border'
                                                     }`}
                                                 />
                                             </div>
-                                            <p className="text-xs text-gray-400">What you paid for this stock — used for cost/profit tracking.</p>
-                                            {errors.purchasePrice && <p className="text-xs text-red-500 mt-1">{errors.purchasePrice.message}</p>}
+                                            <p className="text-xs text-muted-foreground">What you paid for this stock — used for cost/profit tracking.</p>
+                                            {errors.purchasePrice && <p className="text-xs text-danger mt-1">{errors.purchasePrice.message}</p>}
                                         </div>
                                     )}
                                 </div>
@@ -962,16 +962,16 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
 
                             {itemType !== 'SERVICE' && (
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
+                                    <label className="text-sm font-medium text-foreground mb-1.5 block">
                                         Additional Price Tiers
                                     </label>
-                                    <p className="text-xs text-gray-400 mb-2">
+                                    <p className="text-xs text-muted-foreground mb-2">
                                         Optional RRA group prices (e.g. wholesale/retail tiers) — leave blank if not used.
                                     </p>
                                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                                         {PRICE_TIER_FIELDS.map(({ field, label }, index) => (
                                             <div key={field} className="space-y-1">
-                                                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">{label}</label>
+                                                <label className="text-xs font-medium text-muted-foreground">{label}</label>
                                                 <input
                                                     {...bindField(field, PRICE_TIER_FIELDS[index + 1]?.field ?? 'taxCode')}
                                                     type="number"
@@ -979,8 +979,8 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                     step="0.01"
                                                     min="0"
                                                     placeholder="0.00"
-                                                    className={`w-full px-3 py-2 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                        (errors as any)[field] ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                    className={`w-full px-3 py-2 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                        (errors as any)[field] ? 'border-red-400' : 'border-border'
                                                     }`}
                                                 />
                                             </div>
@@ -991,15 +991,15 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
 
                             {/* ── Non-VAT compliance banner ── */}
                             {isNonVat && (
-                                <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-900/20 px-4 py-3">
+                                <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 dark:border-amber-500/40 dark:bg-warning/20 px-4 py-3">
                                     <span className="mt-0.5 shrink-0 text-amber-500" aria-hidden>
                                         ⚠
                                     </span>
                                     <div className="text-sm">
-                                        <p className="font-semibold text-amber-700 dark:text-amber-300">
+                                        <p className="font-semibold text-warning dark:text-amber-300">
                                             Non-VAT Registered Business
                                         </p>
-                                        <p className="text-amber-600 dark:text-amber-400 mt-0.5">
+                                        <p className="text-warning dark:text-amber-400 mt-0.5">
                                             Your organisation is <strong>not registered for VAT</strong>. Per RRA CIS
                                             regulations, all items must carry{' '}
                                             <strong>Tax Category D – Taxpayer Not Registered for VAT</strong>.
@@ -1012,10 +1012,10 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div className="space-y-1.5">
-                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Tax Category <span className="text-red-500">*</span>
+                                    <label className="text-sm font-medium text-foreground">
+                                        Tax Category <span className="text-danger">*</span>
                                         {isNonVat && (
-                                            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                                            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-warning/15 dark:bg-warning/40 px-2 py-0.5 text-xs font-medium text-warning dark:text-amber-300">
                                                 🔒 Locked to D
                                             </span>
                                         )}
@@ -1024,12 +1024,12 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                         {...bindField('taxCode', 'batchNumber')}
                                         disabled={isNonVat || taxCodeLocked}
                                         aria-describedby={isNonVat ? 'tax-code-nonvat-note' : undefined}
-                                        className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
+                                        className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
                                             errors.taxCode
                                                 ? 'border-red-400'
                                                 : isNonVat
-                                                ? 'border-amber-300 bg-amber-50/60 dark:border-amber-600/50 dark:bg-amber-950/30 cursor-not-allowed opacity-80'
-                                                : 'border-gray-200 dark:border-gray-700'
+                                                ? 'border-warning/30 bg-warning/60 dark:border-amber-600/50 dark:bg-warning/30 cursor-not-allowed opacity-80'
+                                                : 'border-border'
                                         }`}
                                     >
                                         {isNonVat ? (
@@ -1044,25 +1044,25 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                         )}
                                     </select>
                                     {isNonVat && (
-                                        <p id="tax-code-nonvat-note" className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                        <p id="tax-code-nonvat-note" className="text-xs text-warning dark:text-amber-400 mt-1">
                                             Tax code is fixed to <strong>D</strong> for all items. Register for VAT in
                                             your Organisation Settings to unlock other categories.
                                         </p>
                                     )}
                                     {taxReviewPending && (
-                                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                        <p className="text-xs text-warning dark:text-amber-400 mt-1">
                                             This item was set to <strong>B</strong> when your organisation registered
                                             for VAT. You can change its tax category <strong>once</strong>; after that
                                             it is locked.
                                         </p>
                                     )}
                                     {taxCodeLocked && (
-                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        <p className="text-xs text-muted-foreground mt-1">
                                             🔒 Tax category was already updated once after VAT registration and can no
                                             longer be changed.
                                         </p>
                                     )}
-                                    {errors.taxCode && <p className="text-xs text-red-500 mt-1">{errors.taxCode.message}</p>}
+                                    {errors.taxCode && <p className="text-xs text-danger mt-1">{errors.taxCode.message}</p>}
                                 </div>
                             </div>
                         </div>
@@ -1071,12 +1071,12 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                     {/* ══════ STEP: INVENTORY ══════ */}
                     {currentStep === 'inventory' && (
                         <div className="space-y-6">
-                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                            <h2 className="text-base font-semibold text-foreground">
                                 {itemType === 'SERVICE' ? 'RRA Registration' : 'Inventory & Stock'}
                             </h2>
 
                             {itemType === 'SERVICE' && (
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                <p className="text-sm text-muted-foreground">
                                     Services are not stock-tracked, but RRA still requires packaging, quantity unit, and origin to register the item.
                                 </p>
                             )}
@@ -1085,24 +1085,24 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                 <div ref={setSectionRef('inventory-details')}>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                         <div className="space-y-1.5">
-                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Batch Number</label>
+                                            <label className="text-sm font-medium text-foreground">Batch Number</label>
                                             <input
                                                 {...bindField('batchNumber', 'expiryDate')}
                                                 placeholder="e.g. BATCH-001"
-                                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                                className="w-full px-3.5 py-2.5 rounded-xl border border-border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white"
                                             />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Expiry Date</label>
+                                            <label className="text-sm font-medium text-foreground">Expiry Date</label>
                                             <input
                                                 {...bindField('expiryDate', 'minStock')}
                                                 type="date"
-                                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                                className="w-full px-3.5 py-2.5 rounded-xl border border-border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white"
                                             />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                Min Stock <span className="text-red-500">*</span>
+                                            <label className="text-sm font-medium text-foreground">
+                                                Min Stock <span className="text-danger">*</span>
                                             </label>
                                             <input
                                                 {...bindField('minStock', 'measurementUnit')}
@@ -1110,20 +1110,20 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                 inputMode="numeric"
                                                 min="0"
                                                 placeholder="10"
-                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                    errors.minStock ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                    errors.minStock ? 'border-red-400' : 'border-border'
                                                 }`}
                                             />
-                                            {errors.minStock && <p className="text-xs text-red-500 mt-1">{errors.minStock.message}</p>}
+                                            {errors.minStock && <p className="text-xs text-danger mt-1">{errors.minStock.message}</p>}
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                Measurement Unit <span className="text-red-500">*</span>
+                                            <label className="text-sm font-medium text-foreground">
+                                                Measurement Unit <span className="text-danger">*</span>
                                             </label>
                                             <select
                                                 {...bindField('measurementUnit', 'pkgUnitCd')}
-                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                    errors.measurementUnit ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                    errors.measurementUnit ? 'border-red-400' : 'border-border'
                                                 }`}
                                             >
                                                 <option value="">Select Unit</option>
@@ -1131,16 +1131,16 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                     <option key={u.value} value={u.value}>{u.label}</option>
                                                 ))}
                                             </select>
-                                            {errors.measurementUnit && <p className="text-xs text-red-500 mt-1">{errors.measurementUnit.message}</p>}
+                                            {errors.measurementUnit && <p className="text-xs text-danger mt-1">{errors.measurementUnit.message}</p>}
                                         </div>
                                         <div className="space-y-1.5">
-                                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                 Packaging Unit <span className="text-red-500">*</span>
+                                             <label className="text-sm font-medium text-foreground">
+                                                 Packaging Unit <span className="text-danger">*</span>
                                              </label>
                                              <select
                                                  {...bindField('pkgUnitCd', 'qtyUnitCd')}
-                                                 className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                     errors.pkgUnitCd ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                 className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                     errors.pkgUnitCd ? 'border-red-400' : 'border-border'
                                                  }`}
                                              >
                                                  <option value="">Select packaging (e.g. Box, Carton)</option>
@@ -1148,25 +1148,25 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                      <option key={u.value} value={u.value}>{u.label}</option>
                                                  ))}
                                              </select>
-                                             {errors.pkgUnitCd && <p className="text-xs text-red-500 mt-1">{errors.pkgUnitCd.message}</p>}
+                                             {errors.pkgUnitCd && <p className="text-xs text-danger mt-1">{errors.pkgUnitCd.message}</p>}
                                          </div>
                                          <div className="space-y-1.5">
-                                             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                             <label className="text-sm font-medium text-foreground">
                                                  RRA Quantity Unit
                                              </label>
                                              <select
                                                  {...bindField('qtyUnitCd', 'packagingQty')}
-                                                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                                 className="w-full px-3.5 py-2.5 rounded-xl border border-border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white"
                                              >
                                                  <option value="">Auto-detect from measurement unit</option>
                                                  {qtyOptions.map(u => (
                                                      <option key={u.value} value={u.value}>{u.label}</option>
                                                  ))}
                                              </select>
-                                             <p className="text-xs text-gray-400">Override the automatically derived RRA quantity unit code if needed.</p>
+                                             <p className="text-xs text-muted-foreground">Override the automatically derived RRA quantity unit code if needed.</p>
                                          </div>
                                          <div className="space-y-1.5">
-                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <label className="text-sm font-medium text-foreground">
                                                 Qty per Package
                                             </label>
                                             <input
@@ -1175,20 +1175,20 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                 inputMode="numeric"
                                                 min="1"
                                                 placeholder="e.g. 24"
-                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                    errors.packagingQty ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                    errors.packagingQty ? 'border-red-400' : 'border-border'
                                                 }`}
                                             />
-                                            {errors.packagingQty && <p className="text-xs text-red-500 mt-1">{errors.packagingQty.message}</p>}
+                                            {errors.packagingQty && <p className="text-xs text-danger mt-1">{errors.packagingQty.message}</p>}
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                Origin <span className="text-red-500">*</span>
+                                            <label className="text-sm font-medium text-foreground">
+                                                Origin <span className="text-danger">*</span>
                                             </label>
                                             <select
                                                 {...bindField('origin', 'barcode')}
-                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                    errors.origin ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                    errors.origin ? 'border-red-400' : 'border-border'
                                                 }`}
                                             >
                                                 <option value="">{countryOptions.length ? 'Select origin country' : 'Sync RRA codes to load countries'}</option>
@@ -1196,7 +1196,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                     <option key={c.value} value={c.value}>{c.label}</option>
                                                 ))}
                                             </select>
-                                            {errors.origin && <p className="text-xs text-red-500 mt-1">{errors.origin.message}</p>}
+                                            {errors.origin && <p className="text-xs text-danger mt-1">{errors.origin.message}</p>}
                                         </div>
                                     </div>
                                 </div>
@@ -1205,13 +1205,13 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                             {itemType === 'SERVICE' && (
                                 <div ref={setSectionRef('service-rra-units')} className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            Packaging Unit <span className="text-red-500">*</span>
+                                        <label className="text-sm font-medium text-foreground">
+                                            Packaging Unit <span className="text-danger">*</span>
                                         </label>
                                         <select
                                             {...bindField('pkgUnitCd', 'qtyUnitCd')}
-                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                errors.pkgUnitCd ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                errors.pkgUnitCd ? 'border-red-400' : 'border-border'
                                             }`}
                                         >
                                             <option value="">Select packaging</option>
@@ -1219,16 +1219,16 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                 <option key={u.value} value={u.value}>{u.label}</option>
                                             ))}
                                         </select>
-                                        {errors.pkgUnitCd && <p className="text-xs text-red-500 mt-1">{errors.pkgUnitCd.message}</p>}
+                                        {errors.pkgUnitCd && <p className="text-xs text-danger mt-1">{errors.pkgUnitCd.message}</p>}
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            RRA Quantity Unit <span className="text-red-500">*</span>
+                                        <label className="text-sm font-medium text-foreground">
+                                            RRA Quantity Unit <span className="text-danger">*</span>
                                         </label>
                                         <select
                                             {...bindField('qtyUnitCd', 'origin')}
-                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                errors.qtyUnitCd ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                errors.qtyUnitCd ? 'border-red-400' : 'border-border'
                                             }`}
                                         >
                                             <option value="">Select quantity unit</option>
@@ -1236,16 +1236,16 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                 <option key={u.value} value={u.value}>{u.label}</option>
                                             ))}
                                         </select>
-                                        {errors.qtyUnitCd && <p className="text-xs text-red-500 mt-1">{errors.qtyUnitCd.message}</p>}
+                                        {errors.qtyUnitCd && <p className="text-xs text-danger mt-1">{errors.qtyUnitCd.message}</p>}
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            Origin <span className="text-red-500">*</span>
+                                        <label className="text-sm font-medium text-foreground">
+                                            Origin <span className="text-danger">*</span>
                                         </label>
                                         <select
                                             {...bindField('origin', 'itemClsCd')}
-                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                errors.origin ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                errors.origin ? 'border-red-400' : 'border-border'
                                             }`}
                                         >
                                             <option value="">{countryOptions.length ? 'Select origin country' : 'Sync RRA codes to load countries'}</option>
@@ -1253,12 +1253,12 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                 <option key={c.value} value={c.value}>{c.label}</option>
                                             ))}
                                         </select>
-                                        {errors.origin && <p className="text-xs text-red-500 mt-1">{errors.origin.message}</p>}
+                                        {errors.origin && <p className="text-xs text-danger mt-1">{errors.origin.message}</p>}
                                     </div>
                                     {itemCdPreview && (
-                                        <div className="md:col-span-3 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 px-4 py-3">
-                                            <p className="text-xs text-gray-500 dark:text-gray-400">Item code preview</p>
-                                            <p className="text-sm font-mono text-gray-800 dark:text-gray-200">{itemCdPreview}</p>
+                                        <div className="md:col-span-3 rounded-xl border border-dashed border-border px-4 py-3">
+                                            <p className="text-xs text-muted-foreground">Item code preview</p>
+                                            <p className="text-sm font-mono text-foreground">{itemCdPreview}</p>
                                         </div>
                                     )}
                                 </div>
@@ -1269,18 +1269,18 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                     {/* ══════ STEP: RRA DETAILS ══════ */}
                     {currentStep === 'details' && (
                         <div className="space-y-6">
-                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Additional Details</h2>
+                            <h2 className="text-base font-semibold text-foreground">Additional Details</h2>
 
                             <div ref={setSectionRef('additional-info')}>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Barcode</label>
+                                        <label className="text-sm font-medium text-foreground">Barcode</label>
                                         <input
                                             {...bindField('barcode', 'itemClsCd')}
                                             inputMode="numeric"
                                             maxLength={13}
                                             placeholder="e.g. 8901234567890"
-                                            className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                            className="w-full px-3.5 py-2.5 rounded-xl border border-border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white"
                                         />
                                     </div>
                                     <div>
@@ -1290,31 +1290,31 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                             invalid={!!errors.itemClsCd}
                                             required
                                         />
-                                        {errors.itemClsCd && <p className="text-xs text-red-500 mt-1">{errors.itemClsCd.message}</p>}
+                                        {errors.itemClsCd && <p className="text-xs text-danger mt-1">{errors.itemClsCd.message}</p>}
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Standard Name</label>
+                                        <label className="text-sm font-medium text-foreground">Standard Name</label>
                                         <input
                                             {...bindField('itemStandardName', 'additionalInfo')}
                                             placeholder="Optional standardized name"
-                                            className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white"
+                                            className="w-full px-3.5 py-2.5 rounded-xl border border-border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white"
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Additional Info</label>
+                                        <label className="text-sm font-medium text-foreground">Additional Info</label>
                                         <input
                                             {...bindField('additionalInfo', '')}
                                             maxLength={7}
                                             placeholder="Up to 7 characters"
-                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                                errors.additionalInfo ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
+                                                errors.additionalInfo ? 'border-red-400' : 'border-border'
                                             }`}
                                         />
-                                        {errors.additionalInfo && <p className="text-xs text-red-500 mt-1">{errors.additionalInfo.message}</p>}
+                                        {errors.additionalInfo && <p className="text-xs text-danger mt-1">{errors.additionalInfo.message}</p>}
                                     </div>
                                     <div className="space-y-1.5 md:col-span-2">
-                                        <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            <input type="checkbox" {...register('useInsurance')} className="h-4 w-4 rounded border-gray-300 dark:border-gray-600" />
+                                        <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                                            <input type="checkbox" {...register('useInsurance')} className="h-4 w-4 rounded border-border" />
                                             Billable to customer insurance
                                         </label>
                                     </div>
@@ -1326,13 +1326,13 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                     {/* ══════ STEP 5: REVIEW & CONFIRM ══════ */}
                     {currentStep === 'review' && (
                         <div className="space-y-6">
-                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Review & Confirm</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Please review the information below before saving.</p>
+                            <h2 className="text-base font-semibold text-foreground">Review & Confirm</h2>
+                            <p className="text-sm text-muted-foreground">Please review the information below before saving.</p>
 
                             <div className="space-y-4">
-                                <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                    <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-                                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Basic Information</h3>
+                                <div className="rounded-xl border border-border overflow-hidden">
+                                    <div className="px-4 py-2.5 bg-surface-subtle border-b border-border">
+                                        <h3 className="text-sm font-semibold text-foreground">Basic Information</h3>
                                     </div>
                                     <div className="px-4 py-3 space-y-2.5">
                                         <ReviewRow label="Item Type" value={itemType === 'PRODUCT' ? 'Product' : itemType === 'RAW_MATERIAL' ? 'Raw Material' : 'Service'} />
@@ -1341,16 +1341,16 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                         {watch('description') && <ReviewRow label="Description" value={watch('description')} />}
                                         {imagePreview && (
                                             <div className="flex justify-between items-start">
-                                                <span className="text-sm text-gray-500 dark:text-gray-400">Image</span>
+                                                <span className="text-sm text-muted-foreground">Image</span>
                                                 <img src={imagePreview} alt="Preview" className="h-12 w-12 object-cover rounded-md border" />
                                             </div>
                                         )}
                                     </div>
                                 </div>
 
-                                <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                    <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-                                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Pricing & Tax</h3>
+                                <div className="rounded-xl border border-border overflow-hidden">
+                                    <div className="px-4 py-2.5 bg-surface-subtle border-b border-border">
+                                        <h3 className="text-sm font-semibold text-foreground">Pricing & Tax</h3>
                                     </div>
                                     <div className="px-4 py-3 space-y-2.5">
                                         <ReviewRow label="Sales Price" value={watch('unitPrice') ? `RWF ${Number(watch('unitPrice')).toLocaleString()}` : '-'} />
@@ -1374,9 +1374,9 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                 </div>
 
                                 {itemType !== 'SERVICE' && (
-                                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                        <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-                                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Inventory Details</h3>
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                        <div className="px-4 py-2.5 bg-surface-subtle border-b border-border">
+                                            <h3 className="text-sm font-semibold text-foreground">Inventory Details</h3>
                                         </div>
                                         <div className="px-4 py-3 space-y-2.5">
                                             {watch('batchNumber') && <ReviewRow label="Batch Number" value={watch('batchNumber')} />}
@@ -1401,9 +1401,9 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                 )}
 
                                 {itemType === 'SERVICE' && (
-                                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                        <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-                                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">RRA Registration</h3>
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                        <div className="px-4 py-2.5 bg-surface-subtle border-b border-border">
+                                            <h3 className="text-sm font-semibold text-foreground">RRA Registration</h3>
                                         </div>
                                         <div className="px-4 py-3 space-y-2.5">
                                             <ReviewRow
@@ -1426,9 +1426,9 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                 )}
 
                                 {itemType === 'PRODUCT' && !product && bomComponents.length > 0 && (
-                                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                        <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-                                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Bill of Materials</h3>
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                        <div className="px-4 py-2.5 bg-surface-subtle border-b border-border">
+                                            <h3 className="text-sm font-semibold text-foreground">Bill of Materials</h3>
                                         </div>
                                         <div className="px-4 py-3 space-y-2.5">
                                             {bomComponents.map((component) => {
@@ -1439,9 +1439,9 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                     </div>
                                 )}
 
-                                <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                    <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-                                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Additional Info</h3>
+                                <div className="rounded-xl border border-border overflow-hidden">
+                                    <div className="px-4 py-2.5 bg-surface-subtle border-b border-border">
+                                        <h3 className="text-sm font-semibold text-foreground">Additional Info</h3>
                                     </div>
                                     <div className="px-4 py-3 space-y-2.5">
                                         {watch('barcode') && <ReviewRow label="Barcode" value={watch('barcode')} />}
@@ -1458,8 +1458,8 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                     {/* ══════ STEP: BILL OF MATERIALS ══════ */}
                     {currentStep === 'bom' && itemType === 'PRODUCT' && (
                         <div className="space-y-6">
-                            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Bill of Materials</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                            <h2 className="text-base font-semibold text-foreground">Bill of Materials</h2>
+                            <p className="text-sm text-muted-foreground">
                                 Add the raw materials needed to produce one unit of this product. They will be saved with the product.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-2">
@@ -1468,7 +1468,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                     value={selectedRawMaterialId}
                                     onChange={(event) => setSelectedRawMaterialId(event.target.value)}
                                     disabled={rawMaterialsLoading}
-                                    className="flex-1 min-w-0 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-800 dark:text-white"
+                                    className="flex-1 min-w-0 rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground"
                                 >
                                     <option value="">{rawMaterialsLoading ? 'Loading raw materials...' : 'Select a raw material'}</option>
                                     {rawMaterials.filter((material) => !bomComponents.some((component) => component.componentProductId === material.id)).map((material) => (
@@ -1481,19 +1481,19 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                     type="button"
                                     onClick={addBomMaterial}
                                     disabled={!selectedRawMaterialId || rawMaterialsLoading}
-                                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
                                 >
                                     <Plus className="h-4 w-4" /> Add Material
                                 </button>
                             </div>
                             {!rawMaterialsLoading && rawMaterials.length === 0 && (
-                                <p className="text-sm text-amber-700 dark:text-amber-300">
+                                <p className="text-sm text-warning dark:text-amber-300">
                                     No raw materials are available in this branch. Add an item with type Raw Material first.
                                 </p>
                             )}
-                            <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                            <div className="overflow-x-auto rounded-xl border border-border">
                                 <Table>
-                                    <TableHeader className="bg-gray-50 dark:bg-gray-800">
+                                    <TableHeader className="bg-surface-subtle">
                                         <TableRow>
                                             <TableHead>Raw Material</TableHead>
                                             <TableHead>Qty per Unit</TableHead>
@@ -1504,7 +1504,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                     </TableHeader>
                                     <TableBody>
                                         {bomComponents.length === 0 ? (
-                                            <TableRow><TableCell colSpan={5} className="py-8 text-center text-sm text-gray-500">No raw materials added yet</TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">No raw materials added yet</TableCell></TableRow>
                                         ) : bomComponents.map((component) => {
                                             const material = rawMaterials.find((item) => item.id === component.componentProductId)
                                             const unitCost = Number(material?.purchasePrice ?? material?.unitPrice ?? 0)
@@ -1519,7 +1519,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                             step="0.001"
                                                             value={component.quantity}
                                                             onChange={(event) => setBomComponents((components) => components.map((entry) => entry.componentProductId === component.componentProductId ? { ...entry, quantity: event.target.value } : entry))}
-                                                            className="w-24 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm"
+                                                            className="w-24 rounded-lg border border-border bg-card px-2 py-1.5 text-sm"
                                                         />
                                                     </TableCell>
                                                     <TableCell className="text-sm">{component.unit}</TableCell>
@@ -1531,7 +1531,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                             type="button"
                                                             aria-label={`Remove ${material?.name || 'raw material'}`}
                                                             onClick={() => setBomComponents((components) => components.filter((entry) => entry.componentProductId !== component.componentProductId))}
-                                                            className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+                                                            className="rounded-lg p-1.5 text-danger hover:bg-danger/10 dark:hover:bg-danger/20"
                                                         ><Trash2 className="h-4 w-4" /></button>
                                                     </TableCell>
                                                 </TableRow>
@@ -1541,7 +1541,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                 </Table>
                             </div>
                             {bomComponents.length > 0 && (
-                                <p className="text-right text-sm font-semibold text-gray-900 dark:text-white">
+                                <p className="text-right text-sm font-semibold text-foreground">
                                     Estimated material cost per product: {bomComponents.reduce((total, component) => {
                                         const material = rawMaterials.find((item) => item.id === component.componentProductId)
                                         return total + Number(material?.purchasePrice ?? material?.unitPrice ?? 0) * (Number(component.quantity) || 0)
@@ -1552,13 +1552,13 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                     )}
 
                     {/* ── Navigation Buttons ── */}
-                    <div className="flex items-center justify-between gap-3 pt-6 pb-2 border-t border-gray-100 dark:border-gray-700 mt-6">
+                    <div className="flex items-center justify-between gap-3 pt-6 pb-2 border-t border-border mt-6">
                         <div>
                             {!isFirstStep && (
                                 <button
                                     type="button"
                                     onClick={handlePrevious}
-                                    className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
+                                    className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl border border-border text-foreground hover:bg-muted transition-colors text-sm font-medium"
                                 >
                                     <ChevronLeft className="h-4 w-4" />
                                     Previous
@@ -1569,7 +1569,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                             <button
                                 type="button"
                                 onClick={() => onSuccess ? onSuccess() : navigate('/dashboard/inventory-all')}
-                                className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
+                                className="px-5 py-2.5 rounded-xl border border-border text-foreground hover:bg-muted transition-colors text-sm font-medium"
                             >
                                 Cancel
                             </button>
@@ -1577,7 +1577,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                 <button
                                     type="button"
                                     onClick={handleNext}
-                                    className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors shadow-lg shadow-blue-500/20"
+                                    className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-medium text-sm transition-colors shadow-lg shadow-blue-500/20"
                                 >
                                     Next
                                     <ChevronRight className="h-4 w-4" />
@@ -1587,7 +1587,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                     type="button"
                                     disabled={isSubmitting || isUploadingImage}
                                     onClick={handleSubmit(onSubmit, () => toast.error('Please fix the highlighted fields before saving'))}
-                                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20"
+                                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20"
                                 >
                                     {isSubmitting ? (
                                         <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1608,8 +1608,8 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
 function ReviewRow({ label, value }: { label: string; value: string }) {
     return (
         <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-500 dark:text-gray-400">{label}</span>
-            <span className="text-sm font-medium text-gray-900 dark:text-gray-100 text-right max-w-[60%] break-words">{value}</span>
+            <span className="text-sm text-muted-foreground">{label}</span>
+            <span className="text-sm font-medium text-foreground text-right max-w-[60%] break-words">{value}</span>
         </div>
     )
 }

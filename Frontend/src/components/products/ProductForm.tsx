@@ -221,7 +221,7 @@ export function ProductForm({
     return (
       <div className="mx-auto max-w-2xl space-y-6">
         <Skeleton className="h-7 w-48" />
-        <div className="rounded-xl border bg-white p-6 shadow-sm dark:bg-zinc-800">
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
           <div className="space-y-5">
             {[1, 2, 3, 4].map(i => (
               <div key={i}>
@@ -241,7 +241,7 @@ export function ProductForm({
       {/* ── Header ──────────────────────────────────── */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-h1 text-gray-900 dark:text-gray-100">
+          <h1 className="text-h1 text-foreground">
             {initialValues ? 'Edit Product' : 'Add Product'}
           </h1>
           {branchName && (
@@ -263,16 +263,16 @@ export function ProductForm({
 
       {/* ── Server error banner ──────────────────────── */}
       {serverError && (
-        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
-          <div className="flex-1 text-sm text-red-700 dark:text-red-300">
+        <div className="flex items-start gap-3 rounded-lg border border-danger/25 bg-danger/10 p-4 dark:border-red-800 dark:bg-danger/20">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
+          <div className="flex-1 text-sm text-danger dark:text-red-300">
             <p className="font-medium">Failed to save</p>
             <p>{serverError}</p>
           </div>
           <button
             type="button"
             onClick={() => setServerError(null)}
-            className="rounded-md p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
+            className="rounded-md p-1 text-danger hover:bg-danger/15 dark:hover:bg-danger/30"
           >
             <X className="h-4 w-4" />
           </button>
@@ -285,7 +285,7 @@ export function ProductForm({
         collapsible
         value={activeSection}
         onValueChange={v => v && setActiveSection(v as SectionId)}
-        className="rounded-xl border bg-white shadow-sm dark:bg-zinc-800 dark:border-zinc-700"
+        className="rounded-xl border bg-card shadow-sm"
       >
         {/* ── 1. Basic Information ──────────────────── */}
         <AccordionItem value="basic" className="px-6">
@@ -310,7 +310,7 @@ export function ProductForm({
                     className="h-11"
                   />
                   {errors.name && (
-                    <p className="text-caption text-red-500">{errors.name}</p>
+                    <p className="text-caption text-danger">{errors.name}</p>
                   )}
                 </FieldGroup>
                 <FieldGroup>
@@ -329,7 +329,7 @@ export function ProductForm({
                     </SelectContent>
                   </Select>
                   {errors.category && (
-                    <p className="text-caption text-red-500">{errors.category}</p>
+                    <p className="text-caption text-danger">{errors.category}</p>
                   )}
                 </FieldGroup>
               </FieldRow>
@@ -398,7 +398,7 @@ export function ProductForm({
                     className="h-11"
                   />
                   {errors.unitPrice && (
-                    <p className="text-caption text-red-500">{errors.unitPrice}</p>
+                    <p className="text-caption text-danger">{errors.unitPrice}</p>
                   )}
                 </FieldGroup>
               </FieldRow>
@@ -419,7 +419,7 @@ export function ProductForm({
                       <SelectItem value="D">D — Not VAT Registered (0%)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-muted-foreground">
                     RRA EBM category. If this business is not VAT registered, sales use code D automatically.
                   </p>
                 </FieldGroup>
@@ -436,7 +436,7 @@ export function ProductForm({
                         className="h-11"
                       />
                       {errors.exemptionReference && (
-                        <p className="text-caption text-red-500">{errors.exemptionReference}</p>
+                        <p className="text-caption text-danger">{errors.exemptionReference}</p>
                       )}
                     </>
                   )}
@@ -469,7 +469,7 @@ export function ProductForm({
                     className="h-11"
                   />
                   {errors.sku && (
-                    <p className="text-caption text-red-500">{errors.sku}</p>
+                    <p className="text-caption text-danger">{errors.sku}</p>
                   )}
                 </FieldGroup>
                 <FieldGroup>
@@ -512,7 +512,7 @@ export function ProductForm({
                     className="h-11"
                   />
                   {errors.minStock && (
-                    <p className="text-caption text-red-500">{errors.minStock}</p>
+                    <p className="text-caption text-danger">{errors.minStock}</p>
                   )}
                 </FieldGroup>
                 <FieldGroup>
@@ -625,10 +625,10 @@ export function ProductForm({
 
               {/* Multiple batches */}
               {values.batches.length > 1 && (
-                <div className="space-y-3 rounded-lg border border-dashed border-gray-200 p-4 dark:border-gray-700">
-                  <p className="text-caption font-medium text-gray-500">Additional Batches</p>
+                <div className="space-y-3 rounded-lg border border-dashed border-border p-4">
+                  <p className="text-caption font-medium text-muted-foreground">Additional Batches</p>
                   {values.batches.slice(1).map((batch, i) => (
-                    <div key={i} className="flex items-start gap-2 rounded-lg border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
+                    <div key={i} className="flex items-start gap-2 rounded-lg border bg-surface-subtle p-3">
                       <div className="flex-1 grid grid-cols-2 gap-2">
                         <Input
                           value={batch.batchNumber}
@@ -659,7 +659,7 @@ export function ProductForm({
                       <button
                         type="button"
                         onClick={() => removeBatch(i + 1)}
-                        className="mt-1 rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                        className="mt-1 rounded-md p-1.5 text-muted-foreground hover:bg-danger/10 hover:text-danger"
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -715,7 +715,7 @@ export function ProductForm({
       </Accordion>
 
       {/* ── Footer actions ──────────────────────────── */}
-      <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-xl border bg-white/95 p-4 shadow-lg backdrop-blur-sm dark:border-zinc-700 dark:bg-zinc-900/95">
+      <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-xl border bg-card/95 p-4 shadow-lg backdrop-blur-sm">
         <div className="flex items-center gap-2">
           {onCancel && (
             <Button
@@ -793,18 +793,18 @@ function SectionHeader({
     status === 'complete' ? (
       <CheckCircle2 className="h-4 w-4 text-emerald-500" />
     ) : status === 'error' ? (
-      <AlertCircle className="h-4 w-4 text-red-500" />
+      <AlertCircle className="h-4 w-4 text-danger" />
     ) : null
 
   return (
     <div className="flex items-center gap-2 text-left">
       {icon}
-      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{label}</span>
+      <span className="text-sm font-medium text-foreground">{label}</span>
       {status === 'incomplete' && (
-        <span className="h-2 w-2 rounded-full bg-gray-300 dark:bg-gray-600" />
+        <span className="h-2 w-2 rounded-full bg-muted" />
       )}
       {status === 'error' && errorCount > 0 && (
-        <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600 dark:bg-red-900/30 dark:text-red-400">
+        <span className="rounded-full bg-danger/15 px-1.5 py-0.5 text-[10px] font-bold text-danger dark:bg-danger/30 dark:text-red-400">
           {errorCount} error{errorCount !== 1 ? 's' : ''}
         </span>
       )}

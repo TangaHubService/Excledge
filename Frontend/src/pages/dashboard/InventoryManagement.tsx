@@ -32,11 +32,8 @@ import {
   Eye,
   Edit,
   MoreHorizontal,
-  ArrowUpRight,
-  ArrowDownRight,
   History,
   Trash2,
-  Layers,
 } from "lucide-react";
 import {
   Drawer,
@@ -57,24 +54,14 @@ import ConfirmDialog from "../../components/common/ConfirmDialog";
 import InventoryHistoryDialog from "./inventory/InventoryHistoryDialog";
 import StockAdjustmentDialog from "./inventory/StockAdjustmentDialog";
 import { cn } from "../../lib/utils";
+import { pageWindow } from "../../lib/pagination";
+import { StatCard } from "../../components/common/StatCard";
 
 function getDaysRemaining(expiryDate: string) {
   const now = new Date();
   const expiry = new Date(expiryDate);
   return Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
-
-// Category badge color mapping for polished pill look
-const categoryPillColors: Record<string, string> = {
-  Antibiotics: "bg-blue-50 text-blue-600 border border-blue-100",
-  Supplies: "bg-purple-50 text-purple-600 border border-purple-100",
-  Vitamins: "bg-emerald-50 text-emerald-600 border border-emerald-100",
-  Devices: "bg-amber-50 text-amber-700 border border-amber-100",
-  Hygiene: "bg-pink-50 text-pink-600 border border-pink-100",
-  "Pain relief": "bg-orange-50 text-orange-600 border border-orange-100",
-  Medication: "bg-indigo-50 text-indigo-600 border border-indigo-100",
-  "First Aid": "bg-red-50 text-red-600 border border-red-100",
-};
 
 export const InventoryManagement = () => {
   const { t } = useTranslation();
@@ -168,13 +155,13 @@ export const InventoryManagement = () => {
   };
 
   const getExpiryStatusDisplay = (expiryDate?: string) => {
-    if (!expiryDate) return { label: "N/A", color: "text-gray-400" };
+    if (!expiryDate) return { label: "—", color: "text-muted-foreground/50" };
     const daysRemaining = getDaysRemaining(expiryDate);
-    if (isNaN(daysRemaining)) return { label: "N/A", color: "text-gray-400" };
-    
-    if (daysRemaining < 0) return { label: "Expired", color: "text-red-600 font-semibold" };
-    if (daysRemaining <= 30) return { label: `${daysRemaining}d left`, color: "text-amber-600 font-semibold" };
-    return { label: new Date(expiryDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), color: "text-gray-600" };
+    if (isNaN(daysRemaining)) return { label: "—", color: "text-muted-foreground/50" };
+
+    if (daysRemaining < 0) return { label: "Expired", color: "font-medium text-danger" };
+    if (daysRemaining <= 30) return { label: `${daysRemaining}d left`, color: "font-medium text-warning" };
+    return { label: new Date(expiryDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), color: "text-muted-foreground" };
   };
 
   const [uniqueCategories, setUniqueCategories] = useState<string[]>([]);
@@ -393,19 +380,18 @@ export const InventoryManagement = () => {
   return (
     <div className="space-y-6">
       {/* ── Page Header ─────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            Inventory Management
-            <Layers className="h-5 w-5 text-gray-400" />
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            Inventory
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Track and manage product stock levels in real-time
+          <p className="mt-1 text-sm text-muted-foreground">
+            Track and manage product stock levels in real time
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <label className="cursor-pointer inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted">
             <input
               type="file"
               accept=".xlsx"
@@ -413,33 +399,34 @@ export const InventoryManagement = () => {
               className="hidden"
               disabled={isUploading}
             />
-            {isUploading ? <Loader2 className="h-4 w-4 animate-spin text-blue-600" /> : <Upload className="h-4 w-4 text-gray-500" />}
-            Import Products
+            {isUploading ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <Upload className="h-4 w-4 text-muted-foreground" />}
+            Import
           </label>
 
           <Button
             onClick={downloadTemplate}
-            variant="outline"
-            className="h-9 rounded-xl border-gray-200 text-gray-700 dark:border-gray-700 dark:text-gray-200 font-semibold text-sm shadow-sm hover:bg-gray-50"
+            variant="ghost"
+            className="h-9 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Download the Excel import template"
           >
-            <Download className="h-4 w-4 mr-1.5 text-gray-500" />
-            Download Template
+            <Download className="h-4 w-4" />
+            Template
           </Button>
 
           <Button
             onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }}
-            className="h-9 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm shadow-blue-500/20"
+            className="h-9 rounded-lg px-4 text-sm font-medium shadow-sm"
           >
-            <Plus className="h-4 w-4 mr-1.5" />
-            Add Product
+            <Plus className="h-4 w-4" />
+            Add product
           </Button>
         </div>
       </div>
 
       {/* Add/Edit Product Drawer */}
       <Drawer open={isDialogOpen} onOpenChange={(open) => { if (!open) setEditingProduct(null); setIsDialogOpen(open); }}>
-        <DrawerContent className="sm:max-w-[680px] h-full min-h-[60vh] overflow-y-auto bg-white dark:bg-gray-900">
-          <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4 rounded-tl-2xl rounded-tr-2xl">
+        <DrawerContent className="h-full min-h-[60vh] overflow-y-auto bg-card sm:max-w-[680px]">
+          <DrawerHeader className="rounded-tl-2xl rounded-tr-2xl border-b border-border/80 pb-4">
             <DrawerTitle className="text-lg font-semibold">{editingProduct ? 'Edit Product' : 'Add New Product'}</DrawerTitle>
           </DrawerHeader>
           <div className="p-4">
@@ -452,127 +439,59 @@ export const InventoryManagement = () => {
         </DrawerContent>
       </Drawer>
 
-      {/* ── 4 KPI Cards Grid ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Products */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                TOTAL PRODUCTS
-              </p>
-              <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
-                {(totalProductsCount || products.length || 0).toLocaleString()}
-              </h3>
-              <p className="text-xs text-gray-400 mt-1">All products in inventory</p>
-            </div>
-            <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-              <Package className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="flex items-center gap-1 mt-4 text-xs font-semibold text-emerald-600">
-            <ArrowUpRight className="h-3.5 w-3.5" />
-            <span>12%</span>
-            <span className="text-gray-400 font-normal">vs last month</span>
-          </div>
-        </div>
-
-        {/* Low Stock */}
-        <div
+      {/* ── KPI cards ───────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Products"
+          value={(totalProductsCount || products.length || 0).toLocaleString()}
+          caption="In this branch scope"
+          icon={Package}
+          tone="primary"
+        />
+        <StatCard
+          label="Low stock"
+          value={(lowStockProducts || 0).toLocaleString()}
+          caption="Below minimum stock"
+          icon={AlertTriangle}
+          tone="warning"
           onClick={() => navigate("/dashboard/low-stock")}
-          className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col justify-between cursor-pointer hover:shadow-md transition-all"
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                LOW STOCK
-              </p>
-              <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
-                {lowStockProducts || 0}
-              </h3>
-              <p className="text-xs text-gray-400 mt-1">Items below minimum stock</p>
-            </div>
-            <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
-              <AlertTriangle className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="flex items-center gap-1 mt-4 text-xs font-semibold text-emerald-600">
-            <ArrowUpRight className="h-3.5 w-3.5" />
-            <span>8%</span>
-            <span className="text-gray-400 font-normal">vs last month</span>
-          </div>
-        </div>
-
-        {/* Expired */}
-        <div
+        />
+        <StatCard
+          label="Expired"
+          value={(expiredProducts || 0).toLocaleString()}
+          caption="Past expiry date"
+          icon={Calendar}
+          tone="danger"
           onClick={() => navigate("/dashboard/expired")}
-          className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col justify-between cursor-pointer hover:shadow-md transition-all"
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                EXPIRED
-              </p>
-              <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
-                {String(expiredProducts || 0).padStart(2, "0")}
-              </h3>
-              <p className="text-xs text-gray-400 mt-1">Items past expiry date</p>
-            </div>
-            <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400">
-              <Calendar className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="flex items-center gap-1 mt-4 text-xs font-semibold text-rose-500">
-            <ArrowDownRight className="h-3.5 w-3.5" />
-            <span>3%</span>
-            <span className="text-gray-400 font-normal">vs last month</span>
-          </div>
-        </div>
-
-        {/* Expiring Soon */}
-        <div
+        />
+        <StatCard
+          label="Expiring soon"
+          value={(expiringProducts || 0).toLocaleString()}
+          caption="Within 90 days"
+          icon={Clock}
+          tone="orange"
           onClick={() => navigate("/dashboard/expiring-products")}
-          className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col justify-between cursor-pointer hover:shadow-md transition-all"
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                EXPIRING SOON
-              </p>
-              <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
-                {expiringProducts || 0}
-              </h3>
-              <p className="text-xs text-gray-400 mt-1">Items expiring within 90 days</p>
-            </div>
-            <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
-              <Clock className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="flex items-center gap-1 mt-4 text-xs font-semibold text-emerald-600">
-            <ArrowUpRight className="h-3.5 w-3.5" />
-            <span>15%</span>
-            <span className="text-gray-400 font-normal">vs last month</span>
-          </div>
-        </div>
+        />
       </div>
 
       {/* ── Search & Filter Row ─────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-4">
-        <div className="flex flex-col md:flex-row items-center gap-3">
+      <div className="panel p-3">
+        <div className="flex flex-col items-center gap-2 md:flex-row">
           {/* Search bar */}
           <div className="relative flex-1 w-full">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search by name, SKU, or batch number..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-9 h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-sm text-gray-800 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+              className="h-10 w-full rounded-lg border border-input bg-background pl-10 pr-9 text-sm text-foreground transition-all placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-ring/15"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Clear search"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -584,7 +503,7 @@ export const InventoryManagement = () => {
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="h-10 px-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all w-full md:w-44"
+              className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-ring/15 md:w-44"
             >
               <option value="">All Categories</option>
               {uniqueCategories.map((cat) => (
@@ -598,9 +517,9 @@ export const InventoryManagement = () => {
             <select
               value={expiryStatus}
               onChange={(e) => setExpiryStatus(e.target.value)}
-              className="h-10 px-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all w-full md:w-36"
+              className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-ring/15 md:w-40"
             >
-              <option value="">All Status</option>
+              <option value="">Any expiry</option>
               <option value="expired">Expired</option>
               <option value="expiring">Expiring Soon</option>
             </select>
@@ -609,38 +528,42 @@ export const InventoryManagement = () => {
       </div>
 
       {/* ── Products Table ──────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+      <div className="panel overflow-hidden">
         {loading ? (
           <div className="p-6">
             <TableSkeleton rows={6} columns={10} rowHeight="h-10" />
           </div>
         ) : products.length === 0 ? (
-          <div className="py-20 flex flex-col items-center justify-center text-gray-400 gap-3">
-            <Package className="h-12 w-12 text-gray-300" />
-            <p className="text-sm font-medium">{t("messages.noData")}</p>
+          <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              <Package className="h-6 w-6" />
+            </span>
+            <p className="text-sm text-muted-foreground">{t("messages.noData")}</p>
           </div>
         ) : (
           <Table>
-            <TableHeader className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
+            <TableHeader className="border-b border-border/80 bg-surface-subtle">
               <TableRow className="hover:bg-transparent">
                 {[
                   { label: "ID", key: "id" },
-                  { label: "Product Code", key: "" },
+                  { label: "RRA code", key: "" },
                   { label: "Product", key: "name" },
-                  { label: "Batch Number", key: "batchNumber" },
+                  { label: "Batch", key: "batchNumber" },
                   { label: "Category", key: "category" },
-                  { label: "Qty", key: "quantity" },
-                  { label: "Price", key: "sellingPrice" },
-                  { label: "Expiry Date", key: "expiryDate" },
+                  { label: "Qty", key: "quantity", align: "right" },
+                  { label: "Price", key: "sellingPrice", align: "right" },
+                  { label: "Expiry", key: "expiryDate" },
                   { label: "Status", key: "" },
-                  { label: "Actions", key: "" },
-                ].map(({ label, key }) => (
+                  { label: "", key: "" },
+                ].map(({ label, key, align }, i) => (
                   <TableHead
-                    key={label}
+                    key={label || `col-${i}`}
                     aria-sort={key && sortBy === key ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
                     className={cn(
-                      "text-xs font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap py-3.5",
-                      key && "cursor-pointer select-none hover:text-blue-600",
+                      "h-10 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-muted-foreground",
+                      key && "cursor-pointer select-none hover:text-foreground",
+                      sortBy === key && key && "text-foreground",
+                      align === "right" && "text-right",
                     )}
                     onClick={() => {
                       if (!key) return;
@@ -649,10 +572,10 @@ export const InventoryManagement = () => {
                       setCurrentPage(1);
                     }}
                   >
-                    <span className="flex items-center gap-1">
+                    <span className={cn("inline-flex items-center gap-1", align === "right" && "flex-row-reverse")}>
                       {label}
                       {key && (
-                        <svg className={cn("h-3 w-3", sortBy === key ? "text-blue-600" : "text-gray-400")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                        <svg className={cn("h-3 w-3", sortBy === key ? "text-primary" : "text-muted-foreground/40")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                           {sortBy === key && sortOrder === 'desc'
                             ? <path d="M12 5v14m0 0 5-5m-5 5-5-5" />
                             : <path d="M12 19V5m0 0 5 5m-5-5-5 5" />}
@@ -664,115 +587,125 @@ export const InventoryManagement = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.map((prod, idx) => {
+              {products.map((prod) => {
                 const expiry = getExpiryStatusDisplay(prod.expiryDate);
-                const pillClass = categoryPillColors[prod.category || ""] || "bg-blue-50 text-blue-600 border border-blue-100";
+                // Services carry no stock, so they get neither a quantity nor a stock state.
+                const isService = prod.itemType === "SERVICE";
                 const isLow = prod.quantity <= (prod.minStock || 5);
                 const codeId = `PRD-${String(prod.id).padStart(3, "0")}`;
 
                 return (
                   <TableRow
                     key={prod.id}
-                    className="border-t border-gray-50 dark:border-gray-700/50 hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors"
+                    className="border-b border-border/60 transition-colors hover:bg-muted/50"
                   >
                     {/* ID */}
-                    <TableCell className="py-3.5 text-xs font-mono font-semibold text-blue-600 dark:text-blue-400">
+                    <TableCell className="py-3 font-mono text-xs font-medium text-primary">
                       <button onClick={() => setViewProduct(prod)} className="hover:underline">
                         {codeId}
                       </button>
                     </TableCell>
 
                     {/* RRA Product Code (itemCd) */}
-                    <TableCell className="py-3.5 text-xs font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                      {prod.itemCd || <span className="text-gray-300 dark:text-gray-600">Not registered</span>}
+                    <TableCell className="whitespace-nowrap py-3 font-mono text-xs text-muted-foreground">
+                      {prod.itemCd || <span className="font-sans text-[11px] text-warning">Not registered</span>}
                     </TableCell>
 
                     {/* Product Name & Thumbnail */}
-                    <TableCell className="py-3.5">
+                    <TableCell className="py-3">
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 overflow-hidden flex items-center justify-center flex-shrink-0">
+                        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-subtle">
                           {prod.imageUrl ? (
                             <img src={prod.imageUrl} alt={prod.name} className="h-full w-full object-cover" />
                           ) : (
-                            <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                            <span className="text-sm font-semibold text-primary/50">
                               {prod.name.charAt(0).toUpperCase()}
                             </span>
                           )}
                         </div>
-                        <div>
-                          <p className="text-xs font-bold text-gray-900 dark:text-white">{prod.name}</p>
-                          <p className="text-[11px] text-gray-400 font-normal">{prod.category || "General"}</p>
+                        <div className="min-w-0">
+                          <p className="max-w-[16rem] truncate text-[0.8125rem] font-medium text-foreground">{prod.name}</p>
+                          {prod.pkgUnitCd && (
+                            <p className="text-[11px] text-muted-foreground">
+                              {PACKAGING_UNIT_LABELS[prod.pkgUnitCd] || prod.pkgUnitCd}
+                              {prod.packagingQty ? ` × ${prod.packagingQty}` : ""}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </TableCell>
 
                     {/* Batch Number */}
-                    <TableCell className="py-3.5 text-xs font-mono text-gray-500 dark:text-gray-400">
-                      {prod.batchNumber || `BTH-2024-${String(idx + 1).padStart(3, "0")}`}
+                    <TableCell className="py-3 font-mono text-xs text-muted-foreground">
+                      {prod.batchNumber || <span className="font-sans text-muted-foreground/50">—</span>}
                     </TableCell>
 
                     {/* Category Pill */}
-                    <TableCell className="py-3.5">
-                      <div className="flex flex-col gap-1">
-                        <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold w-fit", pillClass)}>
-                          {prod.category || "Unassigned"}
-                        </span>
-                        {prod.pkgUnitCd && (
-                          <span className="text-[10px] text-gray-400 dark:text-gray-500">
-                            {PACKAGING_UNIT_LABELS[prod.pkgUnitCd] || prod.pkgUnitCd}
-                            {prod.packagingQty ? ` × ${prod.packagingQty}` : ""}
-                          </span>
-                        )}
-                      </div>
+                    <TableCell className="py-3">
+                      {prod.category ? (
+                        <span className="chip whitespace-nowrap">{prod.category}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50">—</span>
+                      )}
                     </TableCell>
 
                     {/* Quantity */}
-                    <TableCell className="py-3.5 text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-200">
-                      {prod.quantity}
+                    <TableCell className={cn(
+                      "num py-3 text-right text-sm font-medium",
+                      isService ? "text-muted-foreground/50" : prod.quantity <= 0 ? "text-danger" : isLow ? "text-warning" : "text-foreground",
+                    )}>
+                      {isService ? "—" : Number(prod.quantity).toLocaleString()}
                     </TableCell>
 
                     {/* Price */}
-                    <TableCell className="py-3.5 text-xs font-bold tabular-nums text-gray-900 dark:text-white">
-                      {(prod.unitPrice ?? 0).toLocaleString()} <span className="font-normal text-gray-400">Frw</span>
+                    <TableCell className="num whitespace-nowrap py-3 text-right text-sm font-medium text-foreground">
+                      {Number(prod.unitPrice ?? 0).toLocaleString()} <span className="text-[11px] font-normal text-muted-foreground">Frw</span>
                       {prod.purchasePrice != null && (
-                        <div className="text-[10px] font-normal text-gray-400 dark:text-gray-500">
+                        <div className="text-[10px] font-normal text-muted-foreground">
                           Cost: {Number(prod.purchasePrice).toLocaleString()} Frw
                         </div>
                       )}
                     </TableCell>
 
                     {/* Expiry Date */}
-                    <TableCell className="py-3.5 text-xs whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap py-3 text-xs">
                       <span className={expiry.color}>{expiry.label}</span>
                     </TableCell>
 
                     {/* Status Badge */}
-                    <TableCell className="py-3.5">
+                    <TableCell className="py-3">
+                      {isService ? (
+                        <span className="inline-flex items-center whitespace-nowrap rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                          Service
+                        </span>
+                      ) : (
                       <span className={cn(
-                        "inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold",
+                        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-medium",
                         prod.quantity <= 0
-                          ? "bg-red-50 text-red-600 border border-red-100"
+                          ? "bg-danger/10 text-danger"
                           : isLow
-                            ? "bg-amber-50 text-amber-700 border border-amber-100"
-                            : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                            ? "bg-warning/10 text-warning"
+                            : "bg-success/10 text-success"
                       )}>
-                        {prod.quantity <= 0 ? "Out of Stock" : isLow ? "Low Stock" : "In Stock"}
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+                        {prod.quantity <= 0 ? "Out of stock" : isLow ? "Low stock" : "In stock"}
                       </span>
+                      )}
                     </TableCell>
 
                     {/* Actions */}
-                    <TableCell className="py-3.5">
-                      <div className="flex items-center gap-1">
+                    <TableCell className="py-3">
+                      <div className="flex items-center justify-end gap-0.5">
                         <button
                           onClick={() => setViewProduct(prod)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                           title="View product"
                         >
                           <Eye className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => { setEditingProduct(prod); setIsDialogOpen(true); }}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                           title="Edit product"
                         >
                           <Edit className="h-4 w-4" />
@@ -783,21 +716,22 @@ export const InventoryManagement = () => {
                               e.stopPropagation();
                               setOpenActionMenuId(openActionMenuId === String(prod.id) ? null : String(prod.id));
                             }}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            aria-label="More actions"
                           >
                             <MoreHorizontal className="h-4 w-4" />
                           </button>
                           {openActionMenuId === String(prod.id) && (
-                            <div className="absolute right-0 mt-1 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 z-30 py-1 text-xs">
+                            <div className="panel absolute right-0 z-30 mt-1 w-48 p-1 text-sm shadow-dropdown">
                               <button
                                 onClick={() => {
                                   setSelectedProductForHistory(Number(prod.id));
                                   setHistoryDialogOpen(true);
                                   setOpenActionMenuId(null);
                                 }}
-                                className="w-full text-left px-3 py-2 flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-foreground transition-colors hover:bg-muted"
                               >
-                                <History className="h-3.5 w-3.5 text-blue-500" />
+                                <History className="h-3.5 w-3.5 text-muted-foreground" />
                                 Movement History
                               </button>
                               <button
@@ -806,18 +740,19 @@ export const InventoryManagement = () => {
                                   setAdjustmentDialogOpen(true);
                                   setOpenActionMenuId(null);
                                 }}
-                                className="w-full text-left px-3 py-2 flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-foreground transition-colors hover:bg-muted"
                               >
-                                <SlidersHorizontal className="h-3.5 w-3.5 text-purple-500" />
+                                <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
                                 Stock Adjustment
                               </button>
+                              <div className="my-1 border-t border-border/70" />
                               <button
                                 onClick={() => {
                                   setProductToDelete({ id: String(prod.id), name: prod.name });
                                   setDeleteDialogOpen(true);
                                   setOpenActionMenuId(null);
                                 }}
-                                className="w-full text-left px-3 py-2 flex items-center gap-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+                                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-danger transition-colors hover:bg-danger/10"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                                 Delete Product
@@ -836,8 +771,8 @@ export const InventoryManagement = () => {
 
         {/* ── Pagination ───────────────────────────────────────────────────── */}
         {!loading && products.length > 0 && (
-          <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex flex-col gap-3 border-t border-border/80 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="num text-xs text-muted-foreground">
               Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalProductsCount || products.length)} of {(totalProductsCount || products.length).toLocaleString()} results
             </p>
 
@@ -845,22 +780,21 @@ export const InventoryManagement = () => {
               <button
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
-                className="h-8 w-8 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
 
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                const page = i + 1;
+              {pageWindow(currentPage, totalPages).map((page) => {
                 return (
                   <button
                     key={page}
                     onClick={() => handlePageChange(page)}
                     className={cn(
-                      "h-8 w-8 rounded-lg text-xs font-semibold transition-colors",
+                      "num h-8 min-w-[2rem] rounded-lg px-2 text-xs font-medium transition-colors",
                       currentPage === page
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
                     {page}
@@ -871,7 +805,7 @@ export const InventoryManagement = () => {
               <button
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
-                className="h-8 w-8 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -879,7 +813,7 @@ export const InventoryManagement = () => {
               <select
                 value={itemsPerPage}
                 onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-                className="h-8 pl-2 pr-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-medium text-gray-600 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all appearance-none"
+                className="ml-1 h-8 rounded-lg border border-border bg-background px-2 text-xs font-medium text-muted-foreground transition-all focus:outline-none focus:ring-4 focus:ring-ring/15"
               >
                 {[10, 20, 50, 100].map((num) => (
                   <option key={num} value={num}>{num} / page</option>

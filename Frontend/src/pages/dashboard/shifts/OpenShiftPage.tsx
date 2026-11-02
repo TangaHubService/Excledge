@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import { Clock, Loader2, Smartphone, Wallet, CheckCircle2, Lock } from 'lucide-react';
+import { Loader2, Smartphone, Wallet, CheckCircle2, Lock } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../..
 import { apiClient } from '../../../lib/api-client';
 import { useBranch } from '../../../context/BranchContext';
 import { useAuth } from '../../../context/AuthContext';
+import { PageHeader } from "../../../components/common/PageHeader";
 
 interface Shift {
   id: number;
@@ -164,33 +165,21 @@ export function OpenShiftPage() {
   if (loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
       {/* Page header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 p-6 text-white shadow-lg">
-        <div className="pointer-events-none absolute inset-0 bg-black/10" />
-        <div className="relative z-10 flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-            <Clock className="h-7 w-7 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Open Shift</h1>
-            <p className="mt-0.5 text-sm text-white/70">
-              Open or close a shift to start tracking sales for the day.
-            </p>
-          </div>
-        </div>
-        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-        <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
-      </div>
+      <PageHeader
+        title="Open Shift"
+        description={<>Open or close a shift to start tracking sales for the day.</>}
+      />
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger">
           {error}
         </div>
       )}
@@ -199,7 +188,7 @@ export function OpenShiftPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              <CheckCircle2 className="h-5 w-5 text-success" />
               <CardTitle>Shift is open</CardTitle>
             </div>
             <CardDescription>
@@ -210,34 +199,34 @@ export function OpenShiftPage() {
           <CardContent className="space-y-4">
             {summary && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs font-medium text-gray-500">Opening Cash</p>
-                  <p className="mt-1 text-lg font-bold text-gray-900">{money(summary.openingFloat)} RWF</p>
+                <div className="rounded-lg bg-surface-subtle p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Opening Cash</p>
+                  <p className="mt-1 text-lg font-bold text-foreground">{money(summary.openingFloat)} RWF</p>
                 </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs font-medium text-gray-500">Opening Mobile Money</p>
-                  <p className="mt-1 text-lg font-bold text-gray-900">{money(summary.openingMobileMoney)} RWF</p>
+                <div className="rounded-lg bg-surface-subtle p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Opening Mobile Money</p>
+                  <p className="mt-1 text-lg font-bold text-foreground">{money(summary.openingMobileMoney)} RWF</p>
                 </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs font-medium text-gray-500">Cash Sales</p>
-                  <p className="mt-1 text-lg font-bold text-gray-900">{money(summary.cashSales)} RWF</p>
+                <div className="rounded-lg bg-surface-subtle p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Cash Sales</p>
+                  <p className="mt-1 text-lg font-bold text-foreground">{money(summary.cashSales)} RWF</p>
                 </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs font-medium text-gray-500">Mobile Money Sales</p>
-                  <p className="mt-1 text-lg font-bold text-gray-900">{money(summary.mobileMoneySales)} RWF</p>
+                <div className="rounded-lg bg-surface-subtle p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Mobile Money Sales</p>
+                  <p className="mt-1 text-lg font-bold text-foreground">{money(summary.mobileMoneySales)} RWF</p>
                 </div>
-                <div className="rounded-lg bg-emerald-50 p-3">
-                  <p className="text-xs font-medium text-emerald-600">Expected Cash</p>
-                  <p className="mt-1 text-lg font-bold text-emerald-700">{money(summary.expectedCash)} RWF</p>
+                <div className="rounded-lg bg-success/10 p-3">
+                  <p className="text-xs font-medium text-success">Expected Cash</p>
+                  <p className="mt-1 text-lg font-bold text-success">{money(summary.expectedCash)} RWF</p>
                 </div>
-                <div className="rounded-lg bg-emerald-50 p-3">
-                  <p className="text-xs font-medium text-emerald-600">Expected Mobile Money</p>
-                  <p className="mt-1 text-lg font-bold text-emerald-700">{money(summary.expectedMobileMoney)} RWF</p>
+                <div className="rounded-lg bg-success/10 p-3">
+                  <p className="text-xs font-medium text-success">Expected Mobile Money</p>
+                  <p className="mt-1 text-lg font-bold text-success">{money(summary.expectedMobileMoney)} RWF</p>
                 </div>
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-4 rounded-lg border border-gray-200 p-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 rounded-lg border border-border p-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="actual-cash">Actual Cash (RWF)</Label>
                 <Input
@@ -249,7 +238,7 @@ export function OpenShiftPage() {
                 />
               </div>
               <div className="flex items-end">
-                <Button onClick={handleClose} disabled={closing || actualCash.trim() === ''} className="w-full bg-emerald-600 hover:bg-emerald-700">
+                <Button onClick={handleClose} disabled={closing || actualCash.trim() === ''} className="w-full bg-success hover:bg-success/90">
                   {closing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
                   {closing ? 'Closing…' : 'Close Shift'}
                 </Button>
@@ -287,19 +276,19 @@ export function OpenShiftPage() {
 
               <div className="space-y-2">
                 <Label>Cashier</Label>
-                <Input value={user?.name ?? ''} readOnly className="bg-gray-50" />
+                <Input value={user?.name ?? ''} readOnly className="bg-surface-subtle" />
               </div>
 
               <div className="space-y-2">
                 <Label>POS / Terminal</Label>
-                <Input value="Web POS" readOnly className="bg-gray-50" />
+                <Input value="Web POS" readOnly className="bg-surface-subtle" />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 rounded-lg border border-gray-200 bg-gray-50/50 p-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 rounded-lg border border-border bg-surface-subtle/50 p-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-emerald-600" />
+                  <Wallet className="h-4 w-4 text-success" />
                   Opening Cash (RWF)
                 </Label>
                 <Input
@@ -311,7 +300,7 @@ export function OpenShiftPage() {
               </div>
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
-                  <Smartphone className="h-4 w-4 text-emerald-600" />
+                  <Smartphone className="h-4 w-4 text-success" />
                   Opening Mobile Money (RWF)
                 </Label>
                 <Input
@@ -326,14 +315,14 @@ export function OpenShiftPage() {
             <Button
               onClick={handleOpen}
               disabled={!branchId || opening}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 sm:w-auto"
+              className="w-full bg-success hover:bg-success/90 sm:w-auto"
               size="lg"
             >
               {opening ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               {opening ? 'Opening…' : 'Open Shift'}
             </Button>
             {!branchId && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-muted-foreground">
                 {userBranches.length === 0 ? 'No branch is assigned to your account yet.' : 'Select the branch where you are working.'}
               </p>
             )}

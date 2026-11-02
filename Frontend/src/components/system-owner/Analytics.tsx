@@ -24,20 +24,20 @@ const Analytics: React.FC<AnalyticsProps> = ({ revenueData, growthData, isLoadin
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-400 p-4">
+      <div className="bg-danger/10 dark:bg-danger/20 border-l-4 border-red-400 p-4">
         <div className="flex">
           <div className="flex-shrink-0">
             <XCircle className="h-5 w-5 text-red-400" aria-hidden="true" />
           </div>
           <div className="ml-3">
-            <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+            <p className="text-sm text-danger dark:text-red-400">{error}</p>
           </div>
         </div>
       </div>
@@ -55,27 +55,27 @@ const Analytics: React.FC<AnalyticsProps> = ({ revenueData, growthData, isLoadin
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-900 dark:text-white">Analytics Dashboard</h2>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        <h2 className="text-lg font-medium text-foreground">Analytics Dashboard</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
           Comprehensive insights into system performance and growth.
         </p>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
           <div className="p-5">
             <div className="flex items-center">
-              <div className="flex-shrink-0 rounded-md p-3 bg-green-500">
+              <div className="flex-shrink-0 rounded-md p-3 bg-success">
                 <DollarSign className="h-6 w-6 text-white" />
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  <dt className="text-sm font-medium text-muted-foreground truncate">
                     Total Revenue
                   </dt>
                   <dd>
-                    <div className="text-lg font-medium text-gray-900 dark:text-white">
+                    <div className="text-lg font-medium text-foreground">
                       RWF {totalRevenue.toLocaleString()}
                     </div>
                   </dd>
@@ -85,19 +85,19 @@ const Analytics: React.FC<AnalyticsProps> = ({ revenueData, growthData, isLoadin
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
           <div className="p-5">
             <div className="flex items-center">
-              <div className="flex-shrink-0 rounded-md p-3 bg-blue-500">
+              <div className="flex-shrink-0 rounded-md p-3 bg-primary">
                 <TrendingUp className="h-6 w-6 text-white" />
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  <dt className="text-sm font-medium text-muted-foreground truncate">
                     Transactions
                   </dt>
                   <dd>
-                    <div className="text-lg font-medium text-gray-900 dark:text-white">
+                    <div className="text-lg font-medium text-foreground">
                       {totalTransactions}
                     </div>
                   </dd>
@@ -107,7 +107,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ revenueData, growthData, isLoadin
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0 rounded-md p-3 bg-purple-500">
@@ -115,11 +115,11 @@ const Analytics: React.FC<AnalyticsProps> = ({ revenueData, growthData, isLoadin
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  <dt className="text-sm font-medium text-muted-foreground truncate">
                     Organizations Growth
                   </dt>
                   <dd>
-                    <div className="text-lg font-medium text-gray-900 dark:text-white">
+                    <div className="text-lg font-medium text-foreground">
                       {totalOrganizations}
                     </div>
                   </dd>
@@ -129,7 +129,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ revenueData, growthData, isLoadin
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0 rounded-md p-3 bg-orange-500">
@@ -137,11 +137,11 @@ const Analytics: React.FC<AnalyticsProps> = ({ revenueData, growthData, isLoadin
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  <dt className="text-sm font-medium text-muted-foreground truncate">
                     Users Growth
                   </dt>
                   <dd>
-                    <div className="text-lg font-medium text-gray-900 dark:text-white">
+                    <div className="text-lg font-medium text-foreground">
                       {totalUsers}
                     </div>
                   </dd>
@@ -155,16 +155,16 @@ const Analytics: React.FC<AnalyticsProps> = ({ revenueData, growthData, isLoadin
       {/* Charts Section */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Revenue Chart */}
-        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="bg-card shadow overflow-hidden sm:rounded-lg border border-border">
           <div className="px-4 py-5 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Revenue by Period</h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+            <h3 className="text-lg leading-6 font-medium text-foreground">Revenue by Period</h3>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               Monthly revenue breakdown
             </p>
           </div>
-          <div className="border-t border-gray-200 dark:border-gray-700 p-6">
+          <div className="border-t border-border p-6">
             {revenueData.length === 0 ? (
-              <div className="flex items-center justify-center h-64 text-gray-500 dark:text-gray-400">
+              <div className="flex items-center justify-center h-64 text-muted-foreground">
                 No revenue data available
               </div>
             ) : (
@@ -173,11 +173,11 @@ const Analytics: React.FC<AnalyticsProps> = ({ revenueData, growthData, isLoadin
                   <CartesianGrid strokeDasharray="3 3" className="dark:stroke-gray-700" />
                   <XAxis
                     dataKey="period"
-                    className="dark:text-gray-400"
+                    className=""
                     tick={{ fill: 'currentColor' }}
                   />
                   <YAxis
-                    className="dark:text-gray-400"
+                    className=""
                     tick={{ fill: 'currentColor' }}
                   />
                   <Tooltip
@@ -197,16 +197,16 @@ const Analytics: React.FC<AnalyticsProps> = ({ revenueData, growthData, isLoadin
         </div>
 
         {/* Growth Chart */}
-        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="bg-card shadow overflow-hidden sm:rounded-lg border border-border">
           <div className="px-4 py-5 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Growth Metrics</h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+            <h3 className="text-lg leading-6 font-medium text-foreground">Growth Metrics</h3>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               Organizations and users growth over time
             </p>
           </div>
-          <div className="border-t border-gray-200 dark:border-gray-700 p-6">
+          <div className="border-t border-border p-6">
             {growthData.length === 0 ? (
-              <div className="flex items-center justify-center h-64 text-gray-500 dark:text-gray-400">
+              <div className="flex items-center justify-center h-64 text-muted-foreground">
                 No growth data available
               </div>
             ) : (
@@ -215,11 +215,11 @@ const Analytics: React.FC<AnalyticsProps> = ({ revenueData, growthData, isLoadin
                   <CartesianGrid strokeDasharray="3 3" className="dark:stroke-gray-700" />
                   <XAxis
                     dataKey="month"
-                    className="dark:text-gray-400"
+                    className=""
                     tick={{ fill: 'currentColor' }}
                   />
                   <YAxis
-                    className="dark:text-gray-400"
+                    className=""
                     tick={{ fill: 'currentColor' }}
                   />
                   <Tooltip

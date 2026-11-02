@@ -19,13 +19,13 @@ const SIZES: Record<AppToggleSize, { track: string; thumb: string; checkedTransl
 
 const COLORS: Record<AppToggleColor, { border: string; borderHover: string; bg: string; bgHover: string; ring: string; thumbOff: string; text: string }> = {
   primary: {
-    border: 'border-blue-600 dark:border-blue-500',
-    borderHover: 'hover:border-blue-700 dark:hover:border-blue-400',
+    border: 'border-primary',
+    borderHover: 'hover:border-primary',
     bg: 'data-[state=checked]:bg-blue-600 dark:data-[state=checked]:bg-blue-500',
     bgHover: 'hover:data-[state=checked]:bg-blue-700 dark:hover:data-[state=checked]:bg-blue-400',
-    ring: 'focus-visible:ring-blue-500',
-    thumbOff: 'bg-blue-600 dark:bg-blue-500',
-    text: 'text-blue-600 dark:text-blue-500',
+    ring: 'focus-visible:ring-ring',
+    thumbOff: 'bg-primary',
+    text: 'text-primary',
   },
   success: {
     border: 'border-emerald-600 dark:border-emerald-500',
@@ -33,8 +33,8 @@ const COLORS: Record<AppToggleColor, { border: string; borderHover: string; bg: 
     bg: 'data-[state=checked]:bg-emerald-600 dark:data-[state=checked]:bg-emerald-500',
     bgHover: 'hover:data-[state=checked]:bg-emerald-700 dark:hover:data-[state=checked]:bg-emerald-400',
     ring: 'focus-visible:ring-emerald-500',
-    thumbOff: 'bg-emerald-600 dark:bg-emerald-500',
-    text: 'text-emerald-600 dark:text-emerald-500',
+    thumbOff: 'bg-success dark:bg-success',
+    text: 'text-success dark:text-emerald-500',
   },
   danger: {
     border: 'border-red-600 dark:border-red-500',
@@ -42,8 +42,8 @@ const COLORS: Record<AppToggleColor, { border: string; borderHover: string; bg: 
     bg: 'data-[state=checked]:bg-red-600 dark:data-[state=checked]:bg-red-500',
     bgHover: 'hover:data-[state=checked]:bg-red-700 dark:hover:data-[state=checked]:bg-red-400',
     ring: 'focus-visible:ring-red-500',
-    thumbOff: 'bg-red-600 dark:bg-red-500',
-    text: 'text-red-600 dark:text-red-500',
+    thumbOff: 'bg-danger dark:bg-danger',
+    text: 'text-danger dark:text-danger',
   },
   warning: {
     border: 'border-amber-600 dark:border-amber-500',
@@ -51,8 +51,8 @@ const COLORS: Record<AppToggleColor, { border: string; borderHover: string; bg: 
     bg: 'data-[state=checked]:bg-amber-600 dark:data-[state=checked]:bg-amber-500',
     bgHover: 'hover:data-[state=checked]:bg-amber-700 dark:hover:data-[state=checked]:bg-amber-400',
     ring: 'focus-visible:ring-amber-500',
-    thumbOff: 'bg-amber-600 dark:bg-amber-500',
-    text: 'text-amber-600 dark:text-amber-500',
+    thumbOff: 'bg-warning dark:bg-warning',
+    text: 'text-warning dark:text-amber-500',
   },
 }
 
@@ -101,7 +101,7 @@ export const AppToggle = React.forwardRef<HTMLButtonElement, AppToggleProps>(
         aria-busy={loading || undefined}
         className={cn(
           'peer relative inline-flex shrink-0 cursor-pointer items-center rounded-full',
-          'border-2 bg-white dark:bg-gray-900',
+          'border-2 bg-card',
           'transition-colors duration-[220ms] ease-in-out',
           'outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900',
           'disabled:cursor-not-allowed disabled:opacity-50',
@@ -126,7 +126,7 @@ export const AppToggle = React.forwardRef<HTMLButtonElement, AppToggleProps>(
             'transition-transform duration-[220ms] ease-in-out',
             s.thumb,
             s.checkedTranslate,
-            checked ? 'bg-white' : c.thumbOff,
+            checked ? 'bg-card' : c.thumbOff,
           )}
         >
           {loading && (

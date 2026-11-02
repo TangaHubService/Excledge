@@ -59,18 +59,18 @@ export const Dashboard = () => {
   if (queryError || !overviewQuery.data) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center p-6">
-        <div className="flex flex-col items-center gap-4 text-center max-w-md bg-white dark:bg-gray-800 p-8 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-          <div className="h-16 w-16 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
-            <RefreshCw className="h-8 w-8 text-red-500" />
+        <div className="panel flex max-w-md flex-col items-center gap-4 p-8 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-danger/10">
+            <RefreshCw className="h-6 w-6 text-danger" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Failed to load dashboard</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{getErrorMessage(error)}</p>
+            <h2 className="mb-1 text-base font-semibold text-foreground">Failed to load dashboard</h2>
+            <p className="text-sm text-muted-foreground">{getErrorMessage(error)}</p>
           </div>
           <button
             type="button"
             onClick={() => overviewQuery.refetch()}
-            className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Try again
           </button>
@@ -80,8 +80,8 @@ export const Dashboard = () => {
   }
 
   return (
-    <div className="p-6 bg-gray-50/50 dark:bg-gray-900 min-h-screen">
-      <div className="max-w-7xl mx-auto">
+    <div className="pb-6">
+      <div className="mx-auto max-w-7xl">
         <DashboardOverview
           data={overviewQuery.data}
           datePreset={datePreset}

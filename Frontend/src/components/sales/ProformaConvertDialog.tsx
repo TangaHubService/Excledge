@@ -212,7 +212,7 @@ export default function ProformaConvertDialog({
 
   return (
     <Drawer open={open} onOpenChange={(o) => !o && !busy && onClose()}>
-      <DrawerContent className="bg-white sm:max-w-2xl">
+      <DrawerContent className="bg-card sm:max-w-2xl">
         <DrawerHeader>
           <DrawerTitle>Convert proforma {sale?.invoiceNumber ? `#${sale.invoiceNumber}` : sale?.saleNumber}</DrawerTitle>
           <DrawerDescription>
@@ -223,9 +223,9 @@ export default function ProformaConvertDialog({
 
         <div className="max-h-[62vh] space-y-4 overflow-y-auto px-5 py-2">
           {/* line editor */}
-          <div className="overflow-hidden rounded-xl border border-slate-200">
+          <div className="overflow-hidden rounded-xl border border-border">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <thead className="bg-surface-subtle text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2.5">Item</th>
                   <th className="w-20 px-2 py-2.5 text-center">Qty</th>
@@ -234,17 +234,17 @@ export default function ProformaConvertDialog({
                   <th className="w-10 px-2 py-2.5" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-border">
                 {lines.map((l) => (
                   <tr key={l.key}>
-                    <td className="px-3 py-2 font-medium text-slate-800">{l.name}</td>
+                    <td className="px-3 py-2 font-medium text-foreground">{l.name}</td>
                     <td className="px-2 py-2">
                       <input
                         type="number"
                         min={1}
                         value={l.quantity}
                         onChange={(e) => patchLine(l.key, { quantity: Math.max(0, Number(e.target.value)) })}
-                        className="h-8 w-full rounded-md border border-slate-200 px-2 text-center tabular-nums focus:border-blue-400 focus:outline-none"
+                        className="h-8 w-full rounded-md border border-border px-2 text-center tabular-nums focus:border-primary focus:outline-none"
                       />
                     </td>
                     <td className="px-2 py-2">
@@ -253,16 +253,16 @@ export default function ProformaConvertDialog({
                         min={0}
                         value={l.unitPrice}
                         onChange={(e) => patchLine(l.key, { unitPrice: Math.max(0, Number(e.target.value)) })}
-                        className="h-8 w-full rounded-md border border-slate-200 px-2 text-right tabular-nums focus:border-blue-400 focus:outline-none"
+                        className="h-8 w-full rounded-md border border-border px-2 text-right tabular-nums focus:border-primary focus:outline-none"
                       />
                     </td>
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-800">
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-foreground">
                       {money(l.quantity * l.unitPrice)}
                     </td>
                     <td className="px-2 py-2 text-center">
                       <button
                         onClick={() => removeLine(l.key)}
-                        className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                        className="rounded-md p-1 text-muted-foreground hover:bg-danger/10 hover:text-danger"
                         title="Remove"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -272,17 +272,17 @@ export default function ProformaConvertDialog({
                 ))}
                 {lines.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-400">No items</td>
+                    <td colSpan={5} className="px-3 py-6 text-center text-sm text-muted-foreground">No items</td>
                   </tr>
                 )}
               </tbody>
             </table>
 
-            <div className="border-t border-slate-100 p-2">
+            <div className="border-t border-border p-2">
               {pickerOpen ? (
-                <div className="rounded-lg border border-slate-200">
-                  <div className="flex items-center gap-2 border-b border-slate-100 px-2">
-                    <Search className="h-4 w-4 text-slate-400" />
+                <div className="rounded-lg border border-border">
+                  <div className="flex items-center gap-2 border-b border-border px-2">
+                    <Search className="h-4 w-4 text-muted-foreground" />
                     <input
                       autoFocus
                       value={search}
@@ -290,23 +290,23 @@ export default function ProformaConvertDialog({
                       placeholder="Search products…"
                       className="h-9 flex-1 bg-transparent text-sm focus:outline-none"
                     />
-                    <button onClick={() => setPickerOpen(false)} className="p-1 text-slate-400 hover:text-slate-700">
+                    <button onClick={() => setPickerOpen(false)} className="p-1 text-muted-foreground hover:text-foreground">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
                   <div className="max-h-44 overflow-y-auto">
-                    {searching && <div className="px-3 py-3 text-sm text-slate-400">Searching…</div>}
+                    {searching && <div className="px-3 py-3 text-sm text-muted-foreground">Searching…</div>}
                     {!searching && results.length === 0 && (
-                      <div className="px-3 py-3 text-sm text-slate-400">No matches</div>
+                      <div className="px-3 py-3 text-sm text-muted-foreground">No matches</div>
                     )}
                     {results.map((p) => (
                       <button
                         key={p.id}
                         onClick={() => addProduct(p)}
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted"
                       >
-                        <span className="font-medium text-slate-700">{p.name}</span>
-                        <span className="tabular-nums text-slate-500">{money(Number(p.unitPrice ?? p.price ?? 0))}</span>
+                        <span className="font-medium text-foreground">{p.name}</span>
+                        <span className="tabular-nums text-muted-foreground">{money(Number(p.unitPrice ?? p.price ?? 0))}</span>
                       </button>
                     ))}
                   </div>
@@ -314,7 +314,7 @@ export default function ProformaConvertDialog({
               ) : (
                 <button
                   onClick={() => setPickerOpen(true)}
-                  className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50"
+                  className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-primary hover:bg-primary/10"
                 >
                   <Plus className="h-4 w-4" /> Add item
                 </button>
@@ -323,10 +323,10 @@ export default function ProformaConvertDialog({
           </div>
 
           {/* payment */}
-          <div className="rounded-xl border border-slate-200 p-4">
+          <div className="rounded-xl border border-border p-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-slate-800">Payment</span>
-              <span className="text-base font-bold text-blue-700">{money(total)}</span>
+              <span className="text-sm font-bold text-foreground">Payment</span>
+              <span className="text-base font-bold text-primary">{money(total)}</span>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
               {(['CASH', 'MOBILE_MONEY', 'CREDIT_CARD', 'INSURANCE', 'DEBT'] as const).map((m) => (
@@ -336,8 +336,8 @@ export default function ProformaConvertDialog({
                   className={cn(
                     'rounded-lg border px-2 py-1.5 text-xs font-semibold transition-colors',
                     payMethod === m
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-slate-200 text-slate-500 hover:bg-slate-50',
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border text-muted-foreground hover:bg-muted',
                   )}
                 >
                   {m.replace('_', ' ')}
@@ -345,37 +345,37 @@ export default function ProformaConvertDialog({
               ))}
             </div>
             {payMethod !== 'DEBT' && (
-              <label className="mt-3 block text-xs font-medium text-slate-500">
+              <label className="mt-3 block text-xs font-medium text-muted-foreground">
                 {payMethod === 'INSURANCE' ? 'Insurance amount' : 'Amount received'}
                 <input
                   type="number"
                   min={0}
                   value={amountPaid}
                   onChange={(e) => setAmountPaid(Math.max(0, Number(e.target.value)))}
-                  className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-right tabular-nums focus:border-blue-400 focus:outline-none"
+                  className="mt-1 h-9 w-full rounded-md border border-border px-2 text-right tabular-nums focus:border-primary focus:outline-none"
                 />
               </label>
             )}
             {total - amountPaid > 0.01 && payMethod !== 'DEBT' && (
-              <p className="mt-2 text-xs text-rose-600">
+              <p className="mt-2 text-xs text-danger">
                 {money(total - amountPaid)} will be recorded as outstanding debt.
               </p>
             )}
           </div>
         </div>
 
-        <DrawerFooter className="flex-row flex-wrap items-center gap-2 border-t border-slate-200 px-5 py-4">
+        <DrawerFooter className="flex-row flex-wrap items-center gap-2 border-t border-border px-5 py-4">
           <button
             onClick={onClose}
             disabled={busy}
-            className="h-10 rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-600 hover:bg-white disabled:opacity-50"
+            className="h-10 rounded-xl border border-border px-4 text-sm font-medium text-muted-foreground hover:bg-card disabled:opacity-50"
           >
             Close
           </button>
           <button
             onClick={saveQuote}
             disabled={busy || !dirty}
-            className="h-10 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="h-10 rounded-xl border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
           >
             {savingQuote ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save quote'}
           </button>

@@ -39,15 +39,15 @@ export function ImportPreviewTable({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <span className="text-sm font-medium text-green-600">
+            <CheckCircle className="h-4 w-4 text-success" />
+            <span className="text-sm font-medium text-success">
               {validRows.length} {t('import.valid')}
             </span>
           </div>
           {invalidRows.length > 0 && (
             <div className="flex items-center gap-2">
-              <XCircle className="h-4 w-4 text-red-600" />
-              <span className="text-sm font-medium text-red-600">
+              <XCircle className="h-4 w-4 text-danger" />
+              <span className="text-sm font-medium text-danger">
                 {invalidRows.length} {t('import.invalid')}
               </span>
             </div>
@@ -55,25 +55,25 @@ export function ImportPreviewTable({
         </div>
       </div>
 
-      <ScrollArea className={`w-full border rounded-xl overflow-hidden ${theme === "dark" ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"
+      <ScrollArea className={`w-full border rounded-xl overflow-hidden ${theme === "dark" ? "border-gray-800 bg-gray-900" : "border-border bg-card"
         }`}>
         <div className="min-w-full inline-block align-middle">
           <Table className="min-w-max">
-            <TableHeader className={theme === "dark" ? "bg-gray-800/50" : "bg-gray-50"}>
+            <TableHeader className={theme === "dark" ? "bg-gray-800/50" : "bg-surface-subtle"}>
               <TableRow className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                <TableHead className={`w-16 font-bold whitespace-nowrap ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
+                <TableHead className={`w-16 font-bold whitespace-nowrap ${theme === "dark" ? "text-muted-foreground/60" : "text-foreground"}`}>
                   {t('common.row')}
                 </TableHead>
-                <TableHead className={`font-bold whitespace-nowrap ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
+                <TableHead className={`font-bold whitespace-nowrap ${theme === "dark" ? "text-muted-foreground/60" : "text-foreground"}`}>
                   {t('common.status')}
                 </TableHead>
                 {columns.map((col) => (
-                  <TableHead key={col} className={`capitalize font-bold whitespace-nowrap ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
+                  <TableHead key={col} className={`capitalize font-bold whitespace-nowrap ${theme === "dark" ? "text-muted-foreground/60" : "text-foreground"}`}>
                     {col.replace(/([A-Z])/g, ' $1').trim()}
                   </TableHead>
                 ))}
                 {invalidRows.length > 0 && (
-                  <TableHead className={`font-bold whitespace-nowrap ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
+                  <TableHead className={`font-bold whitespace-nowrap ${theme === "dark" ? "text-muted-foreground/60" : "text-foreground"}`}>
                     {t('common.errors')}
                   </TableHead>
                 )}
@@ -84,8 +84,8 @@ export function ImportPreviewTable({
                 <TableRow>
                   <TableCell colSpan={columns.length + 3} className="text-center py-12">
                     <div className="flex flex-col items-center justify-center space-y-2">
-                      <AlertCircle className="h-8 w-8 text-gray-400" />
-                      <p className={`text-base font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>
+                      <AlertCircle className="h-8 w-8 text-muted-foreground" />
+                      <p className={`text-base font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"}`}>
                         {t('common.noDataToPreview')}
                       </p>
                     </div>
@@ -98,21 +98,21 @@ export function ImportPreviewTable({
                     <TableRow
                       key={index}
                       className={`transition-colors border-b ${isValid
-                        ? theme === "dark" ? 'hover:bg-green-950/30' : 'hover:bg-green-50/50'
-                        : theme === "dark" ? 'bg-red-950/10 hover:bg-red-950/20' : 'bg-red-50/30 hover:bg-red-50/50'
+                        ? theme === "dark" ? 'hover:bg-success/30' : 'hover:bg-success/50'
+                        : theme === "dark" ? 'bg-danger/10 hover:bg-danger/20' : 'bg-danger/30 hover:bg-danger/50'
                         }`}
                     >
-                      <TableCell className={`font-mono text-xs whitespace-nowrap ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>
+                      <TableCell className={`font-mono text-xs whitespace-nowrap ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"}`}>
                         {row.rowNumber}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {isValid ? (
-                          <Badge className="bg-green-500/10 text-green-500 border-green-500/20 hover:bg-green-500/20 px-2 py-0.5 rounded-md">
+                          <Badge className="bg-success/10 text-green-500 border-green-500/20 hover:bg-success/20 px-2 py-0.5 rounded-md">
                             <CheckCircle className="h-3 w-3 mr-1" />
                             {t('import.valid')}
                           </Badge>
                         ) : (
-                          <Badge className="bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20 px-2 py-0.5 rounded-md">
+                          <Badge className="bg-danger/10 text-danger border-red-500/20 hover:bg-danger/20 px-2 py-0.5 rounded-md">
                             <XCircle className="h-3 w-3 mr-1" />
                             {t('import.invalid')}
                           </Badge>
@@ -122,8 +122,8 @@ export function ImportPreviewTable({
                         const value = row[col] ?? row[col.toLowerCase()] ?? '';
                         return (
                           <TableCell key={col} className={`text-sm whitespace-nowrap ${!isValid
-                            ? theme === "dark" ? "text-red-300" : "text-red-700 font-medium"
-                            : theme === "dark" ? "text-gray-300" : "text-gray-700"
+                            ? theme === "dark" ? "text-red-300" : "text-danger font-medium"
+                            : theme === "dark" ? "text-muted-foreground/60" : "text-foreground"
                             }`}>
                             {value || '-'}
                           </TableCell>
@@ -132,10 +132,10 @@ export function ImportPreviewTable({
                       {invalidRows.length > 0 && (
                         <TableCell className="min-w-[200px]">
                           {!isValid && row.errors && (
-                            <div className={`flex items-start gap-2 p-2 rounded-lg ${theme === "dark" ? "bg-red-950/30 border border-red-900/30" : "bg-red-50 border border-red-100"
+                            <div className={`flex items-start gap-2 p-2 rounded-lg ${theme === "dark" ? "bg-danger/30 border border-red-900/30" : "bg-danger/10 border border-danger/25"
                               }`}>
-                              <AlertCircle className="h-3.5 w-3.5 text-red-500 mt-0.5 flex-shrink-0" />
-                              <span className={`text-xs leading-relaxed ${theme === "dark" ? "text-red-300" : "text-red-700"
+                              <AlertCircle className="h-3.5 w-3.5 text-danger mt-0.5 flex-shrink-0" />
+                              <span className={`text-xs leading-relaxed ${theme === "dark" ? "text-red-300" : "text-danger"
                                 }`}>
                                 {row.errors}
                               </span>

@@ -46,8 +46,8 @@ export interface DataTableProps<T> {
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   if (!active || dir === null) return <ChevronsUpDown className="h-3.5 w-3.5 opacity-40" />
-  if (dir === 'asc') return <ChevronUp className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-  return <ChevronDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+  if (dir === 'asc') return <ChevronUp className="h-3.5 w-3.5 text-primary" />
+  return <ChevronDown className="h-3.5 w-3.5 text-primary" />
 }
 
 function compareValues(left: unknown, right: unknown): number {
@@ -93,9 +93,9 @@ function EmptyState({
   return (
     <tr>
       <td colSpan={100}>
-        <div className="flex flex-col items-center justify-center py-16 text-gray-400 dark:text-gray-500">
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           {icon && <div className="mb-3 opacity-40">{icon}</div>}
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
           <p className="text-xs mt-1">{message}</p>
         </div>
       </td>
@@ -113,8 +113,8 @@ function PaginationBar({
   const to = Math.min(page * pageSize, total)
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-      <p className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+    <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-card">
+      <p className="text-xs text-muted-foreground tabular-nums">
         {total === 0 ? 'No results' : `${from}–${to} of ${total}`}
       </p>
       <div className="flex items-center gap-1">
@@ -122,7 +122,7 @@ function PaginationBar({
           type="button"
           disabled={page <= 1}
           onClick={() => onChange(page - 1)}
-          className="flex h-7 w-7 items-center justify-center rounded border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="flex h-7 w-7 items-center justify-center rounded border border-border text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
@@ -137,7 +137,7 @@ function PaginationBar({
           }, [])
           .map((p, i) =>
             p === '...' ? (
-              <span key={`ellipsis-${i}`} className="px-1 text-xs text-gray-400">…</span>
+              <span key={`ellipsis-${i}`} className="px-1 text-xs text-muted-foreground">…</span>
             ) : (
               <button
                 key={p}
@@ -146,8 +146,8 @@ function PaginationBar({
                 className={cn(
                   'flex h-7 min-w-[1.75rem] items-center justify-center rounded px-1.5 text-xs font-medium transition-colors',
                   page === p
-                    ? 'bg-blue-600 text-white'
-                    : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700',
+                    ? 'bg-primary text-white'
+                    : 'border border-border text-muted-foreground hover:bg-muted',
                 )}
               >
                 {p}
@@ -159,7 +159,7 @@ function PaginationBar({
           type="button"
           disabled={page >= totalPages}
           onClick={() => onChange(page + 1)}
-          className="flex h-7 w-7 items-center justify-center rounded border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="flex h-7 w-7 items-center justify-center rounded border border-border text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           <ChevronRight className="h-3.5 w-3.5" />
         </button>
@@ -237,17 +237,17 @@ export function DataTable<T>({
   }, [activeSortDir, activeSortKey, columns, data, onSort])
 
   return (
-    <div className={cn('rounded-card border border-gray-200 dark:border-gray-700 overflow-hidden shadow-card', className)}>
+    <div className={cn('rounded-card border border-border overflow-hidden shadow-card', className)}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700">
+            <tr className="bg-surface-subtle border-b border-border">
               {columns.map(col => (
                 <th
                   key={col.key}
                   className={cn(
-                    'px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap select-none',
-                    isSortable(col) && 'cursor-pointer hover:text-gray-700 dark:hover:text-gray-200',
+                    'px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap select-none',
+                    isSortable(col) && 'cursor-pointer hover:text-foreground',
                     col.headerClassName,
                   )}
                   onClick={isSortable(col) ? () => handleSort(col.key) : undefined}
@@ -268,7 +268,7 @@ export function DataTable<T>({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 bg-white dark:bg-gray-800">
+          <tbody className="divide-y divide-border bg-card">
             {isLoading ? (
               Array.from({ length: skeletonRows }).map((_, i) => (
                 <SkeletonRow key={i} columns={columns} />
@@ -282,7 +282,7 @@ export function DataTable<T>({
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   className={cn(
                     'transition-colors',
-                    onRowClick && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40',
+                    onRowClick && 'cursor-pointer hover:bg-muted',
                     rowClassName?.(row),
                   )}
                 >
@@ -290,7 +290,7 @@ export function DataTable<T>({
                     <td
                       key={col.key}
                       className={cn(
-                        'px-4 py-3 text-gray-700 dark:text-gray-200 align-middle',
+                        'px-4 py-3 text-foreground align-middle',
                         col.className,
                       )}
                     >

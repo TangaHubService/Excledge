@@ -30,9 +30,9 @@ type Pagination = { totalPages?: number; total?: number; totalItems?: number };
 type SalesResponse = { success?: boolean; data?: Invoice[] | { data?: Invoice[]; pagination?: Pagination }; pagination?: Pagination };
 
 const statusStyle: Record<string, string> = {
-  COMPLETED: 'bg-emerald-100 text-emerald-700',
-  REFUNDED: 'bg-purple-100 text-purple-700',
-  PARTIALLY_REFUNDED: 'bg-violet-100 text-violet-700',
+  COMPLETED: 'bg-success/15 text-success',
+  REFUNDED: 'bg-purple-500/15 text-purple-700',
+  PARTIALLY_REFUNDED: 'bg-violet-500/15 text-violet-700',
 };
 
 const fmtCurrency = (amount: string | number) =>
@@ -104,16 +104,16 @@ export default function InvoicesListPage() {
   };
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Invoices</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Invoices</h1>
+          <p className="text-sm text-muted-foreground">
             Every fiscal invoice issued. Download once for the original — downloading the same invoice again automatically prints a watermarked COPY.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-lg border border-gray-300 p-0.5">
+          <div className="flex items-center rounded-lg border border-border p-0.5">
             {(['A4', 'A5', '80mm'] as const).map((option) => (
               <button
                 key={option}
@@ -121,7 +121,7 @@ export default function InvoicesListPage() {
                 onClick={() => setInvoiceFormat(option)}
                 className={cn(
                   'rounded-md px-2.5 py-1 text-xs font-semibold transition-colors',
-                  invoiceFormat === option ? 'bg-[#1d57c8] text-white' : 'text-gray-500 hover:bg-gray-100'
+                  invoiceFormat === option ? 'bg-[#1d57c8] text-white' : 'text-muted-foreground hover:bg-muted'
                 )}
               >
                 {option}
@@ -129,7 +129,7 @@ export default function InvoicesListPage() {
             ))}
           </div>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
@@ -140,18 +140,18 @@ export default function InvoicesListPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
         {isLoading ? (
           <TableSkeleton rows={8} columns={6} />
         ) : invoices.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-16 text-gray-400">
+          <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
             <FileText className="h-10 w-10" />
             <p className="text-sm font-medium">No invoices found</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader className="bg-gray-50">
+              <TableHeader className="bg-surface-subtle">
                 <TableRow>
                   <TableHead>Invoice #</TableHead>
                   <TableHead>Customer</TableHead>
@@ -165,22 +165,22 @@ export default function InvoicesListPage() {
                 {invoices.map((invoice) => (
                   <TableRow
                     key={invoice.id}
-                    className="cursor-pointer hover:bg-gray-50"
+                    className="cursor-pointer hover:bg-muted"
                     onClick={() => navigate(`/dashboard/invoice/${invoice.id}`)}
                   >
-                    <TableCell className="font-semibold text-gray-900">
+                    <TableCell className="font-semibold text-foreground">
                       {invoice.invoiceNumber || invoice.saleNumber}
                       {(invoice.reprintCount ?? 0) > 0 && (
-                        <span className="ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                        <span className="ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                           downloaded {invoice.reprintCount}x
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-gray-700">{invoice.customer?.name || 'Walk-in customer'}</TableCell>
-                    <TableCell className="text-gray-500 text-sm">{format(new Date(invoice.createdAt), 'dd MMM yyyy, HH:mm')}</TableCell>
-                    <TableCell className="text-right font-medium text-gray-900">{fmtCurrency(invoice.totalAmount)}</TableCell>
+                    <TableCell className="text-foreground">{invoice.customer?.name || 'Walk-in customer'}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{format(new Date(invoice.createdAt), 'dd MMM yyyy, HH:mm')}</TableCell>
+                    <TableCell className="text-right font-medium text-foreground">{fmtCurrency(invoice.totalAmount)}</TableCell>
                     <TableCell>
-                      <span className={cn('inline-flex rounded-full px-2 py-1 text-[11px] font-semibold', statusStyle[invoice.status] ?? 'bg-gray-100 text-gray-600')}>
+                      <span className={cn('inline-flex rounded-full px-2 py-1 text-[11px] font-semibold', statusStyle[invoice.status] ?? 'bg-muted text-muted-foreground')}>
                         {invoice.status.replace('_', ' ')}
                       </span>
                     </TableCell>
@@ -189,7 +189,7 @@ export default function InvoicesListPage() {
                         onClick={() => handleDownload(invoice)}
                         disabled={downloadingId === invoice.id}
                         title={(invoice.reprintCount ?? 0) > 0 ? 'Download again — this will be marked COPY' : 'Download original invoice'}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                       >
                         {downloadingId === invoice.id
                           ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -205,23 +205,23 @@ export default function InvoicesListPage() {
         )}
 
         {!isLoading && invoices.length > 0 && (
-          <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3">
-            <p className="text-xs text-gray-500">
+          <div className="flex items-center justify-between border-t border-border px-4 py-3">
+            <p className="text-xs text-muted-foreground">
               {totalCount} invoice{totalCount === 1 ? '' : 's'} total
             </p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage <= 1}
-                className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40"
+                className="p-1.5 rounded-lg border border-border text-muted-foreground hover:bg-muted disabled:opacity-40"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-xs text-gray-600">Page {currentPage} of {totalPages}</span>
+              <span className="text-xs text-muted-foreground">Page {currentPage} of {totalPages}</span>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage >= totalPages}
-                className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40"
+                className="p-1.5 rounded-lg border border-border text-muted-foreground hover:bg-muted disabled:opacity-40"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>

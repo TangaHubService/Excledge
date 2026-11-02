@@ -27,8 +27,8 @@ export function RraItemClassPicker({
 
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-        RRA item classification{required ? <span className="text-red-500"> *</span> : null}
+      <label className="text-sm font-medium text-foreground">
+        RRA item classification{required ? <span className="text-danger"> *</span> : null}
       </label>
       <SearchableSelect
         options={options}
@@ -39,10 +39,10 @@ export function RraItemClassPicker({
         emptyText="No matching classification."
         className={cn(
           "h-auto min-h-[42px] rounded-xl border px-3.5 py-2.5",
-          invalid ? "border-red-400" : "border-gray-200 dark:border-gray-700",
+          invalid ? "border-red-400" : "border-border",
         )}
       />
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-muted-foreground">
         {required
           ? "Required by RRA. Pick the closest matching class for this item."
           : "Pick the closest matching RRA class for this item."}

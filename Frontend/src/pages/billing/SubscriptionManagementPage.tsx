@@ -85,18 +85,18 @@ const formatDate = (dateString: string | null | undefined, locale: string = 'en-
 // Colored Status Badges
 const getStatusBadge = (status: string, t: any) => {
     const statusMap: Record<string, { text: string; color: string }> = {
-        ACTIVE: { text: t('common.active'), color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
-        TRIALING: { text: t('billing.trial'), color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
-        GRACE_PERIOD: { text: t('billing.gracePeriod') || 'Grace Period', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
-        PAST_DUE: { text: t('billing.pastDue'), color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' },
-        CANCELED: { text: t('billing.canceled'), color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
-        UNPAID: { text: t('billing.unpaid'), color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
-        INCOMPLETE: { text: t('billing.incomplete'), color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' },
-        EXPIRED: { text: t('billing.expired'), color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' },
-        PENDING: { text: t('billing.pending'), color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300' },
+        ACTIVE: { text: t('common.active'), color: 'bg-success/15 text-success dark:bg-success/30 dark:text-green-300' },
+        TRIALING: { text: t('billing.trial'), color: 'bg-primary/15 text-primary' },
+        GRACE_PERIOD: { text: t('billing.gracePeriod') || 'Grace Period', color: 'bg-danger/15 text-danger dark:bg-danger/30 dark:text-red-300' },
+        PAST_DUE: { text: t('billing.pastDue'), color: 'bg-warning/15 text-warning dark:bg-warning/30 dark:text-yellow-300' },
+        CANCELED: { text: t('billing.canceled'), color: 'bg-danger/15 text-danger dark:bg-danger/30 dark:text-red-300' },
+        UNPAID: { text: t('billing.unpaid'), color: 'bg-danger/15 text-danger dark:bg-danger/30 dark:text-red-300' },
+        INCOMPLETE: { text: t('billing.incomplete'), color: 'bg-orange-500/15 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' },
+        EXPIRED: { text: t('billing.expired'), color: 'bg-muted text-foreground' },
+        PENDING: { text: t('billing.pending'), color: 'bg-indigo-500/15 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300' },
     };
 
-    const info = statusMap[status] || { text: status, color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' };
+    const info = statusMap[status] || { text: status, color: 'bg-muted text-foreground' };
     return <span className={`px-2 py-1 text-xs rounded-full font-semibold ${info.color}`}>{info.text}</span>;
 };
 
@@ -191,7 +191,7 @@ const SubscriptionManagementPage = () => {
 
     if (error) {
         return (
-            <div className="p-4 bg-red-50 text-red-700 rounded-md mb-4 flex items-center">
+            <div className="p-4 bg-danger/10 text-danger rounded-md mb-4 flex items-center">
                 <XCircle className="mr-2 h-5 w-5" /> {error}
             </div>
         );
@@ -228,12 +228,12 @@ const SubscriptionManagementPage = () => {
         } : null;
 
         return (
-            <Card key={subscription.id} className={`overflow-hidden border-2 transition-all duration-200 bg-white dark:bg-gray-800 ${isActive ? 'border-primary/20 shadow-md' : 'border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'}`}>
+            <Card key={subscription.id} className={`overflow-hidden border-2 transition-all duration-200 bg-card ${isActive ? 'border-primary/20 shadow-md' : 'border-border hover:border-border'}`}>
                 <div className="p-6">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                         <div>
                             <div className="flex items-center gap-3 mb-1">
-                                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{currentPlan?.name || t('common.unknown')}</h3>
+                                <h3 className="text-2xl font-bold text-foreground">{currentPlan?.name || t('common.unknown')}</h3>
                                 {getStatusBadge(subscription.status, t)}
                             </div>
                             <p className="text-muted-foreground">{currentPlan?.description}</p>
@@ -243,7 +243,7 @@ const SubscriptionManagementPage = () => {
                                 <Button
                                     onClick={() => handleReactivateSubscription(subscription.id)}
                                     disabled={isUpdating}
-                                    className="bg-green-600 hover:bg-green-700 flex-1 md:flex-none text-white shadow-sm"
+                                    className="bg-success hover:bg-success/90 flex-1 md:flex-none text-white shadow-sm"
                                 >
                                     {isUpdating ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : t('billing.reactivate')}
                                 </Button>
@@ -251,7 +251,7 @@ const SubscriptionManagementPage = () => {
                                 <Button
                                     onClick={() => handleRenewSubscription(subscription)}
                                     disabled={isUpdating}
-                                    className="bg-blue-600 hover:bg-blue-700 flex-1 md:flex-none text-white shadow-sm"
+                                    className="bg-primary hover:bg-primary/90 flex-1 md:flex-none text-white shadow-sm"
                                 >
                                     {t('billing.renew')}
                                 </Button>
@@ -259,22 +259,22 @@ const SubscriptionManagementPage = () => {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 bg-gray-50/50 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-600">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 bg-surface-subtle/50 rounded-xl border border-border">
                         <div className="flex items-start gap-4">
-                            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                            <div className="p-2 bg-primary/15 rounded-lg text-primary">
                                 <CreditCard className="h-6 w-6" />
                             </div>
                             <div>
-                                <p className="text-sm font-medium text-gray-500 mb-1">{t('billing.pricingAndCycle')}</p>
-                                <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                                <p className="text-sm font-medium text-muted-foreground mb-1">{t('billing.pricingAndCycle')}</p>
+                                <p className="text-lg font-semibold text-foreground">
                                     {currentPlan ? `${formatCurrency(currentPlan.price, currentPlan.currency)}/${currentPlan.interval === 'month' ? t('common.month') : t('common.year')}` : 'N/A'}
                                 </p>
                                 {subscription.autoRenew && isActive ? (
-                                    <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                                    <p className="text-xs text-success mt-1 flex items-center gap-1">
                                         <CheckCircle2 className="h-3 w-3" /> {t('billing.autoRenewalOn')}
                                     </p>
                                 ) : (
-                                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                                    <p className="text-xs text-warning mt-1 flex items-center gap-1">
                                         <CalendarClock className="h-3 w-3" /> {t('billing.autoRenewalOff')}
                                     </p>
                                 )}
@@ -282,36 +282,36 @@ const SubscriptionManagementPage = () => {
                         </div>
 
                         <div className="flex items-start gap-4">
-                            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600 dark:text-purple-400">
+                            <div className="p-2 bg-purple-500/15 dark:bg-purple-900/30 rounded-lg text-purple-600 dark:text-purple-400">
                                 <CalendarClock className="h-6 w-6" />
                             </div>
                             <div>
-                                <p className="text-sm font-medium text-gray-500 mb-1">
+                                <p className="text-sm font-medium text-muted-foreground mb-1">
                                     {!isActive ? t('billing.endedOn') : t('billing.nextBillingDate')}
                                 </p>
-                                <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                                <p className="text-lg font-semibold text-foreground">
                                     {formatDate(subscription.endDate || undefined, i18n.language)}
                                 </p>
-                                <p className="text-xs text-gray-500 mt-1">
+                                <p className="text-xs text-muted-foreground mt-1">
                                     {t('billing.usingPayment', { method: subscription.paymentMethod || t('common.default') })}
                                 </p>
                             </div>
                         </div>
 
                         <div className="flex items-start gap-4">
-                            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg text-green-600 dark:text-green-400">
+                            <div className="p-2 bg-success/15 dark:bg-success/30 rounded-lg text-success dark:text-green-400">
                                 <ShieldCheck className="h-6 w-6" />
                             </div>
                             <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-500 mb-1">{t('billing.planFeatures')}</p>
+                                <p className="text-sm font-medium text-muted-foreground mb-1">{t('billing.planFeatures')}</p>
                                 <div className="flex flex-wrap gap-2">
                                     {currentPlan?.features.slice(0, 3).map((feature, i) => (
-                                        <span key={i} className="inline-flex items-center px-2 py-1 rounded bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 text-xs font-medium text-gray-600 dark:text-gray-300">
+                                        <span key={i} className="inline-flex items-center px-2 py-1 rounded bg-card border border-border text-xs font-medium text-muted-foreground">
                                             {feature}
                                         </span>
                                     ))}
                                     {(currentPlan?.features.length || 0) > 3 && (
-                                        <span className="inline-flex items-center px-2 py-1 rounded bg-gray-100 dark:bg-gray-600 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                        <span className="inline-flex items-center px-2 py-1 rounded bg-muted text-xs font-medium text-muted-foreground">
                                             {t('billing.more', { count: currentPlan!.features.length - 3 })}
                                         </span>
                                     )}
@@ -326,9 +326,9 @@ const SubscriptionManagementPage = () => {
     };
 
     return (
-        <div className="container mx-auto px-4 py-8 space-y-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
+        <div className="container mx-auto px-4 py-8 space-y-8 bg-surface-subtle min-h-screen">
             <div>
-                <h1 className="text-3xl font-bold mb-1 text-gray-900 dark:text-white">{t('billing.title')}</h1>
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t('billing.title')}</h1>
                 <p className="text-muted-foreground">{t('billing.description')}</p>
             </div>
 
@@ -370,11 +370,11 @@ const SubscriptionManagementPage = () => {
                         )}
                     </>
                 ) : (
-                    <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-600">
-                        <div className="bg-white dark:bg-gray-700 p-4 rounded-full inline-flex mb-4 shadow-sm">
-                            <ShoppingBag className="h-8 w-8 text-gray-400 dark:text-gray-500" />
+                    <div className="text-center py-12 bg-surface-subtle rounded-2xl border-2 border-dashed border-border">
+                        <div className="bg-card p-4 rounded-full inline-flex mb-4 shadow-sm">
+                            <ShoppingBag className="h-8 w-8 text-muted-foreground" />
                         </div>
-                        <h3 className="text-lg font-medium text-gray-900">{t('billing.noActiveSubscriptions')}</h3>
+                        <h3 className="text-lg font-medium text-foreground">{t('billing.noActiveSubscriptions')}</h3>
                         <p className="text-muted-foreground mt-1 max-w-sm mx-auto">
                             {t('billing.choosePlanBelow')}
                         </p>
@@ -384,7 +384,7 @@ const SubscriptionManagementPage = () => {
 
             {/* Available Plans */}
             <div>
-                <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">{t('billing.availablePlans')}</h2>
+                <h2 className="text-2xl font-semibold mb-4 text-foreground">{t('billing.availablePlans')}</h2>
 
                 <SubscriptionPage
                     preselectedPlanId={renewTarget?.planId ?? null}
@@ -403,15 +403,15 @@ const SubscriptionManagementPage = () => {
             </div>
 
             <Drawer open={isCancelModalOpen} onOpenChange={setIsCancelModalOpen}>
-                <DrawerContent className="sm:max-w-md bg-white dark:bg-gray-800">
+                <DrawerContent className="sm:max-w-md bg-card">
                     <DrawerHeader>
                         <div className="flex items-center gap-4">
-                            <div className="p-3 rounded-full bg-red-100 flex items-center justify-center">
-                                <AlertTriangle className="h-6 w-6 text-red-600" />
+                            <div className="p-3 rounded-full bg-danger/15 flex items-center justify-center">
+                                <AlertTriangle className="h-6 w-6 text-danger" />
                             </div>
                             <div>
-                                <DrawerTitle className="text-xl text-red-600">{t('billing.confirmCancelTitle')}</DrawerTitle>
-                                <DrawerDescription className="mt-2 text-gray-600">
+                                <DrawerTitle className="text-xl text-danger">{t('billing.confirmCancelTitle')}</DrawerTitle>
+                                <DrawerDescription className="mt-2 text-muted-foreground">
                                     {t('billing.confirmCancelDesc')}
                                 </DrawerDescription>
                             </div>
@@ -419,7 +419,7 @@ const SubscriptionManagementPage = () => {
                     </DrawerHeader>
 
                     <div className="py-4">
-                        <div className="p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-800/50 rounded-lg text-sm text-red-800 dark:text-red-200">
+                        <div className="p-4 bg-danger/10 dark:bg-danger/10 border border-danger/25 dark:border-red-800/50 rounded-lg text-sm text-danger dark:text-red-200">
                             <p className="font-medium flex items-center gap-2 mb-1">
                                 <ShieldCheck className="h-4 w-4" />
                                 {t('billing.premiumAccessWarning')}
@@ -428,16 +428,16 @@ const SubscriptionManagementPage = () => {
                                 {t('billing.premiumAccessWarningDesc')}
                             </p>
                         </div>
-                        <p className="text-sm text-gray-500 mt-4 px-1">
+                        <p className="text-sm text-muted-foreground mt-4 px-1">
                             {t('billing.undoneWarning')}
                         </p>
                     </div>
 
                     <DrawerFooter className="gap-2">
-                        <Button variant="outline" onClick={() => setIsCancelModalOpen(false)} className="border-gray-300">
+                        <Button variant="outline" onClick={() => setIsCancelModalOpen(false)} className="border-border">
                             {t('billing.keepSubscription')}
                         </Button>
-                        <Button variant="destructive" onClick={confirmCancellation} disabled={isUpdating} className="bg-red-600 hover:bg-red-700">
+                        <Button variant="destructive" onClick={confirmCancellation} disabled={isUpdating} className="bg-danger hover:bg-danger/90">
                             {isUpdating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t('billing.cancelSolution')}
                         </Button>
                     </DrawerFooter>

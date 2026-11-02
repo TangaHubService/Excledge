@@ -250,17 +250,17 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
         const skeletonPlans = Array.from({ length: 4 });
 
         return (
-            <section className={showPlanHeader ? "bg-[#f2f4f7] py-10 dark:bg-zinc-950 sm:py-14" : "py-4"}>
+            <section className={showPlanHeader ? "bg-[#f2f4f7] py-10 sm:py-14" : "py-4"}>
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     {showPlanHeader && (
                     <div className="mx-auto mb-10 max-w-3xl text-center sm:mb-14">
-                        <div className="mx-auto mb-4 h-8 w-3/4 max-w-md animate-pulse rounded-lg bg-gray-200 dark:bg-zinc-800" />
-                        <div className="mx-auto mb-3 h-4 w-2/3 max-w-sm animate-pulse rounded bg-gray-200 dark:bg-zinc-800" />
+                        <div className="mx-auto mb-4 h-8 w-3/4 max-w-md animate-pulse rounded-lg bg-muted" />
+                        <div className="mx-auto mb-3 h-4 w-2/3 max-w-sm animate-pulse rounded bg-muted" />
                         <div className="mx-auto flex flex-wrap justify-center gap-2">
                             {[1, 2, 3].map((i) => (
                                 <div
                                     key={i}
-                                    className="h-9 w-28 animate-pulse rounded-full bg-white dark:bg-zinc-900"
+                                    className="h-9 w-28 animate-pulse rounded-full bg-card"
                                 />
                             ))}
                         </div>
@@ -271,20 +271,20 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
                         {skeletonPlans.map((_, index) => (
                             <div
                                 key={index}
-                                className="bg-white rounded-lg shadow-sm border p-6 space-y-4 animate-pulse"
+                                className="bg-card rounded-lg shadow-sm border p-6 space-y-4 animate-pulse"
                             >
-                                <div className="h-6 w-3/4 bg-gray-200 rounded"></div>
-                                <div className="h-8 w-1/2 bg-gray-200 rounded"></div>
-                                <div className="h-4 bg-gray-100 rounded"></div>
-                                <div className="h-4 bg-gray-100 rounded w-5/6"></div>
-                                <div className="h-10 bg-gray-200 rounded mt-4"></div>
+                                <div className="h-6 w-3/4 bg-muted rounded"></div>
+                                <div className="h-8 w-1/2 bg-muted rounded"></div>
+                                <div className="h-4 bg-muted rounded"></div>
+                                <div className="h-4 bg-muted rounded w-5/6"></div>
+                                <div className="h-10 bg-muted rounded mt-4"></div>
                             </div>
                         ))}
                     </div>
 
                     {showPlanHeader && (
                     <div className="mt-10 text-center">
-                        <div className="mx-auto h-4 w-2/3 max-w-md animate-pulse rounded bg-gray-200 dark:bg-zinc-800" />
+                        <div className="mx-auto h-4 w-2/3 max-w-md animate-pulse rounded bg-muted" />
                     </div>
                     )}
                 </div>
@@ -294,15 +294,15 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
 
     // Render Actual UI
     return (
-        <div className={showPlanHeader ? "bg-[#f2f4f7] dark:bg-zinc-950" : ""}>
+        <div className={showPlanHeader ? "bg-[#f2f4f7]" : ""}>
             <section className={showPlanHeader ? "py-10 sm:py-14" : "py-0"}>
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     {showPlanHeader && (
                     <div className="mx-auto max-w-3xl text-center">
-                        <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
+                        <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
                             {t("subscription.choosePlan")}
                         </h2>
-                        <p className="mt-3 text-base text-gray-600 dark:text-zinc-400 sm:text-lg">
+                        <p className="mt-3 text-base text-muted-foreground sm:text-lg">
                             {t("subscription.planDesc")}
                         </p>
                         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
@@ -313,7 +313,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
                             ].map((label) => (
                                 <span
                                     key={label}
-                                    className="inline-flex items-center rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+                                    className="inline-flex items-center rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-sm"
                                 >
                                     {label}
                                 </span>
@@ -346,7 +346,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
                     </div>
 
                     {showPlanHeader && (
-                    <p className="mt-12 text-center text-sm text-gray-500 dark:text-zinc-500">
+                    <p className="mt-12 text-center text-sm text-muted-foreground">
                         {t("subscription.plansFootnote")}
                     </p>
                     )}
@@ -370,8 +370,8 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
 
             {/* Payment Result Modal */}
             <Drawer open={showPaymentResult && !!paymentResult} onOpenChange={setShowPaymentResult}>
-                <DrawerContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-                    <DrawerHeader className="border-b border-gray-200 dark:border-gray-700 pb-4 mb-4">
+                <DrawerContent className="bg-card border-border">
+                    <DrawerHeader className="border-b border-border pb-4 mb-4">
                         <DrawerTitle className="text-center">
                             {paymentResult?.success
                                 ? "Payment Successful"
@@ -383,13 +383,13 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
                             <div className="text-center">
                                 <div
                                     className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${paymentResult.success
-                                        ? "bg-green-100"
-                                        : "bg-red-100"
+                                        ? "bg-success/15"
+                                        : "bg-danger/15"
                                         }`}
                                 >
                                     {paymentResult.success ? (
                                         <svg
-                                            className="h-6 w-6 text-green-600"
+                                            className="h-6 w-6 text-success"
                                             fill="none"
                                             viewBox="0 0 24 24"
                                             stroke="currentColor"
@@ -403,7 +403,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
                                         </svg>
                                     ) : (
                                         <svg
-                                            className="h-6 w-6 text-red-600"
+                                            className="h-6 w-6 text-danger"
                                             fill="none"
                                             viewBox="0 0 24 24"
                                             stroke="currentColor"
@@ -418,12 +418,12 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
                                     )}
                                 </div>
 
-                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                                <p className="text-sm text-muted-foreground mt-2">
                                     {paymentResult.message}
                                 </p>
 
                                 {paymentResult.transactionId && (
-                                    <p className="text-xs text-gray-400 mt-2">
+                                    <p className="text-xs text-muted-foreground mt-2">
                                         Transaction ID: {paymentResult.transactionId}
                                     </p>
                                 )}
@@ -446,7 +446,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
                                                     handleModalClose();
                                                     navigate("/");
                                                 }}
-                                                className="w-full sm:w-auto px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                                                className="w-full sm:w-auto px-4 py-2 bg-muted text-foreground rounded-md hover:bg-muted"
                                             >
                                                 Go Home
                                             </button>
@@ -463,7 +463,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
                                                     if (selectedPlan)
                                                         setShowPaymentModal(true);
                                                 }}
-                                                className="w-full sm:w-auto px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                                                className="w-full sm:w-auto px-4 py-2 bg-danger text-white rounded-md hover:bg-danger/90"
                                             >
                                                 Retry
                                             </button>

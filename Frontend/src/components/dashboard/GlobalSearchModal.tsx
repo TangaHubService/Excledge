@@ -126,36 +126,36 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
 
   const getIcon = (category: string) => {
     switch (category) {
-      case 'Products': return <Package className="h-4 w-4 text-blue-500" />
+      case 'Products': return <Package className="h-4 w-4 text-primary" />
       case 'Sales': return <ShoppingBag className="h-4 w-4 text-emerald-500" />
       case 'Customers': return <Users className="h-4 w-4 text-purple-500" />
-      default: return <FileText className="h-4 w-4 text-gray-400" />
+      default: return <FileText className="h-4 w-4 text-muted-foreground" />
     }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-gray-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-gray-800 w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col max-h-[80vh]">
+      <div className="bg-card w-full max-w-2xl rounded-2xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[80vh]">
         {/* Search Header */}
-        <div className="relative flex items-center px-4 border-b border-gray-100 dark:border-gray-700">
-          <Search className="h-5 w-5 text-gray-400 mr-3 shrink-0" />
+        <div className="relative flex items-center px-4 border-b border-border">
+          <Search className="h-5 w-5 text-muted-foreground mr-3 shrink-0" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search products, sales, customers, or navigate..."
-            className="w-full py-4 text-sm bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
+            className="w-full py-4 text-sm bg-transparent text-foreground placeholder-gray-400 focus:outline-none"
             autoFocus
           />
           {query && (
             <button
               onClick={() => setQuery('')}
-              className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              className="p-1 rounded-md text-muted-foreground hover:text-muted-foreground"
             >
               <X className="h-4 w-4" />
             </button>
           )}
-          <kbd className="hidden sm:inline-block px-2 py-0.5 ml-2 text-xs font-semibold text-gray-400 bg-gray-100 dark:bg-gray-700 rounded">
+          <kbd className="hidden sm:inline-block px-2 py-0.5 ml-2 text-xs font-semibold text-muted-foreground bg-muted rounded">
             ESC
           </kbd>
         </div>
@@ -163,11 +163,11 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
         {/* Results Body */}
         <div className="overflow-y-auto p-2 space-y-1 flex-1">
           {loading ? (
-            <div className="py-8 text-center text-sm text-gray-400 animate-pulse">
+            <div className="py-8 text-center text-sm text-muted-foreground animate-pulse">
               Searching data...
             </div>
           ) : results.length === 0 ? (
-            <div className="py-12 text-center text-sm text-gray-400">
+            <div className="py-12 text-center text-sm text-muted-foreground">
               No results found for &ldquo;{query}&rdquo;
             </div>
           ) : (
@@ -175,24 +175,24 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
               <button
                 key={item.id}
                 onClick={() => handleSelect(item)}
-                className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left group"
+                className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-muted transition-colors text-left group"
               >
                 <div className="flex items-center space-x-3">
-                  <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/30 transition-colors">
+                  <div className="p-2 rounded-lg bg-muted group-hover:bg-primary/10 transition-colors">
                     {getIcon(item.category)}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                    <p className="text-sm font-medium text-foreground group-hover:text-primary">
                       {item.title}
                     </p>
                     {item.subtitle && (
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-muted-foreground">
                         {item.subtitle}
                       </p>
                     )}
                   </div>
                 </div>
-                <span className="text-xs px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700/70 text-gray-500 dark:text-gray-400 font-medium">
+                <span className="text-xs px-2 py-1 rounded-md bg-muted text-muted-foreground font-medium">
                   {item.category}
                 </span>
               </button>
@@ -201,7 +201,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/80 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-xs text-gray-400">
+        <div className="px-4 py-2.5 bg-surface-subtle border-t border-border flex items-center justify-between text-xs text-muted-foreground">
           <span>Navigate with click or arrow keys</span>
           <span>Quick Search</span>
         </div>

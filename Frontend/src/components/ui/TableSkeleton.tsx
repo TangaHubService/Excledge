@@ -28,20 +28,20 @@ export const TableSkeleton: React.FC<TableSkeletonProps> = ({
   return (
     <div className={cn('w-full overflow-hidden rounded-lg', className)}>
       <div className="w-full overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <table className="min-w-full divide-y divide-border">
           {showHeader && (
-            <thead className="bg-gray-50 dark:bg-gray-800">
+            <thead className="bg-surface-subtle">
               <tr>
                 {[...Array(columns)].map((_, colIndex) => (
                   <th
                     key={`header-${colIndex}`}
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                    className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
                   >
                     <div 
                       className={cn(
                         'h-4 rounded animate-pulse',
-                        'bg-gray-200 dark:bg-gray-700',
+                        'bg-muted',
                         headerWidth
                       )}
                     />
@@ -50,11 +50,11 @@ export const TableSkeleton: React.FC<TableSkeletonProps> = ({
               </tr>
             </thead>
           )}
-          <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
+          <tbody className="bg-card divide-y divide-border">
             {[...Array(rows)].map((_, rowIndex) => (
               <tr 
                 key={`row-${rowIndex}`} 
-                className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                className="hover:bg-muted"
               >
                 {[...Array(columns)].map((_, colIndex) => (
                   <td 
@@ -64,7 +64,7 @@ export const TableSkeleton: React.FC<TableSkeletonProps> = ({
                     <div 
                       className={cn(
                         'rounded animate-pulse',
-                        'bg-gray-100 dark:bg-gray-800',
+                        'bg-muted',
                         rowHeight,
                         colIndex % 3 === 0 ? 'w-full' : colIndex % 2 === 0 ? 'w-4/5' : 'w-2/3'
                       )}

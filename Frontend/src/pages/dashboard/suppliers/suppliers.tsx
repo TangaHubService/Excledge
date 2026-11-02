@@ -21,6 +21,7 @@ import type {
 } from './types/supplierTypes';
 import { useTranslation } from 'react-i18next';
 import { useDebounce } from '../../../hooks/use-debounce';
+import { PageHeader } from "../../../components/common/PageHeader";
 
 // Main SuppliersPage Component
 const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
@@ -145,44 +146,32 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
     );
 
     return (
-        <div className="space-y-6 p-4 md:p-6">
+        <div className="space-y-6">
             {/* Page Header */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-teal-600 via-emerald-600 to-green-600 p-6 text-white shadow-lg">
-                <div className="pointer-events-none absolute inset-0 bg-black/10" />
-                <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-                            <Plus className="h-7 w-7 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold tracking-tight">{t('suppliers.title')}</h1>
-                            <p className="text-sm text-white/70 mt-0.5">
-                                Manage your suppliers and their contact information
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-3 self-start sm:self-auto">
-                        <button
-                            type="button"
-                            onClick={() => setIsImportDialogOpen(true)}
-                            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 border border-white/30 text-white text-sm font-semibold rounded-lg backdrop-blur-sm transition-all"
-                        >
-                            <Upload className="h-4 w-4" />
-                            {t('common.import')}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleAdd}
-                            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white text-teal-700 text-sm font-semibold rounded-lg shadow-sm hover:bg-white/90 transition-all"
-                        >
-                            <Plus className="h-4 w-4" />
-                            {t('suppliers.addSupplier')}
-                        </button>
-                    </div>
-                </div>
-                <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-                <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
-            </div>
+            <PageHeader
+              title={t('suppliers.title')}
+              description={<>Manage your suppliers and their contact information</>}
+              actions={
+                <>
+                  <button
+                      type="button"
+                      onClick={() => setIsImportDialogOpen(true)}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-card/20 hover:bg-card/30 border border-white/30 text-white text-sm font-semibold rounded-lg backdrop-blur-sm transition-all"
+                  >
+                      <Upload className="h-4 w-4" />
+                      {t('common.import')}
+                  </button>
+                  <button
+                      type="button"
+                      onClick={handleAdd}
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                      <Plus className="h-4 w-4" />
+                      {t('suppliers.addSupplier')}
+                  </button>
+                </>
+              }
+            />
 
             <SuppliersCard
                 loading={loading}
@@ -210,11 +199,11 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
                 <DrawerContent
                     className={`max-w-4xl overflow-y-auto ${theme === "dark"
                         ? "bg-gray-900 border-gray-700 text-gray-100"
-                        : "bg-white border-gray-200 text-gray-900"
+                        : "bg-card border-border text-foreground"
                         }`}
                 >
                     <DrawerHeader>
-                        <DrawerTitle className={theme === "dark" ? "text-white" : "text-gray-900"}>
+                        <DrawerTitle className={theme === "dark" ? "text-white" : "text-foreground"}>
                             {t("import.supplierImport")}
                         </DrawerTitle>
                     </DrawerHeader>

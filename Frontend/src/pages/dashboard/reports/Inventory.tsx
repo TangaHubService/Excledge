@@ -11,6 +11,7 @@ import { useBranch } from '../../../context/BranchContext';
 import { useDebounce } from '../../../hooks/use-debounce';
 import { TableSkeleton } from '../../../components/ui/TableSkeleton';
 import { type ProductsReport } from '../../../types';
+import { PageHeader } from "../../../components/common/PageHeader";
 
 
 
@@ -246,18 +247,18 @@ export const InventoryReport = () => {
     };
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'critical': return 'text-red-600 bg-red-100';
-            case 'low': return 'text-orange-600 bg-orange-100';
-            case 'high': return 'text-blue-600 bg-blue-100';
+            case 'critical': return 'text-danger bg-danger/15';
+            case 'low': return 'text-orange-600 bg-orange-500/15';
+            case 'high': return 'text-primary bg-primary/15';
             case 'normal':
-            default: return 'text-green-600 bg-green-100';
+            default: return 'text-success bg-success/15';
         }
     };
 
 
     if (loading) {
         return (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-700">
+            <div className="bg-card rounded-lg border border-border overflow-hidden">
                 {loading ? (
                     <TableSkeleton
                         rows={8}
@@ -275,23 +276,23 @@ export const InventoryReport = () => {
     if (error) {
         return (
             <div className="p-4 sm:p-6">
-                <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded">
+                <div className="bg-danger/10 dark:bg-danger/20 border-l-4 border-red-500 p-4 rounded">
                     <div className="flex">
                         <div className="flex-shrink-0">
-                            <AlertTriangle className="h-5 w-5 text-red-500" />
+                            <AlertTriangle className="h-5 w-5 text-danger" />
                         </div>
                         <div className="ml-3">
-                            <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
+                            <h3 className="text-sm font-medium text-danger dark:text-red-200">
                                 {t('inventoryReport.errorLoading')}
                             </h3>
-                            <div className="mt-2 text-sm text-red-700 dark:text-red-300">
+                            <div className="mt-2 text-sm text-danger dark:text-red-300">
                                 <p>{error}</p>
                             </div>
                             <div className="mt-4">
                                 <button
                                     type="button"
                                     onClick={() => setLoading(true)}
-                                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 dark:bg-red-900/30 dark:text-red-200 dark:hover:bg-red-900/40"
+                                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-danger bg-danger/15 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 dark:bg-danger/30 dark:text-red-200 dark:hover:bg-danger/40"
                                 >
                                     {t('inventoryReport.tryAgain')}
                                 </button>
@@ -304,26 +305,12 @@ export const InventoryReport = () => {
     }
 
     return (
-        <div className="space-y-6 p-4 md:p-6">
+        <div className="space-y-6">
             {/* Page Header */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 p-6 text-white shadow-lg">
-                <div className="pointer-events-none absolute inset-0 bg-black/10" />
-                <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-                            <TrendingUp className="h-7 w-7 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold tracking-tight">{t('inventoryReport.title') || 'Inventory Report'}</h1>
-                            <p className="text-sm text-white/70 mt-0.5">
-                                Monitor your stock levels, item values, and identify reorder points
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-                <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
-            </div>
+            <PageHeader
+              title={t('inventoryReport.title') || 'Inventory Report'}
+              description={<>Monitor your stock levels, item values, and identify reorder points</>}
+            />
 
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -332,58 +319,58 @@ export const InventoryReport = () => {
                         label: t('inventoryReport.totalValue'),
                         value: `${summary.totalValue.toLocaleString()} Frw`,
                         icon: TrendingUp,
-                        light: 'bg-emerald-50 dark:bg-emerald-900/20',
-                        text: 'text-emerald-600 dark:text-emerald-400',
+                        light: 'bg-success/10 dark:bg-success/20',
+                        text: 'text-success dark:text-emerald-400',
                     },
                     {
                         label: t('inventoryReport.totalItems'),
                         value: summary.totalItems,
                         icon: Clock,
-                        light: 'bg-blue-50 dark:bg-blue-900/20',
-                        text: 'text-blue-600 dark:text-blue-400',
+                        light: 'bg-primary/10',
+                        text: 'text-primary',
                     },
                     {
                         label: t('inventoryReport.lowStockItems'),
                         value: summary.lowStockItems,
                         icon: AlertTriangle,
-                        light: 'bg-orange-50 dark:bg-orange-900/20',
+                        light: 'bg-orange-500/10 dark:bg-orange-900/20',
                         text: 'text-orange-600 dark:text-orange-400',
                     },
                     {
                         label: t('inventoryReport.criticalStockItems'),
                         value: summary.criticalItems,
                         icon: AlertTriangle,
-                        light: 'bg-red-50 dark:bg-red-900/20',
-                        text: 'text-red-600 dark:text-red-400',
+                        light: 'bg-danger/10 dark:bg-danger/20',
+                        text: 'text-danger dark:text-red-400',
                     },
                 ].map(({ label, value, icon: Icon, light, text }) => (
                     <div
                         key={label}
-                        className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4"
+                        className="bg-card rounded-xl border border-border shadow-sm p-4 flex items-center gap-4"
                     >
                         <div className={`flex h-11 w-11 items-center justify-center rounded-xl flex-shrink-0 ${light}`}>
                             <Icon className={`h-5 w-5 ${text}`} />
                         </div>
                         <div>
-                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
-                            <p className="text-lg font-bold text-gray-900 dark:text-white tabular-nums">{value}</p>
+                            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                            <p className="text-lg font-bold text-foreground tabular-nums">{value}</p>
                         </div>
                     </div>
                 ))}
             </div>
 
             {/* Filter Bar */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+            <div className="bg-card rounded-xl border border-border shadow-sm p-4">
                 <div className="flex flex-col lg:flex-row justify-between gap-3">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-grow">
                         <div className="relative">
-                            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
                             <input
                                 type="text"
                                 placeholder={t('inventoryReport.searchPlaceholder')}
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-205 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-850 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                                className="w-full pl-8 pr-3 py-2 text-sm border border-border rounded-lg bg-card dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                             />
                         </div>
 
@@ -391,7 +378,7 @@ export const InventoryReport = () => {
                             <select
                                 value={filterCategory}
                                 onChange={(e) => setFilterCategory(e.target.value)}
-                                className="w-full border border-gray-205 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                                className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-card dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                             >
                                 <option value="all">{t('inventoryReport.allCategories')}</option>
                                 {categories.map(cat => (
@@ -404,7 +391,7 @@ export const InventoryReport = () => {
                             <select
                                 value={filterStatus}
                                 onChange={(e) => setFilterStatus(e.target.value)}
-                                className="w-full border border-gray-205 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                                className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-card dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                             >
                                 <option value="all">{t('inventoryReport.allStatus')}</option>
                                 <option value="critical">{t('inventoryReport.criticalStock')}</option>
@@ -417,14 +404,14 @@ export const InventoryReport = () => {
                     <div className="flex gap-2">
                         <button
                             onClick={() => exportToExcel()}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors shadow-xs"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-success text-white text-xs font-semibold rounded-lg hover:bg-success/90 transition-colors shadow-xs"
                         >
                             <Download size={13} />
                             Excel
                         </button>
                         <button
                             onClick={exportToPdf}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-colors shadow-xs"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-danger text-white text-xs font-semibold rounded-lg hover:bg-danger/90 transition-colors shadow-xs"
                         >
                             <Download size={13} />
                             PDF
@@ -434,44 +421,44 @@ export const InventoryReport = () => {
             </div>
 
             {/* Table Card */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                        <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 text-left">
+                        <thead className="bg-surface-subtle border-b border-border text-left">
                             <tr>
-                                <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">ID</th>
-                                <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('inventory.product')}</th>
-                                <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cashFlowReport.category')}</th>
-                                <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">{t('inventoryReport.prev')}</th>
-                                <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">{t('inventoryReport.currentStock')}</th>
-                                <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">{t('inventory.minStock')}</th>
-                                <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">{t('inventory.maxStock')}</th>
-                                <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center">{t('inventoryReport.change')}</th>
-                                <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center">{t('common.status')}</th>
-                                <th className="py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">{t('inventoryReport.value')}</th>
+                                <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">ID</th>
+                                <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('inventory.product')}</th>
+                                <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('cashFlowReport.category')}</th>
+                                <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">{t('inventoryReport.prev')}</th>
+                                <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">{t('inventoryReport.currentStock')}</th>
+                                <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">{t('inventory.minStock')}</th>
+                                <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">{t('inventory.maxStock')}</th>
+                                <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">{t('inventoryReport.change')}</th>
+                                <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">{t('common.status')}</th>
+                                <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">{t('inventoryReport.value')}</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                        <tbody className="divide-y divide-border">
                             {paginatedInventory.map((item: any) => {
                                 const stockChange = getStockChange(item);
                                 const status = getStockStatus(item);
                                 const stockValue = item.currentStock * item.unitPrice;
 
                                 return (
-                                    <tr key={item.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition border-b border-gray-100 dark:border-gray-700">
-                                        <td className="py-3 px-4 text-xs font-mono text-gray-500 dark:text-gray-400">#{item.id}</td>
-                                        <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white">{item.product}</td>
+                                    <tr key={item.id} className="hover:bg-surface-subtle/50 transition border-b border-border">
+                                        <td className="py-3 px-4 text-xs font-mono text-muted-foreground">#{item.id}</td>
+                                        <td className="py-3 px-4 font-semibold text-foreground">{item.product}</td>
                                         <td className="py-3 px-4 whitespace-nowrap">
-                                            <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">
+                                            <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-medium">
                                                 {item.category}
                                             </span>
                                         </td>
-                                        <td className="py-3 px-4 text-right font-medium text-gray-700 dark:text-gray-300">{item.previousStock.toLocaleString()}</td>
-                                        <td className="py-3 px-4 text-right font-semibold text-gray-900 dark:text-white">{item.currentStock.toLocaleString()}</td>
-                                        <td className="py-3 px-4 text-right text-gray-500 dark:text-gray-400">{item.minStock.toLocaleString()}</td>
-                                        <td className="py-3 px-4 text-right text-gray-500 dark:text-gray-400">{item.maxStock.toLocaleString()}</td>
+                                        <td className="py-3 px-4 text-right font-medium text-foreground">{item.previousStock.toLocaleString()}</td>
+                                        <td className="py-3 px-4 text-right font-semibold text-foreground">{item.currentStock.toLocaleString()}</td>
+                                        <td className="py-3 px-4 text-right text-muted-foreground">{item.minStock.toLocaleString()}</td>
+                                        <td className="py-3 px-4 text-right text-muted-foreground">{item.maxStock.toLocaleString()}</td>
                                         <td className="py-3 px-4 text-center">
-                                            <div className={`flex items-center justify-center gap-1 font-semibold text-xs ${stockChange > 0 ? 'text-green-600 dark:text-green-400' : stockChange < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'}`}>
+                                            <div className={`flex items-center justify-center gap-1 font-semibold text-xs ${stockChange > 0 ? 'text-success dark:text-green-400' : stockChange < 0 ? 'text-danger dark:text-red-400' : 'text-muted-foreground'}`}>
                                                 {stockChange > 0 ? (
                                                     <TrendingUp size={13} />
                                                 ) : stockChange < 0 ? (
@@ -488,15 +475,15 @@ export const InventoryReport = () => {
                                                 {t(`inventoryReport.${status === 'in-stock' ? 'inStock' : status === 'out-of-stock' ? 'outOfStock' : status === 'critical' ? 'criticalStock' : status === 'low' ? 'lowStock' : status === 'overstocked' ? 'overstocked' : status + 'Stock'}`)}
                                             </span>
                                         </td>
-                                        <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-white font-mono">
-                                            {stockValue.toLocaleString()} <span className="text-xxs font-medium text-gray-400">RWF</span>
+                                        <td className="py-3 px-4 text-right font-bold text-foreground font-mono">
+                                            {stockValue.toLocaleString()} <span className="text-xxs font-medium text-muted-foreground">RWF</span>
                                         </td>
                                     </tr>
                                 );
                             })}
                         </tbody>
-                        <tfoot className="bg-gray-50/50 dark:bg-gray-750/50 font-semibold border-t border-gray-200 dark:border-gray-600">
-                            <tr className="text-gray-900 dark:text-white">
+                        <tfoot className="bg-surface-subtle/50 font-semibold border-t border-border">
+                            <tr className="text-foreground">
                                 <td className="py-3 px-4" colSpan={3}>
                                     {t('common.total').toUpperCase()}
                                 </td>
@@ -513,7 +500,7 @@ export const InventoryReport = () => {
                                     {filteredInventory.reduce((sum, item) => sum + item.maxStock, 0).toLocaleString()}
                                 </td>
                                 <td className="py-3 px-4" colSpan={2}></td>
-                                <td className="py-3 px-4 text-right font-bold text-blue-600 dark:text-blue-400 font-mono">
+                                <td className="py-3 px-4 text-right font-bold text-primary font-mono">
                                     {filteredInventory.reduce((sum, item) => sum + (item.currentStock * item.unitPrice), 0).toLocaleString()} <span className="text-xxs font-semibold">RWF</span>
                                 </td>
                             </tr>
@@ -524,15 +511,15 @@ export const InventoryReport = () => {
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xs gap-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 bg-card border border-border rounded-xl shadow-xs gap-4">
                     <div className="flex items-center gap-6 w-full sm:w-auto justify-between">
-                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                        <div className="text-sm text-muted-foreground">
                             {t('common.showing')} <span className="font-semibold">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-semibold">{Math.min(currentPage * itemsPerPage, filteredInventory.length)}</span> of <span className="font-semibold">{filteredInventory.length}</span> {t('inventoryReport.results').toLowerCase()}
                         </div>
                         <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{t('common.rowsPerPage')}:</span>
+                            <span className="text-sm text-muted-foreground whitespace-nowrap">{t('common.rowsPerPage')}:</span>
                             <select
-                                className="border border-gray-300 dark:border-gray-650 rounded-lg px-2 py-1 text-sm bg-white dark:bg-gray-750 dark:text-white focus:outline-none"
+                                className="border border-border rounded-lg px-2 py-1 text-sm bg-card dark:text-white focus:outline-none"
                                 value={itemsPerPage}
                                 onChange={(e) => {
                                     setItemsPerPage(Number(e.target.value));
@@ -549,14 +536,14 @@ export const InventoryReport = () => {
                         <button
                             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                             disabled={currentPage === 1}
-                            className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="px-4 py-2 text-sm font-semibold text-foreground bg-card border border-border rounded-lg hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                             {t('common.previous')}
                         </button>
                         <button
                             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                             disabled={currentPage === totalPages}
-                            className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="px-4 py-2 text-sm font-semibold text-foreground bg-card border border-border rounded-lg hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                             {t('common.next')}
                         </button>
@@ -567,15 +554,15 @@ export const InventoryReport = () => {
             {/* Product detail Modal */}
             {selectedProduct && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden dark:bg-gray-800 border dark:border-gray-700 flex flex-col">
-                        <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                    <div className="bg-card rounded-2xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden border flex flex-col">
+                        <div className="p-6 border-b border-border flex items-center justify-between">
                             <div>
-                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">{selectedProduct.product}</h2>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">SKU: {selectedProduct.sku}</p>
+                                <h2 className="text-xl font-bold text-foreground">{selectedProduct.product}</h2>
+                                <p className="text-sm text-muted-foreground mt-0.5">SKU: {selectedProduct.sku}</p>
                             </div>
                             <button
                                 onClick={() => setSelectedProduct(null)}
-                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg font-bold"
+                                className="text-muted-foreground hover:text-muted-foreground text-lg font-bold"
                             >
                                 ✕
                             </button>
@@ -583,38 +570,38 @@ export const InventoryReport = () => {
 
                         <div className="p-6 overflow-y-auto space-y-6">
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
-                                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('inventoryReport.currentStock')}</p>
-                                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{selectedProduct.currentStock}</p>
+                                <div className="bg-surface-subtle rounded-xl p-4">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('inventoryReport.currentStock')}</p>
+                                    <p className="text-2xl font-bold text-foreground mt-1">{selectedProduct.currentStock}</p>
                                 </div>
-                                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
-                                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('inventoryReport.lastRestocked')}</p>
-                                    <p className="text-base font-bold text-gray-800 dark:text-gray-200 mt-1.5">{selectedProduct.lastRestocked}</p>
+                                <div className="bg-surface-subtle rounded-xl p-4">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('inventoryReport.lastRestocked')}</p>
+                                    <p className="text-base font-bold text-foreground mt-1.5">{selectedProduct.lastRestocked}</p>
                                 </div>
                             </div>
 
                             <div>
-                                <h3 className="text-base font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                <h3 className="text-base font-bold text-foreground mb-3 flex items-center gap-2">
                                     <Clock size={18} />
                                     {t('inventoryReport.stockMovement')}
                                 </h3>
 
                                 <div className="space-y-3">
                                     {selectedProduct.changes.map((change: any, idx) => (
-                                        <div key={idx} className="border border-gray-150 dark:border-gray-700 rounded-xl p-4 hover:shadow-xs transition-shadow">
+                                        <div key={idx} className="border border-border rounded-xl p-4 hover:shadow-xs transition-shadow">
                                             <div className="flex items-center justify-between mb-2">
-                                                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">{change.date}</span>
-                                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${change.type === 'restock' ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'}`}>
+                                                <span className="text-xs font-semibold text-muted-foreground">{change.date}</span>
+                                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${change.type === 'restock' ? 'bg-success/10 text-success dark:bg-success/20 dark:text-green-400' : 'bg-danger/10 text-danger dark:bg-danger/20 dark:text-red-400'}`}>
                                                     {change.type === 'restock' ? t('inventoryReport.restock') : t('inventoryReport.sale')}
                                                 </span>
                                             </div>
                                             <div className="flex items-center justify-between gap-4">
-                                                <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">{change.note}</p>
+                                                <p className="text-sm text-foreground font-medium">{change.note}</p>
                                                 <div className="text-right shrink-0">
-                                                    <p className={`text-base font-bold ${change.quantity > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600'}`}>
+                                                    <p className={`text-base font-bold ${change.quantity > 0 ? 'text-success dark:text-green-400' : 'text-danger'}`}>
                                                         {change.quantity > 0 ? '+' : ''}{change.quantity}
                                                     </p>
-                                                    <p className="text-xs text-gray-400 mt-0.5">{t('inventoryReport.newStock')}: {change.newStock}</p>
+                                                    <p className="text-xs text-muted-foreground mt-0.5">{t('inventoryReport.newStock')}: {change.newStock}</p>
                                                 </div>
                                             </div>
                                         </div>

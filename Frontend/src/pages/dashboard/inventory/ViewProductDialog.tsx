@@ -62,12 +62,12 @@ export default function ViewProductDialog({
       <DrawerContent
         className={`sm:max-w-[500px] ${theme === "dark"
           ? "bg-gray-900 border-gray-700 text-gray-100"
-          : "bg-white border-gray-200"
+          : "bg-card border-border"
           }`}
       >
         <DrawerHeader>
           <DrawerTitle
-            className={theme === "dark" ? "text-white" : "text-gray-900"}
+            className={theme === "dark" ? "text-white" : "text-foreground"}
           >
             {t('inventory.productDetails')}
           </DrawerTitle>
@@ -79,7 +79,7 @@ export default function ViewProductDialog({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p
-                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                     }`}
                 >
                   {t('common.name')}
@@ -88,7 +88,7 @@ export default function ViewProductDialog({
               </div>
               <div>
                 <p
-                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                     }`}
                 >
                   ID
@@ -100,7 +100,7 @@ export default function ViewProductDialog({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p
-                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                     }`}
                 >
                   {t('inventory.category')}
@@ -109,7 +109,7 @@ export default function ViewProductDialog({
               </div>
               <div>
                 <p
-                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                     }`}
                 >
                   {t('inventory.unitPrice')}
@@ -119,7 +119,7 @@ export default function ViewProductDialog({
               {viewProduct.purchasePrice != null && (
                 <div>
                   <p
-                    className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                    className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                       }`}
                   >
                     Purchase Price
@@ -130,7 +130,7 @@ export default function ViewProductDialog({
               {viewProduct.taxCode && (
                 <div>
                   <p
-                    className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                    className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                       }`}
                   >
                     Tax Category
@@ -145,7 +145,7 @@ export default function ViewProductDialog({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p
-                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                     }`}
                 >
                   {t('inventory.quantity')}
@@ -154,7 +154,7 @@ export default function ViewProductDialog({
               </div>
               <div>
                 <p
-                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                     }`}
                 >
                   {t('inventory.minStock')}
@@ -166,7 +166,7 @@ export default function ViewProductDialog({
             {viewProduct.batchNumber && (
               <div>
                 <p
-                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                     }`}
                 >
                   {t('inventory.batchNumber')}
@@ -178,7 +178,7 @@ export default function ViewProductDialog({
             {viewProduct.barcode && (
               <div>
                 <p
-                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                     }`}
                 >
                   Barcode
@@ -190,7 +190,7 @@ export default function ViewProductDialog({
             {viewProduct.pkgUnitCd && (
               <div>
                 <p
-                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                     }`}
                 >
                   Packaging
@@ -205,14 +205,14 @@ export default function ViewProductDialog({
             {viewProduct.expiryDate && (
               <div>
                 <p
-                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                     }`}
                 >
                   {t('inventory.expiryDate')}
                 </p>
                 <p className="mt-1">
                   {new Date(viewProduct.expiryDate).toLocaleDateString()}
-                  <span className="ml-2 text-sm text-gray-500">
+                  <span className="ml-2 text-sm text-muted-foreground">
                     ({t('inventory.daysRemainingCount', { count: getDaysRemaining(viewProduct.expiryDate) })})
                   </span>
                 </p>
@@ -222,7 +222,7 @@ export default function ViewProductDialog({
             {viewProduct.description && (
               <div>
                 <p
-                  className={`text-sm font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  className={`text-sm font-medium ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"
                     }`}
                 >
                   {t('common.description')}

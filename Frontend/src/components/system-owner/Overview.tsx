@@ -9,7 +9,7 @@ interface StatCardProps {
 }
 
 const StatCard: React.FC<StatCardProps> = ({ icon, title, value, color }) => (
-  <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-200 dark:border-gray-700">
+  <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
     <div className="p-5">
       <div className="flex items-center">
         <div className={`flex-shrink-0 rounded-md p-3 ${color}`}>
@@ -17,9 +17,9 @@ const StatCard: React.FC<StatCardProps> = ({ icon, title, value, color }) => (
         </div>
         <div className="ml-5 w-0 flex-1">
           <dl>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{title}</dt>
+            <dt className="text-sm font-medium text-muted-foreground truncate">{title}</dt>
             <dd>
-              <div className="text-lg font-medium text-gray-900 dark:text-white">{value}</div>
+              <div className="text-lg font-medium text-foreground">{value}</div>
             </dd>
           </dl>
         </div>
@@ -54,8 +54,8 @@ const Overview: React.FC<OverviewProps> = ({ stats, recentOrganizations }) => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-900 dark:text-white">Dashboard Overview</h2>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Welcome back! Here's what's happening with your system.</p>
+        <h2 className="text-lg font-medium text-foreground">Dashboard Overview</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Welcome back! Here's what's happening with your system.</p>
       </div>
 
       {/* Stats Grid */}
@@ -64,19 +64,19 @@ const Overview: React.FC<OverviewProps> = ({ stats, recentOrganizations }) => {
           icon={<Building2 className="h-6 w-6 text-white" />}
           title="Total Organizations"
           value={stats.totalOrganizations}
-          color="bg-blue-500"
+          color="bg-primary"
         />
         <StatCard
           icon={<Users className="h-6 w-6 text-white" />}
           title="Total Users"
           value={stats.totalUsers}
-          color="bg-blue-500"
+          color="bg-primary"
         />
         <StatCard
           icon={<CheckCircle className="h-6 w-6 text-white" />}
           title="Active Subscriptions"
           value={stats.activeSubscriptions}
-          color="bg-green-500"
+          color="bg-success"
         />
         <StatCard
           icon={<DollarSign className="h-6 w-6 text-white" />}
@@ -88,41 +88,41 @@ const Overview: React.FC<OverviewProps> = ({ stats, recentOrganizations }) => {
           icon={<XCircle className="h-6 w-6 text-white" />}
           title="Pending Payments"
           value={stats.pendingPayments}
-          color="bg-yellow-500"
+          color="bg-warning"
         />
       </div>
 
       {/* Recent Organizations Section */}
-      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg border border-gray-200 dark:border-gray-700">
+      <div className="bg-card shadow overflow-hidden sm:rounded-lg border border-border">
         <div className="px-4 py-5 sm:px-6">
-          <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Recent Organizations</h3>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Latest organizations added to your system.</p>
+          <h3 className="text-lg leading-6 font-medium text-foreground">Recent Organizations</h3>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Latest organizations added to your system.</p>
         </div>
-        <div className="border-t border-gray-200 dark:border-gray-700">
+        <div className="border-t border-border">
           {recentOrganizations.length === 0 ? (
             <div className="px-4 py-5 sm:p-6">
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center">No recent organizations</p>
+              <p className="text-sm text-muted-foreground text-center">No recent organizations</p>
             </div>
           ) : (
-            <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+            <ul className="divide-y divide-border">
               {recentOrganizations.map((org) => (
-                <li key={org.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:hover:bg-gray-700">
+                <li key={org.id} className="px-4 py-4 sm:px-6 hover:bg-muted">
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{org.name}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{org.businessType}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      <p className="text-sm font-medium text-foreground truncate">{org.name}</p>
+                      <p className="text-sm text-muted-foreground">{org.businessType}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
                         Owner: {org.owner} ({org.ownerEmail})
                       </p>
                     </div>
                     <div className="ml-4 flex-shrink-0">
                       {org.subscription ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/15 dark:bg-success/30 text-success dark:text-green-400">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           {org.subscription.status}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-400">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-foreground">
                           No subscription
                         </span>
                       )}

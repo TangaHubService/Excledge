@@ -36,6 +36,11 @@ interface HeaderProps {
   onOpenSearch?: () => void;
 }
 
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+
+/** BRANCH_MANAGER → "branch manager" (capitalised by CSS). */
+const formatRole = (role: string) => role.toLowerCase().replace(/_/g, ' ');
+
 /* ─── Component ─────────────────────────────────────── */
 
 export function Header({ onMenuClick, onOpenSearch }: HeaderProps) {
@@ -71,11 +76,11 @@ export function Header({ onMenuClick, onOpenSearch }: HeaderProps) {
   }, [userMenuOpen]);
 
   return (
-    <header className="dashboard-chrome sticky top-0 z-30 flex h-14 shrink-0 items-center border-b px-4 lg:px-6">
+    <header className="dashboard-chrome sticky top-0 z-30 flex h-14 shrink-0 items-center border-b px-3 lg:px-5">
       {/* Mobile menu trigger */}
       <button
         type="button"
-        className="lg:hidden rounded-lg p-2 text-white transition-colors hover:bg-white/10"
+        className="chrome-icon-btn lg:hidden"
         onClick={onMenuClick}
         aria-label="Open navigation menu"
       >
@@ -86,26 +91,24 @@ export function Header({ onMenuClick, onOpenSearch }: HeaderProps) {
       <button
         type="button"
         onClick={() => navigate(-1)}
-        className="group ml-2 flex items-center gap-2 rounded-lg p-2 text-white transition-colors hover:bg-white/10 lg:ml-0"
+        className="chrome-icon-btn group ml-1 lg:ml-0"
         title={t('common.back')}
+        aria-label={t('common.back')}
       >
-        <ArrowLeft className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" />
-        <span className="hidden text-sm font-medium sm:inline">{t('common.back')}</span>
+        <ArrowLeft className="h-[18px] w-[18px] transition-transform group-hover:-translate-x-0.5" />
       </button>
 
-      {/* Search Bar matching mockup */}
-      <div className="hidden md:flex items-center flex-1 max-w-md mx-4">
+      {/* Global search */}
+      <div className="mx-3 hidden max-w-md flex-1 items-center md:flex">
         <button
           type="button"
           onClick={onOpenSearch}
-          className="w-full flex items-center justify-between px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-slate-200 text-xs rounded-xl border border-white/10 transition-colors shadow-inner"
+          className="group flex h-9 w-full items-center gap-2.5 rounded-lg border border-white/[0.08] bg-white/[0.05] px-3 text-[0.8125rem] text-slate-400 transition-colors hover:border-white/15 hover:bg-white/[0.08] hover:text-slate-200"
         >
-          <div className="flex items-center gap-2">
-            <Search className="h-3.5 w-3.5 text-slate-300" />
-            <span>Search anything...</span>
-          </div>
-          <kbd className="px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 bg-white/15 rounded border border-white/20">
-            Ctrl + K
+          <Search className="h-4 w-4 shrink-0" />
+          <span className="min-w-0 flex-1 truncate text-left">Search products, sales, customers…</span>
+          <kbd className="hidden rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.5 font-sans text-[10px] font-medium text-slate-400 lg:inline">
+            {isMac ? '⌘K' : 'Ctrl K'}
           </kbd>
         </button>
       </div>
@@ -120,23 +123,24 @@ export function Header({ onMenuClick, onOpenSearch }: HeaderProps) {
           <OrganizationSwitcher toolbar />
         )}
 
-        <div className="hidden items-center gap-2 sm:flex">
+        <div className="hidden items-center gap-1.5 sm:flex">
           <VsdcPresenceIndicator />
-          <ThemeToggle className="text-white hover:bg-white/10 hover:text-white" />
+          <span className="mx-1 h-5 w-px bg-white/10" aria-hidden />
+          <ThemeToggle className="text-slate-300 hover:bg-white/[0.08] hover:text-white" />
           <LanguageSwitcher toolbar />
           <NotificationBell toolbar />
         </div>
 
         {/* User profile dropdown */}
-        <div ref={userMenuRef} className="relative ml-1 sm:ml-2">
+        <div ref={userMenuRef} className="relative ml-1 border-l border-white/10 pl-2 sm:ml-2 sm:pl-3">
           <button
             type="button"
             onClick={() => setUserMenuOpen(prev => !prev)}
-            className="flex items-center gap-2 rounded-lg p-1.5 text-white transition-colors hover:bg-white/10"
+            className="flex items-center gap-2.5 rounded-lg py-1 pl-1 pr-2 text-white transition-colors hover:bg-white/[0.08]"
             aria-expanded={userMenuOpen}
             aria-haspopup="true"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-sm font-medium text-white ring-2 ring-white/30">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-500 to-slate-700 text-[0.8125rem] font-semibold text-white ring-1 ring-white/20">
               {profile?.profileImage ? (
                 <img
                   src={profile.profileImage}
@@ -147,12 +151,19 @@ export function Header({ onMenuClick, onOpenSearch }: HeaderProps) {
                 profile?.name?.charAt(0)?.toUpperCase() || 'U'
               )}
             </div>
-            <span className="hidden text-sm font-medium text-white sm:inline">
-              {profile?.name || t('common.user')}
+            <span className="hidden min-w-0 text-left leading-tight lg:block">
+              <span className="block max-w-[10rem] truncate text-[0.8125rem] font-medium text-white">
+                {profile?.name || t('common.user')}
+              </span>
+              {profile?.role && (
+                <span className="block text-[0.6875rem] capitalize text-slate-400">
+                  {formatRole(profile.role)}
+                </span>
+              )}
             </span>
             <ChevronDown
               className={cn(
-                "h-4 w-4 text-slate-300 transition-transform duration-200",
+                "h-3.5 w-3.5 text-slate-400 transition-transform duration-200",
                 userMenuOpen && "rotate-180",
               )}
             />
@@ -161,32 +172,32 @@ export function Header({ onMenuClick, onOpenSearch }: HeaderProps) {
           {userMenuOpen && (
             <div
               className={cn(
-                "absolute right-0 mt-2 w-56 overflow-hidden rounded-lg border border-gray-200/50 bg-white/95 shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200 dark:border-gray-700/50 dark:bg-gray-800/95",
+                "panel absolute right-0 mt-2 w-60 overflow-hidden p-1 shadow-dropdown animate-in fade-in slide-in-from-top-2 duration-200",
               )}
             >
-              <div className="border-b border-gray-200/50 bg-gradient-to-br from-gray-50/50 to-transparent px-4 py-3 dark:border-gray-700/50 dark:from-gray-700/30 dark:to-transparent">
-                <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
+              <div className="mb-1 border-b border-border/70 px-3 pb-2.5 pt-2">
+                <p className="truncate text-sm font-medium text-foreground">
                   {profile?.name || t('common.user')}
                 </p>
-                <p className="truncate text-xs text-gray-500 dark:text-gray-400">
-                  {profile?.role || ''}
+                <p className="truncate text-xs text-muted-foreground">
+                  {profile?.email || ''}
                 </p>
               </div>
 
               <Link
                 to="/dashboard/profile"
                 onClick={() => setUserMenuOpen(false)}
-                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
               >
                 <User className="h-4 w-4" />
                 {t('nav.profile')}
               </Link>
 
-              <div className="border-t border-gray-200/50 dark:border-gray-700/50" />
+              <div className="my-1 border-t border-border/70" />
 
               <button
                 onClick={handleLogout}
-                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-danger transition-colors hover:bg-danger/10"
               >
                 <LogOut className="h-4 w-4" />
                 {t('nav.logout')}

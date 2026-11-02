@@ -269,20 +269,20 @@ export default function SaleDetailsPage() {
 
     const getStatusColor = (status: string) => {
         const colors: Record<string, string> = {
-            'COMPLETED': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100',
-            'PENDING': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100',
-            'PROCESSING': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100',
-            'CANCELLED': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100',
-            'REFUNDED': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100',
-            'PARTIALLY_REFUNDED': 'bg-purple-100 text-purple-500 dark:bg-purple-600 dark:text-purple-500',
+            'COMPLETED': 'bg-success/15 text-success dark:bg-success dark:text-green-100',
+            'PENDING': 'bg-warning/15 text-warning dark:bg-warning dark:text-yellow-100',
+            'PROCESSING': 'bg-primary/15 text-primary',
+            'CANCELLED': 'bg-danger/15 text-danger dark:bg-danger dark:text-red-100',
+            'REFUNDED': 'bg-purple-500/15 text-purple-800 dark:bg-purple-900 dark:text-purple-100',
+            'PARTIALLY_REFUNDED': 'bg-purple-500/15 text-purple-500 dark:bg-purple-600 dark:text-purple-500',
         };
-        return colors[status] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100';
+        return colors[status] || 'bg-muted text-foreground';
     };
 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
         );
     }
@@ -291,7 +291,7 @@ export default function SaleDetailsPage() {
         return (
             <div className="p-6">
                 <div className="text-center py-12">
-                    <p className={`text-lg ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
+                    <p className={`text-lg ${theme === 'dark' ? 'text-muted-foreground/60' : 'text-muted-foreground'}`}>
                         {t('sales.saleNotFound') || 'Sale not found'}
                     </p>
                     <Button
@@ -315,7 +315,7 @@ export default function SaleDetailsPage() {
     }, 0);
 
     return (
-        <div className="space-y-6 p-6">
+        <div className="space-y-6">
             {/* Back Button */}
             <div>
                 <Button
@@ -324,7 +324,7 @@ export default function SaleDetailsPage() {
                     size="sm"
                     className={theme === 'dark'
                         ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700'
-                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        : 'bg-card border-border text-foreground hover:bg-muted'
                     }
                 >
                     <ArrowLeft className="h-4 w-4 mr-2" />
@@ -335,15 +335,15 @@ export default function SaleDetailsPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className={`text-2xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    <h1 className={`text-2xl font-semibold ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                         {t('sales.saleDetails') || 'Sale Details'}
                     </h1>
-                    <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                    <p className={`text-sm ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                         {sale.invoiceNumber || sale.saleNumber}
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className={`flex items-center rounded-lg border p-0.5 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}>
+                    <div className={`flex items-center rounded-lg border p-0.5 ${theme === 'dark' ? 'border-gray-700' : 'border-border'}`}>
                         {(['A4', 'A5', '80mm'] as const).map((option) => (
                             <button
                                 key={option}
@@ -351,10 +351,10 @@ export default function SaleDetailsPage() {
                                 onClick={() => setInvoiceFormat(option)}
                                 className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
                                     invoiceFormat === option
-                                        ? 'bg-blue-600 text-white'
+                                        ? 'bg-primary text-white'
                                         : theme === 'dark'
-                                            ? 'text-gray-300 hover:bg-gray-700'
-                                            : 'text-gray-600 hover:bg-gray-100'
+                                            ? 'text-muted-foreground/60 hover:bg-gray-700'
+                                            : 'text-muted-foreground hover:bg-muted'
                                 }`}
                             >
                                 {option}
@@ -368,7 +368,7 @@ export default function SaleDetailsPage() {
                         size="sm"
                         className={theme === 'dark'
                             ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700 hover:text-white'
-                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                            : 'bg-card border-border text-foreground hover:bg-muted hover:text-foreground'
                         }
                     >
                         {isPrintingInvoice ? (
@@ -385,7 +385,7 @@ export default function SaleDetailsPage() {
                         size="sm"
                         className={theme === 'dark'
                             ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700 hover:text-white'
-                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                            : 'bg-card border-border text-foreground hover:bg-muted hover:text-foreground'
                         }
                         title="Queue this 80mm receipt on a logged-in POS device"
                     >
@@ -403,7 +403,7 @@ export default function SaleDetailsPage() {
                         size="sm"
                         className={theme === 'dark'
                             ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700 hover:text-white'
-                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                            : 'bg-card border-border text-foreground hover:bg-muted hover:text-foreground'
                         }
                     >
                         {isDownloadingInvoice ? (
@@ -420,7 +420,7 @@ export default function SaleDetailsPage() {
                         size="sm"
                         className={theme === 'dark'
                             ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700 hover:text-white'
-                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                            : 'bg-card border-border text-foreground hover:bg-muted hover:text-foreground'
                         }
                     >
                         {isSharingInvoice ? (
@@ -440,7 +440,7 @@ export default function SaleDetailsPage() {
                             title="Reprint this receipt as a COPY (CS for a sale, CR for a refund) with its original fiscal data"
                             className={theme === 'dark'
                                 ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700 hover:text-white'
-                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                                : 'bg-card border-border text-foreground hover:bg-muted hover:text-foreground'
                             }
                         >
                             {isCopying === mode ? (
@@ -464,33 +464,33 @@ export default function SaleDetailsPage() {
                 <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         <div>
-                            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                 {t('sales.saleNumber') || 'Sale Number'}
                             </p>
-                            <p className={`mt-1 text-base font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            <p className={`mt-1 text-base font-semibold ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                 {sale.saleNumber}
                             </p>
                         </div>
                         {sale.invoiceNumber && (
                             <div>
-                                <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                <p className={`text-sm font-medium ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                     {t('sales.invoiceNumber') || 'Invoice Number'}
                                 </p>
-                                <p className={`mt-1 text-base font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                <p className={`mt-1 text-base font-semibold ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                     {sale.invoiceNumber}
                                 </p>
                             </div>
                         )}
                         <div>
-                            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                 {t('sales.table.dateTime') || 'Date & Time'}
                             </p>
-                            <p className={`mt-1 text-base ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            <p className={`mt-1 text-base ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                 {format(new Date(sale.createdAt), 'MMM d, yyyy')} at {formatTime(sale.createdAt)}
                             </p>
                         </div>
                         <div>
-                            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                 {t('sales.table.status') || 'Status'}
                             </p>
                             <Badge className={`mt-1 ${getStatusColor(sale.status)}`}>
@@ -498,18 +498,18 @@ export default function SaleDetailsPage() {
                             </Badge>
                         </div>
                         <div>
-                            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                 {t('sales.paymentMethod') || 'Payment Method'}
                             </p>
-                            <p className={`mt-1 text-base ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            <p className={`mt-1 text-base ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                 {getPaymentMethodLabel(sale.paymentType, t)}
                             </p>
                         </div>
                         <div>
-                            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                 {t('sales.soldBy') || 'Sold By'}
                             </p>
-                            <p className={`mt-1 text-base ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            <p className={`mt-1 text-base ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                 {sale.user.name}
                             </p>
                         </div>
@@ -518,9 +518,9 @@ export default function SaleDetailsPage() {
             </Card>
 
             {sale.ebmTransactions && sale.ebmTransactions.length > 0 && (
-                <Card className={theme === 'dark' ? 'bg-gray-800 border-blue-900/40 border' : 'border-blue-200 bg-blue-50/40'}>
+                <Card className={theme === 'dark' ? 'bg-gray-800 border-primary/40 border' : 'border-primary/30 bg-primary/40'}>
                     <CardHeader>
-                        <CardTitle className={theme === 'dark' ? 'text-white' : 'text-blue-950'}>
+                        <CardTitle className={theme === 'dark' ? 'text-white' : 'text-primary'}>
                             RRA EBM / VSDC
                         </CardTitle>
                     </CardHeader>
@@ -528,18 +528,18 @@ export default function SaleDetailsPage() {
                         {sale.ebmTransactions.map((tx) => (
                             <div
                                 key={String(tx.id ?? `${tx.operation}-${tx.submissionStatus}`)}
-                                className={`text-sm rounded-lg p-3 ${theme === 'dark' ? 'bg-gray-900/80' : 'bg-white'}`}
+                                className={`text-sm rounded-lg p-3 ${theme === 'dark' ? 'bg-gray-900/80' : 'bg-card'}`}
                             >
-                                <p className={`font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
+                                <p className={`font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-foreground'}`}>
                                     {tx.operation ?? 'SALE'} — {tx.submissionStatus}
                                 </p>
                                 {tx.ebmInvoiceNumber && (
-                                    <p className={theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}>
+                                    <p className={theme === 'dark' ? 'text-muted-foreground/60' : 'text-foreground'}>
                                         EBM invoice #: {tx.ebmInvoiceNumber}
                                     </p>
                                 )}
                                 {tx.errorMessage && (
-                                    <p className="text-red-600 dark:text-red-400 mt-1">{tx.errorMessage}</p>
+                                    <p className="text-danger dark:text-red-400 mt-1">{tx.errorMessage}</p>
                                 )}
                             </div>
                         ))}
@@ -557,29 +557,29 @@ export default function SaleDetailsPage() {
                 <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div>
-                            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <p className={`text-sm font-medium ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                 {t('sales.customerName') || 'Name'}
                             </p>
-                            <p className={`mt-1 text-base ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            <p className={`mt-1 text-base ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                 {sale.customer.name}
                             </p>
                         </div>
                         {sale.customer.phone && (
                             <div>
-                                <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                <p className={`text-sm font-medium ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                     {t('sales.phone') || 'Phone'}
                                 </p>
-                                <p className={`mt-1 text-base ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                <p className={`mt-1 text-base ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                     {sale.customer.phone}
                                 </p>
                             </div>
                         )}
                         {sale.customer.email && (
                             <div>
-                                <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                <p className={`text-sm font-medium ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                     {t('sales.email') || 'Email'}
                                 </p>
-                                <p className={`mt-1 text-base ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                <p className={`mt-1 text-base ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                     {sale.customer.email}
                                 </p>
                             </div>
@@ -598,21 +598,21 @@ export default function SaleDetailsPage() {
                 <CardContent>
                     <div className="overflow-x-auto">
                         <Table>
-                            <TableHeader className={theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}>
+                            <TableHeader className={theme === 'dark' ? 'bg-gray-700' : 'bg-muted'}>
                                 <TableRow className={theme === 'dark' ? 'border-gray-600' : ''}>
-                                    <TableHead className={theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}>
+                                    <TableHead className={theme === 'dark' ? 'text-gray-200' : 'text-foreground'}>
                                         {t('inventory.product') || 'Product'}
                                     </TableHead>
-                                    <TableHead className={`text-right ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>
+                                    <TableHead className={`text-right ${theme === 'dark' ? 'text-gray-200' : 'text-foreground'}`}>
                                         {t('inventory.qty') || 'Quantity'}
                                     </TableHead>
-                                    <TableHead className={`text-right ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>
+                                    <TableHead className={`text-right ${theme === 'dark' ? 'text-gray-200' : 'text-foreground'}`}>
                                         {t('inventory.unitPrice') || 'Unit Price'}
                                     </TableHead>
-                                    <TableHead className={`text-right ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>
+                                    <TableHead className={`text-right ${theme === 'dark' ? 'text-gray-200' : 'text-foreground'}`}>
                                         {t('sales.table.tax') || 'Tax'}
                                     </TableHead>
-                                    <TableHead className={`text-right ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>
+                                    <TableHead className={`text-right ${theme === 'dark' ? 'text-gray-200' : 'text-foreground'}`}>
                                         {t('common.total') || 'Total'}
                                     </TableHead>
                                 </TableRow>
@@ -621,37 +621,37 @@ export default function SaleDetailsPage() {
                                 {lineItems.map((item) => (
                                     <TableRow
                                         key={item.id}
-                                        className={theme === 'dark' ? 'border-gray-700 hover:bg-gray-800' : 'hover:bg-gray-50'}
+                                        className={theme === 'dark' ? 'border-gray-700 hover:bg-gray-800' : 'hover:bg-muted'}
                                     >
-                                        <TableCell className={theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}>
+                                        <TableCell className={theme === 'dark' ? 'text-muted-foreground/60' : 'text-foreground'}>
                                             <div>
                                                 <p className="font-medium">
                                                     {item.product.name}
                                                     {item.taxCode && (
-                                                        <span className="ml-1.5 text-[10px] font-medium px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                                                        <span className="ml-1.5 text-[10px] font-medium px-1 py-0.5 rounded bg-muted text-muted-foreground">
                                                             {item.taxCode}
                                                         </span>
                                                     )}
                                                 </p>
                                                 {item.product.batchNumber && (
-                                                    <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                    <p className={`text-xs ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                                         {t('inventory.batchNumber')}: {item.product.batchNumber}
                                                     </p>
                                                 )}
                                             </div>
                                         </TableCell>
-                                        <TableCell className={`text-right ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
+                                        <TableCell className={`text-right ${theme === 'dark' ? 'text-muted-foreground/60' : 'text-foreground'}`}>
                                             {item.quantity}
                                         </TableCell>
-                                        <TableCell className={`text-right ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
+                                        <TableCell className={`text-right ${theme === 'dark' ? 'text-muted-foreground/60' : 'text-foreground'}`}>
                                             {formatCurrency(item.unitPrice)}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             {parseFloat(item.taxAmount ?? '0') > 0
-                                                ? <span className="text-blue-600 dark:text-blue-400 font-medium">{formatCurrency(item.taxAmount!)}</span>
-                                                : <span className={theme === 'dark' ? 'text-gray-600' : 'text-gray-400'}>—</span>}
+                                                ? <span className="text-primary font-medium">{formatCurrency(item.taxAmount!)}</span>
+                                                : <span className={theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}>—</span>}
                                         </TableCell>
-                                        <TableCell className={`text-right font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
+                                        <TableCell className={`text-right font-medium ${theme === 'dark' ? 'text-muted-foreground/60' : 'text-foreground'}`}>
                                             {formatCurrency(item.totalPrice)}
                                         </TableCell>
                                     </TableRow>
@@ -673,19 +673,19 @@ export default function SaleDetailsPage() {
                     <div className="space-y-4">
                         {/* Show payment breakdown - always show if multiple methods or MIXED payment type */}
                         {(sale.paymentType === 'MIXED' || getPaymentMethods(sale).length > 1) && (
-                            <div className={`p-4 rounded-lg border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-blue-50 border-blue-200'}`}>
-                                <p className={`text-sm font-semibold mb-3 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            <div className={`p-4 rounded-lg border ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-primary/10 border-primary/30'}`}>
+                                <p className={`text-sm font-semibold mb-3 ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                     {t('sales.paymentBreakdown')}
                                 </p>
                                 <div className="space-y-2">
                                     {getPaymentMethods(sale).map((payment, index) => (
                                         <div key={index} className="flex justify-between items-center">
-                                            <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                                            <span className={`text-sm ${theme === 'dark' ? 'text-muted-foreground/60' : 'text-foreground'}`}>
                                                 {getPaymentMethodLabel(payment.method, t)}:
                                             </span>
                                             <span className={`font-medium ${payment.method === 'DEBT'
-                                                    ? 'text-amber-600 dark:text-amber-400'
-                                                    : theme === 'dark' ? 'text-white' : 'text-gray-900'
+                                                    ? 'text-warning dark:text-amber-400'
+                                                    : theme === 'dark' ? 'text-white' : 'text-foreground'
                                                 }`}>
                                                 {formatCurrency(payment.amount.toString())}
                                             </span>
@@ -700,30 +700,30 @@ export default function SaleDetailsPage() {
                             <>
                                 {sale.paymentType === 'CASH' && parseFloat(sale.cashAmount) > 0 && (
                                     <div className="flex justify-between items-center">
-                                        <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        <span className={`text-sm ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                             {t('sales.table.paid') || 'Cash Paid'}
                                         </span>
-                                        <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                        <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                             {formatCurrency(sale.cashAmount)}
                                         </span>
                                     </div>
                                 )}
                                 {sale.paymentType === 'INSURANCE' && parseFloat(sale.insuranceAmount) > 0 && (
                                     <div className="flex justify-between items-center">
-                                        <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        <span className={`text-sm ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                             {t('sales.insuranceAmount') || 'Insurance'}
                                         </span>
-                                        <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                        <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                             {formatCurrency(sale.insuranceAmount)}
                                         </span>
                                     </div>
                                 )}
                                 {sale.paymentType === 'DEBT' && parseFloat(sale.debtAmount) > 0 && (
                                     <div className="flex justify-between items-center">
-                                        <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        <span className={`text-sm ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                             {t('sales.table.debt') || 'Debt'}
                                         </span>
-                                        <span className={`font-medium text-amber-600 dark:text-amber-400`}>
+                                        <span className={`font-medium text-warning dark:text-amber-400`}>
                                             {formatCurrency(sale.debtAmount)}
                                         </span>
                                     </div>
@@ -732,30 +732,30 @@ export default function SaleDetailsPage() {
                         )}
                         {parseFloat(sale.vatAmount ?? '0') > 0 && (
                             <div className="border-t pt-4 flex justify-between items-center">
-                                <span className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                <span className={`text-sm font-medium ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                     {t('sales.table.tax') || 'Tax (VAT)'}
                                 </span>
-                                <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                                <span className="text-sm font-semibold text-primary">
                                     {formatCurrency(sale.vatAmount!)}
                                 </span>
                             </div>
                         )}
                         <div className="border-t pt-4 flex justify-between items-center">
-                            <span className={`text-base font-semibold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            <span className={`text-base font-semibold ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                 {t('sales.table.total') || 'Grand Total'}
                             </span>
-                            <span className={`text-lg font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                            <span className={`text-lg font-bold ${theme === 'dark' ? 'text-white' : 'text-foreground'}`}>
                                 {formatCurrency(sale.totalAmount)}
                             </span>
                         </div>
                         {totalProfit !== 0 && (
                             <div className="border-t pt-4 flex justify-between items-center">
-                                <span className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                <span className={`text-sm font-medium ${theme === 'dark' ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                     {t('sales.table.profit')}
                                 </span>
                                 <span className={`text-base font-semibold ${totalProfit >= 0
-                                        ? 'text-green-600 dark:text-green-400'
-                                        : 'text-red-600 dark:text-red-400'
+                                        ? 'text-success dark:text-green-400'
+                                        : 'text-danger dark:text-red-400'
                                     }`}>
                                     {formatCurrency(totalProfit.toString())}
                                 </span>

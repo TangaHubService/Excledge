@@ -10,6 +10,7 @@ import type { UserOptions } from 'jspdf-autotable';
 import { TableSkeleton } from '../../../components/ui/TableSkeleton';
 import { apiClient } from '../../../lib/api-client';
 import { useTheme } from '../../../context/ThemeContext';
+import { PageHeader } from "../../../components/common/PageHeader";
 
 interface StockReportItem {
     productId: number;
@@ -249,48 +250,37 @@ export const StockReports = () => {
     }, [searchQuery, startDate, endDate]);
 
     return (
-        <div className="space-y-6 p-4 md:p-6">
+        <div className="space-y-6">
             {/* Page Header */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 text-white shadow-lg">
-                <div className="pointer-events-none absolute inset-0 bg-black/10" />
-                <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-                            <Package className="h-7 w-7 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold tracking-tight">{t('inventoryReport.title') || 'Stock Movement Report'}</h1>
-                            <p className="text-sm text-white/70 mt-0.5">Manage and track your inventory stock levels and history details</p>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 self-start sm:self-auto">
-                        <button
-                            onClick={handleExportPdf}
-                            disabled={loading || isGeneratingPdf}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-red-650 text-white text-xs font-semibold rounded-lg hover:bg-red-750 transition-colors disabled:opacity-50 shadow-sm border border-transparent"
-                        >
-                            {isGeneratingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText size={14} />}
-                            PDF
-                        </button>
-                        <button
-                            onClick={handleExportExcel}
-                            disabled={loading}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-white text-blue-700 font-semibold text-xs rounded-lg hover:bg-white/90 transition-colors disabled:opacity-50 shadow-sm"
-                        >
-                            <FileText size={14} />
-                            Excel
-                        </button>
-                    </div>
-                </div>
-                <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-                <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
-            </div>
+            <PageHeader
+              title={t('inventoryReport.title') || 'Stock Movement Report'}
+              description={<>Manage and track your inventory stock levels and history details</>}
+              actions={
+                <>
+                  <button
+                      onClick={handleExportPdf}
+                      disabled={loading || isGeneratingPdf}
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                      {isGeneratingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText size={14} />}
+                      PDF
+                  </button>
+                  <button
+                      onClick={handleExportExcel}
+                      disabled={loading}
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                      <FileText size={14} />
+                      Excel
+                  </button>
+                </>
+              }
+            />
 
             {/* Tabs */}
-            <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-t-xl px-4">
+            <div className="flex border-b border-border bg-card rounded-t-xl px-4">
                 <button
-                    className={`px-5 py-3 font-semibold text-sm transition-colors border-b-2 ${activeTab === 'report' ? 'border-blue-650 text-blue-600 dark:text-blue-450' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                    className={`px-5 py-3 font-semibold text-sm transition-colors border-b-2 ${activeTab === 'report' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
                     onClick={() => setActiveTab('report')}
                 >
                     <div className="flex items-center gap-2">
@@ -299,7 +289,7 @@ export const StockReports = () => {
                     </div>
                 </button>
                 <button
-                    className={`px-5 py-3 font-semibold text-sm transition-colors border-b-2 ${activeTab === 'history' ? 'border-blue-650 text-blue-600 dark:text-blue-450' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                    className={`px-5 py-3 font-semibold text-sm transition-colors border-b-2 ${activeTab === 'history' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
                     onClick={() => setActiveTab('history')}
                 >
                     <div className="flex items-center gap-2">
@@ -310,53 +300,53 @@ export const StockReports = () => {
             </div>
 
             {/* Filters */}
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-b-xl border border-t-0 border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="bg-card p-4 rounded-b-xl border border-t-0 border-border shadow-sm">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
-                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Start Date</label>
+                        <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Start Date</label>
                         <div className="relative">
-                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-450" size={15} />
+                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
                             <input
                                 type="date"
                                 value={startDate}
                                 onChange={(e) => setStartDate(e.target.value)}
-                                className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-gray-650 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm focus:outline-none"
+                                className="w-full pl-9 pr-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring/20 focus:border-primary dark:text-white text-sm focus:outline-none"
                             />
                         </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">End Date</label>
+                        <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">End Date</label>
                         <div className="relative">
-                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-450" size={15} />
+                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
                             <input
                                 type="date"
                                 value={endDate}
                                 onChange={(e) => setEndDate(e.target.value)}
-                                className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-gray-650 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm focus:outline-none"
+                                className="w-full pl-9 pr-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring/20 focus:border-primary dark:text-white text-sm focus:outline-none"
                             />
                         </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Search Product</label>
+                        <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Search Product</label>
                         <div className="relative group">
                             <Search className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
-                                searchQuery ? 'text-blue-500' : 'text-gray-455 group-focus-within:text-blue-500'
+                                searchQuery ? 'text-primary' : 'text-muted-foreground group-focus-within:text-primary'
                             }`} size={15} />
                             <input
                                 type="text"
                                 placeholder="Search by name or batch..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className={`w-full pl-9 pr-9 py-2 border rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm ${
+                                className={`w-full pl-9 pr-9 py-2 border rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary text-sm ${
                                     theme === "dark" 
                                         ? "bg-gray-700 border-gray-600 text-white placeholder-gray-500" 
-                                        : "bg-white border-gray-200 text-gray-900 placeholder-gray-400 hover:border-gray-300 shadow-sm"
+                                        : "bg-card border-border text-foreground placeholder-gray-400 hover:border-border shadow-sm"
                                 }`}
                             />
                             {searchQuery && (
                                 <button
                                     onClick={() => setSearchQuery('')}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-danger transition-colors"
                                 >
                                     <X size={15} />
                                 </button>
@@ -365,13 +355,13 @@ export const StockReports = () => {
                     </div>
                     {activeTab === 'history' && (
                         <div>
-                            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Movement Type</label>
+                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Movement Type</label>
                             <div className="relative">
-                                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-450" size={15} />
+                                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
                                 <select
                                     value={movementType}
                                     onChange={(e) => setMovementType(e.target.value)}
-                                    className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-gray-650 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white dark:bg-gray-700 dark:text-white appearance-none text-sm focus:outline-none"
+                                    className="w-full pl-9 pr-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-ring/20 focus:border-primary bg-card dark:text-white appearance-none text-sm focus:outline-none"
                                 >
                                     <option value="ALL">All Types</option>
                                     <option value="SALE">Sales</option>
@@ -395,48 +385,48 @@ export const StockReports = () => {
                             label: 'Opening Stock',
                             value: summary.totalOpening.toLocaleString(),
                             icon: Package,
-                            light: 'bg-gray-50 dark:bg-gray-900/20',
-                            text: 'text-gray-600 dark:text-gray-400',
+                            light: 'bg-surface-subtle',
+                            text: 'text-muted-foreground',
                         },
                         {
                             label: 'Total Stock In',
                             value: `+${summary.totalIn.toLocaleString()}`,
                             icon: ArrowUpRight,
-                            light: 'bg-green-50 dark:bg-green-900/20',
-                            text: 'text-green-600 dark:text-green-400',
+                            light: 'bg-success/10 dark:bg-success/20',
+                            text: 'text-success dark:text-green-400',
                         },
                         {
                             label: 'Total Stock Out',
                             value: `-${summary.totalOut.toLocaleString()}`,
                             icon: ArrowDownRight,
-                            light: 'bg-red-50 dark:bg-red-900/20',
-                            text: 'text-red-600 dark:text-red-400',
+                            light: 'bg-danger/10 dark:bg-danger/20',
+                            text: 'text-danger dark:text-red-400',
                         },
                         {
                             label: 'Closing Stock',
                             value: summary.totalClosing.toLocaleString(),
                             icon: Package,
-                            light: 'bg-indigo-50 dark:bg-indigo-900/20',
+                            light: 'bg-indigo-500/10 dark:bg-indigo-900/20',
                             text: 'text-indigo-600 dark:text-indigo-400',
                         },
                         {
                             label: 'Inventory Value',
                             value: formatCurrency(summary.totalValue),
                             icon: DollarSign,
-                            light: 'bg-blue-50 dark:bg-blue-900/20',
-                            text: 'text-blue-600 dark:text-blue-400',
+                            light: 'bg-primary/10',
+                            text: 'text-primary',
                         },
                     ].map(({ label, value, icon: Icon, light, text }) => (
                         <div
                             key={label}
-                            className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4"
+                            className="bg-card rounded-xl border border-border shadow-sm p-4 flex items-center gap-4"
                         >
                             <div className={`flex h-11 w-11 items-center justify-center rounded-xl flex-shrink-0 ${light}`}>
                                 <Icon className={`h-5 w-5 ${text}`} />
                             </div>
                             <div>
-                                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
-                                <p className="text-base font-bold text-gray-900 dark:text-white tabular-nums">{value}</p>
+                                <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                                <p className="text-base font-bold text-foreground tabular-nums">{value}</p>
                             </div>
                         </div>
                     ))}
@@ -444,107 +434,107 @@ export const StockReports = () => {
             )}
 
             {/* Content Table */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
                 {loading ? (
                     <div className="p-6">
                         <TableSkeleton rows={10} columns={activeTab === 'report' ? 9 : 8} />
                     </div>
                     ) : error ? (
-                        <div className="p-8 text-center text-red-500">{error}</div>
+                        <div className="p-8 text-center text-danger">{error}</div>
                     ) : (
                         <div className="overflow-x-auto">
                             {activeTab === 'report' ? (
                                 <table className="w-full">
-                                    <thead className="bg-gray-50 dark:bg-gray-700/50">
+                                    <thead className="bg-surface-subtle">
                                         <tr>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Product ID</th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('inventory.product')}</th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch</th>
-                                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Opening</th>
-                                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock In</th>
-                                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock Out</th>
-                                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Closing</th>
-                                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Unit Price</th>
-                                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Value</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Product ID</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('inventory.product')}</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Batch</th>
+                                            <th className="px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Opening</th>
+                                            <th className="px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stock In</th>
+                                            <th className="px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stock Out</th>
+                                            <th className="px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Closing</th>
+                                            <th className="px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Unit Price</th>
+                                            <th className="px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Value</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                    <tbody className="divide-y divide-border">
                                         {paginatedReport.map((item) => (
-                                            <tr key={item.productId} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                                                <td className="px-6 py-4 text-xs font-medium text-gray-500 dark:text-gray-400 font-mono">{item.productId}</td>
-                                                <td className="px-6 py-4 text-sm font-medium text-gray-800 dark:text-white capitalize">{item.productName}</td>
-                                                <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{item.batchNumber || 'N/A'}</td>
-                                                <td className="px-6 py-4 text-sm text-right text-gray-600 dark:text-white">{item.openingStock.toLocaleString()}</td>
-                                                <td className="px-6 py-4 text-sm text-right text-green-600">+{item.stockIn.toLocaleString()}</td>
-                                                <td className="px-6 py-4 text-sm text-right text-red-600">-{item.stockOut.toLocaleString()}</td>
-                                                <td className="px-6 py-4 text-sm text-right font-semibold text-gray-800 dark:text-white">{item.closingStock.toLocaleString()}</td>
-                                                <td className="px-6 py-4 text-sm text-right text-gray-500 dark:text-gray-400">{formatCurrency(item.unitPrice)}</td>
-                                                <td className="px-6 py-4 text-sm text-right font-semibold text-blue-600">{formatCurrency(item.stockValue)}</td>
+                                            <tr key={item.productId} className="hover:bg-muted transition-colors">
+                                                <td className="px-6 py-4 text-xs font-medium text-muted-foreground font-mono">{item.productId}</td>
+                                                <td className="px-6 py-4 text-sm font-medium text-foreground capitalize">{item.productName}</td>
+                                                <td className="px-6 py-4 text-sm text-muted-foreground">{item.batchNumber || 'N/A'}</td>
+                                                <td className="px-6 py-4 text-sm text-right text-muted-foreground dark:text-white">{item.openingStock.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-sm text-right text-success">+{item.stockIn.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-sm text-right text-danger">-{item.stockOut.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-sm text-right font-semibold text-foreground">{item.closingStock.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-sm text-right text-muted-foreground">{formatCurrency(item.unitPrice)}</td>
+                                                <td className="px-6 py-4 text-sm text-right font-semibold text-primary">{formatCurrency(item.stockValue)}</td>
                                             </tr>
                                         ))}
                                         {/* Totals Row */}
                                         {paginatedReport.length > 0 && summary && (
-                                            <tr className="bg-gray-50 dark:bg-gray-700/50 border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
-                                                <td colSpan={3} className="px-6 py-4 text-sm font-bold text-gray-900 dark:text-white">TOTAL</td>
-                                                <td className="px-6 py-4 text-sm text-right font-bold text-gray-900 dark:text-white">{summary.totalOpening.toLocaleString()}</td>
-                                                <td className="px-6 py-4 text-sm text-right font-bold text-green-600">+{summary.totalIn.toLocaleString()}</td>
-                                                <td className="px-6 py-4 text-sm text-right font-bold text-red-600">-{summary.totalOut.toLocaleString()}</td>
-                                                <td className="px-6 py-4 text-sm text-right font-bold text-gray-900 dark:text-white">{summary.totalClosing.toLocaleString()}</td>
-                                                <td className="px-6 py-4 text-sm text-right text-gray-500 dark:text-gray-400">—</td>
-                                                <td className="px-6 py-4 text-sm text-right font-bold text-blue-600">{formatCurrency(summary.totalValue)}</td>
+                                            <tr className="bg-surface-subtle border-t-2 border-border font-semibold">
+                                                <td colSpan={3} className="px-6 py-4 text-sm font-bold text-foreground">TOTAL</td>
+                                                <td className="px-6 py-4 text-sm text-right font-bold text-foreground">{summary.totalOpening.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-sm text-right font-bold text-success">+{summary.totalIn.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-sm text-right font-bold text-danger">-{summary.totalOut.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-sm text-right font-bold text-foreground">{summary.totalClosing.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-sm text-right text-muted-foreground">—</td>
+                                                <td className="px-6 py-4 text-sm text-right font-bold text-primary">{formatCurrency(summary.totalValue)}</td>
                                             </tr>
                                         )}
                                         {paginatedReport.length === 0 && (
                                             <tr>
-                                                <td colSpan={9} className="px-6 py-12 text-center text-gray-500">No products found for the selected filters.</td>
+                                                <td colSpan={9} className="px-6 py-12 text-center text-muted-foreground">No products found for the selected filters.</td>
                                             </tr>
                                         )}
                                     </tbody>
                                 </table>
                             ) : (
                                 <table className="w-full">
-                                    <thead className="bg-gray-50 dark:bg-gray-700/50">
+                                    <thead className="bg-surface-subtle">
                                         <tr>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date & Time</th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Product ID</th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Product</th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Quantity</th>
-                                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Prev</th>
-                                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">New</th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">User</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date & Time</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Product ID</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Product</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Type</th>
+                                            <th className="px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quantity</th>
+                                            <th className="px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prev</th>
+                                            <th className="px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">New</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">User</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                    <tbody className="divide-y divide-border">
                                         {historyData.map((item) => (
-                                            <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                                                <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                            <tr key={item.id} className="hover:bg-muted transition-colors">
+                                                <td className="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">
                                                     {new Date(item.createdAt).toLocaleString()}
                                                 </td>
-                                                <td className="px-6 py-4 text-xs font-medium text-gray-500 dark:text-gray-400 font-mono">
+                                                <td className="px-6 py-4 text-xs font-medium text-muted-foreground font-mono">
                                                     {item.productId}
                                                 </td>
-                                                <td className="px-6 py-4 text-sm font-medium text-gray-800 dark:text-white">
+                                                <td className="px-6 py-4 text-sm font-medium text-foreground">
                                                     {item.product.name}
-                                                    <div className="text-xs text-gray-400">{item.product.batchNumber || 'No Batch'}</div>
+                                                    <div className="text-xs text-muted-foreground">{item.product.batchNumber || 'No Batch'}</div>
                                                 </td>
                                                 <td className="px-6 py-4 text-sm">
-                                                    <span className={`px-2 py-1 rounded text-xs font-medium ${item.quantity > 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30' : 'bg-red-100 text-red-700 dark:bg-red-900/30'
+                                                    <span className={`px-2 py-1 rounded text-xs font-medium ${item.quantity > 0 ? 'bg-success/15 text-success dark:bg-success/30' : 'bg-danger/15 text-danger dark:bg-danger/30'
                                                         }`}>
                                                         {item.movementType}
                                                     </span>
                                                 </td>
-                                                <td className={`px-6 py-4 text-sm text-right font-semibold ${item.direction === 'IN' ? 'text-green-600' : 'text-red-600'}`}>
+                                                <td className={`px-6 py-4 text-sm text-right font-semibold ${item.direction === 'IN' ? 'text-success' : 'text-danger'}`}>
                                                     {item.direction === 'IN' ? '+' : '-'}{item.quantity}
                                                 </td>
-                                                <td className="px-6 py-4 text-sm text-right text-gray-500 dark:text-gray-400">{item.previousStock}</td>
-                                                <td className="px-6 py-4 text-sm text-right font-semibold text-gray-800 dark:text-white">{item.newStock}</td>
-                                                <td className="px-6 py-4 text-sm text-gray-600 dark:text-white">{item.user.name}</td>
+                                                <td className="px-6 py-4 text-sm text-right text-muted-foreground">{item.previousStock}</td>
+                                                <td className="px-6 py-4 text-sm text-right font-semibold text-foreground">{item.newStock}</td>
+                                                <td className="px-6 py-4 text-sm text-muted-foreground dark:text-white">{item.user.name}</td>
                                             </tr>
                                         ))}
                                         {historyData.length === 0 && (
                                             <tr>
-                                                <td colSpan={8} className="px-6 py-12 text-center text-gray-500">No stock movements found.</td>
+                                                <td colSpan={8} className="px-6 py-12 text-center text-muted-foreground">No stock movements found.</td>
                                             </tr>
                                         )}
                                     </tbody>
@@ -556,15 +546,15 @@ export const StockReports = () => {
 
                 {/* Pagination (Report Tab) */}
                 {activeTab === 'report' && !loading && filteredReport.length > 0 && (
-                    <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4 bg-card p-4 rounded-lg border border-border shadow-sm">
                         <div className="flex items-center gap-4">
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                            <div className="text-sm text-muted-foreground">
                                 Showing {((reportCurrentPage - 1) * reportItemsPerPage) + 1}-{Math.min(reportCurrentPage * reportItemsPerPage, filteredReport.length)} of {filteredReport.length} {filteredReport.length === 1 ? 'product' : 'products'}
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">Items per page:</span>
+                                <span className="text-sm text-muted-foreground whitespace-nowrap">Items per page:</span>
                                 <select
-                                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-sm bg-white dark:bg-gray-700 dark:text-white"
+                                    className="border border-border rounded-lg px-2 py-1 text-sm bg-card dark:text-white"
                                     value={reportItemsPerPage}
                                     onChange={(e) => {
                                         setReportItemsPerPage(Number(e.target.value));
@@ -583,7 +573,7 @@ export const StockReports = () => {
                                 <button
                                     disabled={reportCurrentPage === 1}
                                     onClick={() => setReportCurrentPage(prev => Math.max(1, prev - 1))}
-                                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 dark:bg-gray-800 dark:text-white transition-colors"
+                                    className="px-4 py-2 border border-border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-muted dark:text-white transition-colors"
                                 >
                                     Previous
                                 </button>
@@ -605,8 +595,8 @@ export const StockReports = () => {
                                                 onClick={() => setReportCurrentPage(pageNum)}
                                                 className={`px-3 py-2 border rounded-lg text-sm transition-colors ${
                                                     reportCurrentPage === pageNum
-                                                        ? 'bg-blue-600 text-white border-blue-600'
-                                                        : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 dark:bg-gray-800 dark:text-white'
+                                                        ? 'bg-primary text-white border-primary'
+                                                        : 'border-border hover:bg-muted dark:text-white'
                                                 }`}
                                             >
                                                 {pageNum}
@@ -617,7 +607,7 @@ export const StockReports = () => {
                                 <button
                                     disabled={reportCurrentPage === reportTotalPages}
                                     onClick={() => setReportCurrentPage(prev => Math.min(reportTotalPages, prev + 1))}
-                                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 dark:bg-gray-800 dark:text-white transition-colors"
+                                    className="px-4 py-2 border border-border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-muted dark:text-white transition-colors"
                                 >
                                     Next
                                 </button>
@@ -628,8 +618,8 @@ export const StockReports = () => {
 
                 {/* Pagination (History Tab) */}
                 {activeTab === 'history' && !loading && (
-                    <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                    <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4 bg-card p-4 rounded-lg border border-border shadow-sm">
+                        <div className="text-sm text-muted-foreground">
                             {pagination.totalItems > 0 ? (
                                 <>
                                     Showing {((pagination.currentPage - 1) * 20) + 1}-{Math.min(pagination.currentPage * 20, pagination.totalItems)} of {pagination.totalItems} {pagination.totalItems === 1 ? 'movement' : 'movements'}
@@ -643,7 +633,7 @@ export const StockReports = () => {
                                 <button
                                     disabled={pagination.currentPage === 1}
                                     onClick={() => setPagination(p => ({ ...p, currentPage: p.currentPage - 1 }))}
-                                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 dark:bg-gray-800 dark:text-white transition-colors"
+                                    className="px-4 py-2 border border-border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-muted dark:text-white transition-colors"
                                 >
                                     Previous
                                 </button>
@@ -665,8 +655,8 @@ export const StockReports = () => {
                                                 onClick={() => setPagination(p => ({ ...p, currentPage: pageNum }))}
                                                 className={`px-3 py-2 border rounded-lg text-sm transition-colors ${
                                                     pagination.currentPage === pageNum
-                                                        ? 'bg-blue-600 text-white border-blue-600'
-                                                        : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 dark:bg-gray-800 dark:text-white'
+                                                        ? 'bg-primary text-white border-primary'
+                                                        : 'border-border hover:bg-muted dark:text-white'
                                                 }`}
                                             >
                                                 {pageNum}
@@ -677,13 +667,13 @@ export const StockReports = () => {
                                 <button
                                     disabled={pagination.currentPage === pagination.totalPages}
                                     onClick={() => setPagination(p => ({ ...p, currentPage: p.currentPage + 1 }))}
-                                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 dark:bg-gray-800 dark:text-white transition-colors"
+                                    className="px-4 py-2 border border-border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-muted dark:text-white transition-colors"
                                 >
                                     Next
                                 </button>
                             </div>
                         ) : pagination.totalItems > 0 ? (
-                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                            <div className="text-sm text-muted-foreground">
                                 All {pagination.totalItems} {pagination.totalItems === 1 ? 'movement' : 'movements'} shown
                             </div>
                         ) : null}

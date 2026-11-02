@@ -41,6 +41,7 @@ import { useTheme } from '../../../context/ThemeContext';
 import { cn } from '../../../lib/utils';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
+import { PageHeader } from "../../../components/common/PageHeader";
 
 type InvoiceStatus = 'DRAFT' | 'PROCESSING' | 'REVIEW' | 'APPROVED' | 'IMPORTED' | 'FAILED';
 
@@ -60,12 +61,12 @@ interface SupplierInvoice {
 }
 
 const STATUS_CONFIG: Record<InvoiceStatus, { label: string; icon: React.ReactNode; className: string }> = {
-  DRAFT: { label: 'Draft', icon: <FileText className="size-3" />, className: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
-  PROCESSING: { label: 'Processing', icon: <Loader2 className="size-3 animate-spin" />, className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
-  REVIEW: { label: 'Review', icon: <Clock className="size-3" />, className: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' },
-  APPROVED: { label: 'Approved', icon: <CheckCircle2 className="size-3" />, className: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
-  IMPORTED: { label: 'Imported', icon: <Package className="size-3" />, className: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' },
-  FAILED: { label: 'Failed', icon: <AlertCircle className="size-3" />, className: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
+  DRAFT: { label: 'Draft', icon: <FileText className="size-3" />, className: 'bg-muted text-foreground' },
+  PROCESSING: { label: 'Processing', icon: <Loader2 className="size-3 animate-spin" />, className: 'bg-primary/15 text-primary' },
+  REVIEW: { label: 'Review', icon: <Clock className="size-3" />, className: 'bg-warning/15 text-warning dark:bg-warning/40 dark:text-yellow-300' },
+  APPROVED: { label: 'Approved', icon: <CheckCircle2 className="size-3" />, className: 'bg-success/15 text-success dark:bg-success/40 dark:text-green-300' },
+  IMPORTED: { label: 'Imported', icon: <Package className="size-3" />, className: 'bg-purple-500/15 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' },
+  FAILED: { label: 'Failed', icon: <AlertCircle className="size-3" />, className: 'bg-danger/15 text-danger dark:bg-danger/40 dark:text-red-300' },
 };
 
 export const SupplierInvoicesPage: React.FC = () => {
@@ -120,8 +121,8 @@ export const SupplierInvoicesPage: React.FC = () => {
       <span className="inline-flex items-center gap-1">
         {label}
         {sortBy !== key ? <ChevronsUpDown className="size-3 opacity-40" /> : sortOrder === 'asc'
-          ? <ChevronUp className="size-3 text-blue-600" />
-          : <ChevronDown className="size-3 text-blue-600" />}
+          ? <ChevronUp className="size-3 text-primary" />
+          : <ChevronDown className="size-3 text-primary" />}
       </span>
     </th>
   );
@@ -145,37 +146,29 @@ export const SupplierInvoicesPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
       {/* Page Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-600 p-6 text-white shadow-lg">
-        <div className="pointer-events-none absolute inset-0 bg-black/10" />
-        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-              <ScanLine className="h-7 w-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">{t('invoiceScanner.supplierInvoices')}</h1>
-              <p className="text-sm text-white/70 mt-0.5">{t('invoiceScanner.subtitle')}</p>
-            </div>
-          </div>
-          <Button
-            onClick={() => navigate('/dashboard/scan-invoice')}
-            className="gap-2 bg-white text-blue-700 hover:bg-white/90 font-semibold shadow-sm self-start sm:self-auto"
-          >
-            <ScanLine className="size-4" />
-            {t('invoiceScanner.scanInvoice')}
-          </Button>
-        </div>
-        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-        <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
-      </div>
+      <PageHeader
+        title={t('invoiceScanner.supplierInvoices')}
+        description={t('invoiceScanner.subtitle')}
+        actions={
+          <>
+            <Button
+              onClick={() => navigate('/dashboard/scan-invoice')}
+              className="gap-2 bg-card text-primary hover:bg-card/90 font-semibold shadow-sm self-start sm:self-auto"
+            >
+              <ScanLine className="size-4" />
+              {t('invoiceScanner.scanInvoice')}
+            </Button>
+          </>
+        }
+      />
 
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+      <div className="bg-card rounded-xl border border-border shadow-sm p-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
               className="pl-9"
               placeholder={t('common.search')}
@@ -185,7 +178,7 @@ export const SupplierInvoicesPage: React.FC = () => {
           </div>
           <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v === 'all' ? '' : v); setPage(1); }}>
             <SelectTrigger className="w-[180px]">
-              <Filter className="size-4 mr-2 text-gray-400" />
+              <Filter className="size-4 mr-2 text-muted-foreground" />
               <SelectValue placeholder={t('common.allStatuses')} />
             </SelectTrigger>
             <SelectContent>
@@ -202,7 +195,7 @@ export const SupplierInvoicesPage: React.FC = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
         <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-16">
@@ -222,7 +215,7 @@ export const SupplierInvoicesPage: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className={cn('border-b text-left', isDark ? 'border-gray-700' : 'border-gray-200')}>
+                  <tr className={cn('border-b text-left', isDark ? 'border-gray-700' : 'border-border')}>
                     {sortHeader(t('invoiceScanner.invoiceNumber'), 'invoiceNumber')}
                     {sortHeader(t('invoiceScanner.supplierName'), 'supplierName')}
                     <th className="px-4 py-3 font-medium text-muted-foreground">{t('invoiceScanner.items')}</th>
@@ -240,7 +233,7 @@ export const SupplierInvoicesPage: React.FC = () => {
                         key={inv.id}
                         className={cn(
                           'border-b transition-colors',
-                          isDark ? 'border-gray-700 hover:bg-gray-800/50' : 'border-gray-100 hover:bg-gray-50'
+                          isDark ? 'border-gray-700 hover:bg-gray-800/50' : 'border-border hover:bg-muted'
                         )}
                       >
                         <td className="px-4 py-3 font-mono text-xs">

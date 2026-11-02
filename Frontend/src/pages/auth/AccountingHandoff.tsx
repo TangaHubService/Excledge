@@ -28,7 +28,7 @@ export default function AccountingHandoff() {
 
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm text-gray-600">{error || "Connecting your Excel Edge session to Accounting…"}</p>
+      <p className="text-sm text-muted-foreground">{error || "Connecting your Excel Edge session to Accounting…"}</p>
     </div>
   );
 }

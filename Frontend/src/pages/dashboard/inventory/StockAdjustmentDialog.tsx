@@ -229,15 +229,15 @@ export default function StockAdjustmentDialog({
           'sm:max-w-[520px]',
           theme === 'dark'
             ? 'bg-gray-900 border-gray-700 text-gray-100'
-            : 'bg-white border-gray-200',
+            : 'bg-card border-border',
         )}
       >
         <DrawerHeader>
-          <DrawerTitle className={cn(theme === 'dark' ? 'text-white' : 'text-gray-900')}>
+          <DrawerTitle className={cn(theme === 'dark' ? 'text-white' : 'text-foreground')}>
             Adjust Stock
           </DrawerTitle>
           {productName && (
-            <p className="text-body-sm text-gray-500 dark:text-gray-400">
+            <p className="text-body-sm text-muted-foreground">
               {productName}
               {batchNumber && ` · Batch: ${batchNumber}`}
               {batchExpiry && ` · Exp: ${new Date(batchExpiry).toLocaleDateString()}`}
@@ -249,18 +249,18 @@ export default function StockAdjustmentDialog({
         {!confirmStep && (
           <div className="space-y-5 px-6 py-2">
             {!canAdjustDirectly && (
-              <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                <p className="text-sm text-amber-700 dark:text-amber-300">
+              <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3 dark:border-amber-800 dark:bg-warning/20">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                <p className="text-sm text-warning dark:text-amber-300">
                   This organization requires manager approval for stock adjustments. Ask an admin or branch manager to make this change.
                 </p>
               </div>
             )}
             {/* Current stock */}
             {currentStock !== undefined && (
-              <div className="flex items-center justify-between rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20 dark:border dark:border-blue-800">
-                <span className="text-sm text-blue-700 dark:text-blue-300">Current Stock</span>
-                <span className="text-lg font-bold text-blue-800 dark:text-blue-200">
+              <div className="flex items-center justify-between rounded-lg bg-primary/10 p-3 dark:border">
+                <span className="text-sm text-primary">Current Stock</span>
+                <span className="text-lg font-bold text-primary">
                   {currentStock.toLocaleString()}
                 </span>
               </div>
@@ -268,14 +268,14 @@ export default function StockAdjustmentDialog({
 
             {/* Target branch (LOCKED — always visible) */}
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-gray-500 dark:text-gray-400">Target Branch</Label>
-              <div className="flex h-11 items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                <Building className="h-4 w-4 shrink-0 text-gray-400" />
+              <Label className="text-xs font-medium text-muted-foreground">Target Branch</Label>
+              <div className="flex h-11 items-center gap-2 rounded-md border border-border bg-surface-subtle px-3 text-sm text-muted-foreground">
+                <Building className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="font-medium">
                   {targetBranch?.name ?? (selectedBranchId === null ? 'All Branches' : '—')}
                 </span>
                 {targetBranch?.isPrimary && (
-                  <span className="ml-auto rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                  <span className="ml-auto rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary">
                     PRIMARY
                   </span>
                 )}
@@ -293,7 +293,7 @@ export default function StockAdjustmentDialog({
                   <button
                     type="button"
                     onClick={() => adjustBy(1, '100')}
-                    className="flex h-9 w-9 items-center justify-center rounded-md border bg-white text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                    className="flex h-9 w-9 items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:bg-muted"
                     title="+100"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -302,7 +302,7 @@ export default function StockAdjustmentDialog({
                   <button
                     type="button"
                     onClick={() => adjustBy(1, '10')}
-                    className="flex h-9 w-9 items-center justify-center rounded-md border bg-white text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                    className="flex h-9 w-9 items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:bg-muted"
                     title="+10"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -311,7 +311,7 @@ export default function StockAdjustmentDialog({
                   <button
                     type="button"
                     onClick={() => adjustBy(1, '1')}
-                    className="flex h-9 w-9 items-center justify-center rounded-md border bg-white text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                    className="flex h-9 w-9 items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:bg-muted"
                     title="+1"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -328,7 +328,7 @@ export default function StockAdjustmentDialog({
                   placeholder="0"
                   className={cn(
                     'h-14 flex-1 text-center text-xl font-bold tabular-nums',
-                    isNegative ? 'text-red-600' : 'text-emerald-600',
+                    isNegative ? 'text-danger' : 'text-success',
                     theme === 'dark' ? 'bg-gray-800 border-gray-700' : '',
                   )}
                 />
@@ -338,7 +338,7 @@ export default function StockAdjustmentDialog({
                   <button
                     type="button"
                     onClick={() => adjustBy(-1, '1')}
-                    className="flex h-9 w-9 items-center justify-center rounded-md border bg-white text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                    className="flex h-9 w-9 items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:bg-muted"
                     title="-1"
                   >
                     <Minus className="h-3.5 w-3.5" />
@@ -347,7 +347,7 @@ export default function StockAdjustmentDialog({
                   <button
                     type="button"
                     onClick={() => adjustBy(-1, '10')}
-                    className="flex h-9 w-9 items-center justify-center rounded-md border bg-white text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                    className="flex h-9 w-9 items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:bg-muted"
                     title="-10"
                   >
                     <Minus className="h-3.5 w-3.5" />
@@ -356,7 +356,7 @@ export default function StockAdjustmentDialog({
                   <button
                     type="button"
                     onClick={() => adjustBy(-1, '100')}
-                    className="flex h-9 w-9 items-center justify-center rounded-md border bg-white text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                    className="flex h-9 w-9 items-center justify-center rounded-md border bg-card text-muted-foreground transition-colors hover:bg-muted"
                     title="-100"
                   >
                     <Minus className="h-3.5 w-3.5" />
@@ -371,8 +371,8 @@ export default function StockAdjustmentDialog({
                   className={cn(
                     'mt-2 rounded-lg border p-3 text-center text-sm',
                     wouldGoNegative
-                      ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300'
-                      : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300',
+                      ? 'border-danger/25 bg-danger/10 text-danger dark:border-red-800 dark:bg-danger/20 dark:text-red-300'
+                      : 'border-success/25 bg-success/10 text-success dark:border-emerald-800 dark:bg-success/20 dark:text-emerald-300',
                   )}
                 >
                   {wouldGoNegative ? (
@@ -385,7 +385,7 @@ export default function StockAdjustmentDialog({
                       New stock:{' '}
                       <strong className="tabular-nums">
                         {currentStock?.toLocaleString()} {isNegative ? '−' : '+'} {Math.abs(qtyNum).toLocaleString()} ={' '}
-                        <span className={isNegative ? 'text-red-600' : 'text-emerald-600'}>
+                        <span className={isNegative ? 'text-danger' : 'text-success'}>
                           {newStock.toLocaleString()}
                         </span>
                       </strong>
@@ -398,7 +398,7 @@ export default function StockAdjustmentDialog({
             {/* Reason (REQUIRED) */}
             <div className="space-y-1.5">
               <Label htmlFor="reason" className="text-sm font-medium">
-                Reason <span className="text-red-500">*</span>
+                Reason <span className="text-danger">*</span>
               </Label>
               <Select value={reason} onValueChange={v => setReason(v as AdjustmentReason)}>
                 <SelectTrigger className="h-11">
@@ -416,7 +416,7 @@ export default function StockAdjustmentDialog({
                 </SelectContent>
               </Select>
               {reason === '' && quantity && (
-                <p className="text-caption text-amber-600">Select a reason before confirming</p>
+                <p className="text-caption text-warning">Select a reason before confirming</p>
               )}
               {isOtherReason && (
                 <div className="space-y-1">
@@ -428,7 +428,7 @@ export default function StockAdjustmentDialog({
                     className={cn('h-11', theme === 'dark' ? 'bg-gray-800 border-gray-700' : '')}
                   />
                   {otherReason.trim() === '' && (
-                    <p className="text-caption text-amber-600">Please specify the reason</p>
+                    <p className="text-caption text-warning">Please specify the reason</p>
                   )}
                 </div>
               )}
@@ -437,7 +437,7 @@ export default function StockAdjustmentDialog({
             {/* Note (optional) */}
             <div className="space-y-1.5">
               <Label htmlFor="note" className="text-sm font-medium">
-                Note <span className="text-xs text-gray-400">(optional)</span>
+                Note <span className="text-xs text-muted-foreground">(optional)</span>
               </Label>
               <Textarea
                 id="note"
@@ -454,27 +454,27 @@ export default function StockAdjustmentDialog({
         {/* ── Step 2: Confirmation ───────────────────── */}
         {confirmStep && (
           <div className="space-y-5 px-6 py-2">
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+            <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 dark:border-amber-800 dark:bg-warning/20">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
                 <div>
-                  <p className="font-medium text-amber-800 dark:text-amber-200">
+                  <p className="font-medium text-warning dark:text-amber-200">
                     Please confirm this adjustment
                   </p>
-                  <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                  <p className="mt-1 text-sm text-warning dark:text-amber-300">
                     This change will be recorded in the inventory ledger and cannot be reversed automatically.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-3 rounded-lg border bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
+            <div className="space-y-3 rounded-lg border bg-surface-subtle p-4">
               <SummaryRow label="Product" value={productName ?? '—'} />
               <SummaryRow label="Target Branch" value={targetBranch?.name ?? '—'} />
               <SummaryRow
                 label="Change"
                 value={`${isNegative ? '−' : '+'} ${Math.abs(qtyNum).toLocaleString()} units`}
-                valueClassName={isNegative ? 'text-red-600' : 'text-emerald-600'}
+                valueClassName={isNegative ? 'text-danger' : 'text-success'}
               />
               <SummaryRow
                 label="Current Stock"
@@ -511,7 +511,7 @@ export default function StockAdjustmentDialog({
               type="button"
               onClick={() => setConfirmStep(true)}
               disabled={!canSubmit}
-              className="h-11 min-w-[140px] gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              className="h-11 min-w-[140px] gap-2 bg-primary hover:bg-primary/90 text-white"
             >
               <CheckCircle2 className="h-4 w-4" />
               Review Adjustment
@@ -524,8 +524,8 @@ export default function StockAdjustmentDialog({
               className={cn(
                 'h-11 min-w-[140px] gap-2',
                 isNegative
-                  ? 'bg-red-600 hover:bg-red-700 text-white'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white',
+                  ? 'bg-danger hover:bg-danger/90 text-white'
+                  : 'bg-primary hover:bg-primary/90 text-white',
               )}
             >
               {loading ? (
@@ -559,8 +559,8 @@ function SummaryRow({
 }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-sm text-gray-500 dark:text-gray-400">{label}</span>
-      <span className={cn('text-sm font-medium text-gray-900 dark:text-gray-100', valueClassName)}>
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className={cn('text-sm font-medium text-foreground', valueClassName)}>
         {value}
       </span>
     </div>

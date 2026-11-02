@@ -106,7 +106,7 @@ export function CustomerForm({
     return (
         <Drawer open={true} onOpenChange={onClose}>
       <DrawerContent
-        className="sm:max-w-[680px] bg-white border-gray-200"
+        className="sm:max-w-[680px] bg-card border-border"
       >
         <DrawerHeader>
           <DrawerTitle className="text-xl font-semibold mb-2">
@@ -116,12 +116,12 @@ export function CustomerForm({
 
 
                 <div className="px-6 pb-6">
-                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-5 space-y-5">
+                    <div className="bg-surface-subtle rounded-lg p-5 space-y-5">
                         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
                             <div>
                                 <label
                                     htmlFor="name"
-                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                    className="block text-sm font-medium text-foreground mb-1"
                                 >
                                     {t('customers.fullName')} *
                                 </label>
@@ -129,18 +129,18 @@ export function CustomerForm({
                                 <input
                                     id="name"
                                     type="text"
-                                    className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
+                                    className={`w-full rounded-md border bg-card ${formErrors.name ? 'border-red-500' : 'border-border'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-foreground`}
                                     {...register('name')}
                                 />
                                 {formErrors.name && (
-                                    <p className="mt-1 text-sm text-red-600">{formErrors.name.message}</p>
+                                    <p className="mt-1 text-sm text-danger">{formErrors.name.message}</p>
                                 )}
                             </div>
 
                             <div>
                                 <label
                                     htmlFor="email"
-                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                    className="block text-sm font-medium text-foreground mb-1"
                                 >
                                     {t('common.email')}
                                 </label>
@@ -148,15 +148,15 @@ export function CustomerForm({
                                 <input
                                     id="email"
                                     type="email"
-                                    className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.email ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
+                                    className={`w-full rounded-md border bg-card ${formErrors.email ? 'border-red-500' : 'border-border'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-foreground`}
                                     {...register('email')}
                                 />
 
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    {t('customers.phoneNumber')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                <label className="block text-sm font-medium text-foreground mb-1">
+                                    {t('customers.phoneNumber')} <span className="text-muted-foreground font-normal text-xs">({t('common.optional') || 'optional'})</span>
                                 </label>
                                 <PhoneInputWithCountryCode
                                     value={phoneValue ?? undefined}
@@ -171,13 +171,13 @@ export function CustomerForm({
                             <div>
                                 <label
                                     htmlFor="tin"
-                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                    className="block text-sm font-medium text-foreground mb-1"
                                 >
                                     {t('customers.tinNumber')}{' '}
                                     {customerType !== 'INDIVIDUAL' ? (
-                                        <span className="text-red-500">*</span>
+                                        <span className="text-danger">*</span>
                                     ) : (
-                                        <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                        <span className="text-muted-foreground font-normal text-xs">({t('common.optional') || 'optional'})</span>
                                     )}
                                 </label>
                                 <div className="flex gap-2">
@@ -187,7 +187,7 @@ export function CustomerForm({
                                         inputMode="numeric"
                                         maxLength={9}
                                         placeholder="e.g. 123456789"
-                                        className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.tin ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
+                                        className={`w-full rounded-md border bg-card ${formErrors.tin ? 'border-red-500' : 'border-border'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-foreground`}
                                         {...register('tin')}
                                         onChange={(e) => {
                                             // TIN is a 9-digit RRA number, never the phone field's "+countrycode"
@@ -224,24 +224,24 @@ export function CustomerForm({
                                                 setRraCheck({ state: 'error', message: err?.message ?? 'RRA verification failed' });
                                             }
                                         }}
-                                        className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-gray-300 dark:border-gray-600 px-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                                        className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
                                     >
                                         {rraCheck.state === 'loading' ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
                                         Verify
                                     </button>
                                 </div>
                                 {formErrors.tin && (
-                                    <p className="mt-1 text-sm text-red-600">{formErrors.tin.message}</p>
+                                    <p className="mt-1 text-sm text-danger">{formErrors.tin.message}</p>
                                 )}
                                 {rraCheck.state === 'ok' && (
-                                    <p className="mt-1 flex items-center gap-1.5 text-sm text-emerald-600"><CheckCircle2 className="size-4" />{rraCheck.message}</p>
+                                    <p className="mt-1 flex items-center gap-1.5 text-sm text-success"><CheckCircle2 className="size-4" />{rraCheck.message}</p>
                                 )}
                                 {rraCheck.state === 'error' && (
-                                    <p className="mt-1 flex items-center gap-1.5 text-sm text-amber-600"><AlertTriangle className="size-4" />{rraCheck.message}</p>
+                                    <p className="mt-1 flex items-center gap-1.5 text-sm text-warning"><AlertTriangle className="size-4" />{rraCheck.message}</p>
                                 )}
                             </div>
                             {customerType === 'INDIVIDUAL' && (
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                              <p className="text-xs text-muted-foreground">
                                 Optional — when the individual has a real RRA TIN it is printed on the fiscal receipt and sent to RRA.
                               </p>
                             )}
@@ -249,53 +249,53 @@ export function CustomerForm({
                             <div>
                                 <label
                                     htmlFor="address"
-                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                    className="block text-sm font-medium text-foreground mb-1"
                                 >
-                                    {t('customers.address')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                    {t('customers.address')} <span className="text-muted-foreground font-normal text-xs">({t('common.optional') || 'optional'})</span>
                                 </label>
                                 <input
                                     id="address"
                                     type="text"
                                     placeholder={t('customers.addressPlaceholder') || 'e.g. KG 7 Ave, Kigali'}
-                                    className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.address ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
+                                    className={`w-full rounded-md border bg-card ${formErrors.address ? 'border-red-500' : 'border-border'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-foreground`}
                                     {...register('address')}
                                 />
                                 {formErrors.address && (
-                                    <p className="mt-1 text-sm text-red-600">{formErrors.address.message}</p>
+                                    <p className="mt-1 text-sm text-danger">{formErrors.address.message}</p>
                                 )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label htmlFor="custPrvncNm" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        {t('customers.province')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                    <label htmlFor="custPrvncNm" className="block text-sm font-medium text-foreground mb-1">
+                                        {t('customers.province')} <span className="text-muted-foreground font-normal text-xs">({t('common.optional') || 'optional'})</span>
                                     </label>
                                     <input id="custPrvncNm" type="text" placeholder="e.g. Kigali City"
-                                        className="w-full rounded-md border bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                        className="w-full rounded-md border bg-card border-border px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
                                         {...register('custPrvncNm')} />
                                 </div>
                                 <div>
-                                    <label htmlFor="custDstrtNm" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        {t('customers.district')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                    <label htmlFor="custDstrtNm" className="block text-sm font-medium text-foreground mb-1">
+                                        {t('customers.district')} <span className="text-muted-foreground font-normal text-xs">({t('common.optional') || 'optional'})</span>
                                     </label>
                                     <input id="custDstrtNm" type="text" placeholder="e.g. Gasabo"
-                                        className="w-full rounded-md border bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                        className="w-full rounded-md border bg-card border-border px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
                                         {...register('custDstrtNm')} />
                                 </div>
                                 <div>
-                                    <label htmlFor="custSctrNm" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        {t('customers.sector')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                    <label htmlFor="custSctrNm" className="block text-sm font-medium text-foreground mb-1">
+                                        {t('customers.sector')} <span className="text-muted-foreground font-normal text-xs">({t('common.optional') || 'optional'})</span>
                                     </label>
                                     <input id="custSctrNm" type="text" placeholder="e.g. Remera"
-                                        className="w-full rounded-md border bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                        className="w-full rounded-md border bg-card border-border px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
                                         {...register('custSctrNm')} />
                                 </div>
                                 <div>
-                                    <label htmlFor="custLocDesc" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        {t('customers.streetCell')} <span className="text-gray-400 font-normal text-xs">({t('common.optional') || 'optional'})</span>
+                                    <label htmlFor="custLocDesc" className="block text-sm font-medium text-foreground mb-1">
+                                        {t('customers.streetCell')} <span className="text-muted-foreground font-normal text-xs">({t('common.optional') || 'optional'})</span>
                                     </label>
                                     <input id="custLocDesc" type="text" placeholder="e.g. KG 7 Ave"
-                                        className="w-full rounded-md border bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                        className="w-full rounded-md border bg-card border-border px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
                                         {...register('custLocDesc')} />
                                 </div>
                             </div>
@@ -303,7 +303,7 @@ export function CustomerForm({
                             <div>
                                 <label
                                     htmlFor="type"
-                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                    className="block text-sm font-medium text-foreground mb-1"
                                 >
                                     {t('customers.customerType')} *
                                 </label>
@@ -311,18 +311,18 @@ export function CustomerForm({
                                 <div className="relative w-full">
                                     <select
                                         id="type"
-                                        className={`w-full appearance-none rounded-md border bg-white dark:bg-gray-700 ${formErrors.type ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
+                                        className={`w-full appearance-none rounded-md border bg-card ${formErrors.type ? 'border-red-500' : 'border-border'} px-3 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-ring text-foreground`}
                                         {...register('type')}
                                     >
                                         <option value="INDIVIDUAL">{t('customers.individual')}</option>
                                         <option value="CORPORATE">{t('customers.corporate')}</option>
                                         <option value="INSURANCE">{t('customers.insurance')}</option>
                                     </select>
-                                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
+                                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 </div>
 
                                 {formErrors.type && (
-                                    <p className="mt-1 text-sm text-red-600">{formErrors.type.message}</p>
+                                    <p className="mt-1 text-sm text-danger">{formErrors.type.message}</p>
                                 )}
                             </div>
 
@@ -331,7 +331,7 @@ export function CustomerForm({
                                     <div>
                                         <label
                                             htmlFor="isrccCd"
-                                            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                            className="block text-sm font-medium text-foreground mb-1"
                                         >
                                             Insurance code (isrccCd) *
                                         </label>
@@ -340,18 +340,18 @@ export function CustomerForm({
                                             type="text"
                                             maxLength={10}
                                             placeholder="ISRCC01"
-                                            className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.isrccCd ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
+                                            className={`w-full rounded-md border bg-card ${formErrors.isrccCd ? 'border-red-500' : 'border-border'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-foreground`}
                                             {...register('isrccCd')}
                                         />
                                         {formErrors.isrccCd && (
-                                            <p className="mt-1 text-sm text-red-600">{formErrors.isrccCd.message}</p>
+                                            <p className="mt-1 text-sm text-danger">{formErrors.isrccCd.message}</p>
                                         )}
-                                        <p className="mt-1 text-xs text-gray-500">RRA insurance company code pushed via saveBrancheInsurances.</p>
+                                        <p className="mt-1 text-xs text-muted-foreground">RRA insurance company code pushed via saveBrancheInsurances.</p>
                                     </div>
                                     <div>
                                         <label
                                             htmlFor="isrcRt"
-                                            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                            className="block text-sm font-medium text-foreground mb-1"
                                         >
                                             Premium rate (%)
                                         </label>
@@ -361,11 +361,11 @@ export function CustomerForm({
                                             step="0.01"
                                             min={0}
                                             max={100}
-                                            className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.isrcRt ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white`}
+                                            className={`w-full rounded-md border bg-card ${formErrors.isrcRt ? 'border-red-500' : 'border-border'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-foreground`}
                                             {...register('isrcRt')}
                                         />
                                         {formErrors.isrcRt && (
-                                            <p className="mt-1 text-sm text-red-600">{formErrors.isrcRt.message}</p>
+                                            <p className="mt-1 text-sm text-danger">{formErrors.isrcRt.message}</p>
                                         )}
                                     </div>
                                 </>
@@ -374,7 +374,7 @@ export function CustomerForm({
                             <div>
                                 <label
                                     htmlFor="balance"
-                                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                                    className="block text-sm font-medium text-foreground mb-1"
                                 >
                                     {t('common.total')} *
                                 </label>
@@ -383,13 +383,13 @@ export function CustomerForm({
                                     id="balance"
                                     type="number"
                                     step="0.01"
-                                    className={`w-full rounded-md border bg-white dark:bg-gray-700 ${formErrors.balance ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white ${initialData?.id ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : ''}`}
+                                    className={`w-full rounded-md border bg-card ${formErrors.balance ? 'border-red-500' : 'border-border'} px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-foreground ${initialData?.id ? 'bg-muted cursor-not-allowed' : ''}`}
                                     {...register('balance')}
                                     readOnly={!!initialData?.id}
                                     disabled={!!initialData?.id}
                                 />
                                 {formErrors.balance && (
-                                    <p className="mt-1 text-sm text-red-600">{formErrors.balance.message}</p>
+                                    <p className="mt-1 text-sm text-danger">{formErrors.balance.message}</p>
                                 )}
                             </div>
 
@@ -397,7 +397,7 @@ export function CustomerForm({
                                 <button
                                     type="button"
                                     onClick={onClose}
-                                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                    className="px-4 py-2 text-sm font-medium text-foreground bg-card border border-border hover:bg-muted rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring"
                                     disabled={isLoading}
                                 >
                                     {t('common.cancel')}
@@ -406,7 +406,7 @@ export function CustomerForm({
                                 <button
                                     type="submit"
                                     disabled={isLoading}
-                                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-primary border border-transparent rounded-md shadow-sm hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isLoading ? (
                                         <span className="flex items-center">

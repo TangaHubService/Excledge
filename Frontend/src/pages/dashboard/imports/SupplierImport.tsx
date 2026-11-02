@@ -143,13 +143,13 @@ export function SupplierImport({ onSuccess }: SupplierImportProps) {
 
   return (
     <div className="space-y-6">
-      <div className={`p-6 rounded-xl border ${theme === "dark" ? "bg-gray-800/50 border-gray-700" : "bg-white border-gray-200"} shadow-sm`}>
+      <div className={`p-6 rounded-xl border ${theme === "dark" ? "bg-gray-800/50 border-gray-700" : "bg-card border-border"} shadow-sm`}>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
-            <h2 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+            <h2 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-foreground"}`}>
               {t('import.supplierImport')}
             </h2>
-            <p className={`text-sm mt-1 ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>
+            <p className={`text-sm mt-1 ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"}`}>
               {t('suppliers.title')}
             </p>
           </div>
@@ -158,7 +158,7 @@ export function SupplierImport({ onSuccess }: SupplierImportProps) {
             onClick={handleDownloadTemplate}
             className={`w-full md:w-auto shadow-sm transition-all hover:shadow-md ${theme === "dark"
               ? "bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-200"
-              : "bg-white border-gray-200 hover:bg-gray-50 text-gray-700"
+              : "bg-card border-border hover:bg-muted text-foreground"
               }`}
           >
             <Download className="h-4 w-4 mr-2" />
@@ -168,7 +168,7 @@ export function SupplierImport({ onSuccess }: SupplierImportProps) {
 
         <div className="grid grid-cols-1 gap-6">
           <div className="space-y-2">
-            <label className={`text-sm font-semibold tracking-tight ${theme === "dark" ? "text-gray-200" : "text-gray-700"}`}>
+            <label className={`text-sm font-semibold tracking-tight ${theme === "dark" ? "text-gray-200" : "text-foreground"}`}>
               {t('import.selectFile')}
             </label>
             <div
@@ -176,8 +176,8 @@ export function SupplierImport({ onSuccess }: SupplierImportProps) {
                 ? "opacity-50 cursor-not-allowed"
                 : "cursor-pointer"
                 } ${theme === "dark"
-                  ? "bg-gray-900/50 border-gray-700 hover:border-blue-500/50 hover:bg-gray-900"
-                  : "bg-gray-50/50 border-gray-200 hover:border-blue-400 hover:bg-gray-50"
+                  ? "bg-gray-900/50 border-gray-700 hover:border-primary/50 hover:bg-gray-900"
+                  : "bg-surface-subtle/50 border-border hover:border-primary hover:bg-muted"
                 }`}
             >
               <Input
@@ -188,25 +188,25 @@ export function SupplierImport({ onSuccess }: SupplierImportProps) {
                 disabled={previewing}
               />
               <div className="flex flex-col items-center justify-center space-y-3 text-center">
-                <div className={`p-3 rounded-full transition-transform group-hover:scale-110 ${theme === "dark" ? "bg-gray-800" : "bg-white shadow-sm"
+                <div className={`p-3 rounded-full transition-transform group-hover:scale-110 ${theme === "dark" ? "bg-gray-800" : "bg-card shadow-sm"
                   }`}>
-                  <FileSpreadsheet className={`h-8 w-8 ${theme === "dark" ? "text-blue-400" : "text-blue-500"}`} />
+                  <FileSpreadsheet className={`h-8 w-8 ${theme === "dark" ? "text-blue-400" : "text-primary"}`} />
                 </div>
                 <div className="space-y-1">
-                  <p className={`text-base font-medium ${theme === "dark" ? "text-gray-200" : "text-gray-900"}`}>
+                  <p className={`text-base font-medium ${theme === "dark" ? "text-gray-200" : "text-foreground"}`}>
                     {previewing ? t('import.previewing') : t('import.selectFile')}
                   </p>
-                  <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>
+                  <p className={`text-sm ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"}`}>
                     Excel files (.xlsx, .xls)
                   </p>
                 </div>
               </div>
 
               {previewing && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-gray-900/60 rounded-xl backdrop-blur-[1px] z-20">
+                <div className="absolute inset-0 flex items-center justify-center bg-card/60 rounded-xl backdrop-blur-[1px] z-20">
                   <div className="flex flex-col items-center gap-3">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                    <span className={`text-sm font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <span className={`text-sm font-medium ${theme === "dark" ? "text-white" : "text-foreground"}`}>
                       {t('import.previewing')}
                     </span>
                   </div>
@@ -221,11 +221,11 @@ export function SupplierImport({ onSuccess }: SupplierImportProps) {
         <DrawerContent
           className={`!max-w-[95vw] !w-[95vw] overflow-y-auto border-none shadow-2xl p-6 ${theme === "dark"
             ? "bg-gray-900 text-gray-100"
-            : "bg-white text-gray-900"
+            : "bg-card text-foreground"
             }`}
         >
           <DrawerHeader className="mb-6">
-            <DrawerTitle className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+            <DrawerTitle className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-foreground"}`}>
               {t('import.previewTitle')}
             </DrawerTitle>
           </DrawerHeader>
@@ -235,40 +235,40 @@ export function SupplierImport({ onSuccess }: SupplierImportProps) {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className={`p-5 rounded-2xl border transition-all ${theme === "dark"
                   ? "bg-gray-800/50 border-gray-700 hover:bg-gray-800"
-                  : "bg-gray-50 border-gray-100 hover:bg-white hover:shadow-md"
+                  : "bg-surface-subtle border-border hover:bg-card hover:shadow-md"
                   }`}>
-                  <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>
+                  <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"}`}>
                     {t('import.totalRows')}
                   </div>
-                  <div className={`text-3xl font-black ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                  <div className={`text-3xl font-black ${theme === "dark" ? "text-white" : "text-foreground"}`}>
                     {previewData.summary.total}
                   </div>
                 </div>
                 <div className={`p-5 rounded-2xl border transition-all ${theme === "dark"
-                  ? "bg-green-950/20 border-green-900/30 hover:bg-green-950/30"
-                  : "bg-green-50 border-green-100 hover:bg-white hover:shadow-md"
+                  ? "bg-success/20 border-green-900/30 hover:bg-success/30"
+                  : "bg-success/10 border-success/25 hover:bg-card hover:shadow-md"
                   }`}>
-                  <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme === "dark" ? "text-green-400" : "text-green-600"}`}>
+                  <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme === "dark" ? "text-green-400" : "text-success"}`}>
                     {t('import.valid')}
                   </div>
-                  <div className={`text-3xl font-black ${theme === "dark" ? "text-green-400" : "text-green-600"}`}>
+                  <div className={`text-3xl font-black ${theme === "dark" ? "text-green-400" : "text-success"}`}>
                     {previewData.summary.valid}
                   </div>
                 </div>
                 <div className={`p-5 rounded-2xl border transition-all ${theme === "dark"
-                  ? "bg-red-950/20 border-red-900/30 hover:bg-red-950/30"
-                  : "bg-red-50 border-red-100 hover:bg-white hover:shadow-md"
+                  ? "bg-danger/20 border-red-900/30 hover:bg-danger/30"
+                  : "bg-danger/10 border-danger/25 hover:bg-card hover:shadow-md"
                   }`}>
-                  <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme === "dark" ? "text-red-400" : "text-red-600"}`}>
+                  <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme === "dark" ? "text-red-400" : "text-danger"}`}>
                     {t('import.invalid')}
                   </div>
-                  <div className={`text-3xl font-black ${theme === "dark" ? "text-red-400" : "text-red-600"}`}>
+                  <div className={`text-3xl font-black ${theme === "dark" ? "text-red-400" : "text-danger"}`}>
                     {previewData.summary.invalid}
                   </div>
                 </div>
               </div>
 
-              <div className={`rounded-2xl border overflow-hidden ${theme === "dark" ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"
+              <div className={`rounded-2xl border overflow-hidden ${theme === "dark" ? "border-gray-700 bg-gray-900" : "border-border bg-card"
                 }`}>
                 <ImportPreviewTable
                   validRows={previewData.validRows}
@@ -280,13 +280,13 @@ export function SupplierImport({ onSuccess }: SupplierImportProps) {
             </div>
           )}
 
-          <DrawerFooter className={`mt-8 gap-3 sm:gap-0 pt-6 border-t ${theme === "dark" ? "border-gray-800" : "border-gray-100"
+          <DrawerFooter className={`mt-8 gap-3 sm:gap-0 pt-6 border-t ${theme === "dark" ? "border-gray-800" : "border-border"
             }`}>
             <Button
               variant="ghost"
               onClick={handleCancel}
               disabled={confirming}
-              className={`hover:bg-gray-100 dark:hover:bg-gray-800 font-medium`}
+              className={`hover:bg-muted font-medium`}
             >
               {t('common.cancel')}
             </Button>
@@ -298,17 +298,17 @@ export function SupplierImport({ onSuccess }: SupplierImportProps) {
                   disabled={confirming}
                   className={`${theme === "dark"
                     ? "bg-gray-800 border-gray-700 hover:bg-gray-700"
-                    : "bg-white border-gray-200 hover:bg-gray-50"
+                    : "bg-card border-border hover:bg-muted"
                     } font-medium`}
                 >
-                  <Download className="h-4 w-4 mr-2 text-red-500" />
+                  <Download className="h-4 w-4 mr-2 text-danger" />
                   {t('import.downloadErrorFile')}
                 </Button>
               )}
               <Button
                 onClick={handleConfirm}
                 disabled={!previewData || previewData.validRows.length === 0 || confirming}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg shadow-blue-500/20 px-6 transition-all active:scale-95"
+                className="bg-primary hover:bg-primary/90 text-white font-bold shadow-lg shadow-blue-500/20 px-6 transition-all active:scale-95"
               >
                 {confirming ? (
                   <>

@@ -11,7 +11,7 @@ export const SuppliersTable: React.FC<SuppliersTableProps> = ({ suppliers, onAdd
   
   if (suppliers.length === 0) {
     return (
-      <div className="flex flex-col items-center py-10 text-center text-gray-500">
+      <div className="flex flex-col items-center py-10 text-center text-muted-foreground">
         <p>No suppliers found</p>
         <button
           type="button"
@@ -26,20 +26,20 @@ export const SuppliersTable: React.FC<SuppliersTableProps> = ({ suppliers, onAdd
   }
 
   return (
-    <div className="overflow-x-auto dark:bg-gray-800 rounded-lg">
+    <div className="overflow-x-auto rounded-lg">
       <table className="w-full">
-        <thead className={theme === "dark" ? "bg-gray-700" : "bg-gray-50"}>
+        <thead className={theme === "dark" ? "bg-gray-700" : "bg-surface-subtle"}>
           <tr>
-            <th className="py-3 px-4 text-left text-sm font-medium text-gray-700 dark:text-white">{t('common.id')}</th>
-            <th className="py-3 px-4 text-left text-sm font-medium text-gray-700 dark:text-white">{t('common.name')}</th>
-            <th className="py-3 px-4 text-left text-sm font-medium text-gray-700 dark:text-white">{t('common.email')}</th>
-            <th className="py-3 px-4 text-left text-sm font-medium text-gray-700 dark:text-white">{t('common.phone')}</th>
-            <th className="py-3 px-4 text-left text-sm font-medium text-gray-700 dark:text-white">{t('suppliers.contactPerson')}</th>
-            <th className="py-3 px-4 text-left text-sm font-medium text-gray-700 dark:text-white">{t('common.address')}</th>
-            <th className="py-3 px-4 text-right text-sm font-medium text-gray-700 dark:text-white">{t('common.actions')}</th>
+            <th className="py-3 px-4 text-left text-sm font-medium text-foreground">{t('common.id')}</th>
+            <th className="py-3 px-4 text-left text-sm font-medium text-foreground">{t('common.name')}</th>
+            <th className="py-3 px-4 text-left text-sm font-medium text-foreground">{t('common.email')}</th>
+            <th className="py-3 px-4 text-left text-sm font-medium text-foreground">{t('common.phone')}</th>
+            <th className="py-3 px-4 text-left text-sm font-medium text-foreground">{t('suppliers.contactPerson')}</th>
+            <th className="py-3 px-4 text-left text-sm font-medium text-foreground">{t('common.address')}</th>
+            <th className="py-3 px-4 text-right text-sm font-medium text-foreground">{t('common.actions')}</th>
           </tr>
         </thead>
-        <tbody className="bg-white dark:bg-gray-800 rounded-lg">
+        <tbody className="bg-card rounded-lg">
           {suppliers.map((supplier) => (
             <SupplierRow
               key={supplier.id}

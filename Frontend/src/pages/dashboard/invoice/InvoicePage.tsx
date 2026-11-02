@@ -143,22 +143,22 @@ export default function InvoicePage() {
   const isFetching = invoiceQuery.isFetching || pdfQuery.isFetching
 
   return (
-    <div className="min-h-screen bg-slate-100 py-6 dark:bg-slate-950">
+    <div className="min-h-screen bg-muted py-6">
       <div className="mx-auto max-w-5xl px-4">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 shadow-sm">
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
               <ArrowLeft className="size-4" /> Back
             </Button>
             <div>
-              <h1 className="text-sm font-bold text-slate-900">EBM Invoice</h1>
-              <p className="text-[11px] text-slate-500">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">EBM Invoice</h1>
+              <p className="text-[11px] text-muted-foreground">
                 {data ? `${data.invoice.invoiceNumber} · ${data.invoice.paymentMethod || "—"}` : "Loading invoice…"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center rounded-lg border border-slate-200 p-0.5">
+            <div className="flex items-center rounded-lg border border-border p-0.5">
               {FORMAT_OPTIONS.map((option) => (
                 <button
                   key={option.value}
@@ -168,7 +168,7 @@ export default function InvoicePage() {
                     "rounded-md px-2.5 py-1 text-xs font-semibold transition-colors",
                     format === option.value
                       ? "bg-slate-900 text-white"
-                      : "text-slate-600 hover:bg-slate-100",
+                      : "text-muted-foreground hover:bg-muted",
                   )}
                 >
                   {option.label}
@@ -208,24 +208,24 @@ export default function InvoicePage() {
         {isLoading ? (
           <InvoiceSkeleton />
         ) : isError ? (
-          <div className="mx-auto flex max-w-xl flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
-            <ReceiptText className="h-10 w-10 text-red-500" />
-            <h2 className="text-base font-bold text-slate-900">Could not load the invoice</h2>
-            <p className="text-sm text-slate-500">The authoritative PDF could not be fetched from the server.</p>
+          <div className="mx-auto flex max-w-xl flex-col items-center gap-3 rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
+            <ReceiptText className="h-10 w-10 text-danger" />
+            <h2 className="text-base font-bold text-foreground">Could not load the invoice</h2>
+            <p className="text-sm text-muted-foreground">The authoritative PDF could not be fetched from the server.</p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => navigate("/dashboard/sales")}>Go to Sales</Button>
               <Button size="sm" onClick={refresh}><RefreshCw className="size-4" /> Retry</Button>
             </div>
           </div>
         ) : !data || !pdfUrl ? (
-          <div className="mx-auto flex max-w-xl flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
-            <ReceiptText className="h-10 w-10 text-slate-300" />
-            <h2 className="text-base font-bold text-slate-900">No invoice found</h2>
+          <div className="mx-auto flex max-w-xl flex-col items-center gap-3 rounded-xl border border-border bg-card px-6 py-12 text-center shadow-sm">
+            <ReceiptText className="h-10 w-10 text-muted-foreground/60" />
+            <h2 className="text-base font-bold text-foreground">No invoice found</h2>
           </div>
         ) : (
           <div className="space-y-2">
             {data.invoice.notFiscalized ? (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+              <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[13px] text-warning">
                 <strong className="font-bold">NOT FISCALISED.</strong>{" "}
                 {data.invoice.notFiscalized === "failed"
                   ? "This sale could not be confirmed by RRA VSDC. "
@@ -233,12 +233,12 @@ export default function InvoicePage() {
                 The document below is provisional — it carries no SDC signature, receipt number or QR and is not a valid tax receipt.
               </div>
             ) : null}
-            <div className="overflow-hidden rounded-xl border border-slate-300 bg-slate-200 p-2 shadow-sm sm:p-4">
+            <div className="overflow-hidden rounded-xl border border-border bg-muted p-2 shadow-sm sm:p-4">
               <iframe
                 title={`Invoice ${data.invoice.invoiceNumber}`}
                 src={pdfUrl}
                 className={cn(
-                  "mx-auto block min-h-[75vh] bg-white",
+                  "mx-auto block min-h-[75vh] bg-card",
                   format === "80mm"
                     ? "w-full max-w-[80mm]"
                     : format === "A5"

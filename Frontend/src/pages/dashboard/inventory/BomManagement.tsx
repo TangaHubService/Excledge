@@ -175,8 +175,8 @@ export const BomManagement = ({ productId, organizationId, branchId }: {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Bill of Materials</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <h2 className="text-lg font-semibold text-foreground">Bill of Materials</h2>
+          <p className="text-sm text-muted-foreground">
             Define raw materials required to produce one unit of this finished product
           </p>
         </div>
@@ -188,12 +188,12 @@ export const BomManagement = ({ productId, organizationId, branchId }: {
 
       {/* Cost Summary */}
       {cost && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+        <div className="bg-card rounded-xl border border-border p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Production Cost per Unit</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {cost.totalCost.toLocaleString()} <span className="text-sm font-normal text-gray-400">Frw</span>
+              <p className="text-sm font-medium text-muted-foreground">Total Production Cost per Unit</p>
+              <p className="text-2xl font-bold text-foreground">
+                {cost.totalCost.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">Frw</span>
               </p>
             </div>
             <Button variant="outline" onClick={fetchCost} disabled={loading} size="sm">
@@ -203,8 +203,8 @@ export const BomManagement = ({ productId, organizationId, branchId }: {
           </div>
           <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
             {cost.components.map((comp, idx) => (
-              <div key={idx} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
-                <p className="text-xs text-gray-500 dark:text-gray-400">{comp.name}</p>
+              <div key={idx} className="bg-surface-subtle rounded-lg p-3">
+                <p className="text-xs text-muted-foreground">{comp.name}</p>
                 <p className="font-semibold">{comp.quantity} × {comp.unitCost.toLocaleString()} = {comp.totalCost.toLocaleString()} Frw</p>
               </div>
             ))}
@@ -213,14 +213,14 @@ export const BomManagement = ({ productId, organizationId, branchId }: {
       )}
 
       {/* Components Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
         {components.length === 0 ? (
           <div className="py-12 text-center">
-            <div className="mx-auto h-12 w-12 text-gray-300">
+            <div className="mx-auto h-12 w-12 text-muted-foreground/60">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="h-12 w-12"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
             </div>
-            <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">No BOM Components</h3>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Add raw materials to define the recipe for this finished product</p>
+            <h3 className="mt-4 text-lg font-medium text-foreground">No BOM Components</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Add raw materials to define the recipe for this finished product</p>
             <Button onClick={() => setAddDialogOpen(true)} className="mt-4">
               <Plus className="h-4 w-4 mr-2" />
               Add First Component
@@ -228,44 +228,44 @@ export const BomManagement = ({ productId, organizationId, branchId }: {
           </div>
         ) : (
           <Table>
-            <TableHeader className="bg-gray-50 dark:bg-gray-700/50">
+            <TableHeader className="bg-surface-subtle">
               <TableRow>
-                <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-3">Raw Material</TableHead>
-                <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-3">Qty per Unit</TableHead>
-                <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-3">Unit</TableHead>
-                <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-3">Unit Cost</TableHead>
-                <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-3">Total Cost/Unit</TableHead>
-                <TableHead className="text-xs font-semibold text-gray-600 dark:text-gray-300 px-4 py-3 w-16">Actions</TableHead>
+                <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-3">Raw Material</TableHead>
+                <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-3">Qty per Unit</TableHead>
+                <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-3">Unit</TableHead>
+                <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-3">Unit Cost</TableHead>
+                <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-3">Total Cost/Unit</TableHead>
+                <TableHead className="text-xs font-semibold text-muted-foreground px-4 py-3 w-16">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {components.map((comp) => (
-                <TableRow key={comp.componentProductId} className="border-t border-gray-100 dark:border-gray-700/50">
+                <TableRow key={comp.componentProductId} className="border-t border-border">
                   <TableCell className="px-4 py-3">
                     <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{comp.componentProduct.name}</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">
+                      <p className="font-medium text-foreground">{comp.componentProduct.name}</p>
+                      <p className="text-xs text-muted-foreground">
                         SKU: {comp.componentProduct.sku || 'N/A'} • Stock: {comp.componentProduct.quantity} {comp.componentProduct.measurementUnit}
                       </p>
                     </div>
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-center font-mono text-gray-900 dark:text-white">
+                  <TableCell className="px-4 py-3 text-center font-mono text-foreground">
                     {Number(comp.quantity)}
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-center text-gray-600 dark:text-gray-300">
+                  <TableCell className="px-4 py-3 text-center text-muted-foreground">
                     {comp.unit}
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
+                  <TableCell className="px-4 py-3 text-right font-medium text-foreground">
                     {Number(comp.componentProduct.unitPrice).toLocaleString()} Frw
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-right font-semibold text-blue-600 dark:text-blue-400">
+                  <TableCell className="px-4 py-3 text-right font-semibold text-primary">
                     {(Number(comp.quantity) * Number(comp.componentProduct.unitPrice)).toLocaleString()} Frw
                   </TableCell>
                   <TableCell className="px-4 py-3 text-center">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+                      className="text-danger hover:text-danger hover:bg-danger/10 dark:hover:bg-danger/20"
                       onClick={() => handleRemoveComponent(comp.componentProductId)}
                       disabled={loading}
                     >

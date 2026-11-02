@@ -110,8 +110,8 @@ const AcceptInvitationContent: React.FC<AcceptInvitationContentProps> = ({
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
-                <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 space-y-6">
+            <div className="min-h-screen flex items-center justify-center bg-surface-subtle p-4">
+                <div className="w-full max-w-md bg-card rounded-xl shadow-sm border border-border p-6 space-y-6">
                     <div className="space-y-4 text-center">
                         <Skeleton className="h-10 w-10 rounded-lg mx-auto" />
                         <div className="space-y-2">
@@ -131,14 +131,14 @@ const AcceptInvitationContent: React.FC<AcceptInvitationContentProps> = ({
 
     if (error || !invitation) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
-                <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-red-100 dark:border-red-900/20 p-6">
+            <div className="min-h-screen flex items-center justify-center bg-surface-subtle p-4">
+                <div className="w-full max-w-md bg-card rounded-xl shadow-sm border border-danger/25 dark:border-red-900/20 p-6">
                     <div className="text-center pb-4">
-                        <div className="mx-auto w-10 h-10 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-3">
-                            <XCircle className="h-5 w-5 text-red-500" />
+                        <div className="mx-auto w-10 h-10 bg-danger/10 dark:bg-danger/20 rounded-full flex items-center justify-center mb-3">
+                            <XCircle className="h-5 w-5 text-danger" />
                         </div>
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Unable to Process Invitation</h2>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <h2 className="text-lg font-semibold text-foreground dark:text-white">Unable to Process Invitation</h2>
+                        <p className="text-xs text-muted-foreground mt-1">
                             {error || "This invitation link is invalid or has expired."}
                         </p>
                     </div>
@@ -157,23 +157,23 @@ const AcceptInvitationContent: React.FC<AcceptInvitationContentProps> = ({
             className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat transition-all duration-500"
             style={{ backgroundImage: "url('/auth-bg.png')" }}
         >
-            <div className="absolute inset-0 bg-blue-900/10 backdrop-blur-[2px]"></div>
+            <div className="absolute inset-0 bg-primary/10 backdrop-blur-[2px]"></div>
 
             <div className="relative w-full max-w-[450px] mx-4">
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden text-sm">
-                    <div className="p-6 border-b border-gray-100 dark:border-gray-700">
+                <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden text-sm">
+                    <div className="p-6 border-b border-border">
                         <div className="flex items-center gap-3 mb-2">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
                                 <Package className="h-6 w-6 text-white" />
                             </div>
-                            <h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">
+                            <h1 className="text-xl font-bold text-foreground dark:text-white tracking-tight">
                                 Excledge
                             </h1>
                         </div>
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        <h2 className="text-lg font-semibold text-foreground dark:text-white">
                             Join the Team
                         </h2>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
+                        <p className="text-muted-foreground mt-1 leading-relaxed">
                             You've been invited to collabrate with {invitation.organization.name}.
                         </p>
                     </div>
@@ -184,16 +184,16 @@ const AcceptInvitationContent: React.FC<AcceptInvitationContentProps> = ({
                                 <img
                                     src={invitation.organization.avatar}
                                     alt={invitation.organization.name}
-                                    className="h-12 w-12 rounded-lg object-cover border border-gray-100 dark:border-gray-700"
+                                    className="h-12 w-12 rounded-lg object-cover border border-border"
                                 />
                             ) : (
-                                <div className="h-12 w-12 rounded-lg bg-blue-600 flex items-center justify-center text-white text-lg font-bold">
+                                <div className="h-12 w-12 rounded-lg bg-primary flex items-center justify-center text-white text-lg font-bold">
                                     {invitation.organization.name.charAt(0).toUpperCase()}
                                 </div>
                             )}
                             <div className="flex-1">
-                                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-0.5">{invitation.organization.name}</h3>
-                                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                <h3 className="text-base font-semibold text-foreground dark:text-white mb-0.5">{invitation.organization.name}</h3>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                     <Building2 className="h-3.5 w-3.5" />
                                     <span className="capitalize">{invitation.organization.businessType.replace(/_/g, " ")}</span>
                                 </div>
@@ -202,11 +202,11 @@ const AcceptInvitationContent: React.FC<AcceptInvitationContentProps> = ({
 
                         <div className="space-y-6">
                             {isExpired && (
-                                <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 flex items-start gap-3">
-                                    <XCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                                <div className="p-3 rounded-lg bg-danger/10 dark:bg-danger/10 border border-danger/25 dark:border-red-900/20 flex items-start gap-3">
+                                    <XCircle className="h-4 w-4 text-danger mt-0.5" />
                                     <div>
-                                        <h4 className="text-xs font-semibold text-red-900 dark:text-red-200">Invitation Expired</h4>
-                                        <p className="text-xs text-red-700 dark:text-red-300 mt-0.5">
+                                        <h4 className="text-xs font-semibold text-danger dark:text-red-200">Invitation Expired</h4>
+                                        <p className="text-xs text-danger dark:text-red-300 mt-0.5">
                                             This invitation link is no longer valid.
                                         </p>
                                     </div>
@@ -215,34 +215,34 @@ const AcceptInvitationContent: React.FC<AcceptInvitationContentProps> = ({
 
                             {!isExpired && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700/30 border border-gray-100 dark:border-gray-700/50">
-                                        <div className="flex items-center gap-2 text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
+                                    <div className="p-3 rounded-lg bg-surface-subtle border border-border">
+                                        <div className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">
                                             <Shield className="h-3 w-3" />
                                             Role
                                         </div>
-                                        <div className="font-semibold text-gray-900 dark:text-white capitalize text-xs">
+                                        <div className="font-semibold text-foreground dark:text-white capitalize text-xs">
                                             {invitation.role.replace(/_/g, " ")}
                                         </div>
                                     </div>
-                                    <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700/30 border border-gray-100 dark:border-gray-700/50">
-                                        <div className="flex items-center gap-2 text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
+                                    <div className="p-3 rounded-lg bg-surface-subtle border border-border">
+                                        <div className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">
                                             <Mail className="h-3 w-3" />
                                             Email Address
                                         </div>
-                                        <div className="font-semibold text-gray-900 dark:text-white truncate text-xs" title={invitation.email}>
+                                        <div className="font-semibold text-foreground dark:text-white truncate text-xs" title={invitation.email}>
                                             {invitation.email}
                                         </div>
                                     </div>
                                     {invitation.branch && (
-                                        <div className="col-span-full p-3 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20">
-                                            <div className="flex items-center gap-2 text-[10px] font-medium text-blue-600 dark:text-blue-400 mb-1 uppercase tracking-wider">
+                                        <div className="col-span-full p-3 rounded-lg bg-primary/10 border border-primary/30">
+                                            <div className="flex items-center gap-2 text-[10px] font-medium text-primary mb-1 uppercase tracking-wider">
                                                 <GitBranch className="h-3 w-3" />
                                                 Branch Access
                                             </div>
-                                            <div className="font-semibold text-blue-900 dark:text-blue-200 text-xs">
+                                            <div className="font-semibold text-primary text-xs">
                                                 {invitation.branch.name} ({invitation.branch.code})
                                             </div>
-                                            <p className="text-[10px] text-blue-600/70 dark:text-blue-300/70 mt-0.5">
+                                            <p className="text-[10px] text-primary/70 mt-0.5">
                                                 Your access will be restricted to this branch
                                             </p>
                                         </div>
@@ -251,7 +251,7 @@ const AcceptInvitationContent: React.FC<AcceptInvitationContentProps> = ({
                             )}
 
                             <div className="space-y-1.5">
-                                <label htmlFor="name" className="text-xs font-medium text-gray-700 dark:text-gray-200">
+                                <label htmlFor="name" className="text-xs font-medium text-foreground">
                                     Confirm your full name
                                 </label>
                                 <input
@@ -264,13 +264,13 @@ const AcceptInvitationContent: React.FC<AcceptInvitationContentProps> = ({
                                     }}
                                     disabled={processing || isExpired}
                                     placeholder="e.g. John Doe"
-                                    className={`flex h-10 w-full rounded-lg border bg-white dark:bg-gray-900 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50 ${nameError
+                                    className={`flex h-10 w-full rounded-lg border bg-card px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary disabled:cursor-not-allowed disabled:opacity-50 ${nameError
                                         ? "border-red-500"
-                                        : "border-gray-300 dark:border-gray-600"
+                                        : "border-border"
                                         }`}
                                 />
                                 {nameError && (
-                                    <p className="text-[10px] text-red-500 font-medium flex items-center gap-1">
+                                    <p className="text-[10px] text-danger font-medium flex items-center gap-1">
                                         <XCircle className="h-2.5 w-2.5" /> {nameError}
                                     </p>
                                 )}
@@ -289,7 +289,7 @@ const AcceptInvitationContent: React.FC<AcceptInvitationContentProps> = ({
                             <Button
                                 onClick={handleAccept}
                                 disabled={processing || isExpired || !name.trim()}
-                                className="flex-1 h-10 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-all active:scale-[0.99]"
+                                className="flex-1 h-10 bg-primary hover:bg-primary/90 text-white text-xs font-semibold rounded-lg transition-all active:scale-[0.99]"
                             >
                                 {processing ? "Processing..." : "Accept Invitation"}
                             </Button>
@@ -315,8 +315,8 @@ export const AcceptInvitationPage: React.FC = () => {
     return (
         <Suspense
             fallback={
-                <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
-                    <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 space-y-6">
+                <div className="min-h-screen flex items-center justify-center bg-surface-subtle p-4">
+                    <div className="w-full max-w-md bg-card rounded-xl shadow-sm border border-border p-6 space-y-6">
                         <div className="space-y-4 text-center">
                             <Skeleton className="h-10 w-10 rounded-lg mx-auto" />
                             <Skeleton className="h-4 w-3/4 mx-auto" />

@@ -75,6 +75,15 @@ export default {
                     DEFAULT: 'hsl(var(--popover) / <alpha-value>)',
                     foreground: 'hsl(var(--popover-foreground) / <alpha-value>)',
                 },
+                success: 'hsl(var(--success) / <alpha-value>)',
+                warning: 'hsl(var(--warning) / <alpha-value>)',
+                danger: 'hsl(var(--danger) / <alpha-value>)',
+                chart: {
+                    sales: 'hsl(var(--chart-sales) / <alpha-value>)',
+                    expenses: 'hsl(var(--chart-expenses) / <alpha-value>)',
+                    grid: 'hsl(var(--chart-grid) / <alpha-value>)',
+                },
+                'surface-subtle': 'hsl(var(--surface-subtle) / <alpha-value>)',
 
                 // ── Inventory health ─────────────────────────────────
                 stock: {

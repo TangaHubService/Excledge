@@ -90,7 +90,7 @@ export function PaymentModal({ sale, onClose, onPaymentSuccess }: PaymentModalPr
         <Drawer open onOpenChange={(open) => !open && onClose()}>
             <DrawerContent>
                 <DrawerHeader>
-                    <DrawerTitle className="text-blue-600">{t('debtManagement.recordPayment')}</DrawerTitle>
+                    <DrawerTitle className="text-primary">{t('debtManagement.recordPayment')}</DrawerTitle>
                 </DrawerHeader>
 
                 <div className="mb-4 bg-muted/30 rounded-md flex justify-between gap-2 mx-6">
@@ -125,10 +125,10 @@ export function PaymentModal({ sale, onClose, onPaymentSuccess }: PaymentModalPr
                             onValueChange={setPaymentMethod}
                             disabled={isSubmitting}
                         >
-                            <SelectTrigger className="w-full bg-white dark:bg-gray-700 data-[placeholder]:text-gray-400">
+                            <SelectTrigger className="w-full bg-card data-[placeholder]:text-gray-400">
                                 <SelectValue placeholder={t('pos.selectCustomer')} />
                             </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-gray-700 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 dark:bg-gray-900 dark:text-white">
+                            <SelectContent className="bg-card data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 dark:text-white">
                                 <SelectItem value="CASH">{t('pos.paymentMethods.CASH')}</SelectItem>
                                 <SelectItem value="CREDIT_CARD">{t('pos.paymentMethods.CREDIT_CARD')}</SelectItem>
                                 <SelectItem value="MOBILE_MONEY">{t('pos.paymentMethods.MOBILE_MONEY')}</SelectItem>
@@ -162,7 +162,7 @@ export function PaymentModal({ sale, onClose, onPaymentSuccess }: PaymentModalPr
                         type="submit"
                         onClick={handleSubmit}
                         disabled={isSubmitting || !amount || (isOtherMethod && !otherPaymentMethod.trim())}
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                        className="bg-primary hover:bg-primary/90 text-white"
                     >
                         {isSubmitting ? (
                             <>

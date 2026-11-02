@@ -18,15 +18,15 @@ export const SuppliersCard: React.FC<SuppliersCardProps> = ({
 
   return (
     <div className={`rounded-xl border shadow-sm overflow-hidden ${
-      theme === "dark" ? "bg-gray-800/50 border-gray-700" : "bg-white border-gray-200"
+      theme === "dark" ? "bg-gray-800/50 border-gray-700" : "bg-card border-border"
     }`}>
-      <div className="p-6 border-b border-gray-100 dark:border-gray-700/50">
+      <div className="p-6 border-b border-border">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h2 className={`text-xl font-bold tracking-tight ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+            <h2 className={`text-xl font-bold tracking-tight ${theme === "dark" ? "text-white" : "text-foreground"}`}>
               All Suppliers
             </h2>
-            <p className={`text-sm mt-1 ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>
+            <p className={`text-sm mt-1 ${theme === "dark" ? "text-muted-foreground" : "text-muted-foreground"}`}>
               View and manage all your suppliers
             </p>
           </div>

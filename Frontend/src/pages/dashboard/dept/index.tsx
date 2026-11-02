@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import { apiClient } from '../../../lib/api-client';
 import { PaymentModal } from '../../../components/dept/PaymentModal';
 import { toast } from 'react-toastify';
-import { Loader2, CreditCard, AlertCircle, Users, TrendingDown } from 'lucide-react';
+import { Loader2, AlertCircle, Users, TrendingDown } from 'lucide-react';
 import { PaymentHistory } from '../../../components/dept/PaymentHistory';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table';
 import { useTranslation } from 'react-i18next';
+import { PageHeader } from "../../../components/common/PageHeader";
 
 export default function DebtManagement() {
     const { t } = useTranslation();
@@ -97,54 +98,42 @@ export default function DebtManagement() {
     const totalDebt = outstandingDebts.reduce((sum: number, s: any) => sum + (Number(s.debtAmount) || 0), 0);
 
     return (
-        <div className="space-y-6 p-4 md:p-6">
+        <div className="space-y-6">
             {/* Page Header */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 p-6 text-white shadow-lg">
-                <div className="pointer-events-none absolute inset-0 bg-black/10" />
-                <div className="relative flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-                        <CreditCard className="h-7 w-7 text-white" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight">{t('debtManagement.title')}</h1>
-                        <p className="text-sm text-white/70 mt-0.5">
-                            Track and manage outstanding customer debts and payment records
-                        </p>
-                    </div>
-                </div>
-                <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/5" />
-                <div className="pointer-events-none absolute -right-4 -bottom-12 h-56 w-56 rounded-full bg-white/5" />
-            </div>
+            <PageHeader
+              title={t('debtManagement.title')}
+              description={<>Track and manage outstanding customer debts and payment records</>}
+            />
 
             {/* KPI Cards */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-900/20 flex-shrink-0">
-                        <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                <div className="bg-card rounded-xl border border-border shadow-sm p-4 flex items-center gap-4">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-danger/10 dark:bg-danger/20 flex-shrink-0">
+                        <AlertCircle className="h-5 w-5 text-danger dark:text-red-400" />
                     </div>
                     <div>
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Outstanding Debts</p>
-                        <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">{outstandingDebts.length}</p>
+                        <p className="text-xs font-medium text-muted-foreground">Outstanding Debts</p>
+                        <p className="text-2xl font-bold text-foreground tabular-nums">{outstandingDebts.length}</p>
                     </div>
                 </div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-50 dark:bg-rose-900/20 flex-shrink-0">
-                        <TrendingDown className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                <div className="bg-card rounded-xl border border-border shadow-sm p-4 flex items-center gap-4">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-danger/10 dark:bg-danger/20 flex-shrink-0">
+                        <TrendingDown className="h-5 w-5 text-danger dark:text-rose-400" />
                     </div>
                     <div>
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Total Debt Amount</p>
-                        <p className="text-xl font-bold text-gray-900 dark:text-white tabular-nums">
-                            {totalDebt.toLocaleString()} <span className="text-xs font-medium text-gray-400">RWF</span>
+                        <p className="text-xs font-medium text-muted-foreground">Total Debt Amount</p>
+                        <p className="text-xl font-bold text-foreground tabular-nums">
+                            {totalDebt.toLocaleString()} <span className="text-xs font-medium text-muted-foreground">RWF</span>
                         </p>
                     </div>
                 </div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/20 flex-shrink-0">
-                        <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <div className="bg-card rounded-xl border border-border shadow-sm p-4 flex items-center gap-4">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 flex-shrink-0">
+                        <Users className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Customers with Debt</p>
-                        <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
+                        <p className="text-xs font-medium text-muted-foreground">Customers with Debt</p>
+                        <p className="text-2xl font-bold text-foreground tabular-nums">
                             {new Set(outstandingDebts.map((s: any) => s.customer?.id)).size}
                         </p>
                     </div>
@@ -152,7 +141,7 @@ export default function DebtManagement() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-                <TabsList className="bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                <TabsList className="bg-muted p-1 rounded-lg">
                     <TabsTrigger
                         value="outstanding"
                         className="rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm data-[state=active]:text-red-600 font-medium"
@@ -168,8 +157,8 @@ export default function DebtManagement() {
                 </TabsList>
 
                 <TabsContent value="outstanding" className="space-y-4">
-                    <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
-                        <CardHeader className="border-b border-gray-100 dark:border-gray-700">
+                    <Card className="bg-card border border-border shadow-sm">
+                        <CardHeader className="border-b border-border">
                             <CardTitle>{t('debtManagement.outstandingDebts')}</CardTitle>
                         </CardHeader>
                         <CardContent>
@@ -186,29 +175,29 @@ export default function DebtManagement() {
 
                                     <Table>
                                         <TableHeader>
-                                            <TableRow className="bg-gray-50 dark:bg-gray-700/50">
-                                                <TableHead className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('debtManagement.saleNumber')}</TableHead>
-                                                <TableHead className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('debtManagement.customer')}</TableHead>
-                                                <TableHead className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('debtManagement.dueAmount')}</TableHead>
-                                                <TableHead className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center">{t('debtManagement.action')}</TableHead>
+                                            <TableRow className="bg-surface-subtle">
+                                                <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('debtManagement.saleNumber')}</TableHead>
+                                                <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('debtManagement.customer')}</TableHead>
+                                                <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('debtManagement.dueAmount')}</TableHead>
+                                                <TableHead className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">{t('debtManagement.action')}</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {outstandingDebts.map((sale: any) => (
-                                                <TableRow key={sale.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                                <TableRow key={sale.id} className="hover:bg-muted transition-colors">
                                                     <TableCell>
-                                                        <span className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">{sale.saleNumber}</span>
+                                                        <span className="font-mono text-sm font-semibold text-primary">{sale.saleNumber}</span>
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex items-center gap-2.5">
                                                             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-rose-600 text-white text-xs font-bold flex-shrink-0">
                                                                 {(sale.customer?.name || 'C').charAt(0).toUpperCase()}
                                                             </div>
-                                                            <span className="font-medium text-sm text-gray-900 dark:text-white">{sale.customer?.name}</span>
+                                                            <span className="font-medium text-sm text-foreground">{sale.customer?.name}</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <span className="text-red-600 dark:text-red-400 font-bold text-sm">
+                                                        <span className="text-danger dark:text-red-400 font-bold text-sm">
                                                             {Number(sale.debtAmount).toLocaleString()} RWF
                                                         </span>
                                                     </TableCell>
@@ -219,7 +208,7 @@ export default function DebtManagement() {
                                                                 setSelectedSale(sale);
                                                                 setShowPaymentModal(true);
                                                             }}
-                                                            className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                                                            className="h-7 px-3 text-xs bg-primary hover:bg-primary/90 text-white"
                                                         >
                                                             {t('debtManagement.recordPayment')}
                                                         </Button>
@@ -236,9 +225,9 @@ export default function DebtManagement() {
 
 
                 <TabsContent value="history" className="space-y-4">
-                    <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
-                        <CardHeader className="border-b border-gray-100 dark:border-gray-700">
-                            <CardTitle className="text-base font-semibold text-gray-900 dark:text-white">{t('debtManagement.paymentHistory')}</CardTitle>
+                    <Card className="bg-card border border-border shadow-sm">
+                        <CardHeader className="border-b border-border">
+                            <CardTitle className="text-base font-semibold text-foreground">{t('debtManagement.paymentHistory')}</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <PaymentHistory

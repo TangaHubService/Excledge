@@ -9,9 +9,9 @@ interface BranchBadgeProps {
 }
 
 const statusDot: Record<string, string> = {
-  ACTIVE: 'bg-emerald-500',
+  ACTIVE: 'bg-success',
   INACTIVE: 'bg-slate-400',
-  SUSPENDED: 'bg-red-500',
+  SUSPENDED: 'bg-danger',
 }
 
 export function BranchBadge({ name, isAllBranches, isPrimary, status = 'ACTIVE', className }: BranchBadgeProps) {
@@ -20,10 +20,10 @@ export function BranchBadge({ name, isAllBranches, isPrimary, status = 'ACTIVE',
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-caption font-medium',
         isAllBranches
-          ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
+          ? 'bg-violet-500/10 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
           : isPrimary
-            ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-            : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+            ? 'bg-primary/10 text-primary'
+            : 'bg-surface-subtle text-muted-foreground',
         className,
       )}
     >

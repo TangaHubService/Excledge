@@ -114,10 +114,10 @@ export const DurationSelector = ({
     return (
         <div className="space-y-4">
             <div>
-                <Label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                <Label className="mb-2 block text-sm font-semibold text-foreground">
                     Billing
                 </Label>
-                <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-1 bg-gray-50 dark:bg-gray-800">
+                <div className="inline-flex rounded-lg border border-border p-1 bg-surface-subtle">
                     {(['MONTHLY', 'YEARLY'] as BillingMode[]).map((mode) => (
                         <button
                             key={mode}
@@ -126,8 +126,8 @@ export const DurationSelector = ({
                             onClick={() => setBillingMode(mode)}
                             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                                 value.billingMode === mode
-                                    ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                    ? 'bg-card text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
                             }`}
                         >
                             {mode === 'MONTHLY' ? 'Monthly' : `Yearly (${yearlyDiscountPercent}% off)`}
@@ -137,7 +137,7 @@ export const DurationSelector = ({
             </div>
 
             <div>
-                <Label htmlFor="duration-units" className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                <Label htmlFor="duration-units" className="mb-2 block text-sm font-semibold text-foreground">
                     {isYearly ? 'Number of Years' : 'Number of Months'}
                 </Label>
                 <Input
@@ -154,27 +154,27 @@ export const DurationSelector = ({
                 />
             </div>
 
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 space-y-2 text-sm">
+            <div className="rounded-lg border border-border bg-surface-subtle p-4 space-y-2 text-sm">
                 <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">Monthly Price</span>
-                    <span className="font-medium text-gray-900 dark:text-gray-100">{formatCurrency(monthlyPrice, currency)}</span>
+                    <span className="text-muted-foreground">Monthly Price</span>
+                    <span className="font-medium text-foreground">{formatCurrency(monthlyPrice, currency)}</span>
                 </div>
                 <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">{isYearly ? 'Years' : 'Months'}</span>
-                    <span className="font-medium text-gray-900 dark:text-gray-100">{units}</span>
+                    <span className="text-muted-foreground">{isYearly ? 'Years' : 'Months'}</span>
+                    <span className="font-medium text-foreground">{units}</span>
                 </div>
                 <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">{startDate ? 'Start Date' : 'Current Expiry'}</span>
-                    <span className="font-medium text-gray-900 dark:text-gray-100">
+                    <span className="text-muted-foreground">{startDate ? 'Start Date' : 'Current Expiry'}</span>
+                    <span className="font-medium text-foreground">
                         {formatDate(startDate ?? currentExpiryDate!)}
                     </span>
                 </div>
                 <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">{startDate ? 'End Date' : 'New Expiry'}</span>
-                    <span className="font-medium text-gray-900 dark:text-gray-100">{formatDate(endDate)}</span>
+                    <span className="text-muted-foreground">{startDate ? 'End Date' : 'New Expiry'}</span>
+                    <span className="font-medium text-foreground">{formatDate(endDate)}</span>
                 </div>
-                <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
-                    <span className="font-semibold text-gray-900 dark:text-gray-100">Total Amount</span>
+                <div className="flex justify-between pt-2 border-t border-border">
+                    <span className="font-semibold text-foreground">Total Amount</span>
                     <span className="font-bold text-indigo-600 dark:text-indigo-400 text-base">{formatCurrency(total, currency)}</span>
                 </div>
             </div>

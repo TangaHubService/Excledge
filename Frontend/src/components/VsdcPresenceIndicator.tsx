@@ -97,7 +97,7 @@ export function VsdcPresenceIndicator() {
   return (
     <span
       title={title}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${s.pill}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${s.pill}`}
     >
       <span className={`h-2 w-2 rounded-full ${s.dot}`} />
       <span className={s.text}>{s.label}</span>

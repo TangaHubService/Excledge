@@ -82,23 +82,23 @@ export const SupplierDialog: React.FC<SupplierDialogProps> = ({
 
                 <form onSubmit={handleSubmit} className="p-4 space-y-3 overflow-y-auto">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
-                            Supplier Name <span className="text-red-500">*</span>
+                        <label className="block text-sm font-medium text-foreground mb-0.5">
+                            Supplier Name <span className="text-danger">*</span>
                         </label>
                         <input
                             type="text"
                             name="name"
                             value={formData.name}
                             onChange={handleChange}
-                            className={`w-full px-3 py-1.5 border rounded-md ${errors.name ? 'border-red-500' : 'border-gray-300'
-                                } dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm`}
+                            className={`w-full px-3 py-1.5 border rounded-md ${errors.name ? 'border-red-500' : 'border-border'
+                                } dark:text-white text-sm`}
                         />
-                        {errors.name && <p className="mt-0.5 text-xs text-red-500">{errors.name}</p>}
+                        {errors.name && <p className="mt-0.5 text-xs text-danger">{errors.name}</p>}
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
-                            Email <span className="text-red-500">*</span>
+                        <label className="block text-sm font-medium text-foreground mb-0.5">
+                            Email <span className="text-danger">*</span>
                         </label>
                         <input
                             type="email"
@@ -106,15 +106,15 @@ export const SupplierDialog: React.FC<SupplierDialogProps> = ({
                             required
                             value={formData.email}
                             onChange={handleChange}
-                            className={`w-full px-3 py-1.5 border rounded-md ${errors.email ? 'border-red-500' : 'border-gray-300'
-                                } dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm`}
+                            className={`w-full px-3 py-1.5 border rounded-md ${errors.email ? 'border-red-500' : 'border-border'
+                                } dark:text-white text-sm`}
                         />
-                        {errors.email && <p className="mt-0.5 text-xs text-red-500">{errors.email}</p>}
+                        {errors.email && <p className="mt-0.5 text-xs text-danger">{errors.email}</p>}
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
-                            Phone Number <span className="text-red-500">*</span>
+                        <label className="block text-sm font-medium text-foreground mb-0.5">
+                            Phone Number <span className="text-danger">*</span>
                         </label>
                         <PhoneInputWithCountryCode
                             value={formData.phone || ''}
@@ -122,11 +122,11 @@ export const SupplierDialog: React.FC<SupplierDialogProps> = ({
                             placeholder="e.g. 700 000 000"
                             className={errors.phone ? 'border-red-500' : ''}
                         />
-                        {errors.phone && <p className="mt-0.5 text-xs text-red-500">{errors.phone}</p>}
+                        {errors.phone && <p className="mt-0.5 text-xs text-danger">{errors.phone}</p>}
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
+                        <label className="block text-sm font-medium text-foreground mb-0.5">
                             Contact Person
                         </label>
                         <input
@@ -134,12 +134,12 @@ export const SupplierDialog: React.FC<SupplierDialogProps> = ({
                             name="contactPerson"
                             value={formData.contactPerson}
                             onChange={handleChange}
-                            className="w-full px-3 py-1.5 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+                            className="w-full px-3 py-1.5 border border-border rounded-md dark:text-white text-sm"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
+                        <label className="block text-sm font-medium text-foreground mb-0.5">
                             Address
                         </label>
                         <textarea
@@ -147,7 +147,7 @@ export const SupplierDialog: React.FC<SupplierDialogProps> = ({
                             value={formData.address}
                             onChange={handleChange}
                             rows={2}
-                            className="w-full px-3 py-1.5 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+                            className="w-full px-3 py-1.5 border border-border rounded-md dark:text-white text-sm"
                         />
                     </div>
 
@@ -156,7 +156,7 @@ export const SupplierDialog: React.FC<SupplierDialogProps> = ({
                             <button
                                 type="button"
                                 disabled={loading}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-4 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Cancel
                             </button>
@@ -164,7 +164,7 @@ export const SupplierDialog: React.FC<SupplierDialogProps> = ({
                         <button
                             type="submit"
                             disabled={loading}
-                            className={`px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center space-x-2 ${loading ? 'opacity-75 cursor-not-allowed' : ''
+                            className={`px-4 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring flex items-center justify-center space-x-2 ${loading ? 'opacity-75 cursor-not-allowed' : ''
                                 }`}
                         >
                             {loading ? (

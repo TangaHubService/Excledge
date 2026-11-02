@@ -298,9 +298,9 @@ export function RraPurchasesPage() {
   };
 
   return (
-    <div className="space-y-5 p-4 md:p-6">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-h1 font-semibold">Purchases</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Purchases</h1>
         <p className="text-body-sm text-muted-foreground">
           Pull B2B sales issued to your TIN from VSDC, then confirm or reject each purchase with RRA.
         </p>
@@ -338,7 +338,7 @@ export function RraPurchasesPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100">
+              <div className="inline-flex items-center gap-2 rounded-md border border-sky-500/25 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100">
                 <span className="text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">Last request</span>
                 <span className="font-mono font-semibold tabular-nums" title={purchasesLastReq}>
                   {formatLastReqDt(purchasesLastReq || PURCHASES_DEFAULT_LAST_REQ)}
@@ -361,7 +361,7 @@ export function RraPurchasesPage() {
                   : ""}{" "}
             purchase(s)
             {purchasePendingCount > 0 && purchaseStatusFilter !== "PENDING" ? (
-              <> · <b className="text-amber-600 tabular-nums">{purchasePendingCount}</b> still pending</>
+              <> · <b className="text-warning tabular-nums">{purchasePendingCount}</b> still pending</>
             ) : null}
           </div>
 
@@ -402,10 +402,10 @@ export function RraPurchasesPage() {
                     <TableCell>
                       <span className={
                         p.status === "CONFIRMED"
-                          ? "text-emerald-600"
+                          ? "text-success"
                           : p.status === "REJECTED"
                             ? "text-muted-foreground"
-                            : "text-amber-600"
+                            : "text-warning"
                       }>
                         {p.status === "CONFIRMED" ? "APPROVED" : p.status}
                       </span>
@@ -538,7 +538,7 @@ export function RraPurchasesPage() {
                               placeholder={`Cost ${money(Number(it.prc))}`}
                             />
                             {Number(edit.sellingPrice) > 0 && Number(edit.sellingPrice) < Number(it.prc) && (
-                              <p className="text-xs text-amber-600">Below the purchase cost of {money(Number(it.prc))}.</p>
+                              <p className="text-xs text-warning">Below the purchase cost of {money(Number(it.prc))}.</p>
                             )}
                           </div>
                           <div className="space-y-1">
@@ -574,9 +574,9 @@ export function RraPurchasesPage() {
 
               {selected.status === "PENDING" && (
                 rejecting ? (
-                  <div className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-950/30">
-                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Reject this purchase?</p>
-                    <p className="text-xs text-red-700/80 dark:text-red-400/80">
+                  <div className="space-y-3 rounded-lg border border-danger/25 bg-danger/10 p-3 dark:border-red-900/50 dark:bg-danger/30">
+                    <p className="text-sm font-medium text-danger dark:text-red-400">Reject this purchase?</p>
+                    <p className="text-xs text-danger/80 dark:text-red-400/80">
                       It will be marked as not accepted and no stock will be recorded. This can&apos;t be undone from here.
                     </p>
                     <Input

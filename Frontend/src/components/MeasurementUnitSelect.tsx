@@ -33,7 +33,7 @@ export function MeasurementUnitSelect({ value, onChange, error, disabled }: Meas
           ))}
         </SelectContent>
       </Select>
-      {error && <span className="text-red-500 text-sm">{error}</span>}
+      {error && <span className="text-danger text-sm">{error}</span>}
     </div>
   );
 }

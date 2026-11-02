@@ -34,6 +34,16 @@
   --border: 220 13% 91%;
   --input: 220 13% 91%;
   --ring: 221 83% 53%;
+
+  /* Status + data-viz tokens. Expenses use a muted rose rather than alarm
+     red so a normal expense line doesn't read as an error. */
+  --success: 158 64% 32%;
+  --warning: 32 95% 42%;
+  --danger: 0 72% 51%;
+  --chart-sales: 221 83% 53%;
+  --chart-expenses: 346 70% 56%;
+  --chart-grid: 220 13% 91%;
+  --surface-subtle: 220 20% 97%;
 }
 
 .dark {
@@ -54,11 +64,40 @@
   --border: 217 19% 27%;
   --input: 217 19% 27%;
   --ring: 217 91% 60%;
+
+  --success: 158 58% 52%;
+  --warning: 38 92% 58%;
+  --danger: 0 84% 66%;
+  --chart-sales: 217 91% 66%;
+  --chart-expenses: 346 82% 68%;
+  --chart-grid: 217 19% 24%;
+  --surface-subtle: 217 26% 14%;
 }
 
 @layer base {
+  /* Bare `border` utilities (Card, Dialog, Table…) use the theme border, not gray-200 */
+  *,
+  ::before,
+  ::after {
+    @apply border-border;
+  }
   html {
     @apply antialiased;
+    color-scheme: light;
+  }
+  /* Native date pickers, <select> lists and scrollbars follow the theme */
+  .dark {
+    color-scheme: dark;
+  }
+  /* Bare form controls otherwise get the browser's white field in dark mode;
+     any utility class on the element still overrides this. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  textarea,
+  select {
+    @apply bg-background text-foreground;
+  }
+  option {
+    @apply bg-card text-foreground;
   }
   body {
     @apply font-sans antialiased;
@@ -78,10 +117,44 @@
     @apply px-4 py-6 sm:px-6 lg:px-8;
   }
   .dashboard-nav-section-label {
-    @apply text-sm font-bold uppercase tracking-wide text-slate-200;
+    @apply text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-slate-400;
   }
   .dashboard-nav-item {
-    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150;
+    @apply relative flex items-center gap-3 rounded-lg px-3 py-2 text-[0.8125rem] font-medium transition-colors duration-150;
+  }
+  .dashboard-nav-item-idle {
+    @apply text-slate-300 hover:bg-white/[0.06] hover:text-white;
+  }
+  /* Active: soft fill + accent rail instead of a solid white pill */
+  .dashboard-nav-item-active {
+    @apply bg-white/[0.09] text-white before:absolute before:inset-y-1.5 before:-left-3 before:w-[3px] before:rounded-r-full before:bg-sky-400 [&>svg]:text-sky-300;
+  }
+  .chrome-icon-btn {
+    @apply flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-white;
+  }
+
+  /* Design system primitives — prefer these over ad-hoc gray-* stacks */
+  .panel {
+    @apply rounded-2xl border border-border/80 bg-card text-card-foreground shadow-card;
+  }
+  .panel-pad {
+    @apply p-5 sm:p-6;
+  }
+  .panel-title {
+    @apply text-[0.9375rem] font-semibold tracking-tight text-foreground;
+  }
+  .panel-subtitle {
+    @apply text-xs text-muted-foreground;
+  }
+  .eyebrow {
+    @apply text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-md border border-border/80 bg-surface-subtle px-2 py-0.5 text-[0.6875rem] font-medium text-muted-foreground;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum", "cv11";
   }
 }
 
@@ -102,6 +175,13 @@
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-gray-400 dark:bg-gray-500;
 }
+/* Dark chrome (sidebar) gets a thin translucent scrollbar instead of the light global one */
+#sidebar-nav::-webkit-scrollbar { width: 6px; }
+#sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+#sidebar-nav::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.12); }
+#sidebar-nav::-webkit-scrollbar-thumb:hover { background: rgb(255 255 255 / 0.22); }
+#sidebar-nav { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.12) transparent; }
+
 @layer utilities {
   .dark input[type="date"]::-webkit-calendar-picker-indicator {
     filter: invert(1);
