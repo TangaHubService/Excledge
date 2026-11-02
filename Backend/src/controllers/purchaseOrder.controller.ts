@@ -11,6 +11,7 @@ import {
     registerLocalPurchaseAsync,
     type LocalPurchaseLine,
 } from "../services/vsdc-local-purchase.service"
+import { submitStockLedgerEntryToEbmAsync } from "../services/stock-movement-sync.service"
 import NotificationService from "../services/notification.service"
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 import { buildBranchFilter, getBranchIdForOperation } from "../middleware/branchAuth.middleware"
@@ -443,6 +444,7 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
             batchNumber: string;
         }> = []
         const repricedProductIds: number[] = []
+        const receiptLedgerIds: number[] = []
         const vsdcPurchaseOn = await isLocalPurchaseRegistrationOn(order.organizationId)
         let localPurchaseId: number | null = null
 
@@ -479,7 +481,6 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
                 if (!branch) {
                     throw new Error("Invalid or inactive branch for receiving")
                 }
-                const receiptLedgerIds: number[] = []
                 const receiptLines: LocalPurchaseLine[] = []
 
                 for (const item of po.items) {
@@ -549,8 +550,8 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
                         reference: order.orderNumber,
                         referenceType: 'PURCHASE_ORDER',
                         note: `Purchase Order #${order.orderNumber} - ${status === 'PARTIALLY_RECEIVED' ? 'Partial' : 'Full'} receive at branch ${effectiveBranchId}`,
-                        // RRA books this stock-in from the savePurchases registration below.
-                        skipEbmSync: vsdcPurchaseOn,
+                        // Stock IO (sarTyCd 02) will be pushed via StockIOSaveReq asynchronously
+                        skipEbmSync: false,
                         tx,
                     });
                     receiptLedgerIds.push(ledgerEntry.id)
@@ -620,6 +621,7 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
 
         for (const productId of repricedProductIds) syncProductToRraAsync(productId, userId)
         if (localPurchaseId != null) registerLocalPurchaseAsync(localPurchaseId)
+        for (const ledgerId of receiptLedgerIds) submitStockLedgerEntryToEbmAsync(ledgerId)
 
         // Send emails
         try {

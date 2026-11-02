@@ -18,6 +18,7 @@ import {
   registerLocalPurchaseAsync,
   type LocalPurchaseLine,
 } from '../services/vsdc-local-purchase.service';
+import { submitStockLedgerEntryToEbmAsync } from '../services/stock-movement-sync.service';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -501,6 +502,7 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
     const importErrors: Array<{ itemId: number; error: string }> = [];
     const vsdcPurchaseOn = await isLocalPurchaseRegistrationOn(organizationId);
     const receiptLines: LocalPurchaseLine[] = [];
+    const receiptLedgerIds: number[] = [];
 
     // Each item gets its own transaction: once a Postgres statement fails, the
     // whole transaction is aborted and refuses further commands (25P02), so a
@@ -567,7 +569,7 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
                 },
               });
 
-              await addStock({
+              const ledgerEntry = await addStock({
                 organizationId,
                 productId: action.productId,
                 userId,
@@ -581,10 +583,11 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
                 expiryDate: expiryDate || undefined,
                 note: `Imported from invoice ${invoice.invoiceNumber || id}`,
                 metadata: { invoiceId: id },
-                skipEbmSync: vsdcPurchaseOn,
+                skipEbmSync: false,
                 tx,
               });
               committedLine = { productId: action.productId, quantity: qty, unitCost: unitPrice, expiryDate };
+              if (ledgerEntry?.id) receiptLedgerIds.push(ledgerEntry.id);
 
               // NOTE (stock S14): addStock above already increments
               // Product.quantity via the centralized ledger service. Do NOT
@@ -636,7 +639,7 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
                 },
               });
 
-              await addStock({
+              const ledgerEntry = await addStock({
                 organizationId,
                 productId: newProduct.id,
                 userId,
@@ -650,10 +653,11 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
                 expiryDate: expiryDate || undefined,
                 note: `Created from invoice ${invoice.invoiceNumber || id}`,
                 metadata: { invoiceId: id },
-                skipEbmSync: vsdcPurchaseOn,
+                skipEbmSync: false,
                 tx,
               });
               committedLine = { productId: newProduct.id, quantity: qty, unitCost: unitPrice, expiryDate };
+              if (ledgerEntry?.id) receiptLedgerIds.push(ledgerEntry.id);
 
               await tx.supplierInvoiceItem.update({
                 where: { id: item.id },
@@ -727,6 +731,7 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
       });
       if (queued) registerLocalPurchaseAsync(queued.id);
     }
+    for (const ledgerId of receiptLedgerIds) submitStockLedgerEntryToEbmAsync(ledgerId);
 
     const accounting = await enqueueScannedSupplierBillAccountingEvent(id, receivedAtCost).catch((e: Error) => ({
       queued: false,

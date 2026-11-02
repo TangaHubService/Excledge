@@ -1,0 +1,11 @@
+tree e3926c8b2bac68647c76149e584e2d87e05d3c26
+parent 0e4ee10dec6c741190bcec6500492923a7dd2cf4
+author niyobertin <niyonkurubbertin@gmail.com> 1782594511 +0200
+committer niyobertin <niyonkurubbertin@gmail.com> 1782594511 +0200
+
+fix: increase Node.js heap to 4 GB for prisma seed
+
+tsx was OOMing during db seed (1048-line seed.ts with heavy imports).
+Use node --max-old-space-size=4096 to invoke tsx directly.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

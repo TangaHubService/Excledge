@@ -95,11 +95,8 @@ export interface AddStockParams {
   note?: string;
   metadata?: Record<string, any>;
   /**
-   * Skip queuing this movement for the RRA Stock In/Out sync. Used when the
-   * stock change has already been reported to the VSDC by another call — e.g.
-   * a confirmed B2B purchase, whose stock-in RRA books from
-   * /trnsPurchase/savePurchases, so re-sending it via /stock/saveStockItems
-   * would double-count.
+   * Skip queuing this movement for the RRA Stock In/Out sync.
+   * Default is false.
    */
   skipEbmSync?: boolean;
   batchId?: number | null;

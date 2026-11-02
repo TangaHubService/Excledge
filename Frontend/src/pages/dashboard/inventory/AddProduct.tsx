@@ -25,6 +25,7 @@ import { toast } from 'react-toastify'
 import { apiClient } from '../../../lib/api-client'
 import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response'
 import { useBranch } from '../../../context/BranchContext'
+import { useOrganization } from '../../../context/OrganizationContext'
 import { BranchRequiredNotice } from '../../../components/BranchRequiredNotice'
 import { MEASUREMENT_UNIT_OPTIONS, PACKAGING_UNIT_OPTIONS, QUANTITY_UNIT_OPTIONS } from '../../../types/ebm'
 import { RraItemClassPicker } from '../../../components/inventory/RraItemClassPicker'
@@ -170,6 +171,15 @@ type StepId = (typeof STEPS)[number]['id']
 export default function AddProduct({ onSuccess, product, initialItemType = 'PRODUCT' }: AddProductProps) {
     const navigate = useNavigate()
     const { selectedBranchId } = useBranch()
+    const { organization } = useOrganization()
+    /**
+     * RRA rule: when vatRegistered is explicitly false the org is NOT registered
+     * for VAT. Every item must carry tax code D (Non-Taxable / taxpayer not
+     * registered for VAT). We lock the tax-category field to D-only so users
+     * cannot accidentally mix VAT-rated items into a non-VAT inventory.
+     */
+    const isNonVat = organization?.vatRegistered === false
+    const isTaxExemptOrg = organization?.isTaxExempt === true
     const { catalog } = useRraCodeCatalog()
     const countryOptions = catalog.countries.length
         ? catalog.countries.map((c) => ({ value: c.code, label: `${c.label} (${c.code})` }))
@@ -267,7 +277,19 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
     const watchUnitPrice = watch('unitPrice')
     const watchTaxCode = watch('taxCode')
 
-    const taxOptions = taxCodes.filter((t) => t.code !== 'D' || watchTaxCode === 'D')
+    /**
+     * Allowed tax-code options for the dropdown.
+     *
+     * Non-VAT registered org  → only D is valid (RRA forces code D on every sale).
+     * Tax-exempt org          → only A is typically applicable, but we still show
+     *                           all codes so the user can set per-product exemptions;
+     *                           the sales layer enforces A at commit time.
+     * VAT registered org      → show A, B, C only (D is the "not registered" code
+     *                           and must not be mixed with VAT-rated products).
+     */
+    const taxOptions = isNonVat
+        ? taxCodes.filter((t) => t.code === 'D')
+        : taxCodes.filter((t) => t.code !== 'D')
 
     useEffect(() => {
         setItemType(watchItemType as 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE')
@@ -340,6 +362,20 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                 }
             })
     }, [catalog.taxTypes])
+
+    /**
+     * For non-VAT-registered organisations, always force taxCode = 'D'.
+     * This runs after taxCodes are loaded (so the option exists) and whenever
+     * the vatRegistered flag or the existing product value changes.
+     */
+    useEffect(() => {
+        if (!isNonVat) return
+        // Only override when D is not already set — prevents fighting with the
+        // product-edit useEffect that sets the stored value first.
+        if (watchTaxCode !== 'D') {
+            setValue('taxCode', 'D', { shouldValidate: true, shouldDirty: true })
+        }
+    }, [isNonVat, taxCodes, watchTaxCode, setValue])
 
     useEffect(() => {
         if (!selectedBranchId) return
@@ -965,22 +1001,66 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                 </div>
                             )}
 
+                            {/* ── Non-VAT compliance banner ── */}
+                            {isNonVat && (
+                                <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-900/20 px-4 py-3">
+                                    <span className="mt-0.5 shrink-0 text-amber-500" aria-hidden>
+                                        ⚠
+                                    </span>
+                                    <div className="text-sm">
+                                        <p className="font-semibold text-amber-700 dark:text-amber-300">
+                                            Non-VAT Registered Business
+                                        </p>
+                                        <p className="text-amber-600 dark:text-amber-400 mt-0.5">
+                                            Your organisation is <strong>not registered for VAT</strong>. Per RRA CIS
+                                            regulations, all items must carry{' '}
+                                            <strong>Tax Category D – Taxpayer Not Registered for VAT</strong>.
+                                            This field is locked to prevent mixing VAT-rated products with non-VAT
+                                            inventory, which would cause EBM submission errors.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div className="space-y-1.5">
                                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                         Tax Category <span className="text-red-500">*</span>
+                                        {isNonVat && (
+                                            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                                                🔒 Locked to D
+                                            </span>
+                                        )}
                                     </label>
                                     <select
                                         {...bindField('taxCode', 'batchNumber')}
+                                        disabled={isNonVat}
+                                        aria-describedby={isNonVat ? 'tax-code-nonvat-note' : undefined}
                                         className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
-                                            errors.taxCode ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                                            errors.taxCode
+                                                ? 'border-red-400'
+                                                : isNonVat
+                                                ? 'border-amber-300 bg-amber-50/60 dark:border-amber-600/50 dark:bg-amber-950/30 cursor-not-allowed opacity-80'
+                                                : 'border-gray-200 dark:border-gray-700'
                                         }`}
                                     >
-                                        <option value="">Select tax category (A, B or C)</option>
-                                        {taxOptions.map(tc => (
-                                            <option key={tc.code} value={tc.code}>{tc.label}</option>
-                                        ))}
+                                        {isNonVat ? (
+                                            <option value="D">D – Taxpayer Not Registered for VAT</option>
+                                        ) : (
+                                            <>
+                                                <option value="">Select tax category (A, B or C)</option>
+                                                {taxOptions.map(tc => (
+                                                    <option key={tc.code} value={tc.code}>{tc.label}</option>
+                                                ))}
+                                            </>
+                                        )}
                                     </select>
+                                    {isNonVat && (
+                                        <p id="tax-code-nonvat-note" className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                            Tax code is fixed to <strong>D</strong> for all items. Register for VAT in
+                                            your Organisation Settings to unlock other categories.
+                                        </p>
+                                    )}
                                     {errors.taxCode && <p className="text-xs text-red-500 mt-1">{errors.taxCode.message}</p>}
                                 </div>
                             </div>

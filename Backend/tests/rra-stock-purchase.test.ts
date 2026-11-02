@@ -32,8 +32,11 @@ vi.mock("../src/lib/prisma", () => {
       rraSyncCursor: { findUnique: vi.fn(async () => null), upsert: vi.fn(async () => ({})) },
       rraPurchase: {
         findFirst: vi.fn(async () => purchase),
+        findUnique: vi.fn(async () => purchase),
         update: vi.fn(async () => ({})),
+        updateMany: vi.fn(async () => ({ count: 1 })),
         upsert: vi.fn(async () => ({})),
+        aggregate: vi.fn(async () => ({ _max: { cisInvcNo: 5 } })),
       },
       user: { findUnique: vi.fn(async () => ({ id: 3, name: "Buyer" })) },
       inventoryLedger: {
@@ -50,7 +53,10 @@ vi.mock("../src/lib/prisma", () => {
         findMany: vi.fn(async () => []),
         groupBy: vi.fn(async () => []),
       },
-      organization: { update: vi.fn(async () => ({})) },
+      organization: {
+        update: vi.fn(async () => ({})),
+        findUnique: vi.fn(async () => ({ id: 1, ebmTin: '100000000', ebmBhfId: '00' })),
+      },
       rraCode: {
         findMany: vi.fn(async ({ where }: any) => {
           if (where?.cdCls === '04') {
@@ -70,6 +76,10 @@ vi.mock("../src/lib/prisma", () => {
         create: vi.fn(async (a: any) => ({ id: 99, name: a.data.name, itemCd: a.data.itemCd })),
         update: vi.fn(async (a: any) => ({ id: a.where.id, name: a.data.name ?? "Widget", itemCd: "RW2CTU0000001" })),
       },
+      vsdcLocalPurchase: {
+        aggregate: vi.fn(async () => ({ _max: { cisInvcNo: 0 } })),
+      },
+      $queryRaw: vi.fn(async () => [{ nextSequence: 42 }]),
       $executeRaw: vi.fn(async () => 0),
       $transaction: vi.fn(async (ops: any) => (typeof ops === "function" ? ops(prisma) : Promise.all(ops))),
   }
@@ -189,7 +199,7 @@ describe("confirmRraPurchase (§71)", () => {
     expect(savePurchasePayload.itemList[0].totAmt).toBe(savePurchasePayload.itemList[0].taxblAmt)
   })
 
-  it("§74: books the received quantity into branch stock, without re-reporting it to the VSDC", async () => {
+  it("§74: books the received quantity into branch stock with EBM stock IO enabled", async () => {
     const r = await confirmRraPurchase(1, 7, { userId: 3, branchId: 4 })
     expect(r.success).toBe(true)
 
@@ -199,13 +209,8 @@ describe("confirmRraPurchase (§71)", () => {
     expect(booked.branchId).toBe(4)
     expect(booked.quantity).toBe(10)
     expect(booked.movementType).toBe("PURCHASE")
-    // RRA already booked the stock-in from /trnsPurchase/savePurchases —
-    // this ledger row must not be queued for /stock/saveStockItems too.
-    expect(booked.skipEbmSync).toBe(true)
-
-    // §73: remaining qty must still be pushed (savePurchases does not update master).
-    expect(stockMasterArgs.itemCd).toBe("RW2CTU0000001")
-    expect(stockMasterArgs.rsdQty).toBe(250)
+    // RRA compliance (§72): Stock IO must be queued to send saveStockItems (sarTyCd 02)
+    expect(booked.skipEbmSync).toBe(false)
   })
 
   it("rejects at VSDC with pchsSttsCd 04 (Canceled) and does not book stock", async () => {

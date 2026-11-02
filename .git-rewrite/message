@@ -1,0 +1,6 @@
+fix: increase Node.js heap to 4 GB for prisma seed
+
+tsx was OOMing during db seed (1048-line seed.ts with heavy imports).
+Use node --max-old-space-size=4096 to invoke tsx directly.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

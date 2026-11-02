@@ -27,6 +27,8 @@ interface Organization {
     subscriptionWarningMessage?: string | null;
     role?: string;
     isOwner?: boolean;
+    vatRegistered?: boolean;
+    isTaxExempt?: boolean;
 }
 
 interface OrganizationContextType {

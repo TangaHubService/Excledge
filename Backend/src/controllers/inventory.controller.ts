@@ -358,6 +358,23 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       ));
     }
 
+    // ── RRA compliance: enforce tax code D for non-VAT-registered taxpayers ──
+    // When vatRegistered = false, the VSDC mandates code D ("Taxpayer not
+    // registered for VAT") on every transaction line. Storing any other code
+    // would cause a mismatch between the product catalogue and the tax applied
+    // at point-of-sale, resulting in RRA EBM submission errors.
+    const orgVatInfo = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { vatRegistered: true },
+    });
+    if (orgVatInfo && orgVatInfo.vatRegistered === false && normalizedTaxCode !== 'D') {
+      return res.status(422).json(apiError(
+        'Your organisation is not registered for VAT. All items must use Tax Category D ' +
+        '(Taxpayer Not Registered for VAT) per RRA CIS regulations. ' +
+        `Received "${normalizedTaxCode}" — please update your Organisation Settings if your VAT status has changed.`
+      ));
+    }
+
 // The RRA item code (itemCd) is derived, not user-entered — VSDC spec
     // §4.17: <origin> + product-type digit + pkgUnitCd + qtyUnitCd + sequence.
     // Use an explicit RRA quantity unit when supplied, otherwise derive it from the measurement unit.
@@ -836,6 +853,17 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
       if (!(await isCachedTaxCode(organizationId, normalizedTaxCode))) {
         return res.status(400).json(apiError(
           `Invalid tax category "${taxCode}". Sync RRA codes (class 04 Taxation Type) and pick a cached code.`
+        ));
+      }
+      // RRA compliance: non-VAT-registered organisations must use code D only.
+      const orgVatInfoUpd = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { vatRegistered: true },
+      });
+      if (orgVatInfoUpd && orgVatInfoUpd.vatRegistered === false && normalizedTaxCode !== 'D') {
+        return res.status(422).json(apiError(
+          'Your organisation is not registered for VAT. Tax Category must remain D ' +
+          '(Taxpayer Not Registered for VAT) per RRA CIS regulations.'
         ));
       }
       data.taxCode = normalizedTaxCode;

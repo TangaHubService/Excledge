@@ -243,9 +243,9 @@ export function syncInsuranceToRraAsync(
  * and never logged. Created once and reused so re-syncs send the same value.
  */
 async function vsdcRegistrationPassword(userId: number): Promise<string> {
-  const existing = await prisma.vsdcUserCredential.findUnique({ where: { userId }, select: { pwd: true } });
+  const existing = await (prisma as any).vsdcUserCredential.findUnique({ where: { userId }, select: { pwd: true } });
   if (existing) return existing.pwd;
-  const row = await prisma.vsdcUserCredential.upsert({
+  const row = await (prisma as any).vsdcUserCredential.upsert({
     where: { userId },
     create: { userId, pwd: randomBytes(18).toString('base64url') },
     update: {},
