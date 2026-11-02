@@ -1,9 +1,8 @@
 import * as yup from 'yup';
 
-// A phone always comes out of PhoneInputWithCountryCode as "+<countrycode><digits>",
-// and a bulk-imported/legacy number may be the plain local "0XXXXXXXX(X)" form —
-// but it never looks like a bare 9-digit TIN, so the two fields can't be
-// mistaken for each other by shape alone.
+// A phone always comes out of PhoneInputWithCountryCode as "+<countrycode><digits>", and a
+// bulk-imported/legacy number may be the plain local "0XXXXXXXX(X)" form — but it never looks like
+// a bare 9-digit TIN, so the two fields can't be mistaken for each other by shape alone.
 const PHONE_PATTERN = /^(\+\d{9,15}|0\d{8,9})$/;
 // RRA TIN: exactly 9 digits (same shape the "Verify with RRA" lookup requires).
 const TIN_PATTERN = /^\d{9}$/;

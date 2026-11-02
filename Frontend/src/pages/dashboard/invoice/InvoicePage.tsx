@@ -77,13 +77,7 @@ export default function InvoicePage() {
     void pdfQuery.refetch()
   }
 
-  /**
-   * CIS/VSDC spec §7.18/§15: "print only one original receipt. Reprint shall
-   * have a watermark with mention Copy." downloadInvoicePdf registers each
-   * download with the backend itself, so the first download of this invoice
-   * comes back original and every one after renders watermarked COPY —
-   * there's no separate copy action to trigger by hand.
-   */
+  /** CIS/VSDC spec §7.18/§15: "print only one original receipt. */
   const handlePdfDownload = async () => {
     if (!data || !id) return
     try {

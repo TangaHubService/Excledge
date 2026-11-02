@@ -172,13 +172,11 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
     const navigate = useNavigate()
     const { selectedBranchId } = useBranch()
     const { organization } = useOrganization()
-    /**
-     * RRA rule: when vatRegistered is explicitly false the org is NOT registered
-     * for VAT. Every item must carry tax code D (Non-Taxable / taxpayer not
-     * registered for VAT). We lock the tax-category field to D-only so users
-     * cannot accidentally mix VAT-rated items into a non-VAT inventory.
-     */
+    /** RRA rule: when vatRegistered is explicitly false the org is NOT registered for VAT. */
     const isNonVat = organization?.vatRegistered === false
+    // Items moved to B by the VAT switch can change their tax type only once.
+    const taxReviewPending = !isNonVat && product?.taxCodeReviewPending === true
+    const taxCodeLocked = !isNonVat && !!product?.taxCodeReviewedAt
     const isTaxExemptOrg = organization?.isTaxExempt === true
     const { catalog } = useRraCodeCatalog()
     const countryOptions = catalog.countries.length
@@ -278,14 +276,8 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
     const watchTaxCode = watch('taxCode')
 
     /**
-     * Allowed tax-code options for the dropdown.
-     *
-     * Non-VAT registered org  → only D is valid (RRA forces code D on every sale).
-     * Tax-exempt org          → only A is typically applicable, but we still show
-     *                           all codes so the user can set per-product exemptions;
-     *                           the sales layer enforces A at commit time.
-     * VAT registered org      → show A, B, C only (D is the "not registered" code
-     *                           and must not be mixed with VAT-rated products).
+     * Allowed tax-code options for the dropdown. Non-VAT registered org → only D is valid (RRA
+     * forces code D on every sale).
      */
     const taxOptions = isNonVat
         ? taxCodes.filter((t) => t.code === 'D')
@@ -363,11 +355,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
             })
     }, [catalog.taxTypes])
 
-    /**
-     * For non-VAT-registered organisations, always force taxCode = 'D'.
-     * This runs after taxCodes are loaded (so the option exists) and whenever
-     * the vatRegistered flag or the existing product value changes.
-     */
+    /** For non-VAT-registered organisations, always force taxCode = 'D'. */
     useEffect(() => {
         if (!isNonVat) return
         // Only override when D is not already set — prevents fighting with the
@@ -1034,7 +1022,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                     </label>
                                     <select
                                         {...bindField('taxCode', 'batchNumber')}
-                                        disabled={isNonVat}
+                                        disabled={isNonVat || taxCodeLocked}
                                         aria-describedby={isNonVat ? 'tax-code-nonvat-note' : undefined}
                                         className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-gray-900 dark:text-white ${
                                             errors.taxCode
@@ -1059,6 +1047,19 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                         <p id="tax-code-nonvat-note" className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                                             Tax code is fixed to <strong>D</strong> for all items. Register for VAT in
                                             your Organisation Settings to unlock other categories.
+                                        </p>
+                                    )}
+                                    {taxReviewPending && (
+                                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                            This item was set to <strong>B</strong> when your organisation registered
+                                            for VAT. You can change its tax category <strong>once</strong>; after that
+                                            it is locked.
+                                        </p>
+                                    )}
+                                    {taxCodeLocked && (
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            🔒 Tax category was already updated once after VAT registration and can no
+                                            longer be changed.
                                         </p>
                                     )}
                                     {errors.taxCode && <p className="text-xs text-red-500 mt-1">{errors.taxCode.message}</p>}

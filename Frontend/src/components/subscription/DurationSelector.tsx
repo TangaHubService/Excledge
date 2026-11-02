@@ -15,11 +15,8 @@ interface DurationSelectorProps {
     value: DurationValue;
     onChange: (value: DurationValue) => void;
     /**
-     * For a renewal of a still-active subscription, its current end date —
-     * shown as "Current Expiry -> New Expiry" instead of "Start -> End".
-     * Pass null/undefined for a brand-new purchase, or when the current
-     * subscription has already lapsed (the server starts those fresh from
-     * today, same rule this preview follows).
+     * For a renewal of a still-active subscription, its current end date — shown as "Current Expiry
+     * -> New Expiry" instead of "Start -> End".
      */
     currentExpiryDate?: Date | null;
     yearlyDiscountPercent?: number;
@@ -57,11 +54,7 @@ export const calculateDurationTotal = ({
     return Math.round(monthlyPrice * months * 100) / 100;
 };
 
-/**
- * Billing-mode toggle + duration input with a live, client-side preview of
- * price/dates. This is presentation only — the server independently
- * recomputes the total and validity window and never trusts these numbers.
- */
+/** Billing-mode toggle + duration input with a live, client-side preview of price/dates. */
 export const DurationSelector = ({
     monthlyPrice,
     currency = 'RWF',
@@ -74,10 +67,7 @@ export const DurationSelector = ({
     const isYearly = value.billingMode === 'YEARLY';
     const units = isYearly ? Math.max(1, Math.round(value.months / 12)) : Math.max(1, value.months);
 
-    // Local draft text for the units input, separate from the derived numeric
-    // `units` above. This lets the field go empty while the user is clearing
-    // the default to type a new number, instead of a controlled value that
-    // snaps back to "1" on every keystroke that isn't yet a valid number >= 1.
+    // Local draft text for the units input, separate from the derived numeric `units` above.
     const [draftUnits, setDraftUnits] = useState(String(units));
 
     useEffect(() => {

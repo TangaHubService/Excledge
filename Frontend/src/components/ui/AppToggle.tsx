@@ -3,19 +3,14 @@ import * as SwitchPrimitive from '@radix-ui/react-switch'
 import { Loader2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
-/**
- * Standardized on/off control for every Active/Inactive, Enabled/Disabled
- * boolean in the app. Built on Radix's Switch primitive so role="switch",
- * aria-checked, and Space/Enter keyboard handling come for free — only the
- * visuals (track/thumb sizing, colors, transitions, loading dot) live here.
- */
+/** Standardized on/off control for every Active/Inactive, Enabled/Disabled boolean in the app. */
 
 export type AppToggleSize = 'small' | 'medium' | 'large'
 export type AppToggleColor = 'primary' | 'success' | 'danger' | 'warning'
 
-// NOTE: the checked-translate classes must appear as full literal strings
-// (not built via concatenation) so Tailwind's static scanner emits the
-// `data-[state=checked]:*` variant utilities at build time.
+// NOTE: the checked-translate classes must appear as full literal strings (not built via
+// concatenation) so Tailwind's static scanner emits the `data-[state=checked]:*` variant utilities
+// at build time.
 const SIZES: Record<AppToggleSize, { track: string; thumb: string; checkedTranslate: string; loader: string }> = {
   small: { track: 'h-5 w-9', thumb: 'size-4', checkedTranslate: 'data-[state=checked]:translate-x-4', loader: 'size-2.5' },
   medium: { track: 'h-6 w-11', thumb: 'size-5', checkedTranslate: 'data-[state=checked]:translate-x-5', loader: 'size-3' },

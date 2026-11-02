@@ -4,11 +4,8 @@ import { AppToggle } from './AppToggle'
 import type { AppToggleColor, AppToggleSize } from './AppToggle'
 
 /**
- * Back-compat shim: every existing call site in the app was written against
- * Radix's raw Switch API (`onCheckedChange`). Routing it through AppToggle
- * means the standardized design applies everywhere this is used without
- * touching each call site individually. New code should import AppToggle
- * directly and use `onChange` instead.
+ * Back-compat shim: every existing call site in the app was written against Radix's raw Switch API
+ * (`onCheckedChange`).
  */
 export interface SwitchProps {
   checked?: boolean

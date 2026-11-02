@@ -1,7 +1,6 @@
-// Shared shape between the two client-side extraction paths (Tesseract
-// heuristic in invoiceOcr.ts, AI vision call in aiInvoiceExtraction.ts) and
-// what the backend's normalizeExtractedData (Backend/src/services/ocr.service.ts)
-// consumes — keep these three in sync.
+// Shared shape between the two client-side extraction paths (Tesseract heuristic in invoiceOcr.ts,
+// AI vision call in aiInvoiceExtraction.ts) and what the backend's normalizeExtractedData
+// (Backend/src/services/ocr.service.ts) consumes — keep these three in sync.
 
 export interface ExtractedProduct {
   productName: string;

@@ -15,12 +15,7 @@ const LEVEL_STYLES: Record<string, string> = {
     expired: 'bg-red-100 border-red-400 text-red-900 dark:bg-red-900/30 dark:border-red-700 dark:text-red-200',
 };
 
-/**
- * Renders the yellow/orange/red/expired subscription warning banner (spec
- * section 11). Purely presentational — driven entirely by the
- * warningLevel/warningMessage/graceDayLabel fields OrganizationContext
- * already gets from computeSubscriptionSummary via the org endpoint.
- */
+/** Renders the yellow/orange/red/expired subscription warning banner (spec section 11). */
 export const SubscriptionStatusBanner = ({
     warningLevel,
     warningMessage,

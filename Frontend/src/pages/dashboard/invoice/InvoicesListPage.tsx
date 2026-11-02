@@ -18,13 +18,7 @@ type Invoice = {
   saleNumber: string;
   invoiceNumber?: string | null;
   rcptLabel?: string | null;
-  /**
-   * Number of times this invoice's PDF has been registered as downloaded.
-   * CIS/VSDC spec §7.18/§15: the first download renders as the ORIGINAL;
-   * every one after automatically comes back watermarked COPY — there's no
-   * separate "download copy" action, the button just behaves differently
-   * the second time it's clicked for the same invoice.
-   */
+  /** Number of times this invoice's PDF has been registered as downloaded. */
   reprintCount?: number;
   customer: { name: string };
   totalAmount: string;
@@ -88,13 +82,7 @@ export default function InvoicesListPage() {
     fetchInvoices();
   }, [fetchInvoices]);
 
-  /**
-   * CIS/VSDC spec §7.18/§15: "print only one original receipt. Reprint shall
-   * have a watermark with mention Copy." downloadInvoicePdf registers this
-   * download with the backend before fetching the PDF, so the first download
-   * of a given invoice comes back original and every one after automatically
-   * renders watermarked COPY — there's no separate copy button to press.
-   */
+  /** CIS/VSDC spec §7.18/§15: "print only one original receipt. */
   const handleDownload = async (invoice: Invoice) => {
     setDownloadingId(invoice.id);
     try {

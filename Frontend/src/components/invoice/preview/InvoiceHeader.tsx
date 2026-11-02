@@ -6,21 +6,11 @@ import { C } from "./theme"
 
 type HeaderData = Pick<EbmInvoice, "company">
 
+/** Top invoice masthead. */
 /**
- * Top invoice masthead. The RRA artwork is deliberately limited to the supplied
- * mark on the left; the right-side certification area stays empty until a real
- * RRA EBM certificate is issued.
- *
- * The RRA mark itself only renders when the branch/org is actually configured
- * with RRA/EBM device credentials (`company.ebmLinked`) — an account that has
- * never been linked to RRA must never display RRA branding on its invoices.
- */
-/**
- * Document designation mirroring the backend's documentIndicator: the title
- * must read PROFORMA / TRAINING MODE / NOT FISCALISED / REFUND exactly when
- * the authoritative PDF does, so the preview can never disagree with the
- * fiscal record sent to RRA. A copy keeps the original's title and carries
- * the COPY watermark instead (isCopyInvoice).
+ * Document designation mirroring the backend's documentIndicator: the title must read PROFORMA /
+ * TRAINING MODE / NOT FISCALISED / REFUND exactly when the authoritative PDF does, so the preview
+ * can never disagree with the fiscal record sent to RRA.
  */
 export function isCopyInvoice(invoice: EbmInvoice["invoice"]): boolean {
   const label = String(invoice?.rcptLabel ?? "").toUpperCase()

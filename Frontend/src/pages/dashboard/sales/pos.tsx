@@ -681,9 +681,8 @@ export default function SalesForm() {
   }, [])
 
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0), [cart])
-  // The business's VAT registration decides the treatment: when the taxpayer is
-  // not VAT registered every line is tax code D (0%). When VAT registered, only
-  // code B items carry 18% VAT (tax-inclusive: VAT = gross − gross/1.18).
+  // The business's VAT registration decides the treatment: when the taxpayer is not VAT registered
+  // every line is tax code D (0%).
   const vatRegistered = orgSettings.vatRegistered
   const taxRateByCode = useMemo(() => {
     const map = new Map<string, number>()
@@ -725,10 +724,8 @@ export default function SalesForm() {
     return typed.filter(p => p.category?.toLowerCase() === activeCategory.toLowerCase())
   }, [products, activeCategory, productTypeFilter, trainingMode])
 
-  // A USB/Bluetooth barcode scanner behaves like a keyboard: it types the
-  // barcode digits into whichever input is focused, then sends Enter. Since
-  // the search box already filters by barcode (server-side), Enter here just
-  // needs to add the scanned/matched product straight to the cart.
+  // A USB/Bluetooth barcode scanner behaves like a keyboard: it types the barcode digits into
+  // whichever input is focused, then sends Enter.
   const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter' || !searchTerm.trim()) return
     e.preventDefault()
@@ -747,11 +744,9 @@ export default function SalesForm() {
     setIsPaymentModalOpen(true)
   }, [cart, selectedCustomer, t])
 
-  // Poll GET /invoices/:saleId until VSDC confirms (200) or the wait gives up
-  // — the endpoint returns 425 while `composeInvoicePayload` is still
-  // blocking on fiscalization (RRA checklist §16/§22). Updates the success
-  // modal's fiscalizationStatus in place so Print/Download/Share unlock the
-  // moment the receipt is actually safe to issue.
+  // Poll GET /invoices/:saleId until VSDC confirms (200) or the wait gives up — the endpoint
+  // returns 425 while `composeInvoicePayload` is still blocking on fiscalization (RRA checklist
+  // §16/§22).
   const pollFiscalization = useCallback(async (saleId: string | number) => {
     const maxAttempts = 10
     const stepMs = 1500
@@ -846,11 +841,7 @@ export default function SalesForm() {
         if (storedUser) cashierName = (JSON.parse(storedUser).name as string) || undefined
       } catch { /* ignore */ }
 
-      // RRA VSDC checklist §16/§22: don't let the cashier print before VSDC
-      // has confirmed. The backend already waited briefly for that during
-      // createSale — `fiscalization.status` tells us whether it landed in
-      // time ("success"), is still in flight ("pending", poll below), or
-      // gave up ("failed").
+      // RRA VSDC checklist §16/§22: don't let the cashier print before VSDC has confirmed.
       const fiscalizationStatus = (createdSale?.fiscalization?.status as 'success' | 'pending' | 'failed' | undefined) ?? 'success'
 
       setSuccessSale({
@@ -893,13 +884,9 @@ export default function SalesForm() {
     }
   }, [cart, selectedCustomer, total, t, isOnline, selectedBranchId, pollFiscalization, trainingMode])
 
-  // A proforma is a quote, not a sale: no payment is collected, no stock moves,
-  // and no customer debt is booked (see createSale on the backend — isProforma
-  // skips stock deduction and debt entirely). It IS fiscalized through RRA
-  // VSDC like every other receipt type, so its invoice matches the fiscal
-  // record. debtAmount is still set to `total` here only to satisfy the
-  // backend's payment-sum check; the backend does not actually add it to the
-  // customer's balance.
+  // A proforma is a quote, not a sale: no payment is collected, no stock moves, and no customer
+  // debt is booked (see createSale on the backend — isProforma skips stock deduction and debt
+  // entirely).
   const handleCreateProforma = useCallback(async () => {
     if (cart.length === 0) { toast.error(t('pos.noItemsInCart')); return }
     if (!selectedCustomer) { toast.error(t('pos.selectCustomer')); return }
@@ -947,9 +934,9 @@ export default function SalesForm() {
         changeReturned: 0,
         date: new Date(),
         cashierName,
-        // Proforma is fiscalized through VSDC like any other receipt — report
-        // the real submission outcome so the success modal never claims a
-        // receipt is print-ready before RRA confirms it.
+        // Proforma is fiscalized through VSDC like any other receipt — report the real submission
+        // outcome so the success modal never claims a receipt is print-ready before RRA confirms
+        // it.
         fiscalizationStatus: ((createdSale as any)?.fiscalization?.status as 'success' | 'pending' | 'failed' | undefined) ?? 'pending',
       })
       setLastCreatedSale(createdSale)

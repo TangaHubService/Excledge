@@ -3,9 +3,8 @@ import { ITEM_CLASSIFICATION_OPTIONS, ITEM_CLASSIFICATION_LABELS } from "../../t
 import { cn } from "../../lib/utils";
 
 /**
- * Searchable classification picker — text labels only; the RRA code is stored
- * as the option value (not shown in the UI). Uses the shared SearchableSelect
- * pattern instead of a native <select>.
+ * Searchable classification picker — text labels only; the RRA code is stored as the option value
+ * (not shown in the UI).
  */
 export function RraItemClassPicker({
   value,

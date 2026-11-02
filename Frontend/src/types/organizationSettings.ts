@@ -64,11 +64,14 @@ export interface IOrganizationSettings {
     /** Business/taxpayer is registered for VAT. False → every sale uses RRA tax
      *  code D regardless of product category. */
     vatRegistered: boolean;
+    /** VSDC device configured: EBM and negative-stock flags are read-only. */
+    fiscalFlagsLocked?: boolean;
 }
 
-/** One entry per real sidebar link, grouped the same way the sidebar itself
- *  groups them — the single source of truth for the Settings UI's labels,
- *  routes (defaultLandingPage) and section layout. */
+/**
+ * One entry per real sidebar link, grouped the same way the sidebar itself groups them — the single
+ * source of truth for the Settings UI's labels, routes (defaultLandingPage) and section layout.
+ */
 export const SIDEBAR_SECTIONS: { label: string; items: { key: keyof ISidebarConfig; label: string; route: string }[] }[] = [
     {
         label: 'General',
@@ -172,8 +175,7 @@ export const DEFAULT_ORGANIZATION_SETTINGS: IOrganizationSettings = {
         lowStockThresholdOverride: null,
         enabledPaymentMethods: ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK_TRANSFER', 'DEBT'],
     },
-    // Defaults to true: matches the existing behavior where VAT-registered
-    // products charge 18%, so organizations that never touch this setting keep
-    // their current tax treatment.
+    // Defaults to true: matches the existing behavior where VAT-registered products charge 18%, so
+    // organizations that never touch this setting keep their current tax treatment.
     vatRegistered: true,
 };

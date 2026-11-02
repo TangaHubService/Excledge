@@ -40,32 +40,37 @@ interface OrganizationContextType {
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
 
 export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [organization, setOrganization] = useState<Organization | null>(null);
+    const [organization, setOrganizationState] = useState<Organization | null>(null);
+
+    // Persist so a reload does not fall back to the stale login-time copy.
+    const setOrganization = (org: Organization | null) => {
+        setOrganizationState(org);
+        if (org) localStorage.setItem('organization', JSON.stringify(org));
+    };
 
     const loadOrganization = async () => {
         const storedOrg = localStorage.getItem('organization');
         const orgId = localStorage.getItem('current_organization_id');
 
         if (orgId) {
-            // Verify cached org matches current_organization_id
+            let cached: Organization | null = null;
             if (storedOrg) {
                 try {
                     const parsedOrg = JSON.parse(storedOrg);
                     if (String(parsedOrg.id) === orgId) {
-                        setOrganization(parsedOrg);
-                        return;
+                        cached = parsedOrg;
+                        setOrganizationState(parsedOrg);
                     }
                 } catch (e) {
                     console.error('Failed to parse stored organization:', e);
                 }
             }
 
-            // Fetch from API if localStorage is stale or missing
+            // Always refresh: the cached copy may lack or predate fields like vatRegistered.
             try {
                 const organizationData = await apiClient.getOrganization(orgId);
                 if (organizationData?.organization) {
-                    setOrganization(organizationData.organization);
-                    localStorage.setItem('organization', JSON.stringify(organizationData.organization));
+                    setOrganization({ ...(cached ?? {}), ...organizationData.organization });
                 }
             } catch (error) {
                 console.error('Failed to fetch organization:', error);

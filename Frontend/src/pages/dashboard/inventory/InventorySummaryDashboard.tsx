@@ -85,9 +85,8 @@ export default function InventorySummaryDashboard() {
 
       const data = await apiClient.getInventorySummary(params);
 
-      // Normalize data structure - handle potential nesting
-      // Backend might return { summary: { summary: [...], fromDate }, fromDate }
-      // or { summary: [...], fromDate }
+      // Normalize data structure - handle potential nesting Backend might return { summary: {
+      // summary: [...], fromDate }, fromDate } or { summary: [...], fromDate }
       let normalizedData: InventorySummaryResponse;
       if (Array.isArray(data.summary)) {
         // Direct array

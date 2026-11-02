@@ -25,12 +25,7 @@ export interface SaleSuccessData {
   cashierName?: string
   date?: Date | string
   /**
-   * RRA VSDC compliance: a receipt must not print until VSDC has confirmed
-   * it (checklist §16/§22). "success" (or undefined, for proforma/EBM-off
-   * sales which never go through VSDC) means print actions are safe to use;
-   * "pending" means VSDC confirmation is still in flight; "failed" means the
-   * bounded wait ran out without confirmation and the sale needs manual
-   * follow-up before it can be printed.
+   * RRA VSDC compliance: a receipt must not print until VSDC has confirmed it (checklist §16/§22).
    */
   fiscalizationStatus?: "success" | "pending" | "failed"
 }
@@ -175,11 +170,8 @@ export default function SaleSuccessModal({
 
               {/* Actions */}
               {(() => {
-                // Print waits only while VSDC confirmation is still in flight
-                // (it resolves within seconds via the poll). A failed sale is
-                // not going to confirm on its own, so its invoice is allowed —
-                // it renders stamped NOT FISCALISED. Download/Share follow the
-                // same rule and stay enabled unless we're still waiting.
+                // Print waits only while VSDC confirmation is still in flight (it resolves within
+                // seconds via the poll).
                 const printBlocked = saleData.fiscalizationStatus === "pending" || saleData.fiscalizationStatus === "failed"
                 return (
                   <>

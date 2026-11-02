@@ -1,9 +1,6 @@
 /**
- * Single source of truth for the composed ERP sales-invoice payload
- * produced by GET /api/sales/:orgId/invoices/:saleId.
- *
- * The backend owns all invoice values and the authoritative PDF. These types
- * describe the metadata envelope used for status and filenames in the UI.
+ * Single source of truth for the composed ERP sales-invoice payload produced by GET
+ * /api/sales/:orgId/invoices/:saleId.
  */
 
 import type { InvoicePdfFormat } from "./invoice-pdf"
@@ -64,11 +61,7 @@ export interface InvoiceTotals {
   grandTotal: number
 }
 
-/**
- * Raw sale-level charges (as stored on the Sale row). The derived `totals` are
- * computed from these + the line items via {@link calculateInvoiceTotals} so the
- * displayed numbers can never drift from the lines being rendered.
- */
+/** Raw sale-level charges (as stored on the Sale row). */
 export interface InvoiceCharges {
   vatAmount: number
   taxableAmount: number
@@ -146,9 +139,8 @@ export interface InvoiceInvoice {
   /** The copied receipt's own VSDC counter, e.g. `168/258 NS`. */
   copyOfReceiptNumber?: string | null
   /**
-   * Set when this is a real sale downloaded before VSDC confirmed it
-   * ("pending" — still syncing, or "failed" — permanently dead-lettered). The
-   * document is watermarked NOT FISCALISED and is not a valid tax receipt.
+   * Set when this is a real sale downloaded before VSDC confirmed it ("pending" — still syncing, or
+   * "failed" — permanently dead-lettered).
    */
   notFiscalized?: 'pending' | 'failed' | null
   currency: string
@@ -183,9 +175,8 @@ export interface EbmInvoice {
 }
 
 /**
- * Half-up 2-decimal rounding for RWF display math (mirrors the backend
- * money.service round2; the backend stays authoritative for fiscal values).
- * The +1e-9 nudge absorbs binary-float boundary error (e.g. 1.005*100).
+ * Half-up 2-decimal rounding for RWF display math (mirrors the backend money.service round2; the
+ * backend stays authoritative for fiscal values).
  */
 export function round2(n: unknown): number {
   const v = Number(n)
@@ -195,10 +186,8 @@ export function round2(n: unknown): number {
 }
 
 /**
- * Single shared source of truth for all money arithmetic used by the invoice
- * preview and every export. Totals are derived from the fetched line items and
- * sale-level charges rather than trusting a separately-sent total, so they can
- * never drift from what is actually rendered.
+ * Single shared source of truth for all money arithmetic used by the invoice preview and every
+ * export.
  */
 export function calculateInvoiceTotals(
   items: InvoiceLineItem[],

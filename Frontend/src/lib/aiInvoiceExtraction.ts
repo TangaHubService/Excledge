@@ -3,10 +3,10 @@ import { zodTextFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 import type { ExtractedInvoiceData, ExtractedProduct } from './invoiceExtraction.types';
 
-// ── Structured-output schema ────────────────────────────────────────────────
-// Every field is `.nullable()` rather than `.optional()` — OpenAI's strict
-// JSON Schema mode requires every property to be listed in `required`, so
-// "not on this invoice" is expressed as `null`, never a missing key.
+// ── Structured-output schema ────────────────────────────────────────────── ── Every field is
+// `.nullable()` rather than `.optional()` — OpenAI's strict JSON Schema mode requires every
+// property to be listed in `required`, so "not on this invoice" is expressed as `null`, never a
+// missing key.
 
 const VendorSchema = z.object({
   name: z.string().nullable(),
@@ -69,9 +69,8 @@ let client: OpenAI | null = null;
 
 function getClient(): OpenAI {
   if (!client) {
-    // The key ships inside this bundle by design (see VITE_OPENAI_API_KEY in
-    // .env.example) — there is no backend proxy for this call. Treat the key
-    // as public: scope it to a low-spend project and rotate it if abused.
+    // The key ships inside this bundle by design (see VITE_OPENAI_API_KEY in .env.example) — there
+    // is no backend proxy for this call.
     client = new OpenAI({
       apiKey: import.meta.env.VITE_OPENAI_API_KEY,
       dangerouslyAllowBrowser: true,
@@ -93,10 +92,9 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-// ── Defensive normalization ─────────────────────────────────────────────────
-// Structured outputs guarantees the *shape* of the response, not that the
-// values are sane — clamp money/tax to the backend's DB column bounds and
-// coerce dates to ISO before anything reaches the review UI.
+// ── Defensive normalization ─────────────────────────────────────────────── ── Structured outputs
+// guarantees the *shape* of the response, not that the values are sane — clamp money/tax to the
+// backend's DB column bounds and coerce dates to ISO before anything reaches the review UI.
 
 const MAX_MONEY = 99_999_999.99;
 const MAX_TAX_RATE = 999.99;
@@ -144,9 +142,9 @@ function normalize(raw: InvoiceExtraction, provider: string, processingMs: numbe
       totalPrice: lineTotal,
       taxRate: item.taxRate != null ? clampTaxRate(item.taxRate) : undefined,
       taxAmount,
-      // Line math is checked client-side too (the backend re-checks at header
-      // level) so a bad extraction is visibly flagged in the review table
-      // before the user commits to it, not just after the fact.
+      // Line math is checked client-side too (the backend re-checks at header level) so a bad
+      // extraction is visibly flagged in the review table before the user commits to it, not just
+      // after the fact.
       confidence: verified ? raw.extractionConfidence : Math.min(raw.extractionConfidence, 0.4),
     };
   });
@@ -173,10 +171,8 @@ function normalize(raw: InvoiceExtraction, provider: string, processingMs: numbe
 }
 
 /**
- * Extracts a supplier invoice using OpenAI vision + structured outputs,
- * called directly from the browser. Throws if VITE_OPENAI_API_KEY is not
- * configured or the API call fails — callers should fall back to
- * scanInvoiceLocally (Tesseract) on error.
+ * Extracts a supplier invoice using OpenAI vision + structured outputs, called directly from the
+ * browser.
  */
 export async function extractInvoiceWithAI(
   file: File,

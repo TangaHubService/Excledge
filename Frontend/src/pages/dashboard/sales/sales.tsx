@@ -163,9 +163,9 @@ export default function SalesPage() {
   const [refundRsnCd, setRefundRsnCd] = useState('');
   const [refundReasons, setRefundReasons] = useState<Array<{ code: string; name: string }>>([]);
   const [isRefunding, setIsRefunding] = useState(false);
-  // Refundable detail (original + per-line remaining + prior refunds) loaded
-  // from GET .../refundable when the drawer opens; per-line qty inputs are
-  // kept as strings and parsed on submit.
+  // Refundable detail (original + per-line remaining + prior refunds) loaded from GET
+  // .../refundable when the drawer opens; per-line qty inputs are kept as strings and parsed on
+  // submit.
   const [refundDetail, setRefundDetail] = useState<any>(null);
   const [refundDetailLoading, setRefundDetailLoading] = useState(false);
   const [refundLineQty, setRefundLineQty] = useState<Record<string, string>>({});
@@ -274,9 +274,8 @@ export default function SalesPage() {
     setRefundLineQty({});
     setRefundDetail(null);
     setIsRefundModalOpen(true);
-    // What is still refundable (remaining per line, prior refunds). The inputs
-    // default to the full remaining quantity; the operator lowers them for a
-    // partial refund. The backend re-validates everything on submit.
+    // What is still refundable (remaining per line, prior refunds). The inputs default to the full
+    // remaining quantity; the operator lowers them for a partial refund.
     setRefundDetailLoading(true);
     apiClient.getRefundable(sale.id)
       .then((res: any) => {
@@ -376,13 +375,7 @@ export default function SalesPage() {
     }
   };
 
-  /**
-   * CIS/VSDC spec §7.18/§15: "print only one original receipt. Reprint shall
-   * have a watermark with mention Copy." There's no separate copy action —
-   * downloadInvoicePdf registers each download with the backend itself, so
-   * the first download of a given sale's invoice comes back as the original
-   * and every one after automatically renders watermarked COPY.
-   */
+  /** CIS/VSDC spec §7.18/§15: "print only one original receipt. */
   const handleDownloadInvoice = async (sale: Sale, downloadFormat: InvoicePdfFormat = invoiceFormat) => {
     setIsDownloadingInvoice(sale.id);
     try {
@@ -435,9 +428,8 @@ export default function SalesPage() {
     setSearchTerm(''); setCurrentPage(1);
   };
 
-  // Poll GET /invoices/:saleId until VSDC confirms (200) or the wait gives up —
-  // the endpoint returns 425 while fiscalization is still in flight. Flips the
-  // success modal's indicator in place. Mirrors the POS checkout behaviour.
+  // Poll GET /invoices/:saleId until VSDC confirms (200) or the wait gives up — the endpoint
+  // returns 425 while fiscalization is still in flight.
   const pollFiscalization = useCallback(async (saleId: string | number) => {
     for (let attempt = 0; attempt < 10; attempt += 1) {
       await new Promise((r) => setTimeout(r, 1500));

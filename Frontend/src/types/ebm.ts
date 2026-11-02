@@ -51,17 +51,7 @@ export const MEASUREMENT_UNIT_OPTIONS = Object.entries(MEASUREMENT_UNIT_LABELS).
   ([value, label]) => ({ value: value as MeasurementUnit, label }),
 );
 
-/**
- * RRA/EBM packaging unit codes (product `pkgUnitCd`). This is how a product is
- * physically packaged for sale/purchase — e.g. a carton of bottles — distinct
- * from `MeasurementUnit`, which is the base unit the product is measured/sold in.
- *
- * Sourced from RRA's authoritative VSDC code list (`POST /code/selectCodes`,
- * class "17" — Packing Unit; cached locally in the `rra_codes` table by
- * `rra-master-data.service.ts`). The previous version of this table was
- * hand-guessed and included codes RRA doesn't recognize (e.g. "EA", "BX"),
- * which VSDC rejects with `resultCd 913: Code value error ... [<pkgUnitCd>]`.
- */
+/** RRA/EBM packaging unit codes (product `pkgUnitCd`). */
 export const PACKAGING_UNIT_LABELS: Record<string, string> = {
   AM: 'Ampoule',
   BA: 'Barrel',
@@ -122,14 +112,8 @@ export const PACKAGING_UNIT_OPTIONS = Object.entries(PACKAGING_UNIT_LABELS).map(
 );
 
 /**
- * RRA/EBM quantity unit codes (product `qtyUnitCd`) — the unit each item inside
- * the package is counted/measured in.
- *
- * Sourced from RRA's authoritative VSDC code list (`POST /code/selectCodes`,
- * class "10" — Quantity Unit; cached locally in the `rra_codes` table by
- * `rra-master-data.service.ts`). The previous version of this table included
- * codes RRA doesn't recognize (e.g. "G", "TN", "ML", "NT"), which VSDC rejects
- * with `resultCd 913: Code value error ... [<qtyUnitCd>]`.
+ * RRA/EBM quantity unit codes (product `qtyUnitCd`) — the unit each item inside the package is
+ * counted/measured in.
  */
 export const QUANTITY_UNIT_LABELS: Record<string, string> = {
   '4B': 'Pair',
@@ -181,11 +165,7 @@ export const QUANTITY_UNIT_OPTIONS = Object.entries(QUANTITY_UNIT_LABELS).map(
   ([value, label]) => ({ value, label: `${label} (${value})` }),
 );
 
-/**
- * RRA/EBM origin-country codes (product `origin`, VSDC `OrgplceCd`) — ISO
- * 3166-1 alpha-2. Rwanda is listed first since it's the overwhelmingly common
- * default for locally sourced goods.
- */
+/** RRA/EBM origin-country codes (product `origin`, VSDC `OrgplceCd`) — ISO 3166-1 alpha-2. */
 export const ORIGIN_COUNTRY_LABELS: Record<string, string> = {
   RW: 'Rwanda',
   UG: 'Uganda',
@@ -258,12 +238,8 @@ export const ORIGIN_COUNTRY_OPTIONS = Object.entries(ORIGIN_COUNTRY_LABELS).map(
 
 /**
  * Built-in RRA item classification codes (`itemClsCd`) for offline create when
- * `/itemClass/selectItemsClass` sync is unavailable (VSDC often returns 894
- * when RRA is unreachable).
- *
- * Only 10-digit codes verified against local VSDC `/items/saveItems`
- * (resultCd 000). Prefer syncing the live list via Fiscal Reports when the
- * gateway can reach RRA. Unknown codes are rejected with resultCd 910.
+ * `/itemClass/selectItemsClass` sync is unavailable (VSDC often returns 894 when RRA is
+ * unreachable).
  */
 /** Codes verified against local VSDC `/items/saveItems` (resultCd 000). */
 export const ITEM_CLASSIFICATION_LABELS: Record<string, string> = {

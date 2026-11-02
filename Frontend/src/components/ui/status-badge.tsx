@@ -1,8 +1,7 @@
 import { cn } from '../../lib/utils'
 
-// ── Palette map ───────────────────────────────────────────────────────────────
-// Each key maps to a Tailwind className string for bg + text + border.
-// Using explicit class strings (not dynamic) so Tailwind's JIT includes them.
+// ── Palette map ───────────────────────────────────────────────────────────── ── Each key maps to
+// a Tailwind className string for bg + text + border.
 
 const STYLES: Record<string, string> = {
   // ── Sale / generic ─────────────────────────────────────────────────────────

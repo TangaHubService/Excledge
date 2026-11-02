@@ -162,9 +162,9 @@ export const CashFlowReport = () => {
         try {
             const orgId = apiClient.getOrganizationId();
             const data = await apiClient.getPurchaseOrders(orgId) as any;
-            // Only show orders that are not fully paid
-            // Note: Our current orders might not have a payment status in the standard list, 
-            // but we'll show all and let the backend validate if we don't have that info yet.
+            // Only show orders that are not fully paid Note: Our current orders might not have a
+            // payment status in the standard list, but we'll show all and let the backend validate
+            // if we don't have that info yet.
             setPurchaseOrders(data || []);
         } catch (error) {
             console.error('Error fetching purchase orders:', error);

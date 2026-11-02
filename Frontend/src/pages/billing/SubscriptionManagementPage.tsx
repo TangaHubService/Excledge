@@ -173,11 +173,10 @@ const SubscriptionManagementPage = () => {
         }
     };
 
-    // Renewal reuses the exact same duration-selection + payment flow as a new
-    // purchase (rendered below via <SubscriptionPage preselectedPlanId .../>):
-    // the backend already treats "buy more months for a plan you already have"
-    // as a renewal-in-place, extending from the current endDate when it's
-    // still in the future.
+    // Renewal reuses the exact same duration-selection + payment flow as a new purchase (rendered
+    // below via <SubscriptionPage preselectedPlanId .../>): the backend already treats "buy more
+    // months for a plan you already have" as a renewal-in-place, extending from the current endDate
+    // when it's still in the future.
     const handleRenewSubscription = (subscription: Subscription) => {
         setRenewTarget({ planId: subscription.plan.id, currentExpiryDate: subscription.endDate });
     };

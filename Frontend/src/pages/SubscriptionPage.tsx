@@ -14,11 +14,10 @@ type SubscriptionPageProps = {
     /** When false, only the plan grid is shown (e.g. landing page already has a title). */
     showPlanHeader?: boolean;
     /**
-     * When set, auto-opens the payment modal for this plan on mount — used by
-     * the Renew action on SubscriptionManagementPage so renewal reuses the
-     * exact same duration + payment flow as a new purchase (the backend's
-     * preparePurchase already treats "buy more months for a plan you already
-     * have" as a renewal-in-place, so no separate renewal codepath is needed).
+     * When set, auto-opens the payment modal for this plan on mount — used by the Renew action on
+     * SubscriptionManagementPage so renewal reuses the exact same duration + payment flow as a new
+     * purchase (the backend's preparePurchase already treats "buy more months for a plan you
+     * already have" as a renewal-in-place, so no separate renewal codepath is needed).
      */
     preselectedPlanId?: string | number | null;
     /** The current subscription's end date, shown in the duration preview as "Current Expiry -> New Expiry" instead of "Start -> End" when renewing. */
@@ -48,9 +47,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
     const navigate = useNavigate();
     const organizationId = localStorage.getItem("current_organization_id");
 
-    // -----------------------------------------------------
     // 🟣 WebSocket Handlers
-    // -----------------------------------------------------
     const onConnect = useCallback(() => {
         if (!socketRef.current) return;
         console.log("🔌 WebSocket connected:", socketRef.current.id);
@@ -105,9 +102,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
     }, [refreshSubscription]);
 
 
-    // -----------------------------------------------------
     // 🟣 WebSocket Setup
-    // -----------------------------------------------------
     useEffect(() => {
         if (!organizationId) return;
 
@@ -153,9 +148,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
         };
     }, [organizationId, paymentRef, refreshSubscription]);
 
-    // -----------------------------------------------------
     // Select Plan
-    // -----------------------------------------------------
     const handleSelectPlan = (plan: any) => {
         const token = localStorage.getItem("token");
         if (!token) {
@@ -176,9 +169,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [preselectedPlanId, isLoading, plans]);
 
-    // -----------------------------------------------------
     // 🟣 Initiate Payment (Mobile & Card)
-    // -----------------------------------------------------
     const handlePaymentInitiated = async (
         paymentMethod: string,
         phoneNumber?: string,
@@ -193,16 +184,12 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
         setPaymentStatus("processing");
 
         try {
-            // -------------------------------------------------
             // 💳 CARD PAYMENT (handled entirely inside PesapalPaymentForm)
-            // -------------------------------------------------
             if (paymentMethod === "CARD") {
                 return;
             }
 
-            // -------------------------------------------------
             // 📱 MOBILE MONEY PAYMENT
-            // -------------------------------------------------
             if (!phoneNumber) {
                 throw new Error("Phone number required");
             }
@@ -249,9 +236,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
         setIsProcessing(false);
     };
 
-    // -----------------------------------------------------
     // Close Modals
-    // -----------------------------------------------------
     const handleModalClose = () => {
         setShowPaymentModal(false);
         setShowPaymentResult(false);
@@ -260,9 +245,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
         setSelectedPlan(null);
     };
 
-    // -----------------------------------------------------
     // Skeleton (Loading State)
-    // -----------------------------------------------------
     if (isLoading) {
         const skeletonPlans = Array.from({ length: 4 });
 
@@ -309,9 +292,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
         );
     }
 
-    // -----------------------------------------------------
     // Render Actual UI
-    // -----------------------------------------------------
     return (
         <div className={showPlanHeader ? "bg-[#f2f4f7] dark:bg-zinc-950" : ""}>
             <section className={showPlanHeader ? "py-10 sm:py-14" : "py-0"}>

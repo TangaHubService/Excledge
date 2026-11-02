@@ -21,10 +21,8 @@ interface SubscriptionRequiredModalProps {
 }
 
 /**
- * Blocking, dismissible modal shown in place of the old inline banner when
- * the active organization has no active subscription. Presentation only —
- * the underlying "does this org have an active subscription" check is
- * unchanged and still comes from OrganizationContext.
+ * Blocking, dismissible modal shown in place of the old inline banner when the active organization
+ * has no active subscription.
  */
 export const SubscriptionRequiredModal: React.FC<SubscriptionRequiredModalProps> = ({
     hasActiveSubscription,

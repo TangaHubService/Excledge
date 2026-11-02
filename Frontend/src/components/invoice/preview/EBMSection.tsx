@@ -24,16 +24,7 @@ function QrCanvas({ payload }: { payload: string }) {
   return <canvas ref={canvasRef} style={{ width: 100, height: 100, display: "block" }} />
 }
 
-/**
- * Official verification data. Shown after real fiscalisation — including
- * training (TS/TR) and proforma (PS) receipts, which are fiscalized through
- * the VSDC like every other receipt type. While confirmation is still pending
- * the block still appears (with blank Internal Data / Receipt Signature)
- * rather than silently disappearing.
- *
- * Layout matches the RRA thermal sample: SDC INFORMATION heading, fiscal
- * fields, bottom RECEIPT NUMBER:{vsdcInvcNo} + Date + MRC, then CIS branding.
- */
+/** Official verification data. */
 export function EBMSection({ data }: { data: EbmSectionProps }) {
   const sdc = data.sdcInformation
   const rcptLabel = (data.invoice?.rcptLabel ?? "").toUpperCase()

@@ -2,41 +2,21 @@ import React from 'react';
 import { cn } from '../../lib/utils';
 
 interface TableSkeletonProps {
-  /**
-   * Number of rows to display in the skeleton
-   * @default 5
-   */
+  /** Number of rows to display in the skeleton */
   rows?: number;
-  /**
-   * Number of columns to display in the skeleton
-   * @default 5
-   */
+  /** Number of columns to display in the skeleton */
   columns?: number;
-  /**
-   * Whether to show the header row
-   * @default true
-   */
+  /** Whether to show the header row */
   showHeader?: boolean;
-  /**
-   * Additional class names to apply to the table
-   */
+  /** Additional class names to apply to the table */
   className?: string;
-  /**
-   * Custom height for table rows
-   * @default 'h-4'
-   */
+  /** Custom height for table rows */
   rowHeight?: string;
-  /**
-   * Custom width for the header skeleton
-   * @default 'w-3/4'
-   */
+  /** Custom width for the header skeleton */
   headerWidth?: string;
 }
 
-/**
- * A reusable table skeleton loader component that can be used while data is loading.
- * It provides a visual indication that content is being loaded and supports dark mode.
- */
+/** A reusable table skeleton loader component that can be used while data is loading. */
 export const TableSkeleton: React.FC<TableSkeletonProps> = ({
   rows = 5,
   columns = 5,

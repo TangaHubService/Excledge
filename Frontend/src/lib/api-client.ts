@@ -37,11 +37,8 @@ const handleTokenExpiration = () => {
   window.location.href = '/login';
 };
 
-// A lapsed subscription past its grace period returns 403 SUBSCRIPTION_INACTIVE
-// on operational routes (see requireActiveSubscription middleware). There was
-// previously no frontend handling of this code at all — requests just failed
-// silently wherever they were called. Surface it once and send the user to
-// the renewal page instead.
+// A lapsed subscription past its grace period returns 403 SUBSCRIPTION_INACTIVE on operational
+// routes (see requireActiveSubscription middleware).
 const handleSubscriptionInactive = (errorData: any) => {
   if (errorData?.code !== 'SUBSCRIPTION_INACTIVE') return;
   if (typeof window === 'undefined') return;
@@ -246,9 +243,8 @@ class ApiClient {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    // ── Auto-inject branchId into query string (same as request()) ──
-    // File downloads/exports must respect the selected branch too, or an
-    // export could silently include other branches' data.
+    // ── Auto-inject branchId into query string (same as request()) ── File downloads/exports must
+    // respect the selected branch too, or an export could silently include other branches' data.
     const branchParam = this.getBranchQueryParam(endpoint);
     const separator = endpoint.includes('?') ? '&' : '?';
     const url = branchParam ? `${API_URL}${endpoint}${separator}${branchParam}` : `${API_URL}${endpoint}`;
@@ -662,13 +658,7 @@ class ApiClient {
     return this.request(`/sales/${this.getOrganizationId()}/${id}`);
   }
 
-  /**
-   * Composed ERP invoice payload for the modern RRA/EBM invoice renderer.
-   * Pass `allowPending` to also get the payload for a real sale VSDC has not
-   * confirmed yet (it comes back stamped NOT FISCALISED); without it the
-   * endpoint returns 425 while fiscalization is still in flight, which the
-   * fiscalization poll relies on.
-   */
+  /** Composed ERP invoice payload for the modern RRA/EBM invoice renderer. */
   async getInvoice(id: string | number, opts: { allowPending?: boolean } = {}) {
     const query = opts.allowPending ? "?allowPending=1" : "";
     return this.request(`/sales/${this.getOrganizationId()}/invoices/${id}${query}`);
@@ -696,13 +686,7 @@ class ApiClient {
     })
   }
 
-  /**
-   * CIS/VSDC spec §7.18/§15: registers one download of this invoice's PDF.
-   * The first registered download is the original; every one after that
-   * makes the backend render the PDF as a COPY (CS/CR) receipt. Called
-   * automatically before every deliberate download — there's no separate
-   * "copy" action to trigger by hand.
-   */
+  /** CIS/VSDC spec §7.18/§15: registers one download of this invoice's PDF. */
   async reprintSale(saleId: string | number) {
     return this.request(`/sales/${this.getOrganizationId()}/${saleId}/reprint`, {
       method: "POST",
@@ -718,9 +702,8 @@ class ApiClient {
   }
 
   /**
-   * CS/CR: PDF copy of an existing NS (Copy Sale) or NR (Copy Refund) receipt,
-   * carrying the original receipt's VSDC fiscal data and marked COPY. The
-   * backend records the copy; it never creates a new sale/refund.
+   * CS/CR: PDF copy of an existing NS (Copy Sale) or NR (Copy Refund) receipt, carrying the
+   * original receipt's VSDC fiscal data and marked COPY.
    */
   async printReceiptCopy(saleId: string | number, format: "A4" | "A5" | "80mm" = "A4") {
     return this.requestFile(`/sales/${this.getOrganizationId()}/${saleId}/copy?format=${format}`, {
@@ -1378,11 +1361,8 @@ class ApiClient {
   }
 
   async renewSubscription(id: string, params?: { months?: number; billingMode?: "MONTHLY" | "YEARLY" }) {
-    // NOTE: this hits the Stripe-only renewal path (subscription.controller.ts),
-    // which isn't reachable from the app's real payment rails (Pesapal/Paypack).
-    // The subscription-management renewal UI uses the Pesapal/Paypack initiate
-    // endpoints instead (see initiatePesapalPayment / initiateMobilePayment),
-    // which already treat "buy more months for an existing plan" as a renewal.
+    // NOTE: this hits the Stripe-only renewal path (subscription.controller.ts), which isn't
+    // reachable from the app's real payment rails (Pesapal/Paypack).
     const organizationId = this.getOrganizationId();
     return this.request(`/subscriptions/organizations/${organizationId}/subscriptions/${id}/renew`, {
       method: "POST",
@@ -1657,14 +1637,9 @@ class ApiClient {
     });
   }
 
-  // ============================================
   // Inventory Ledger Endpoints
-  // ============================================
 
-  /**
-   * Add stock to inventory (Stock IN)
-   * @param data Stock addition details
-   */
+  /** Add stock to inventory (Stock IN) */
   async addStockToInventory(data: {
     productId: number;
     quantity: number;
@@ -1684,10 +1659,7 @@ class ApiClient {
     });
   }
 
-  /**
-   * Remove stock from inventory (Stock OUT)
-   * @param data Stock removal details
-   */
+  /** Remove stock from inventory (Stock OUT) */
   async removeStockFromInventory(data: {
     productId: number;
     quantity: number;
@@ -1704,10 +1676,7 @@ class ApiClient {
     });
   }
 
-  /**
-   * Adjust stock (can be positive or negative)
-   * @param data Stock adjustment details
-   */
+  /** Adjust stock (can be positive or negative) */
   async adjustInventoryStock(data: {
     productId: number;
     quantity: number; // Can be positive or negative
@@ -1724,10 +1693,7 @@ class ApiClient {
     });
   }
 
-  /**
-   * Get ledger entries with filtering and pagination
-   * @param params Filter and pagination parameters
-   */
+  /** Get ledger entries with filtering and pagination */
   async getInventoryLedger(params?: {
     productId?: number;
     warehouseId?: number | null;
@@ -1754,10 +1720,7 @@ class ApiClient {
     return this.request(`/inventory/${this.getOrganizationId()}/ledger${query}`);
   }
 
-  /**
-   * Get inventory summary since inception or from a specific date
-   * @param params Summary parameters
-   */
+  /** Get inventory summary since inception or from a specific date */
   async getInventorySummary(params?: {
     productId?: number;
     branchId?: number | null;
@@ -1776,11 +1739,7 @@ class ApiClient {
     return this.request(`/inventory/${this.getOrganizationId()}/ledger/summary${query}`);
   }
 
-  /**
-   * Get current stock for a product (calculated from ledger)
-   * @param productId Product ID
-   * @param warehouseId Optional warehouse ID (null for main warehouse)
-   */
+  /** Get current stock for a product (calculated from ledger) */
   async getCurrentStock(productId: number, warehouseId?: number | null) {
     const query = warehouseId !== undefined
       ? `?warehouseId=${warehouseId === null ? 'null' : warehouseId}`
@@ -1788,11 +1747,7 @@ class ApiClient {
     return this.request(`/inventory/${this.getOrganizationId()}/ledger/current-stock/${productId}${query}`);
   }
 
-  /**
-   * Get complete inventory history for a product since inception
-   * @param productId Product ID
-   * @param warehouseId Optional warehouse ID (null for main warehouse)
-   */
+  /** Get complete inventory history for a product since inception */
   async getInventoryHistory(productId: number, branchId?: number | null) {
     const query = branchId !== undefined
       ? `?branchId=${branchId === null ? 'null' : branchId}`
@@ -1800,11 +1755,7 @@ class ApiClient {
     return this.request(`/inventory/${this.getOrganizationId()}/ledger/history/${productId}${query}`);
   }
 
-  /**
-   * Recalculate product stock from ledger (useful for data integrity)
-   * @param productId Product ID
-   * @param warehouseId Optional warehouse ID (null for main warehouse)
-   */
+  /** Recalculate product stock from ledger (useful for data integrity) */
   async recalculateProductStock(productId: number, warehouseId?: number | null) {
     return this.request(`/inventory/${this.getOrganizationId()}/ledger/recalculate/${productId}`, {
       method: 'POST',
@@ -1812,13 +1763,9 @@ class ApiClient {
     });
   }
 
-  // ============================================
   // Warehouse Endpoints
-  // ============================================
 
-  /**
-   * Get all warehouses for the organization
-   */
+  /** Get all warehouses for the organization */
   async getWarehouses(includeInactive: boolean = true) {
     const query = includeInactive ? '?includeInactive=true' : '';
     return this.request(`/warehouses/${this.getOrganizationId()}${query}`, {
@@ -1826,20 +1773,14 @@ class ApiClient {
     });
   }
 
-  /**
-   * Get warehouse by ID
-   * @param warehouseId Warehouse ID
-   */
+  /** Get warehouse by ID */
   async getWarehouseById(warehouseId: number) {
     return this.request(`/warehouses/${this.getOrganizationId()}/${warehouseId}`, {
       method: 'GET',
     });
   }
 
-  /**
-   * Create a new warehouse
-   * @param data Warehouse data
-   */
+  /** Create a new warehouse */
   async createWarehouse(data: {
     name: string;
     code?: string;
@@ -1852,11 +1793,7 @@ class ApiClient {
     });
   }
 
-  /**
-   * Update warehouse
-   * @param warehouseId Warehouse ID
-   * @param data Warehouse data
-   */
+  /** Update warehouse */
   async updateWarehouse(warehouseId: number, data: {
     name?: string;
     code?: string;
@@ -1870,10 +1807,7 @@ class ApiClient {
     });
   }
 
-  /**
-   * Delete warehouse
-   * @param warehouseId Warehouse ID
-   */
+  /** Delete warehouse */
   async deleteWarehouse(warehouseId: number) {
     return this.request(`/warehouses/${this.getOrganizationId()}/${warehouseId}`, {
       method: 'DELETE',
@@ -1882,9 +1816,7 @@ class ApiClient {
 
   // ==================== Batch Management ====================
 
-  /**
-   * Get batches for a product
-   */
+  /** Get batches for a product */
   async getBatches(productId: number, warehouseId?: number | null, includeInactive?: boolean) {
     const params = new URLSearchParams();
     if (warehouseId !== undefined) params.append('warehouseId', warehouseId === null ? 'null' : warehouseId.toString());
@@ -1893,16 +1825,12 @@ class ApiClient {
     return this.request(`/batches/${this.getOrganizationId()}/product/${productId}${query}`);
   }
 
-  /**
-   * Get a single batch by ID
-   */
+  /** Get a single batch by ID */
   async getBatch(batchId: number) {
     return this.request(`/batches/${this.getOrganizationId()}/${batchId}`);
   }
 
-  /**
-   * Create a new batch
-   */
+  /** Create a new batch */
   async createBatch(data: {
     productId: number;
     batchNumber: string;
@@ -1919,9 +1847,7 @@ class ApiClient {
     });
   }
 
-  /**
-   * Select batches for sale (FIFO/LIFO/AVERAGE)
-   */
+  /** Select batches for sale (FIFO/LIFO/AVERAGE) */
   async selectBatches(data: {
     productId: number;
     quantity: number;
@@ -1936,31 +1862,23 @@ class ApiClient {
 
   // ==================== Branch Management ====================
 
-  /**
-   * Get all branches
-   */
+  /** Get all branches */
   async getBranches(includeInactive?: boolean) {
     const query = includeInactive ? '?includeInactive=true' : '';
     return this.request(`/branches/${this.getOrganizationId()}${query}`);
   }
 
-  /**
-   * Get a single branch
-   */
+  /** Get a single branch */
   async getBranch(branchId: number) {
     return this.request(`/branches/${this.getOrganizationId()}/${branchId}`);
   }
 
-  /**
-   * Get default branch
-   */
+  /** Get default branch */
   async getDefaultBranch() {
     return this.request(`/branches/${this.getOrganizationId()}/default`);
   }
 
-  /**
-   * Create a branch
-   */
+  /** Create a branch */
   async createBranch(data: {
     name: string;
     code?: string;
@@ -1976,9 +1894,7 @@ class ApiClient {
     });
   }
 
-  /**
-   * Update a branch
-   */
+  /** Update a branch */
   async updateBranch(branchId: number, data: {
     name?: string;
     code?: string;
@@ -2000,18 +1916,14 @@ class ApiClient {
     });
   }
 
-  /**
-   * Delete a branch
-   */
+  /** Delete a branch */
   async deleteBranch(branchId: number) {
     return this.request(`/branches/${this.getOrganizationId()}/${branchId}`, {
       method: 'DELETE',
     });
   }
 
-  /**
-   * Set default branch
-   */
+  /** Set default branch */
   async setDefaultBranch(branchId: number) {
     return this.request(`/branches/${this.getOrganizationId()}/${branchId}/default`, {
       method: 'PUT',
@@ -2020,9 +1932,7 @@ class ApiClient {
 
   // ==================== Excel Imports ====================
 
-  /**
-   * Import customers from Excel
-   */
+  /** Import customers from Excel */
   async importCustomers(file: File) {
     const formData = new FormData();
     formData.append('file', file);
@@ -2033,16 +1943,12 @@ class ApiClient {
     });
   }
 
-  /**
-   * Download customer import template
-   */
+  /** Download customer import template */
   async downloadCustomerTemplate() {
     return this.requestFile(`/customers/${this.getOrganizationId()}/import/template`);
   }
 
-  /**
-   * Import suppliers from Excel
-   */
+  /** Import suppliers from Excel */
   async importSuppliers(file: File) {
     const formData = new FormData();
     formData.append('file', file);
@@ -2053,16 +1959,12 @@ class ApiClient {
     });
   }
 
-  /**
-   * Download supplier import template
-   */
+  /** Download supplier import template */
   async downloadSupplierTemplate() {
     return this.requestFile(`/suppliers/${this.getOrganizationId()}/import/template`);
   }
 
-  /**
-   * Preview customer import - validates but does not save
-   */
+  /** Preview customer import - validates but does not save */
   async previewCustomerImport(file: File) {
     const formData = new FormData();
     formData.append('file', file);
@@ -2072,9 +1974,7 @@ class ApiClient {
     });
   }
 
-  /**
-   * Confirm customer import - saves valid records
-   */
+  /** Confirm customer import - saves valid records */
   async confirmCustomerImport(importId: string) {
     return this.request(`/customers/${this.getOrganizationId()}/import/confirm`, {
       method: 'POST',
@@ -2082,16 +1982,12 @@ class ApiClient {
     });
   }
 
-  /**
-   * Download customer error file
-   */
+  /** Download customer error file */
   async downloadCustomerErrorFile(importId: string) {
     return this.requestFile(`/customers/${this.getOrganizationId()}/import/errors/${importId}`);
   }
 
-  /**
-   * Preview supplier import - validates but does not save
-   */
+  /** Preview supplier import - validates but does not save */
   async previewSupplierImport(file: File) {
     const formData = new FormData();
     formData.append('file', file);
@@ -2101,9 +1997,7 @@ class ApiClient {
     });
   }
 
-  /**
-   * Confirm supplier import - saves valid records
-   */
+  /** Confirm supplier import - saves valid records */
   async confirmSupplierImport(importId: string) {
     return this.request(`/suppliers/${this.getOrganizationId()}/import/confirm`, {
       method: 'POST',
@@ -2111,18 +2005,14 @@ class ApiClient {
     });
   }
 
-  /**
-   * Download supplier error file
-   */
+  /** Download supplier error file */
   async downloadSupplierErrorFile(importId: string) {
     return this.requestFile(`/suppliers/${this.getOrganizationId()}/import/errors/${importId}`);
   }
 
   // ==================== Profit Reports ====================
 
-  /**
-   * Get profit report for a date range
-   */
+  /** Get profit report for a date range */
   async getProfitReport(startDate: string, endDate: string, productId?: number) {
     const params = new URLSearchParams({
       startDate,
@@ -2132,9 +2022,7 @@ class ApiClient {
     return this.request(`/reports/${this.getOrganizationId()}/profit?${params.toString()}`);
   }
 
-  /**
-   * Get profit summary for a sale
-   */
+  /** Get profit summary for a sale */
   async getSaleProfitSummary(saleId: number) {
     return this.request(`/sales/${this.getOrganizationId()}/${saleId}/profit`);
   }

@@ -123,13 +123,7 @@ export default function SaleDetailsPage() {
         return format(new Date(dateString), 'HH:mm');
     };
 
-    /**
-     * CIS/VSDC spec §7.18/§15: "print only one original receipt. Reprint shall
-     * have a watermark with mention Copy." Registers this deliberate
-     * download/print with the backend before fetching the PDF — the first
-     * registered call for a sale renders as the original, every one after
-     * automatically comes back watermarked COPY. No separate copy action needed.
-     */
+    /** CIS/VSDC spec §7.18/§15: "print only one original receipt. */
     const buildInvoicePdfBlob = async () => {
         if (!id) throw new Error('Sale ID is missing');
 

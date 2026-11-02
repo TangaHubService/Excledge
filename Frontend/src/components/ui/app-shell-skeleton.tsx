@@ -7,8 +7,8 @@ interface AppShellSkeletonProps {
 }
 
 /**
- * AppShellSkeleton — mirrors the exact shell layout (sidebar + header + main)
- * so there is zero layout shift when content loads.
+ * AppShellSkeleton — mirrors the exact shell layout (sidebar + header + main) so there is zero
+ * layout shift when content loads.
  */
 export function AppShellSkeleton({ sidebarCollapsed = false, variant = 'dashboard' }: AppShellSkeletonProps) {
   return (

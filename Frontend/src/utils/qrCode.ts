@@ -1,12 +1,9 @@
 import QRCode from 'qrcode';
 
 /**
- * D1: RRA QR code utilities (CIS/VSDC spec §4.2)
- *
- * QR string format:
- *   ddmmyyyy#hhmmss#sdcnumber#sdc_receipt_number#internal_data#receipt_signature
- *
- * internalData and receiptSignature are displayed on the receipt with a dash every 4 chars.
+ * D1: RRA QR code utilities (CIS/VSDC spec §4.2) QR string format:
+ * ddmmyyyy#hhmmss#sdcnumber#sdc_receipt_number#internal_data#receipt_signature internalData and
+ * receiptSignature are displayed on the receipt with a dash every 4 chars.
  */
 
 export function buildRraQrString(params: {
@@ -50,10 +47,8 @@ export async function qrToDataUrl(qrString: string): Promise<string> {
 }
 
 /**
- * Build the printable QR data URL for a fiscalized sale in one call — composes
- * buildRraQrString() + qrToDataUrl(). Returns null when any required field is
- * missing (not yet fiscalized, or an older row predating one of these columns),
- * so callers can render the "not yet fiscalized" state instead of a broken image.
+ * Build the printable QR data URL for a fiscalized sale in one call — composes buildRraQrString() +
+ * qrToDataUrl().
  */
 export async function buildInvoiceQrDataUrl(fiscal: {
   sdcDateTime?: string | null;

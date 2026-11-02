@@ -319,9 +319,8 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
     );
   }, []);
 
-  // Section (header) groups collapse/expand independently and remember the
-  // user's preference across reloads. Nothing is collapsed by default so the
-  // sidebar looks the same as before until a group is explicitly toggled.
+  // Section (header) groups collapse/expand independently and remember the user's preference across
+  // reloads.
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem("sidebar-collapsed-groups");
@@ -633,9 +632,8 @@ export function Sidebar({ isOpen, onClose, onCollapsedChange }: SidebarProps) {
               // Collapsing a section is a sidebar-expanded-only affordance — in
               // icon-only mode there are no labels to click, so always show items.
               const isGroupCollapsed = !isCollapsed && collapsedGroups.includes(block.header.id);
-              // Highlight the category the user is currently inside, so the
-              // active main section reads clearly even when its own group is
-              // collapsed or has several items.
+              // Highlight the category the user is currently inside, so the active main section
+              // reads clearly even when its own group is collapsed or has several items.
               const isGroupActive = block.items.some(i => isActiveRoute(i.href));
 
               return (

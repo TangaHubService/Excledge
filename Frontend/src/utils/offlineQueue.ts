@@ -7,9 +7,7 @@ export interface QueuedSale {
 const OFFLINE_QUEUE_KEY = 'pos_offline_sales_queue';
 
 export const offlineQueue = {
-    /**
-     * Add a sale to the offline queue
-     */
+    /** Add a sale to the offline queue */
     enqueue: (payload: any): void => {
         try {
             const queue = offlineQueue.getQueue();
@@ -25,9 +23,7 @@ export const offlineQueue = {
         }
     },
 
-    /**
-     * Get all queued sales
-     */
+    /** Get all queued sales */
     getQueue: (): QueuedSale[] => {
         try {
             const stored = localStorage.getItem(OFFLINE_QUEUE_KEY);
@@ -38,9 +34,7 @@ export const offlineQueue = {
         }
     },
 
-    /**
-     * Remove a sale from the queue by ID
-     */
+    /** Remove a sale from the queue by ID */
     dequeue: (id: string): void => {
         try {
             const queue = offlineQueue.getQueue();
@@ -51,52 +45,38 @@ export const offlineQueue = {
         }
     },
 
-    /**
-     * Clear the entire queue
-     */
+    /** Clear the entire queue */
     clear: (): void => {
         localStorage.removeItem(OFFLINE_QUEUE_KEY);
     },
 
-    /**
-     * Check if there are items in the queue
-     */
+    /** Check if there are items in the queue */
     hasItems: (): boolean => {
         return offlineQueue.getQueue().length > 0;
     },
 
-    /**
-     * Get the count of queued items
-     */
+    /** Get the count of queued items */
     count: (): number => {
         return offlineQueue.getQueue().length;
     },
 
-    /**
-     * Save products to local cache
-     */
+    /** Save products to local cache */
     saveProducts: (products: any[]): void => {
         localStorage.setItem('pos_cached_products', JSON.stringify(products));
     },
 
-    /**
-     * Get cached products
-     */
+    /** Get cached products */
     getProducts: (): any[] => {
         const stored = localStorage.getItem('pos_cached_products');
         return stored ? JSON.parse(stored) : [];
     },
 
-    /**
-     * Save customers to local cache
-     */
+    /** Save customers to local cache */
     saveCustomers: (customers: any[]): void => {
         localStorage.setItem('pos_cached_customers', JSON.stringify(customers));
     },
 
-    /**
-     * Get cached customers
-     */
+    /** Get cached customers */
     getCustomers: (): any[] => {
         const stored = localStorage.getItem('pos_cached_customers');
         return stored ? JSON.parse(stored) : [];

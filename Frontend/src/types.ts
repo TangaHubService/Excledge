@@ -26,6 +26,9 @@ export interface Product {
     supplierId?: number;
     imageUrl?: string;
     taxCode?: string;
+    /** Moved D → B by the VAT switch; one tax-type change left. */
+    taxCodeReviewPending?: boolean;
+    taxCodeReviewedAt?: string | null;
     taxCategory?: string;
     itemType?: 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE';
     measurementUnit?: string;

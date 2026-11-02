@@ -81,6 +81,9 @@ interface Branch {
     isDefault?: boolean;
 }
 
+/** Flags the backend forces for a fiscalised (VSDC-configured) tenant. */
+const FISCAL_LOCKED_FLAGS: (keyof IFeatureFlags)[] = ['ebmIntegrationEnabled', 'allowNegativeStock'];
+
 const FEATURE_FLAG_LABELS: Record<keyof IFeatureFlags, { label: string; description: string }> = {
     allowNegativeStock: {
         label: 'Allow Negative Stock',
@@ -125,6 +128,7 @@ export function OrganizationConfig() {
     const { refreshBranches } = useBranch();
 
     const [organization, setOrganization] = useState<OrganizationData | null>(null);
+    const [savedVatRegistered, setSavedVatRegistered] = useState<boolean | undefined>(undefined);
     const [branches, setBranches] = useState<Branch[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSavingOrg, setIsSavingOrg] = useState(false);
@@ -165,6 +169,7 @@ export function OrganizationConfig() {
 
                 if (orgResponse?.organization) {
                     setOrganization(orgResponse.organization);
+                    setSavedVatRegistered(orgResponse.organization?.vatRegistered);
                 }
                 setBranches(branchesResponse || []);
                 if (settingsResponse?.settings) {
@@ -190,9 +195,18 @@ export function OrganizationConfig() {
             return;
         }
 
+        if (savedVatRegistered === false && organization.vatRegistered === true) {
+            const ok = window.confirm(
+                'Registering for VAT moves every item with tax type D to B (18%). ' +
+                'Each item can then have its tax type changed only once. Continue?'
+            );
+            if (!ok) return;
+        }
+
         setIsSavingOrg(true);
         try {
             const response = await apiClient.updateOrganization(organization);
+            setSavedVatRegistered(organization.vatRegistered);
             updateGlobalOrg(organization as any);
             toast.success(response.message || t('companySettings.updateSuccess'));
         } catch (error: any) {
@@ -925,12 +939,21 @@ export function OrganizationConfig() {
                                                     <p className="text-sm text-gray-500 dark:text-gray-400">
                                                         {FEATURE_FLAG_LABELS[key].description}
                                                     </p>
+                                                    {settings.fiscalFlagsLocked && FISCAL_LOCKED_FLAGS.includes(key) && (
+                                                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                                                            Locked while a VSDC device is configured (RRA requirement).
+                                                        </p>
+                                                    )}
                                                 </div>
                                                 <Switch
                                                     id={`flag-${key}`}
                                                     checked={settings.featureFlags[key]}
                                                     onCheckedChange={() => toggleFeatureFlag(key)}
-                                                    disabled={!isAuthorized || isSavingSettings}
+                                                    disabled={
+                                                        !isAuthorized ||
+                                                        isSavingSettings ||
+                                                        (!!settings.fiscalFlagsLocked && FISCAL_LOCKED_FLAGS.includes(key))
+                                                    }
                                                 />
                                             </div>
                                         ))}

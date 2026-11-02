@@ -101,10 +101,7 @@ export const PesapalCallback = () => {
     }, [location.search]);
 
 
-    /**
-     * ▶ Start Redirect Countdown when SUCCESS
-     * Runs 3 seconds and updates progress from 0 → 100%
-     */
+    /** ▶ Start Redirect Countdown when SUCCESS Runs 3 seconds and updates progress from 0 → 100% */
     useEffect(() => {
         if (status !== 'success') return;
 
@@ -162,9 +159,7 @@ export const PesapalCallback = () => {
     }
 
 
-    /**
-     * 🎉 SUCCESS SCREEN WITH PROGRESS BAR
-     */
+    /** 🎉 SUCCESS SCREEN WITH PROGRESS BAR */
     if (status === 'success' && transaction) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
@@ -208,9 +203,7 @@ export const PesapalCallback = () => {
     }
 
 
-    /**
-     * ❌ ERROR SCREEN
-     */
+    /** ❌ ERROR SCREEN */
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50">
             <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-lg w-full">

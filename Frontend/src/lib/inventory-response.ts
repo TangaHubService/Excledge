@@ -1,8 +1,4 @@
-/**
- * Normalizes GET /inventory/products/:org responses.
- * Backend: success({ data: products[], lowStockProducts, pagination, ... })
- * → JSON body is { success, data: { data: [...], pagination, ... } }.
- */
+/** Normalizes GET /inventory/products/:org responses. */
 export function parseInventoryGetProductsResponse(res: unknown): {
   items: unknown[];
   lowStockProducts: number;

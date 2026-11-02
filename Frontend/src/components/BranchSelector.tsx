@@ -72,9 +72,9 @@ export const BranchSelector: React.FC<BranchSelectorProps> = ({ toolbar = false 
   } = useBranch();
   const { user } = useAuth();
 
-  // Sellers/Cashiers must always see only their assigned branch — never an
-  // interactive switcher, even in the unusual case they have more than one
-  // branch assigned (that's reserved for Store Managers/Admins).
+  // Sellers/Cashiers must always see only their assigned branch — never an interactive switcher,
+  // even in the unusual case they have more than one branch assigned (that's reserved for Store
+  // Managers/Admins).
   const isSingleBranchRole = user?.role === 'SELLER' || user?.role === 'ACCOUNTANT';
 
   /* Auto-focus search when dropdown opens */

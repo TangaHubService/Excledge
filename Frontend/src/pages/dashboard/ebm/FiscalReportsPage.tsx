@@ -55,9 +55,8 @@ const todayIso = () => new Date().toISOString().split("T")[0];
 const daysAgoIso = (n: number) => new Date(Date.now() - n * 864e5).toISOString().split("T")[0];
 
 /**
- * Truncate for table cells without colliding into neighbors.
- * Caps characters at `max`, and also uses CSS ellipsis inside a bounded width.
- * Full text is available on hover.
+ * Truncate for table cells without colliding into neighbors. Caps characters at `max`, and also
+ * uses CSS ellipsis inside a bounded width.
  */
 function TruncatedText({
   value,

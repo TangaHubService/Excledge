@@ -210,11 +210,9 @@ export const BranchProvider: React.FC<BranchProviderProps> = ({ children }) => {
         refreshBranches();
     }, [organization?.id]);
 
-    // Single, reusable hook for "refresh everything on branch change" — every
-    // page's React Query hooks refetch automatically, with no page reload and
-    // no per-page invalidation logic to duplicate. Pages using plain
-    // useEffect + apiClient calls already refetch on their own by including
-    // selectedBranchId in their effect dependencies.
+    // Single, reusable hook for "refresh everything on branch change" — every page's React Query
+    // hooks refetch automatically, with no page reload and no per-page invalidation logic to
+    // duplicate.
     const handleSetSelectedBranch = (id: number | null) => {
         setSelectedBranchId(id);
         localStorage.setItem('selected_branch_id', id === null ? 'all' : String(id));

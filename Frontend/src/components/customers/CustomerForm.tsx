@@ -97,9 +97,9 @@ export function CustomerForm({
 
 
     const handleFormSubmit = (data: CustomerFormData) => {
-        // A TIN may be stored for every customer type — individuals may hold a
-        // real RRA TIN too, and when present it is used on the fiscal receipt
-        // (sent to RRA) instead of a walk-in placeholder. Blank stays blank.
+        // A TIN may be stored for every customer type — individuals may hold a real RRA TIN too,
+        // and when present it is used on the fiscal receipt (sent to RRA) instead of a walk-in
+        // placeholder.
         onSubmit({ ...data, tin: (data.tin || '').trim() });
     };
 

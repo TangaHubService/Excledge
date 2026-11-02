@@ -15,12 +15,7 @@ export async function getInvoicePdfBlob(saleId: string | number, format: Invoice
   return pdfBlobFrom(await apiClient.getInvoicePdf(saleId, format))
 }
 
-/**
- * CIS/VSDC spec §7.18/§15: "print only one original receipt. Reprint shall
- * have a watermark with mention Copy." Registers this deliberate issuance with
- * the backend, then fetches the PDF: the first registered issuance of a sale
- * is the original, every later one comes back as its CS/CR copy.
- */
+/** CIS/VSDC spec §7.18/§15: "print only one original receipt. */
 export async function issueInvoicePdfBlob(saleId: string | number, format: InvoicePdfFormat = "A4"): Promise<Blob> {
   await apiClient.reprintSale(saleId)
   return getInvoicePdfBlob(saleId, format)
@@ -84,8 +79,8 @@ export async function printReceiptCopy(saleId: string | number, format: InvoiceP
 }
 
 /**
- * Whether a sale's receipt is an NS/NR that can be reprinted as CS/CR. The
- * backend re-checks this plus the stored VSDC fiscal record.
+ * Whether a sale's receipt is an NS/NR that can be reprinted as CS/CR. The backend re-checks this
+ * plus the stored VSDC fiscal record.
  */
 export function canCopyReceipt(sale: { rcptLabel?: string | null; isProforma?: boolean; status?: string }): boolean {
   if (sale.isProforma) return false

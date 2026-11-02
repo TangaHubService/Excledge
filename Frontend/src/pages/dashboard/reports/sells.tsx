@@ -213,17 +213,14 @@ export const SalesReport = () => {
         XLSX.writeFile(workbook, `${fileName}_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
-    /* const exportToCSV = (data: any[], fileName: string) => {
-        const csv = XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(data));
-        const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${fileName}_${new Date().toISOString().split('T')[0]}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }; */
+    /*
+     * const exportToCSV = (data: any[], fileName: string) => { const csv =
+     * XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(data)); const blob = new Blob(["\uFEFF" +
+     * csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const link
+     * = document.createElement('a'); link.href = url; link.download = `${fileName}_${new
+     * Date().toISOString().split('T')[0]}.csv`; document.body.appendChild(link); link.click();
+     * document.body.removeChild(link); };
+     */
 
 
     const exportTransactionDetails = (format: 'excel' | 'pdf' = 'excel') => {
