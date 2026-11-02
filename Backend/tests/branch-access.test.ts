@@ -5,10 +5,9 @@ vi.mock("../src/lib/prisma", () => ({
     userBranch: { findMany: vi.fn() },
     userOrganization: { findFirst: vi.fn() },
   },
-  // Simplified stand-in: the real implementation runs `fn` inside an
-  // AsyncLocalStorage context so Prisma can auto-inject branchId; for these
-  // middleware-level tests we only assert what gets attached to `req` and
-  // that `next()` is reached, so a synchronous passthrough is sufficient.
+  // Simplified stand-in: the real implementation runs `fn` inside an AsyncLocalStorage context so
+  // Prisma can auto-inject branchId; for these middleware-level tests we only assert what gets
+  // attached to `req` and that `next()` is reached, so a synchronous passthrough is sufficient.
   withBranchScope: (_branchId: unknown, fn: () => unknown) => fn(),
 }));
 

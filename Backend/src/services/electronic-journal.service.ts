@@ -16,11 +16,8 @@ export interface SdcData {
 }
 
 /**
- * C8: Build the EJ_DATA text block for every fiscal sale.
- * Format follows RRA CIS/VSDC spec §5 (Electronic Journal). The text is always
- * stored on the fiscal record (EbmTransaction.journalText); it is additionally
- * transmitted to the VSDC when EBM_EJ_SYNC_PATH is configured (2018 Art. 6.5),
- * and EbmTransaction.ejSent tracks transmission (not storage).
+ * C8: Build the EJ_DATA text block for every fiscal sale. Format follows RRA CIS/VSDC spec §5
+ * (Electronic Journal).
  */
 export function buildElectronicJournal(
   sale: SaleWithRelations,

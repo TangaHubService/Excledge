@@ -4,14 +4,11 @@ import { getRraCertificationLogo } from "./invoice-logo.service"
 import { SYSTEM_FOOTER, CIS_VERSION_LABEL } from "./system-branding.service"
 
 /**
- * Thermal-roll (80 mm) renderers for the fiscal reports the RRA certification
- * process asks for alongside the receipts:
- *   - Daily X / Z report (RRA CIS/VSDC spec §6 / Articles 7, 18, 19)
- *   - PLU (Price Look-Up) report (Article 21)
- *
- * Both share the layout language of invoice-receipt-pdf.service.ts so a
- * certified thermal printer produces a consistent-looking strip of paper for
- * every fiscal document.
+ * Thermal-roll (80 mm) renderers for the fiscal reports the RRA certification process asks for
+ * alongside the receipts: - Daily X / Z report (RRA CIS/VSDC spec §6 / Articles 7, 18, 19) - PLU
+ * (Price Look-Up) report (Article 21) Both share the layout language of
+ * invoice-receipt-pdf.service.ts so a certified thermal printer produces a consistent-looking strip
+ * of paper for every fiscal document.
  */
 
 const PAGE_WIDTH = 226.77
@@ -158,9 +155,7 @@ function drawHeader(doc: PDFKit.PDFDocument, header: FiscalReportHeader, logo: B
   return y
 }
 
-// ──────────────────────────────────────────────────────────────
 // Daily X / Z report
-// ──────────────────────────────────────────────────────────────
 
 const PAYMENT_LABELS: Record<string, string> = {
   CASH: "CASH",
@@ -320,9 +315,7 @@ function drawDailyReport(doc: PDFKit.PDFDocument, data: DailyReportData, logo: B
   return y
 }
 
-// ──────────────────────────────────────────────────────────────
 // PLU report
-// ──────────────────────────────────────────────────────────────
 
 function drawPluReport(doc: PDFKit.PDFDocument, data: PluReportData, logo: Buffer | null, startY: number): number {
   let y = drawHeader(doc, data.header, logo, startY)
@@ -373,9 +366,7 @@ function drawPluReport(doc: PDFKit.PDFDocument, data: PluReportData, logo: Buffe
   return y
 }
 
-// ──────────────────────────────────────────────────────────────
 // Two-pass render (measure → size the page exactly)
-// ──────────────────────────────────────────────────────────────
 
 async function renderRoll(
   draw: (doc: PDFKit.PDFDocument, logo: Buffer | null, startY: number) => number,

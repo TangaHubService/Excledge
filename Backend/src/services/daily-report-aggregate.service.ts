@@ -1,22 +1,7 @@
 import { Decimal } from '@prisma/client/runtime/library';
 import { bandTaxFromNet } from './money.service';
 
-/**
- * Pure aggregation of receipt legs for the X/Z daily report (R10/R11).
- *
- * Extracted from buildDailyReport so the money math over a set of sample
- * receipts is unit-testable without a database. Inputs are structural —
- * Prisma rows satisfy them directly (Decimal legs are coerced with Number()).
- *
- * Conventions (kept identical to the controller's historical behavior):
- *  - sales legs accumulate raw; refund legs accumulate SIGNED (negative) and
- *    are reported in separate `refund*` splits;
- *  - headline `grossRefundAmt` stays a positive magnitude (unchanged);
- *  - each receipt's band tax derives from the receipt's band NET
- *    (money.service policy — identical to its printed receipt), then sums
- *    across receipts, so R11 holds literally: report = sum of receipts;
- *  - every other accumulation rounds half-up to 2 dp per addition (fix2).
- */
+/** Pure aggregation of receipt legs for the X/Z daily report (R10/R11). */
 
 export interface ReportSaleItemLeg {
   taxCode?: string | null;
@@ -71,13 +56,7 @@ function emptyBands(): Record<string, ReportBandLeg> {
 
 const KNOWN_BAND_RATES = ['A', 'B', 'C', 'D'];
 
-/**
- * Add ONE receipt's legs to the report bands. The receipt's band tax is
- * derived from the receipt's band NET (money.service policy — matches the
- * printed receipt and the VSDC payload for that receipt), then summed across
- * receipts, so R11 holds literally: report = sum of its receipts.
- * Non-A/B/C/D codes (no programmed rate) fall back to summed line taxes.
- */
+/** Add ONE receipt's legs to the report bands. */
 function addReceiptBands(
   bands: Record<string, ReportBandLeg>,
   sale: ReportSaleLeg,
@@ -190,21 +169,7 @@ export interface SplitReportSales {
   incompleteDrafts: number;
 }
 
-/**
- * Bucket receipts the way buildDailyReport does.
- *
- * Bucketing is by RECEIPT TYPE (rcptLabel), not by row status: refunding an
- * original flips the original's status to REFUNDED but it REMAINS an NS
- * receipt (its label never changes), while the refund itself is the NR
- * receipt. Bucketing by status would count the original's positive legs in
- * the refund buckets a second time (double-count: grossRefund = 2x, net
- * goes wrong). So:
- *  - NS sales (COMPLETED originals AND REFUNDED originals) -> normalSales;
- *  - NR rows (status REFUNDED, label NR or legacy null) -> normalRefunds.
- * TS/TR (training) are excluded from legal totals, proforma (PS) and
- * incomplete (DRAFT/PENDING) are reported separately, copies are tracked via
- * reprintCount rather than as fiscal records.
- */
+/** Bucket receipts the way buildDailyReport does. */
 export function splitReportSales(sales: ReportSaleBucket[]): SplitReportSales {
   const fiscalSales = sales.filter((s) => s.status === 'COMPLETED' || s.status === 'REFUNDED');
   const isExcludedLabel = (s: ReportSaleBucket) =>
@@ -221,10 +186,7 @@ export function splitReportSales(sales: ReportSaleBucket[]): SplitReportSales {
   );
   const trainingSales = fiscalSales.filter((s) => s.rcptLabel === 'TS' || s.rcptLabel === 'TR');
   const proformaSales = sales.filter((s) => s.isProforma || s.rcptLabel === 'PS');
-  // Copies are tracked via reprintCount rather than as fiscal records. The
-  // threshold is > 1, matching receipt semantics: the first download
-  // (reprintCount reaches 1) is still the original; only later downloads
-  // render as COPY (see composeInvoicePayload isCopy).
+  // Copies are tracked via reprintCount rather than as fiscal records.
   const copiedSales = fiscalSales.filter((s) => (s.reprintCount ?? 0) > 1);
   const incompleteDrafts = sales.filter((s) => s.status === 'DRAFT' || s.status === 'PENDING').length;
   return { fiscalSales, normalSales, normalRefunds, trainingSales, proformaSales, copiedSales, incompleteDrafts };

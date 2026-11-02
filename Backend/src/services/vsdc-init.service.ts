@@ -7,17 +7,8 @@ import { hasMrcLength, mrcMismatch } from '../utils/mrc';
 import { purchaseCounterKey } from './vsdc-purchase-counter.service';
 
 /**
- * RRA VSDC device initialization (RRA checklist §58).
- *
- * Calls /initializer/selectInitInfo with (TIN, bhfId, device serial). On
- * success it:
- *   - confirms the device is registered with RRA under this TIN (also satisfies
- *     the "same TIN" half of §22),
- *   - stores the returned SDC id and the full init payload on the branch, fills
- *     a blank device MRC from the reported one and flags a configured MRC that
- *     disagrees with it,
- *   - seeds the local VSDC invoice counter past the last invoice number RRA
- *     already has on record, so the CIS never re-emits a used number.
+ * RRA VSDC device initialization (RRA checklist §58). Calls /initializer/selectInitInfo with (TIN,
+ * bhfId, device serial).
  */
 
 export interface VsdcInitResult {
@@ -57,9 +48,7 @@ export async function initializeVsdcDevice(
     };
   }
 
-  // Persist the returned identifiers + full payload. The device serial
-  // (dvcSrlNo) is what we asked with and stays as configured; the MRC VSDC
-  // reports only fills a device MRC that was never configured.
+  // Persist the returned identifiers + full payload.
   const reportedMrc = info.mrcNo?.trim() || undefined;
   const mrcFill = reportedMrc && !envelope.mrcNo && hasMrcLength(reportedMrc) ? reportedMrc.toUpperCase() : undefined;
   if (branchId != null) {

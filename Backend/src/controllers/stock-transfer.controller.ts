@@ -4,9 +4,9 @@ import type { BranchAuthRequest } from "../middleware/branchAuth.middleware";
 import { addStock, removeStock } from "../services/inventory-ledger.service";
 import { success, error as apiError } from "../utils/apiResponse";
 
-// StockTransfer spans two branches (fromBranchId/toBranchId), so it can't use
-// the generic single-column BRANCH_AWARE_MODELS auto-injection — a transfer
-// "belongs" to a branch if that branch is on either side of it.
+// StockTransfer spans two branches (fromBranchId/toBranchId), so it can't use the generic
+// single-column BRANCH_AWARE_MODELS auto-injection — a transfer "belongs" to a branch if that
+// branch is on either side of it.
 function branchInvolvementFilter(req: BranchAuthRequest) {
   const id = req.selectedBranchId;
   if (id !== null && id !== undefined) {

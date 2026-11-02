@@ -1,8 +1,8 @@
 import { config } from '../config';
 
 /**
- * CIS spec Art. 3.2.1 MRC: BBBCCNNNNNN (POS: developer id + certificate + serial)
- * or AAABBNNNNNN (cash register: manufacturer id + certificate + serial).
+ * CIS spec Art. 3.2.1 MRC: BBBCCNNNNNN (POS: developer id + certificate + serial) or AAABBNNNNNN
+ * (cash register: manufacturer id + certificate + serial).
  */
 export const MRC_PATTERN = /^[A-Z0-9]{3}[A-Z0-9]{2}[0-9]{6}$/;
 
@@ -35,11 +35,7 @@ export type MrcCheckResult =
 export interface MrcCheckOptions {
   /** Defaults to `isMrcValidationRelaxed()`. */
   relaxed?: boolean;
-  /**
-   * Values already stored (e.g. written by VSDC init). Clients resubmit the
-   * whole form, so an unchanged stored value must not block unrelated edits
-   * on the BBBCCNNNNNN layout — the 11-character length is never waived.
-   */
+  /** Values already stored (e.g. written by VSDC init). */
   current?: Array<string | null | undefined>;
 }
 
@@ -49,8 +45,8 @@ export function hasMrcLength(value: string | null | undefined): boolean {
 }
 
 /**
- * Normalizes (trim + uppercase) and format-checks a configured MRC.
- * `undefined` = field not supplied; `null`/blank = clear the MRC.
+ * Normalizes (trim + uppercase) and format-checks a configured MRC. `undefined` = field not
+ * supplied; `null`/blank = clear the MRC.
  */
 export function checkMrc(value: unknown, opts: MrcCheckOptions = {}): MrcCheckResult {
   if (value === undefined) return { ok: true, value: undefined };
@@ -92,9 +88,9 @@ export function configuredMrc(
 }
 
 /**
- * MRC to print on fiscal reports and unsigned receipts: the configured device
- * MRC, then the value VSDC reported at device init, then the legacy device
- * serials for setups configured before MRC had its own field.
+ * MRC to print on fiscal reports and unsigned receipts: the configured device MRC, then the value
+ * VSDC reported at device init, then the legacy device serials for setups configured before MRC had
+ * its own field.
  */
 export function resolveReportMrc(
   branch?: { mrcNo?: string | null; ebmInitInfo?: unknown; ebmSerialNo?: string | null } | null,

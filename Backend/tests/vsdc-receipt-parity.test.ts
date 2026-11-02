@@ -1,11 +1,6 @@
 /**
- * Data parity: what was sent to VSDC (`/trnsSales/saveSales` request) and what
- * VSDC returned must be exactly what the receipt prints — 80mm, A4 and HTML.
- *
- * The request is produced by the real buildRraSendReceiptPayload, the reply is
- * persisted the way the outbox persists it, and the receipt is composed by the
- * real composeInvoicePayload against a mocked Prisma. Every fiscal value is a
- * TEST fixture standing in for what VSDC returned.
+ * Data parity: what was sent to VSDC (`/trnsSales/saveSales` request) and what VSDC returned must
+ * be exactly what the receipt prints — 80mm, A4 and HTML.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import PDFDocument from "pdfkit"

@@ -206,9 +206,8 @@ async function allocateNextInvoiceSequence(organizationId: number, branchId: num
   });
   const deviceKey = branch?.bhfId ? `bhf:${branch.bhfId}` : `branch:${branchId}`;
 
-  // Seed the first row past the highest number ever used by this org so we never
-  // re-emit an invcNo the device has already accepted (avoids VSDC 924). The
-  // atomic UPSERT below makes concurrent first-initializations safe.
+  // Seed the first row past the highest number ever used by this org so we never re-emit an invcNo
+  // the device has already accepted (avoids VSDC 924).
   const maxRow = await client.sale.aggregate({
     where: { organizationId },
     _max: { vsdcInvcNo: true },
@@ -265,13 +264,8 @@ async function allocateNextInvoiceSequence(organizationId: number, branchId: num
 }
 
 /**
- * Consume the next unused RRA purchase code from the organization's pool for a
- * given buyer TIN, atomically (within the sale transaction when `client` is a tx).
- * Only codes that pass the sandbox checksum for `buyerTin` are handed out — the
- * pool may still contain legacy invalid codes, and allocating one would be
- * rejected by the device with 882. Returns the code, or null when no valid
- * unconsumed code remains (caller falls back to the legacy per-customer
- * `prcOrdCd`).
+ * Consume the next unused RRA purchase code from the organization's pool for a given buyer TIN,
+ * atomically (within the sale transaction when `client` is a tx).
  */
 export async function consumeOrgPurchaseCode(
   organizationId: number,
@@ -302,13 +296,7 @@ export async function consumeOrgPurchaseCode(
   return null;
 }
 
-/**
- * Thrown when a fiscal payload cannot be built because no RRA purchase order
- * code is on record. Unlike malformed data (dead-letter immediately), a
- * missing code is TRANSIENT — the operator can top the pool up and the retry
- * will succeed — so the outbox worker backs this off with retries instead of
- * dead-lettering on the first miss.
- */
+/** Thrown when a fiscal payload cannot be built because no RRA purchase order code is on record. */
 export class PurchaseCodeMissingError extends Error {
   constructor(saleRef: string | number, custTin: string) {
     super(
@@ -320,14 +308,8 @@ export class PurchaseCodeMissingError extends Error {
 }
 
 /**
- * Consume the next unused RRA purchase code from the organization's pool for
- * the given buyer TIN, atomically (within the sale transaction when `client`
- * is a tx). Strictly buyer-scoped: a code pooled for buyer A must never be
- * submitted for buyer B — the sandbox checksum binds each code to its buyer
- * TIN and rejects cross-buyer codes with 882 (verified live). Returns the
- * code, or null when no valid unconsumed code remains for this buyer (the
- * caller fails with an actionable top-up message instead of submitting a
- * placeholder the sandbox will reject).
+ * Consume the next unused RRA purchase code from the organization's pool for the given buyer TIN,
+ * atomically (within the sale transaction when `client` is a tx).
  */
 export async function consumeAnyOrgPurchaseCode(
   organizationId: number,
@@ -338,9 +320,7 @@ export async function consumeAnyOrgPurchaseCode(
   const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { TIN: true } });
   const sellerTin = org?.TIN?.trim() ?? '';
 
-  // Strictly buyer-scoped: only codes pooled for THIS buyer TIN are ever
-  // handed out. A code generated for another buyer carries that buyer's
-  // checksum and is rejected by the device with 882.
+  // Strictly buyer-scoped: only codes pooled for THIS buyer TIN are ever handed out.
   const targetTin = buyerTin?.trim() || '';
   if (!targetTin) return null;
 
@@ -350,11 +330,9 @@ export async function consumeAnyOrgPurchaseCode(
     take: 100,
   });
 
-  // Sandbox/dev resilience: outside production there are no buyer devices to
-  // issue real purchase codes, so mint buyer-scoped single-use codes on demand
-  // (the same stand-ins scripts/topup-purchase-codes.ts creates manually).
-  // Production NEVER mints codes: real B2B codes arrive through procurement
-  // and a dry pool there must surface as an actionable top-up error instead.
+  // Sandbox/dev resilience: outside production there are no buyer devices to issue real purchase
+  // codes, so mint buyer-scoped single-use codes on demand (the same stand-ins
+  // scripts/topup-purchase-codes.ts creates manually).
   if (!candidates.length && sellerTin && (config.ebm.environment ?? 'sandbox') !== 'production') {
     const existing = await client.organizationPurchaseCode.findMany({
       where: { organizationId },
@@ -389,9 +367,7 @@ export async function consumeAnyOrgPurchaseCode(
   return null;
 }
 
-// ──────────────────────────────────────────────
 // C4: RRA-canonical date/amount helpers (CIS/VSDC spec §3.2)
-// ──────────────────────────────────────────────
 
 export function toRraDate(d: Date): string {
   // VSDC sales dates are Kigali calendar days, independent of server timezone.
@@ -419,25 +395,17 @@ export function clampField(value: string | null | undefined, maxLength: number):
   return value.trim().slice(0, maxLength);
 }
 
-/**
- * VSDC §4.9 Sales Receipt Type only has two values: 'S' (Sale) and 'R' (Refund
- * after Sale). The CIS-level NS/NR/CS/CR/TS/TR/PS distinction (rcptLabel) is
- * used for the printed A/B/RT counter, not for this field — every label ends
- * in 'S' or 'R', which is exactly the axis VSDC cares about here.
- */
-/**
- * VSDC §4.9 Sales Receipt Type only has two values: 'S' (Sale) and 'R' (Refund
- * after Sale). The CIS-level NS/NR/CS/CR/TS/TR/PS distinction (rcptLabel) is
- * used for the printed A/B/RT counter, not for this field — every label ends
- * in 'S' or 'R', which is exactly the axis VSDC cares about here.
- */
+/** VSDC §4.9 Sales Receipt Type only has two values: 'S' (Sale) and 'R' (Refund after Sale). */
+/** VSDC §4.9 Sales Receipt Type only has two values: 'S' (Sale) and 'R' (Refund after Sale). */
 function rcptTyCdFromLabel(label: string | null): 'S' | 'R' {
   return label?.endsWith('R') ? 'R' : 'S';
 }
 
-/** RRA TIN shape accepted by the VSDC (`receipt.custTin` + `custTin` must both
- * pass it — verified live: the sandbox rejects 7-prefix, all-zero and short
- * values with resultCd 910, and rejects empty with 910). */
+/**
+ * RRA TIN shape accepted by the VSDC (`receipt.custTin` + `custTin` must both pass it — verified
+ * live: the sandbox rejects 7-prefix, all-zero and short values with resultCd 910, and rejects
+ * empty with 910).
+ */
 export const RRA_TIN_PATTERN = /^[19]\d{8}$/;
 
 export function isValidRraTin(tin: string): boolean {
@@ -445,11 +413,8 @@ export function isValidRraTin(tin: string): boolean {
 }
 
 /**
- * Official VSDC buyer-mobile shape for `receipt.custMblNo` (and the phone
- * fallback for top-level `custTin`): optional leading `+`, 9–15 digits.
- * Accepts the local mobile shape the VSDC API documents (e.g. "788428899")
- * as well as 0-prefixed and +-prefixed forms. Judged by what VSDC accepts,
- * not by what the CIS customer form requires.
+ * Official VSDC buyer-mobile shape for `receipt.custMblNo` (and the phone fallback for top-level
+ * `custTin`): optional leading `+`, 9–15 digits.
  */
 export const VSDC_PHONE_PATTERN = /^\+?\d{9,15}$/;
 
@@ -458,19 +423,17 @@ export function isValidVsdcPhone(value: string | null | undefined): boolean {
 }
 
 /**
- * Coerce customer/org free text to a plain JSON-safe VSDC string: trimmed
- * with control characters stripped (never valid in VSDC text fields — they
- * would otherwise ride along inside the JSON body). Length caps stay with
- * the per-field `clampField` calls; `custNm`/`trdeNm`/`adrs`/`topMsg`/`btmMsg`
- * always remain normal string values.
+ * Coerce customer/org free text to a plain JSON-safe VSDC string: trimmed with control characters
+ * stripped (never valid in VSDC text fields — they would otherwise ride along inside the JSON
+ * body).
  */
 export function sanitizeVsdcText(value: unknown): string {
   return String(value ?? '').replace(/[\u0000-\u001F\u007F]/g, '').trim();
 }
 
 /**
- * Seller identity for `adrs`/`topMsg`: the branch address wins over the
- * organization address, matching the printed invoice header.
+ * Seller identity for `adrs`/`topMsg`: the branch address wins over the organization address,
+ * matching the printed invoice header.
  */
 export async function withBranchSellerAddress<T extends { address: string | null }>(
   org: T,
@@ -482,10 +445,8 @@ export async function withBranchSellerAddress<T extends { address: string | null
 }
 
 /**
- * Rwanda mobile in the only shape the VSDC accepts in top-level `custTin`:
- * the 9-digit local number starting with 7 ("788333001"). Live VSDC rejects
- * "0788333001", "250788333001" and "+250788333001" there with 910, so those
- * are normalized down; anything else returns null.
+ * Rwanda mobile in the only shape the VSDC accepts in top-level `custTin`: the 9-digit local number
+ * starting with 7 ("788333001").
  */
 export function toVsdcCustTinMobile(phone: string | null | undefined): string | null {
   const digits = (phone ?? '').replace(/[\s-]/g, '').replace(/^\+?250/, '').replace(/^0/, '');
@@ -503,14 +464,12 @@ export interface VsdcBuyerIdentity {
 }
 
 /**
- * Resolve the buyer identity for a VSDC sales submission from the stored
- * customer record, per the official payload structure:
- * - `receipt.custTin` carries a valid TIN or null — never a phone number.
- * - `receipt.custMblNo` carries a valid phone number or null — never a TIN
- *   (a stored phone that itself passes the TIN shape is dropped from both
- *   slots: it is a suspected swap and must leak into neither field).
- * - top-level `custTin` carries the TIN when present, else the phone as a
- *   9-digit local mobile, else null (sent as JSON null, never "").
+ * Resolve the buyer identity for a VSDC sales submission from the stored customer record, per the
+ * official payload structure: - `receipt.custTin` carries a valid TIN or null — never a phone
+ * number. - `receipt.custMblNo` carries a valid phone number or null — never a TIN (a stored phone
+ * that itself passes the TIN shape is dropped from both slots: it is a suspected swap and must leak
+ * into neither field). - top-level `custTin` carries the TIN when present, else the phone as a
+ * 9-digit local mobile, else null (sent as JSON null, never "").
  */
 export function resolveVsdcBuyerIdentity(
   customer: { TIN?: string | null; phone?: string | null } | null | undefined,
@@ -519,47 +478,21 @@ export function resolveVsdcBuyerIdentity(
   const rawPhone = (customer?.phone ?? '').trim();
   const tin = isValidRraTin(rawTin) ? rawTin : null;
   const phone = rawPhone && isValidVsdcPhone(rawPhone) && !isValidRraTin(rawPhone) ? rawPhone : null;
-  // receipt.custTin accepts a real TIN only (910 "Must be a valid TIN" for
-  // every phone shape); top-level custTin accepts a TIN or a 9-digit local
-  // mobile ("Must be a valid TIN or a Rwanda Mobile phone number").
+  // receipt.custTin accepts a real TIN only (910 "Must be a valid TIN" for every phone shape);
+  // top-level custTin accepts a TIN or a 9-digit local mobile ("Must be a valid TIN or a Rwanda
+  // Mobile phone number").
   return { custTin: tin ?? toVsdcCustTinMobile(phone), receiptCustTin: tin, receiptCustMblNo: phone };
 }
 
-/**
- * Walk-in (no-TIN individual) buyer TIN for VSDC submission.
- *
- * The sandbox mandates a valid-format `custTin` on every receipt (resultCd
- * 881/910/884 otherwise), so a retail sale to a customer without a registered
- * TIN cannot be submitted at all without one. This derives a deterministic,
- * per-customer value in the RRA individual range — it is a submission
- * placeholder, NOT the customer's real TIN: it is never written back to the
- * customer record and never printed on the customer-facing receipt (which
- * shows the customer's actual TIN, blank for walk-ins).
- *
- * Uses the `19xxxxxxx` band so low customer ids never collide with common RRA
- * sandbox test TINs (e.g. 100000000 / 100000001) that seed corporate/insurance
- * buyers use — a collision reuses that buyer's purchase-code pool and VSDC
- * rejects with 883 ("Purchase Code already used").
- *
- * PRODUCTION RISK (see final report §H): confirm with RRA whether B2C
- * receipts require the buyer's real TIN, a designated walk-in TIN, or another
- * marker. Business (CORPORATE/INSURANCE) buyers without a valid TIN are
- * always rejected below instead of receiving a placeholder.
- */
+/** Walk-in (no-TIN individual) buyer TIN for VSDC submission. */
 export function walkInCustTin(customerId: number): string {
   const n = Math.max(1, Math.floor(Number(customerId) || 1));
   return `19${String(n).padStart(7, '0')}`.slice(0, 9);
 }
 
 /**
- * The buyer TIN under which purchase codes are pooled/allocated for a sale:
- * the stored customer TIN when it is valid, otherwise the deterministic
- * walk-in placeholder for individuals. NOTE: this scopes purchase-code pool
- * lookups only — it is NOT what is submitted on the receipt (see
- * resolveVsdcBuyerIdentity: receipt.custTin is a real TIN or null, never a
- * placeholder). Falls back to the stored value when nothing resolves, so
- * callers always get a string and the payload builder still raises the
- * precise error.
+ * The buyer TIN under which purchase codes are pooled/allocated for a sale: the stored customer TIN
+ * when it is valid, otherwise the deterministic walk-in placeholder for individuals.
  */
 export function effectiveBuyerTin(sale: Pick<SaleWithRelations, 'id' | 'saleNumber' | 'customer'>): string {
   const stored = sale.customer?.TIN?.trim() ?? '';
@@ -571,14 +504,7 @@ export function effectiveBuyerTin(sale: Pick<SaleWithRelations, 'id' | 'saleNumb
   }
 }
 
-/**
- * Resolve the buyer TIN used to scope purchase-code pooling for a sale (see
- * effectiveBuyerTin). NOT the receipt value — the submitted receipt fields
- * come from resolveVsdcBuyerIdentity. Throws a descriptive error when no
- * poolable TIN exists (business buyers without a valid TIN, or a sale with
- * no customer at all) so the outbox dead-letters with an actionable message
- * instead of pooling under a fake value.
- */
+/** Resolve the buyer TIN used to scope purchase-code pooling for a sale (see effectiveBuyerTin). */
 export function resolveCustTinForVsdc(sale: Pick<SaleWithRelations, 'id' | 'saleNumber' | 'customer'>): string {
   const customerTin = sale.customer?.TIN?.trim() ?? '';
   if (isValidRraTin(customerTin)) return customerTin;
@@ -601,13 +527,7 @@ export function resolveCustTinForVsdc(sale: Pick<SaleWithRelations, 'id' | 'sale
 export const TAX_RATE_BY_SLOT: [number, number, number, number] = [0, 18, 0, 0];
 
 /**
- * Build the RRA VSDC API v1.0.5 `/trnsSales/saveSales` payload
- * (`TrnsSalesSaveWrReq`, §3.3.6.1). `tin`/`bhfId` are added by the caller from
- * the VSDC envelope, not here.
- *
- * `opts` lets the same builder produce a refund submission: a refund is not a
- * separate endpoint, it's another sales-transaction record referencing the
- * original invoice via `orgInvcNo` with `rfdDt`/`rfdRsnCd` set.
+ * Build the RRA VSDC API v1.0.5 `/trnsSales/saveSales` payload (`TrnsSalesSaveWrReq`, §3.3.6.1).
  */
 export function buildRraSendReceiptPayload(
   sale: SaleWithRelations,
@@ -619,11 +539,8 @@ export function buildRraSendReceiptPayload(
     rfdRsnCd?: string | null;
     cnclDt?: Date | null;
     /**
-     * VOID must be submitted as a brand-new sales-transaction document — the
-     * VSDC sandbox rejects a resubmitted `invcNo` with resultCd 924
-     * ("Invoice number already exists"). Callers building a void payload must
-     * allocate a fresh `invcNo` (e.g. via `generateInvoiceNumber()`) and pass
-     * it here, with `orgInvcNo` = the original sale's `vsdcInvcNo`.
+     * VOID must be submitted as a brand-new sales-transaction document — the VSDC sandbox rejects a
+     * resubmitted `invcNo` with resultCd 924 ("Invoice number already exists").
      */
     invcNoOverride?: number;
     taxRates?: [number, number, number, number];
@@ -639,10 +556,7 @@ export function buildRraSendReceiptPayload(
   const taxAmt:   [number, number, number, number] = [0, 0, 0, 0];
   const codeToSlot: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
 
-  // Pharmacy insurance line fields (TrnsSalesSaveWrItem isrcc*/isrc*). Only
-  // populate when the buyer is a registered insurer (CustomerType.INSURANCE +
-  // isrccCd previously pushed via /branches/saveBrancheInsurances). RRA rejects
-  // unknown isrccCd with resultCd 913 — never invent codes.
+  // Pharmacy insurance line fields (TrnsSalesSaveWrItem isrcc*/isrc*).
   const insurerCd = (sale.customer?.isrccCd ?? '').trim();
   const insuranceAmtTotal = Math.abs(Number(sale.insuranceAmount ?? 0));
   const insuranceActive =
@@ -669,43 +583,28 @@ export function buildRraSendReceiptPayload(
         `Cannot build Sale ${sale.saleNumber ?? sale.id} to RRA: sale item ${idx + 1} has an invalid tax code "${rawCode}". Only A, B, C, D are valid for line items.`
       );
     }
-    // VSDC (RRA reference implementation) uses tax-inclusive quantities: the
-    // supply/taxable amount is the gross unit price × quantity, and the VAT is
-    // extracted from it (taxAmt = grossAmount × rate/(100+rate)).
-    //
-    // Refunds store negative amounts (the controller mirrors the original sale
-    // with negated totals), but the RRA sandbox validates each line as
-    // `dcAmt <= splyAmt` etc. against POSITIVE amounts and rejects negative
-    // supply amounts with resultCd 910. A refund document is a fresh positive
-    // sales-transaction record marked `salesSttsCd=05` (see §4.11/§4.16), so
-    // abs() every amount and quantity when building a refund payload.
+    // VSDC (RRA reference implementation) uses tax-inclusive quantities: the supply/taxable amount
+    // is the gross unit price × quantity, and the VAT is extracted from it (taxAmt = grossAmount ×
+    // rate/(100+rate)).
     const qty = Math.abs(Number(si.quantity));
     const prc = Math.abs(si.unitPrice.toNumber());
     const splyAmt = fix2(qty * prc);
     const dcAmtAbs = fix2(Math.abs(si.dcAmt.toNumber()));
     const tAmt = Math.abs(fix2(si.taxAmount.toNumber()));
-    // R4: the DISCOUNTED amount enters the totals. splyAmt stays the gross
-    // qty×prc (unit-price identity + the sandbox's dcAmt<=splyAmt check), but
-    // the taxable band and the line total are net of discount. si.taxAmount is
-    // already net-based — commitSale computes tax on the charged (post-
-    // discount) prices — so only the splyAmt leg needed correcting.
+    // R4: the DISCOUNTED amount enters the totals. splyAmt stays the gross qty×prc (unit-price
+    // identity + the sandbox's dcAmt<=splyAmt check), but the taxable band and the line total are
+    // net of discount. si.taxAmount is already net-based — commitSale computes tax on the charged
+    // (post- discount) prices — so only the splyAmt leg needed correcting.
     const netAmt = diff2(splyAmt, dcAmtAbs);
     // Exact-decimal slot accumulation through diff2 (a + b == a - (-b)) so
     // binary-float dust in the legs can never reach the band derivation.
     taxblAmt[slot] = diff2(taxblAmt[slot], -netAmt);
 
-    // Sales are always rung up per individual unit (qty), never per whole
-    // package. `pkg` is RRA's package count for the line, so when the product
-    // declares how many units make up one package, convert; a partial package
-    // still rounds up to 1, since RRA has no concept of a fractional package.
-    // Products without packagingQty (most of the catalog today) fall back to
-    // the historical 1 pkg == 1 unit behavior.
+    // Sales are always rung up per individual unit (qty), never per whole package.
     const packagingQty = si.product?.packagingQty ?? null;
     const pkg = packagingQty && packagingQty > 0 ? Math.ceil(qty / packagingQty) : qty;
 
-    // Catalog products/services without an RRA itemCd can never be sold
-    // fiscally. Ad-hoc service lines (no productId) use a synthetic SVC-n
-    // code, but still require itemClsCd below — VSDC rejects empty class.
+    // Catalog products/services without an RRA itemCd can never be sold fiscally.
     const itemCd = si.product?.itemCd ?? (si.productId != null ? null : `SVC-${idx + 1}`);
     if (!itemCd) {
       throw new Error(
@@ -713,9 +612,9 @@ export function buildRraSendReceiptPayload(
         `Open the product and save it so an itemCd is allocated, then sync it via POST /rra/items/:productId/sync.`,
       );
     }
-    // RRA code classes 10/17: the sandbox rejects unknown unit codes with
-    // resultCd 913, so stored codes are accepted only when they are real RRA
-    // codes — otherwise fall back to the measurement-unit derivation / 'CT'.
+    // RRA code classes 10/17: the sandbox rejects unknown unit codes with resultCd 913, so stored
+    // codes are accepted only when they are real RRA codes — otherwise fall back to the
+    // measurement-unit derivation / 'CT'.
     const pkgUnitCd = resolvePkgUnitCd(si.product?.pkgUnitCd);
     const qtyUnitCd = resolveQtyUnitCd(si.product?.qtyUnitCd, si.measurementUnit ?? null, deriveQtyUnitCd);
 
@@ -774,11 +673,10 @@ export function buildRraSendReceiptPayload(
     };
   });
 
-  // R4/R11: band taxes are DERIVED once from each band's NET and its rate
-  // (money.service policy) — never summed from per-line cents, which are
-  // already rounded by the Decimal(15,2) columns and can land a cent away
-  // from the exact band value (768.81 + 45.76 = 814.57 vs 814.58 for the
-  // R4 sample). Per-LINE taxAmt above stays stored/line-based.
+  // R4/R11: band taxes are DERIVED once from each band's NET and its rate (money.service policy) —
+  // never summed from per-line cents, which are already rounded by the Decimal(15,2) columns and
+  // can land a cent away from the exact band value (768.81 + 45.76 = 814.57 vs 814.58 for the R4
+  // sample).
   const bandRates = opts.taxRates ?? TAX_RATE_BY_SLOT;
   for (let i = 0; i < 4; i++) {
     taxAmt[i] = bandRates[i] > 0 ? bandTaxFromNet(taxblAmt[i], bandRates[i]) : 0;
@@ -788,15 +686,10 @@ export function buildRraSendReceiptPayload(
   const totAmt      = fix2(Math.abs(sale.totalAmount.toNumber()));
   const now         = sale.createdAt;
 
-  // Official buyer-field mapping (TrnsSalesSaveWrReq.custTin + receipt block):
-  // - receipt.custTin is a valid customer TIN or null — never a phone number.
-  // - receipt.custMblNo is a valid customer mobile or null — never a TIN.
-  // - top-level custTin is the TIN when present, else the mobile as a 9-digit
-  //   local number, else null (sent as JSON null, never "").
-  // Business buyers without a real TIN still block here with an actionable
-  // error instead of submitting a value VSDC will reject. We never fall back
-  // to the seller's own TIN — that would silently convert the sale into a B2B
-  // transaction.
+  // Official buyer-field mapping (TrnsSalesSaveWrReq.custTin + receipt block): - receipt.custTin is
+  // a valid customer TIN or null — never a phone number. - receipt.custMblNo is a valid customer
+  // mobile or null — never a TIN. - top-level custTin is the TIN when present, else the mobile as a
+  // 9-digit local number, else null (sent as JSON null, never "").
   if (!sale.customer) {
     throw new Error(
       `Cannot fiscalize Sale ${sale.saleNumber ?? sale.id}: no customer on record and no valid TIN to submit.`,
@@ -825,12 +718,8 @@ export function buildRraSendReceiptPayload(
     invcNo,
     orgInvcNo: opts.orgInvcNo ?? 0,
     custTin,
-    // RRA purchase order code: verified live, the sandbox rejects a missing
-    // code with 881 and a fake one such as '000000' with 882 — so there is no
-    // placeholder fallback. The outbox processor auto-allocates an unconsumed
-    // org-pool code onto the sale before building this payload; when none is
-    // on record we fail with an actionable message instead of submitting a
-    // value RRA will reject.
+    // RRA purchase order code: verified live, the sandbox rejects a missing code with 881 and a
+    // fake one such as '000000' with 882 — so there is no placeholder fallback.
     prcOrdCd: ((): string => {
       const code = (sale.prcOrdCd ?? sale.customer?.prcOrdCd ?? '').trim();
       if (!code) {
@@ -839,11 +728,9 @@ export function buildRraSendReceiptPayload(
       return code;
     })(),
     custNm: custNm ?? '',
-    // VSDC API v1.0.5 TrnsSalesSaveWrReq says "Send only 'N' type", but CIS §6
-    // routes TRAINING receipts through VSDC too, and the RRA reference VSDC
-    // (rraVsdcSandbox 3.0.2) handles 'T' as training: own counter, no
-    // intrlData/rcptSign. Sending a TS/TR as 'N' would issue a real signed NS/NR.
-    // Proforma (PS) travels as 'P' for the same reason (CIS §6.3.6).
+    // VSDC API v1.0.5 TrnsSalesSaveWrReq says "Send only 'N' type", but CIS §6 routes TRAINING
+    // receipts through VSDC too, and the RRA reference VSDC (rraVsdcSandbox 3.0.2) handles 'T' as
+    // training: own counter, no intrlData/rcptSign.
     salesTyCd: vsdcSalesTyCdForLabel(sale.rcptLabel),
     rcptTyCd,
     pmtTyCd: rraPaymentCode,
@@ -901,13 +788,8 @@ export function buildRraSendReceiptPayload(
 }
 
 /**
- * Atomically allocate next invoice sequence for a branch (PostgreSQL upsert).
- * RRA requires per-branch (per-device) sequences, not per-organization.
- *
- * Returns both the human-readable, CIS-side invoice number (printed on the
- * receipt, purely cosmetic) and the raw numeric sequence — VSDC's `invcNo` /
- * `orgInvcNo` fields are typed NUMBER and must never receive the formatted
- * string.
+ * Atomically allocate next invoice sequence for a branch (PostgreSQL upsert). RRA requires
+ * per-branch (per-device) sequences, not per-organization.
  */
 export async function generateInvoiceNumber(
   organizationId: number,
@@ -922,11 +804,10 @@ export async function generateInvoiceNumber(
     select: { TIN: true },
   });
 
-  // TIN-derived code is cosmetic only — it is NOT guaranteed unique across
-  // organizations (many orgs have no TIN yet and all fall back to the same
-  // literal), and the sequence above resets per (organizationId, branchId).
-  // branchId is a global PK, so folding it in makes the whole string globally
-  // unique by construction, independent of TIN state or branch count per org.
+  // TIN-derived code is cosmetic only — it is NOT guaranteed unique across organizations (many orgs
+  // have no TIN yet and all fall back to the same literal), and the sequence above resets per
+  // (organizationId, branchId). branchId is a global PK, so folding it in makes the whole string
+  // globally unique by construction, independent of TIN state or branch count per org.
   const orgCode = organization?.TIN?.replace(/\D/g, '').slice(-4) || 'ORG';
   const year = new Date().getFullYear();
 
@@ -934,16 +815,9 @@ export async function generateInvoiceNumber(
 }
 
 /**
- * Allocate a local, non-fiscal receipt number pair for PROFORMA and TRAINING
- * receipts, used as the fallback receipt number printed until VSDC confirms
- * the submission (all receipt types draw their invoice number from the real
- * gapless RRA sequence). Mirrors the spec's own "A/B RT"
- * counter shape (§7.25) with two independent, atomically-incremented values:
- *  - typeSeq: this branch's count of this specific receipt type only
- *    (BranchReceiptCounter, keyed by rcptLabel)
- *  - totalSeq: this branch's running count across EVERY locally-numbered
- *    receipt type combined (Branch.localReceiptTotalSeq)
- * Both increment together so the pair is never `<n>/<n>` by construction.
+ * Allocate a local, non-fiscal receipt number pair for PROFORMA and TRAINING receipts, used as the
+ * fallback receipt number printed until VSDC confirms the submission (all receipt types draw their
+ * invoice number from the real gapless RRA sequence).
  */
 export async function allocateLocalReceiptSequence(
   branchId: number,

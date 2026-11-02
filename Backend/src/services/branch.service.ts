@@ -28,9 +28,7 @@ export interface UpdateBranchParams {
   vsdcUrl?: string | null;
 }
 
-/**
- * Get all branches for an organization
- */
+/** Get all branches for an organization */
 export async function getBranches(
   organizationId: number,
   includeInactive: boolean = false
@@ -60,9 +58,7 @@ export async function getBranches(
   });
 }
 
-/**
- * Get a single branch by ID
- */
+/** Get a single branch by ID */
 export async function getBranchById(branchId: number, organizationId: number) {
   return await prisma.branch.findFirst({
     where: {
@@ -83,9 +79,7 @@ export async function getBranchById(branchId: number, organizationId: number) {
   });
 }
 
-/**
- * Create a new branch
- */
+/** Create a new branch */
 export async function createBranch(params: CreateBranchParams) {
   const { organizationId, name, code, location, address, phone, metadata } = params;
 
@@ -116,9 +110,7 @@ export async function createBranch(params: CreateBranchParams) {
   });
 }
 
-/**
- * Update a branch
- */
+/** Update a branch */
 export async function updateBranch(
   branchId: number,
   organizationId: number,
@@ -206,8 +198,8 @@ export async function updateBranch(
 }
 
 /**
- * Set a branch as the organization's default branch, unsetting any other
- * branch previously marked as default.
+ * Set a branch as the organization's default branch, unsetting any other branch previously marked
+ * as default.
  */
 export async function setDefaultBranch(branchId: number, organizationId: number) {
   const branch = await prisma.branch.findFirst({
@@ -232,9 +224,7 @@ export async function setDefaultBranch(branchId: number, organizationId: number)
   });
 }
 
-/**
- * Delete a branch (soft delete by setting status to INACTIVE)
- */
+/** Delete a branch (soft delete by setting status to INACTIVE) */
 export async function deleteBranch(branchId: number, organizationId: number) {
   const branch = await prisma.branch.findFirst({
     where: {
@@ -271,9 +261,7 @@ export async function deleteBranch(branchId: number, organizationId: number) {
   }
 }
 
-/**
- * Assign a user to a branch
- */
+/** Assign a user to a branch */
 export async function assignUserToBranch(
   userId: number,
   branchId: number,
@@ -311,9 +299,7 @@ export async function assignUserToBranch(
   });
 }
 
-/**
- * Remove a user from a branch
- */
+/** Remove a user from a branch */
 export async function removeUserFromBranch(userId: number, branchId: number) {
   return await prisma.userBranch.delete({
     where: {
@@ -325,9 +311,7 @@ export async function removeUserFromBranch(userId: number, branchId: number) {
   });
 }
 
-/**
- * Get all branches for a user
- */
+/** Get all branches for a user */
 export async function getUserBranches(
   userId: number,
   organizationId?: number,
@@ -371,9 +355,7 @@ export async function getUserBranches(
   }));
 }
 
-/**
- * Get primary branch for a user
- */
+/** Get primary branch for a user */
 export async function getUserPrimaryBranch(userId: number) {
   const userBranch = await prisma.userBranch.findFirst({
     where: {
@@ -388,9 +370,7 @@ export async function getUserPrimaryBranch(userId: number) {
   return userBranch?.branch || null;
 }
 
-/**
- * Get all users assigned to a branch
- */
+/** Get all users assigned to a branch */
 export async function getBranchUsers(branchId: number) {
   const userBranches = await prisma.userBranch.findMany({
     where: {

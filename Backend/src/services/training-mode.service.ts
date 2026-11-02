@@ -1,14 +1,6 @@
 import type { Prisma } from "@prisma/client"
 
-/**
- * Training receipts (CIS §5.3): TS = TRAINING + SALE, TR = TRAINING + REFUND.
- *
- * They go through the same VSDC data flow as normal receipts (CIS §6) but as
- * `salesTyCd: "T"`: the RRA reference VSDC (rraVsdcSandbox 3.0.2) then returns
- * its own training counter (shared by TS and TR) and the shared total counter,
- * with empty `intrlData` / `rcptSign` — training receipts carry no signature.
- * They never touch real stock, batches, customer debt, payments or accounting.
- */
+/** Training receipts (CIS §5.3): TS = TRAINING + SALE, TR = TRAINING + REFUND. */
 export const TRAINING_RECEIPT_LABELS = ["TS", "TR"] as const
 
 export type ReceiptMode = "TRAINING" | "NORMAL"
@@ -24,8 +16,8 @@ export function vsdcSalesTyCdForLabel(label: string | null | undefined): "T" | "
 }
 
 /**
- * Receipts VSDC confirms without `intrlData` / `rcptSign` (CIS §6.3.6: no
- * signature for TRAINING or PROFORMA receipts).
+ * Receipts VSDC confirms without `intrlData` / `rcptSign` (CIS §6.3.6: no signature for TRAINING or
+ * PROFORMA receipts).
  */
 export function isUnsignedLabel(label: string | null | undefined): boolean {
   return isTrainingLabel(label) || label === "PS"
@@ -36,11 +28,7 @@ export function refundLabelForOriginal(originalLabel: string | null | undefined)
   return originalLabel === "TS" ? "TR" : "NR"
 }
 
-/**
- * Wrap a `Sale` where-clause so production reports never include TS/TR rows.
- * Legacy rows with no label (NULL) are kept — they predate labelling and were
- * never training receipts.
- */
+/** Wrap a `Sale` where-clause so production reports never include TS/TR rows. */
 export function excludeTrainingReceipts<T extends Prisma.SaleWhereInput>(where: T): Prisma.SaleWhereInput {
   return {
     AND: [
@@ -67,9 +55,9 @@ export function parseExpectedReceiptMode(value: unknown): ReceiptMode | null {
 }
 
 /**
- * A client that states which mode it was showing must be refused when the
- * organization has switched since — otherwise a cashier on a stale screen would
- * silently issue a real NS while believing it is training (or vice versa).
+ * A client that states which mode it was showing must be refused when the organization has switched
+ * since — otherwise a cashier on a stale screen would silently issue a real NS while believing it
+ * is training (or vice versa).
  */
 export function assertExpectedReceiptMode(expected: ReceiptMode | null, trainingMode: boolean): void {
   if (!expected) return
@@ -82,9 +70,9 @@ function receiptModeLockKey(organizationId: number): string {
 }
 
 /**
- * Read the organization's receipt mode inside the sale/refund transaction while
- * holding a shared advisory lock, so `setTrainingModeLocked` cannot flip the
- * mode between the read and the commit of this receipt.
+ * Read the organization's receipt mode inside the sale/refund transaction while holding a shared
+ * advisory lock, so `setTrainingModeLocked` cannot flip the mode between the read and the commit of
+ * this receipt.
  */
 export async function readReceiptModeLocked(
   tx: Prisma.TransactionClient,

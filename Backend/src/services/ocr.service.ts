@@ -55,9 +55,7 @@ export function clampTaxRate(n: number): number {
   return Math.min(n, MAX_TAX_RATE);
 }
 
-/** Best-effort coercion to YYYY-MM-DD. Both extraction paths (Tesseract heuristic
- *  and the browser AI call) are instructed to emit ISO dates already — this is a
- *  defensive backstop, not the primary source of correctness. */
+/** Best-effort coercion to YYYY-MM-DD. */
 function toIsoDate(raw: unknown): string | undefined {
   if (!raw || typeof raw !== 'string') return undefined;
   const trimmed = raw.trim();
@@ -81,9 +79,7 @@ function toIsoDate(raw: unknown): string | undefined {
 
 // Invoice scanning runs client-side in the browser (Tesseract heuristic in
 // Frontend/src/lib/invoiceOcr.ts, or the AI vision call in
-// Frontend/src/lib/aiInvoiceExtraction.ts). This module only defines the
-// shared data shape and defensively normalizes whatever the client sends
-// before it touches the database.
+// Frontend/src/lib/aiInvoiceExtraction.ts).
 export function normalizeExtractedData(raw: any): ExtractedInvoiceData {
   const products: ExtractedProduct[] = Array.isArray(raw?.products)
     ? raw.products.map((p: any) => ({

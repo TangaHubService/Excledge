@@ -1,10 +1,6 @@
 /**
- * Static ISO 3166-1 alpha-2 country names used only as a last-resort lookup
- * when `/code/selectCodes` class 05 has not been cached yet.
- *
- * Do not use these as silent payload defaults. Product origin (`orgnNatCd`)
- * and itemCd generation must come from the cached class-05 list or an
- * explicit operator/org preference — never invent `RW`.
+ * Static ISO 3166-1 alpha-2 country names used only as a last-resort lookup when
+ * `/code/selectCodes` class 05 has not been cached yet.
  */
 export const RRA_COUNTRY_CODES: Record<string, string> = {
   RW: 'Rwanda',
@@ -78,23 +74,17 @@ export const VALID_RRA_COUNTRY_CODES: string[] = Object.keys(RRA_COUNTRY_CODES);
 /** Present for tests/docs only — never send this as a silent VSDC default. */
 export const DEFAULT_RRA_COUNTRY_CODE = 'RW';
 
-/**
- * Check if a country code is valid per RRA VSDC specification
- */
+/** Check if a country code is valid per RRA VSDC specification */
 export function isValidRraCountryCode(code: string): boolean {
   return code in RRA_COUNTRY_CODES;
 }
 
-/**
- * Get the country name for a valid RRA country code
- */
+/** Get the country name for a valid RRA country code */
 export function getRraCountryName(code: string): string | undefined {
   return RRA_COUNTRY_CODES[code];
 }
 
-/**
- * Get all RRA country codes as options for dropdowns
- */
+/** Get all RRA country codes as options for dropdowns */
 export function getRraCountryCodeOptions(): Array<{ value: string; label: string }> {
   return Object.entries(RRA_COUNTRY_CODES).map(([value, label]) => ({
     value,

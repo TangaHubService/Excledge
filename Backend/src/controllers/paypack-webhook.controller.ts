@@ -116,10 +116,10 @@ async function handleProcessedTransaction(payload: PaypackWebhookPayload) {
             return;
         }
 
-        /** -------------------------------------------
-         *   PAYMENT SUCCESS → NEW ACTIVATION OR RENEWAL
-         *   via the shared, gateway-agnostic completion path.
-         *  ------------------------------------------- */
+        /**
+         * PAYMENT SUCCESS → NEW ACTIVATION OR RENEWAL via the shared, gateway-agnostic completion
+         * path.
+         */
         if (data.status === "successful") {
             const result = await subscriptionService.finalizeSubscriptionPurchase({
                 subscriptionId: subscription.id,
@@ -221,9 +221,7 @@ async function handleProcessedTransaction(payload: PaypackWebhookPayload) {
             }
         };
 
-        /** -------------------------------------------
-         *   PAYMENT FAILED → DO NOT CANCEL subscription
-         * ------------------------------------------- */
+        /** PAYMENT FAILED → DO NOT CANCEL subscription */
         if (data.status === "failed") {
             // Do NOT touch subscription.status if it was ACTIVE
             if (subscription.status !== "ACTIVE") {

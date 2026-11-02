@@ -125,17 +125,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
   }
 }
 
-/**
- * Recompute a proforma's line items / customer before it is converted.
- * A proforma never touched inventory or the customer balance, so this is a
- * pure recompute: replace saleItems, refresh totals. Only allowed while the
- * proforma has not been converted yet AND VSDC has not confirmed it — a
- * VSDC-signed proforma is immutable (like any fiscalized receipt), otherwise
- * the printed invoice would no longer match what was sent to RRA. Pass edited
- * lines to the convert endpoint instead.
- *
- * PUT /:organizationId/:saleId/proforma   body: { customerId?, items: [...] }
- */
+/** Recompute a proforma's line items / customer before it is converted. */
 export const updateProforma = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId)
@@ -158,9 +148,7 @@ customerId?: number
     if (sale.status === 'CONVERTED' || sale.convertedSale) {
       return res.status(409).json(apiError("This proforma has already been converted to a sale"))
     }
-    // RRA checklist §28: a VSDC-signed receipt must never be modified. The
-    // proforma is fiscalized at creation, so once its outbox row SUCCEEDED its
-    // lines are frozen — convert with edited lines instead.
+    // RRA checklist §28: a VSDC-signed receipt must never be modified.
     const proformaOutbox = await prisma.ebmOutbox.findFirst({
       where: { saleId, operation: 'SALE' },
       orderBy: { createdAt: 'desc' },
@@ -256,14 +244,9 @@ customerId?: number
 }
 
 /**
- * Convert a proforma into a real NS sale: creates a fresh, fully-fiscalized sale
- * from the (optionally edited) proforma lines + the supplied payment, links it
- * back via proformaSourceId, and moves the proforma to status CONVERTED. The
- * proforma document itself is kept untouched.
- *
- * POST /:organizationId/:saleId/convert
- *   body: { paymentType?, cashAmount?, debtAmount?, insuranceAmount?, payments?,
- *           shiftId?, customerId?, items? }
+ * Convert a proforma into a real NS sale: creates a fresh, fully-fiscalized sale from the
+ * (optionally edited) proforma lines + the supplied payment, links it back via proformaSourceId,
+ * and moves the proforma to status CONVERTED.
  */
 export const convertProforma = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -651,10 +634,8 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           throw e;
         }
 
-        // RRA refund reason (code class 32): the operator's selection, validated
-        // now so a bad code is a 400 instead of a dead-lettered fiscal refund.
-        // Stored on the refund sale and carried on the outbox payload to VSDC
-        // as rfdRsnCd; the free-text `reason` stays the human note (remark).
+        // RRA refund reason (code class 32): the operator's selection, validated now so a bad code
+        // is a 400 instead of a dead-lettered fiscal refund.
         let rfdRsnCd: string;
         try {
           rfdRsnCd = await validateRefundReasonCodeForOrg(
@@ -665,9 +646,7 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           throw { status: 400, message: e instanceof Error ? e.message : 'Invalid refund reason code' };
         }
 
-        // Justification is always required; code 13 ("Other reason") needs a
-        // real explanation. (The zod schema already requires a non-empty
-        // reason; this enforces the code-13 rule with a precise message.)
+        // Justification is always required; code 13 ("Other reason") needs a real explanation.
         try {
           assertRefundReason(rfdRsnCd, reason);
         } catch (e: unknown) {
@@ -708,9 +687,9 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           throw { status: 404, message: "Sale not found" };
         }
 
-        // The original must be a genuine Normal Sale: never an NR (or any
-        // other label), never a proforma, never already refunded/cancelled,
-        // and carrying the VSDC invoice number the refund will reference.
+        // The original must be a genuine Normal Sale: never an NR (or any other label), never a
+        // proforma, never already refunded/cancelled, and carrying the VSDC invoice number the
+        // refund will reference.
         try {
           assertOriginalRefundable({
             id,
@@ -725,11 +704,7 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           throw e;
         }
 
-        // A number allocated at checkout is not a receipt. When EBM is on, the
-        // NS must already have VSDC's rcptNo, signature, internal data and
-        // timestamp — otherwise the refund would mark the original REFUNDED,
-        // the pending SALE submission would be dead-lettered, and the NR
-        // would never be confirmed.
+        // A number allocated at checkout is not a receipt.
         if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
           const confirmed = await prisma.ebmTransaction.findFirst({
             where: { saleId: id, operation: 'SALE', submissionStatus: 'SUCCESS' },
@@ -783,11 +758,8 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           itemType: item.itemType || 'PRODUCT',
         }));
 
-        // Already-refunded legs from every prior refund linked to this sale
-        // (refund rows store negated quantities — take abs). Linked refunds
-        // can never be cancelled (cancelSale refuses REFUNDED rows), so every
-        // linked row counts as consumed: conservative by design, re-refunding
-        // the same quantity is impossible.
+        // Already-refunded legs from every prior refund linked to this sale (refund rows store
+        // negated quantities — take abs).
         const priorLegs = ((sale as any).refunds || []).flatMap((r: any) =>
           (r.saleItems || []).map((si: any) => ({
             productId: si.productId ?? null,
@@ -796,10 +768,8 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           })),
         );
 
-        // Duplicate-submission guard: a refund for this original that is still
-        // being fiscalized (or waiting to retry) blocks a new one. Without
-        // this, a double-click / retry-after-timeout would create a second
-        // refund record and restore the same stock twice.
+        // Duplicate-submission guard: a refund for this original that is still being fiscalized (or
+        // waiting to retry) blocks a new one.
         const linkedRefundIds = ((sale as any).refunds || []).map((r: any) => r.id);
         if (linkedRefundIds.length > 0) {
           const inFlight = await prisma.ebmOutbox.findFirst({
@@ -818,9 +788,7 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
           }
         }
 
-        // Plan the negated legs. No `items` (or an empty list) = full refund
-        // of every remaining line; otherwise each entry refunds part of one
-        // original line within its remaining quantity. Over-refunds throw.
+        // Plan the negated legs.
         const requested = Array.isArray(refundItems) && refundItems.length > 0
           ? refundItems.map((r: any) => ({ saleItemId: Number(r.saleItemId), quantity: Number(r.quantity) }))
           : null;
@@ -870,10 +838,9 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
         const refundRcptLabel = refundLabelForOriginal((sale as any).rcptLabel ?? 'NS');
         const isTrainingRefund = refundRcptLabel === 'TR';
 
-        // A fiscal refund is a NEW sales-transaction document: allocate a fresh
-        // VSDC invoice number for it (the sandbox rejects a resubmitted invcNo
-        // with 924, and a refund with orgInvcNo=0 with 910). The original sale
-        // is referenced via orgInvcNo at submission time (see outbox worker).
+        // A fiscal refund is a NEW sales-transaction document: allocate a fresh VSDC invoice number
+        // for it (the sandbox rejects a resubmitted invcNo with 924, and a refund with orgInvcNo=0
+        // with 910).
         const { invoiceNumber: refundInvoiceNumber, vsdcInvcNo: refundVsdcInvcNo } =
           await generateInvoiceNumber(organizationId!, (sale as any).branchId, prisma);
 
@@ -916,17 +883,16 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
             saleItems: {
               create: planned.map((item) => ({
                 productId: item.productId || undefined,
-                // quantity negative x unitPrice positive = totalPrice negative;
-                // unitPrice itself stays positive here so that identity holds —
-                // the printed minus sign on the per-unit price (RRA checklist
-                // §56) is applied at render time (composeInvoicePayload), not
-                // stored, to avoid double-negating the line total.
+                // quantity negative x unitPrice positive = totalPrice negative; unitPrice itself
+                // stays positive here so that identity holds — the printed minus sign on the
+                // per-unit price (RRA checklist §56) is applied at render time
+                // (composeInvoicePayload), not stored, to avoid double-negating the line total.
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
                 totalPrice: item.totalPrice,
-                // Tax + discount mirror the original line with the sign flipped so
-                // the refund fiscalises with the correct tax code/amount and the
-                // printed receipt shows every amount negative (RRA checklist §56).
+                // Tax + discount mirror the original line with the sign flipped so the refund
+                // fiscalises with the correct tax code/amount and the printed receipt shows every
+                // amount negative (RRA checklist §56).
                 taxRate: item.taxRate,
                 taxAmount: item.taxAmount,
                 taxCode: item.taxCode ?? undefined,
@@ -947,9 +913,6 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
 
         // Update product quantities (restore inventory) and record movements in ledger (Stock IN)
         // Only restore stock for PRODUCT items; SERVICE items have no inventory.
-        // Exactly the refunded quantity is restored, once, against this refund
-        // record — retrying the fiscal submission never touches stock again, so
-        // a retry can neither duplicate nor miss the restoration.
         const batchBySaleItemId = new Map<number, number | null>(
           originalLines.map((l: any) => [l.saleItemId, l.batchId ?? null] as [number, number | null]),
         );
@@ -1085,10 +1048,8 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
       });
     });
 
-    // Bounded wait (same rationale as createSale — RRA checklist §16/§22: a
-    // refund receipt must not be issued before VSDC confirms it either). The
-    // outbox row stays the single source of truth; the 2-minute cron job
-    // remains the retry/backstop if this wait times out.
+    // Bounded wait (same rationale as createSale — RRA checklist §16/§22: a refund receipt must not
+    // be issued before VSDC confirms it either).
     let refundFiscalization: { status: 'success' | 'pending' | 'failed' } = { status: 'success' };
     if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
       const EBM_INLINE_WAIT_MS = 5000;
@@ -1120,14 +1081,8 @@ export const refundSale = async (req: BranchAuthRequest, res: Response) => {
 
 
 /**
- * What can still be refunded on a sale — drives the refund UI (original
- * detail + per-line remaining + prior refunds + fiscal state).
- *
- * GET /:organizationId/:saleId/refundable
- *
- * Always 200 (except 404/500): `eligible` tells the UI whether a refund may
- * start, with machine-readable `errors` when not. Never exposes a path to
- * refund an ineligible receipt — `refundSale` re-enforces every rule.
+ * What can still be refunded on a sale — drives the refund UI (original detail + per-line remaining
+ * + prior refunds + fiscal state).
  */
 export const getRefundable = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -1291,16 +1246,8 @@ export const getRefundable = async (req: BranchAuthRequest, res: Response) => {
 
 
 /**
- * Registers one download/print of this sale's invoice PDF — called by the
- * frontend right before it fetches the actual PDF for every deliberate
- * download. CIS/VSDC spec §7.18: "print only one original receipt. Reprint
- * shall have a watermark with mention Copy." There's no separate "copy"
- * action: the FIRST registered download stays the original (reprintCount
- * reaches 1, isCopy stays false in getSaleInvoiceData); every one after that
- * is automatically rendered as a COPY (CS/CR) receipt.
- *
- * The explicit copy action is printReceiptCopy (POST .../copy), which renders
- * and records the copy in one request.
+ * Registers one download/print of this sale's invoice PDF — called by the frontend right before it
+ * fetches the actual PDF for every deliberate download.
  */
 export const reprintSaleReceipt = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -1319,11 +1266,8 @@ export const reprintSaleReceipt = async (req: BranchAuthRequest, res: Response) 
       return res.status(404).json(apiError("Sale not found"));
     }
 
-    // C6: CS = copy of a Normal Sale, CR = copy of a Normal Refund — derived
-    // from the receipt's own label (an NS that was later refunded is still a
-    // sale receipt). Display-only: the sale's rcptLabel (NS/NR/TS/TR) stays
-    // the fiscal record of what the original receipt was. Training/proforma
-    // reprints are not CS/CR.
+    // C6: CS = copy of a Normal Sale, CR = copy of a Normal Refund — derived from the receipt's own
+    // label (an NS that was later refunded is still a sale receipt).
     const copyLabel = copyLabelFor({
       rcptLabel: sale.rcptLabel ?? null,
       isProforma: sale.isProforma,
@@ -1332,10 +1276,8 @@ export const reprintSaleReceipt = async (req: BranchAuthRequest, res: Response) 
     });
     const willBeCopy = (sale.reprintCount ?? 0) + 1 > 1;
 
-    // Validate that the document this registration unlocks can actually be
-    // produced before counting it — a failed registration must never inflate
-    // the count. A CS/CR reprints the original's VSDC data under a COPY
-    // watermark; nothing is sent to VSDC.
+    // Validate that the document this registration unlocks can actually be produced before counting
+    // it — a failed registration must never inflate the count.
     await composeInvoicePayload(req, { copy: copyLabel && willBeCopy ? "force" : "auto" });
 
     const updated = await prisma.sale.update({
@@ -1376,8 +1318,8 @@ export const reprintSaleReceipt = async (req: BranchAuthRequest, res: Response) 
 };
 
 /**
- * Regenerate invoice for a sale — creates a new invoice number, updates the sale,
- * generates new EBM transaction, preserves history, and prevents duplicate numbers.
+ * Regenerate invoice for a sale — creates a new invoice number, updates the sale, generates new EBM
+ * transaction, preserves history, and prevents duplicate numbers.
  */
 export const regenerateInvoice = async (req: BranchAuthRequest, res: Response) => {
     try {
@@ -1398,11 +1340,8 @@ export const regenerateInvoice = async (req: BranchAuthRequest, res: Response) =
             return res.status(400).json(apiError(`Cannot regenerate invoice for a ${sale.status.toLowerCase()} sale`));
         }
 
-        // RRA checklist §28: an approved (VSDC-signed) receipt must never be
-        // modified — that includes re-numbering it. Regeneration is only for a
-        // sale whose invoice number was never accepted by VSDC (still pending or
-        // permanently failed). A fiscalised sale can only be corrected via a
-        // refund against the original receipt.
+        // RRA checklist §28: an approved (VSDC-signed) receipt must never be modified — that
+        // includes re-numbering it.
         const alreadyFiscalised = sale.ebmTransactions.some(
             (t) => (t.operation === 'SALE' || !t.operation) && t.submissionStatus === 'SUCCESS' && t.ebmInvoiceNumber != null,
         );
@@ -1427,9 +1366,9 @@ export const regenerateInvoice = async (req: BranchAuthRequest, res: Response) =
                 },
             });
 
-            // Supersede any still-pending SALE outbox rows for this sale: they
-            // carry the previous (now replaced) invcNo, and letting the worker
-            // submit them would fiscalize a stale number alongside the new one.
+            // Supersede any still-pending SALE outbox rows for this sale: they carry the previous
+            // (now replaced) invcNo, and letting the worker submit them would fiscalize a stale
+            // number alongside the new one.
             await tx.ebmOutbox.updateMany({
               where: {
                 saleId,
@@ -1496,9 +1435,8 @@ export const regenerateInvoice = async (req: BranchAuthRequest, res: Response) =
 };
 
 /**
- * E2/E3: GET /api/organizations/:orgId/sales/:saleId/ebm-receipt
- * Returns the latest successful SDC fiscalization data for a sale.
- * The frontend polls this after sale creation once the outbox worker has run.
+ * E2/E3: GET /api/organizations/:orgId/sales/:saleId/ebm-receipt Returns the latest successful SDC
+ * fiscalization data for a sale.
  */
 export const getEbmReceipt = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -1541,9 +1479,9 @@ export const getEbmReceipt = async (req: BranchAuthRequest, res: Response) => {
 
     const signedMrc = (tx.responseData as { normalized?: { mrcNo?: string } } | null)?.normalized?.mrcNo;
     const mrcNo = configuredMrc(branch, org) || signedMrc || resolveReportMrc(branch, org);
-    // `tx` is this sale's own successful VSDC response — prefer the ID it was
-    // actually stamped with over the (possibly still-unconfigured) device
-    // setting, same precedence composeInvoicePayload uses.
+    // `tx` is this sale's own successful VSDC response — prefer the ID it was actually stamped with
+    // over the (possibly still-unconfigured) device setting, same precedence composeInvoicePayload
+    // uses.
     const sdcId = tx.sdcId ?? branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null;
 
     res.json({
@@ -1618,10 +1556,9 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
         }
       });
 
-      // Return items to inventory ONLY when the original sale actually
-      // released stock (RRA v1.0.5: cancellation is a sales-status 04 event;
-      // a 03 Return/Incoming movement is emitted only if inventory comes back
-      // — e.g. never for proforma/training/service-only sales that never
+      // Return items to inventory ONLY when the original sale actually released stock (RRA v1.0.5:
+      // cancellation is a sales-status 04 event; a 03 Return/Incoming movement is emitted only if
+      // inventory comes back — e.g. never for proforma/training/service-only sales that never
       // deducted stock).
       const deducted = await prisma.inventoryLedger.findMany({
         where: {
@@ -1669,9 +1606,8 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
         }
       }
 
-      // Revert customer balance for debt portion only
-      // During sale creation, we added the debt amount to customer balance
-      // During cancellation, we need to subtract it
+      // Revert customer balance for debt portion only During sale creation, we added the debt
+      // amount to customer balance During cancellation, we need to subtract it
       const debtAmount = (sale as any).debtAmount?.toNumber?.() || 0;
       if (debtAmount > 0) {
         await prisma.customer.update({
@@ -1715,10 +1651,8 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
       }
     });
 
-    // Fire the outbox worker immediately (fire-and-forget) so the void hits
-    // the WAR right at cancel time instead of waiting for the cron tick. The
-    // outbox row stays the single source of truth for idempotency; the cron
-    // job remains a retry/backstop if this run fails or times out.
+    // Fire the outbox worker immediately (fire-and-forget) so the void hits the WAR right at cancel
+    // time instead of waiting for the cron tick.
     if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
       void processEbmOutboxBatch(50).catch((e) => {
         console.error('[EBM] immediate void fiscalization error:', e);
@@ -1733,22 +1667,8 @@ export const cancelSale = async (req: BranchAuthRequest, res: Response) => {
 };
 
 /**
- * Pre-approval correction (2018 spec Art. 12): replace a COMPLETED sale that
- * the VSDC has NOT yet confirmed with a corrected sale.
- *
- * Rules enforced:
- * - Only unfiscalized sales qualify: no SUCCEEDED outbox row and no SUCCESS
- *   fiscal transaction. An approved (VSDC-signed) receipt is immutable — issue
- *   a refund instead (409 otherwise).
- * - The original is cancelled first and referenced by the correction
- *   (cancellationReason carries the new sale number); a CANCELLED/REFUNDED
- *   sale cannot be corrected again (cancel-once rule).
- * - The original's VSDC invoice number was never submitted, so no VOID
- *   document is owed to RRA for it; a VOID outbox row is still recorded for
- *   the audit trail and the worker skips it as never-fiscalized.
- * - Proformas have their own edit endpoint (updateProforma).
- *
- * POST /:organizationId/:saleId/correct
+ * Pre-approval correction (2018 spec Art. 12): replace a COMPLETED sale that the VSDC has NOT yet
+ * confirmed with a corrected sale.
  */
 export const correctSale = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -1783,9 +1703,7 @@ export const correctSale = async (req: BranchAuthRequest, res: Response) => {
       return res.status(400).json(apiError(`Only a completed sale can be corrected (status is ${sale.status})`));
     }
 
-    // VSDC approval check: any SUCCEEDED fiscal record makes the receipt
-    // immutable. (Outbox SUCCEEDED and fiscal SUCCESS are written together, so
-    // either one blocks; checking both covers legacy rows.)
+    // VSDC approval check: any SUCCEEDED fiscal record makes the receipt immutable.
     const [outboxSuccess, fiscalSuccess] = await Promise.all([
       prisma.ebmOutbox.findFirst({ where: { saleId, status: 'SUCCEEDED' }, select: { id: true } }),
       prisma.ebmTransaction.findFirst({ where: { saleId, submissionStatus: 'SUCCESS' }, select: { id: true } }),
@@ -1794,9 +1712,8 @@ export const correctSale = async (req: BranchAuthRequest, res: Response) => {
       return res.status(409).json(apiError("Sale already confirmed by RRA VSDC and can no longer be corrected — issue a refund instead"));
     }
 
-    // Pre-validate the corrected totals BEFORE cancelling the original, so a
-    // correctable sale is never stranded by a correctable typo: the same
-    // payment-identity gate commitSale enforces.
+    // Pre-validate the corrected totals BEFORE cancelling the original, so a correctable sale is
+    // never stranded by a correctable typo: the same payment-identity gate commitSale enforces.
     const correctedTotal = (items as any[]).reduce((s: number, i: any) => s + Number(i.quantity) * Number(i.unitPrice), 0);
     if (Math.abs(correctedTotal - (cashAmount || 0) - (insuranceAmount || 0) - (debtAmount || 0)) > 0.01) {
       return res.status(400).json(apiError("Payment amounts do not match total. Total must equal cashAmount + insuranceAmount + debtAmount"));
@@ -1846,9 +1763,8 @@ export const correctSale = async (req: BranchAuthRequest, res: Response) => {
         });
       }
 
-      // VOID outbox row for the audit trail. The original was never
-      // fiscalized, so the worker marks this SUCCEEDED-skipped without
-      // submitting anything to RRA.
+      // VOID outbox row for the audit trail. The original was never fiscalized, so the worker marks
+      // this SUCCEEDED-skipped without submitting anything to RRA.
       if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
         await prisma.ebmOutbox.create({
           data: {
@@ -1885,9 +1801,9 @@ export const correctSale = async (req: BranchAuthRequest, res: Response) => {
         req,
       });
     } catch (e: any) {
-      // The original is already cancelled at this point (cancel-once rule), so
-      // a failed correction must be re-entered as a brand-new sale — say so
-      // explicitly instead of leaving the operator guessing.
+      // The original is already cancelled at this point (cancel-once rule), so a failed correction
+      // must be re-entered as a brand-new sale — say so explicitly instead of leaving the operator
+      // guessing.
       const status = e instanceof CommitSaleError ? e.statusCode : 500;
       return res.status(status).json(apiError(
         `Original sale #${sale.saleNumber} was cancelled, but the corrected sale could not be created: ${e.message}. Re-enter the corrected sale as a new sale.`,
@@ -1922,8 +1838,8 @@ export const correctSale = async (req: BranchAuthRequest, res: Response) => {
 
 /**
  * Build the RRA QR string per CIS/VSDC spec (§4.2):
- * ddmmyyyy#hhmmss#sdcId#rcptNo/totRcptNo+label#internalData#receiptSignature,
- * the receipt number exactly as printed in RECEIPT NUMBER (e.g. 212/237NS).
+ * ddmmyyyy#hhmmss#sdcId#rcptNo/totRcptNo+label#internalData#receiptSignature, the receipt number
+ * exactly as printed in RECEIPT NUMBER (e.g. 212/237NS).
  */
 function buildRraQrString(p: {
   sdcDateTime?: string | Date | null
@@ -1973,21 +1889,12 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
   MIXED: "Mixed",
 }
 
+/** Composed invoice payload used by the modern ERP invoice renderer. */
 /**
- * Composed invoice payload used by the modern ERP invoice renderer.
- *
- * GET /api/organizations/:orgId/invoices/:saleId
- *
- * Returns a single, fully-mapped document so the frontend renders ONLY values
- * coming from the API — no hardcoded business data anywhere in the UI.
- * All money arithmetic (subtotal, discount, VAT, tax, paid, balance, grand
- * total) is performed here in the backend; the frontend merely displays it.
- */
-/**
- * Thrown by composeInvoicePayload when a real (non-proforma) sale has not yet
- * been confirmed by VSDC — RRA VSDC spec forbids issuing/printing a receipt
- * without that confirmation (checklist §16/§22), so callers must surface this
- * distinctly instead of falling back to a degraded, unsigned receipt.
+ * Thrown by composeInvoicePayload when a real (non-proforma) sale has not yet been confirmed by
+ * VSDC — RRA VSDC spec forbids issuing/printing a receipt without that confirmation (checklist
+ * §16/§22), so callers must surface this distinctly instead of falling back to a degraded, unsigned
+ * receipt.
  */
 export class FiscalizationPendingError extends Error {
   constructor(public readonly reason: "pending" | "failed") {
@@ -1997,13 +1904,10 @@ export class FiscalizationPendingError extends Error {
 }
 
 /**
- * `copy`:
- *  - "auto" (default): a sale whose original was already issued and then
- *    registered again (reprintCount > 1, see reprintSaleReceipt) renders as
- *    its CS/CR copy.
- *  - "force": always render the CS/CR copy (explicit copy request); throws
- *    ReceiptCopyError when the receipt is not an NS/NR or its stored VSDC
- *    record is incomplete.
+ * `copy`: - "auto" (default): a sale whose original was already issued and then registered again
+ * (reprintCount > 1, see reprintSaleReceipt) renders as its CS/CR copy. - "force": always render
+ * the CS/CR copy (explicit copy request); throws ReceiptCopyError when the receipt is not an NS/NR
+ * or its stored VSDC record is incomplete.
  */
 export async function composeInvoicePayload(
   req: BranchAuthRequest,
@@ -2038,31 +1942,22 @@ export async function composeInvoicePayload(
 
     if (!sale) return null
 
-    // Every receipt type — normal (NS/NR), training (TS/TR) and proforma (PS)
-    // — is submitted to VSDC, so a sale that has an outbox row must have
-    // reached SUCCEEDED before its receipt can be composed — anything else
-    // (PENDING/PROCESSING/FAILED still retrying, or permanently DEAD_LETTER)
-    // blocks here rather than silently degrading to an unsigned receipt.
-    // (Proforma/training sales created before this guarantee shipped have no
-    // outbox row at all and compose without a fiscal block, as before.)
-    // Set when the sale is real but VSDC has not confirmed it yet. By default
-    // that is a hard stop (RRA VSDC spec §16/§22 — no receipt without VSDC
-    // confirmation); when the caller passes allowUnfiscalized (a deliberate,
-    // user-initiated download/print), we instead compose the payload and stamp
-    // it NOT FISCALISED so the document can never pass as a real tax receipt.
+    // Every receipt type — normal (NS/NR), training (TS/TR) and proforma (PS) — is submitted to
+    // VSDC, so a sale that has an outbox row must have reached SUCCEEDED before its receipt can be
+    // composed — anything else (PENDING/PROCESSING/FAILED still retrying, or permanently
+    // DEAD_LETTER) blocks here rather than silently degrading to an unsigned receipt.
     let notFiscalized: "pending" | "failed" | null = null
     {
-      // Not filtered to operation:"SALE" — a refund sale's outbox row is
-      // written with operation:"REFUND" (see refundSale), and a voided sale's
-      // with "VOID"; whichever applies to this sale is what must have SUCCEEDED.
+      // Not filtered to operation:"SALE" — a refund sale's outbox row is written with
+      // operation:"REFUND" (see refundSale), and a voided sale's with "VOID"; whichever applies to
+      // this sale is what must have SUCCEEDED.
       const outboxRow = await prisma.ebmOutbox.findFirst({
         where: { saleId: sale.id },
         orderBy: { createdAt: "desc" },
         select: { status: true, operation: true },
       })
-      // A SALE/REFUND row is only "done" when the VSDC receipt it produced is
-      // on record; a SUCCEEDED row without one has no fiscal data to print.
-      // A forced copy is validated field by field by assertCopyableFiscalRecord.
+      // A SALE/REFUND row is only "done" when the VSDC receipt it produced is on record; a
+      // SUCCEEDED row without one has no fiscal data to print.
       const confirmedReceipt = (sale.ebmTransactions ?? []).some(
         (t) => t.submissionStatus === "SUCCESS" && t.sdcRcptNo != null && (!t.operation || t.operation === "SALE" || t.operation === "REFUND"),
       )
@@ -2086,35 +1981,29 @@ export async function composeInvoicePayload(
       }),
     ])
 
-    // "Linked to RRA/EBM" means the VSDC device credentials actually used to
-    // talk to RRA (see getOsdcCreds/getVsdcCreds: org.TIN + branch.ebmSerialNo,
-    // falling back to org.ebmSerialNo) are configured — NOT ebmDeviceId, which
-    // is just the SDC ID RRA hands back after a successful transaction and is
-    // still empty for a freshly-registered device that hasn't fiscalized yet.
-    // bhfId is sourced from branch.bhfId (configurable in Organization Settings),
-    // falling back to config.ebm.defaultBhfId
+    // "Linked to RRA/EBM" means the VSDC device credentials actually used to talk to RRA (see
+    // getOsdcCreds/getVsdcCreds: org.TIN + branch.ebmSerialNo, falling back to org.ebmSerialNo) are
+    // configured — NOT ebmDeviceId, which is just the SDC ID RRA hands back after a successful
+    // transaction and is still empty for a freshly-registered device that hasn't fiscalized yet.
+    // bhfId is sourced from branch.bhfId (configurable in Organization Settings), falling back to
+    // config.ebm.defaultBhfId
     const isEbmLinked = Boolean(org?.TIN && (branch?.ebmSerialNo || org?.ebmSerialNo))
 
     const fiscalTx = (sale.ebmTransactions ?? []).find((t) => t.submissionStatus === "SUCCESS" && (!t.operation || t.operation === "SALE" || t.operation === "REFUND"))
     const responseData = fiscalTx?.responseData as { normalized?: { ebmInvoiceNumber?: string; verificationCode?: string; sdcDateTime?: string; intrlData?: string; vsdcSignature?: string; mrcNo?: string } } | null | undefined
     const norm = responseData?.normalized
-    // The request/response actually exchanged with VSDC. Printed fiscal values
-    // come from here first so a reprint/copy still matches VSDC after the
-    // catalog, customer or tax settings change.
+    // The request/response actually exchanged with VSDC.
     const vsdcRecord = readVsdcRecord(fiscalTx?.responseData)
 
     // MRC: the device MRC configured in the CIS (spec Art. 3.2.1); the value
     // VSDC returned on the signed receipt is the fallback for unconfigured devices.
     const mrcNo = configuredMrc(branch, org) || vsdcMrcNo(vsdcRecord) || norm?.mrcNo || resolveReportMrc(branch, org)
-    // Prefer the ID stamped in the successful RRA response. Configured device
-    // values are a fallback only; this keeps the printed SDC identifier aligned
-    // with the actual fiscal receipt.
+    // Prefer the ID stamped in the successful RRA response.
     let sdcId = fiscalTx?.sdcId ?? vsdcSdcId(vsdcRecord) ?? branch?.ebmDeviceId ?? org?.ebmDeviceId ?? null
-    // Proforma/training documents never get their own fiscalTx (never
-    // submitted to VSDC), and the device may not have its ebmDeviceId
-    // backfilled in Organization/Branch settings — but the SDC ID is a fixed
-    // per-device identifier, so reuse the one this branch's device was last
-    // handed back on any real, successfully-fiscalized sale.
+    // Proforma/training documents never get their own fiscalTx (never submitted to VSDC), and the
+    // device may not have its ebmDeviceId backfilled in Organization/Branch settings — but the SDC
+    // ID is a fixed per-device identifier, so reuse the one this branch's device was last handed
+    // back on any real, successfully-fiscalized sale.
     if (!sdcId) {
       const lastKnownDevice = await prisma.ebmTransaction.findFirst({
         where: { organizationId, sdcId: { not: null }, sale: { branchId: sale.branchId } },
@@ -2131,19 +2020,17 @@ export async function composeInvoicePayload(
     const isUnsignedReceipt = isUnsignedLabel(fiscalTx?.rcptLabel ?? sale.rcptLabel ?? null) || !!sale.isProforma
     const internalData = isUnsignedReceipt ? null : fiscalTx?.internalData ?? norm?.intrlData ?? null
     const receiptSignature = isUnsignedReceipt ? null : fiscalTx?.receiptSignature ?? norm?.vsdcSignature ?? norm?.verificationCode ?? null
-    // A receipt with no fiscalTx yet (still pending VSDC confirmation, or a
-    // proforma/training sale created before all receipt types were fiscalized)
-    // has no VSDC-stamped time either — fall back to the CIS's own creation
-    // time, same as the spec's own proforma example still prints a date/time
-    // under SDC INFORMATION.
+    // A receipt with no fiscalTx yet (still pending VSDC confirmation, or a proforma/training sale
+    // created before all receipt types were fiscalized) has no VSDC-stamped time either — fall back
+    // to the CIS's own creation time, same as the spec's own proforma example still prints a
+    // date/time under SDC INFORMATION.
     const sdcDateTime = fiscalTx?.sdcDateTime ?? norm?.sdcDateTime ?? (sale.isProforma ? sale.createdAt : null)
     const ebmInvoiceNumber = fiscalTx?.ebmInvoiceNumber ?? norm?.ebmInvoiceNumber ?? sale.invoiceNumber ?? null
     const rcptLabel = fiscalTx?.rcptLabel ?? sale.rcptLabel ?? null
-    // Until VSDC confirms (no fiscalTx/sdcRcptNo yet), a proforma or training
-    // receipt prints its own local, non-fiscal counter pair instead:
-    // localReceiptSeq (this type only) / localReceiptTotalSeq (every
-    // locally-numbered type combined), the same distinct-A/B shape as a real
-    // VSDC counter (spec §7.25's own example: "168/258 NS" — two different numbers).
+    // Until VSDC confirms (no fiscalTx/sdcRcptNo yet), a proforma or training receipt prints its
+    // own local, non-fiscal counter pair instead: localReceiptSeq (this type only) /
+    // localReceiptTotalSeq (every locally-numbered type combined), the same distinct-A/B shape as a
+    // real VSDC counter (spec §7.25's own example: "168/258 NS" — two different numbers).
     const fiscalReceiptNumber = sdcRcptNo != null
       ? `${sdcRcptNo}${totalRcptNo != null ? `/${totalRcptNo}` : ""}${rcptLabel ? ` ${rcptLabel}` : ""}`
       : sale.localReceiptSeq != null && !isTrainingReceipt
@@ -2158,9 +2045,8 @@ export async function composeInvoicePayload(
     // The orgInvcNo this refund was submitted with (falls back to the linked
     // original before VSDC has confirmed the refund).
     const originalInvoiceNumber = vsdcOriginalInvoiceNumber(vsdcRecord) ?? sale.originalSale?.vsdcInvcNo ?? null
-    // REF. NORMAL RECEIPT# prints the orgInvcNo the refund references — the
-    // same value VSDC prints on its own NR journal (e.g. 149), not the
-    // original's SDC rcptNo.
+    // REF. NORMAL RECEIPT# prints the orgInvcNo the refund references — the same value VSDC prints
+    // on its own NR journal (e.g. 149), not the original's SDC rcptNo.
     const originalReceiptNumber = formatOriginalReceiptReference(originalInvoiceNumber)
 
     const currency = org?.currency ?? "RWF"
@@ -2176,10 +2062,9 @@ export async function composeInvoicePayload(
     const insuranceAmount = toNumber(sale.insuranceAmount)
     const vatAmount = toNumber(sale.vatAmount)
     const taxableAmount = toNumber(sale.taxableAmount)
-    // A refund stores every amount negative; compute the residual sale-level
-    // discount on magnitudes and re-apply the document's sign so a refund
-    // receipt shows the discount negative too (RRA checklist §56) instead of a
-    // spurious positive value.
+    // A refund stores every amount negative; compute the residual sale-level discount on magnitudes
+    // and re-apply the document's sign so a refund receipt shows the discount negative too (RRA
+    // checklist §56) instead of a spurious positive value.
     const docSign = totalAmount < 0 ? -1 : 1
     const discountAmount = docSign * Math.max(
       0,
@@ -2201,22 +2086,16 @@ export async function composeInvoicePayload(
       return {
         id: String(line.id),
         line: index + 1,
-        // Item code and name must be EXACTLY what was submitted to VSDC
-        // (itemList[].itemCd / itemNm). Before submission the same values
-        // buildRraSendReceiptPayload would send are used: registered itemCd
-        // (or SVC-n for ad-hoc service lines) and product name before service
-        // name. Never substitute sku/barcode here — those are never sent to
-        // RRA. A catalog line still missing its itemCd prints blank (the
-        // submission then dead-letters with an actionable message instead of
-        // fiscalizing a code RRA never saw).
+        // Item code and name must be EXACTLY what was submitted to VSDC (itemList[].itemCd /
+        // itemNm).
         code: sent?.itemCd ?? line.product?.itemCd ?? ((line as any).productId != null ? "" : `SVC-${index + 1}`),
         description: sent?.itemNm ?? line.product?.name ?? line.serviceName ?? line.serviceDescription ?? "",
         quantity: qty,
         unit: line.measurementUnit ?? "PCS",
-        // Per-unit price always prints positive, refund or not — only qty and
-        // the amounts derived from it (gross/net/total) carry the refund's
-        // negative sign. qty is already stored negative for a refund line, so
-        // qty*unitPrice still yields the correct negative line total below.
+        // Per-unit price always prints positive, refund or not — only qty and the amounts derived
+        // from it (gross/net/total) carry the refund's negative sign. qty is already stored
+        // negative for a refund line, so qty*unitPrice still yields the correct negative line total
+        // below.
         unitPrice: Math.abs(unitPrice),
         discountPct: dcRate,
         discountAmt: dcAmt,
@@ -2225,9 +2104,7 @@ export async function composeInvoicePayload(
         taxAmount: taxAmt,
         subtotal: round2(gross),
         net,
-        // Unit prices and `sale.totalAmount` are VAT-inclusive throughout the
-        // checkout flow. The tax is an extraction from the gross line, not an
-        // amount to add again on the printed invoice.
+        // Unit prices and `sale.totalAmount` are VAT-inclusive throughout the checkout flow.
         total: net,
         itemType: line.itemType,
       }
@@ -2235,9 +2112,9 @@ export async function composeInvoicePayload(
 
     const subtotal = items.reduce((s, i) => s + i.subtotal, 0)
     const itemDiscount = items.reduce((s, i) => s + i.discountAmt, 0)
-    // R4/R11: receipt-level tax is derived once per band from the band NETs
-    // (money.service policy) — never summed from per-line cents — so the
-    // printed TOTAL TAX matches the R4 sample (5340.00 x 18/118 = 814.58).
+    // R4/R11: receipt-level tax is derived once per band from the band NETs (money.service policy)
+    // — never summed from per-line cents — so the printed TOTAL TAX matches the R4 sample (5340.00
+    // x 18/118 = 814.58).
     const derivedBandTax = bandTaxAmounts(items, programmedRates)
     const receiptTax = round2(Object.values(derivedBandTax).reduce((s, t) => s + t, 0))
     // §56: keep the discount signed with the document (negative on a refund).
@@ -2271,9 +2148,7 @@ export async function composeInvoicePayload(
     const invoiceDate = dateObj.toISOString()
 
     const paymentMethodLabel = PAYMENT_METHOD_LABEL[sale.paymentType] ?? sale.paymentType ?? ""
-    // R1: every means of payment prints with its amount. Split tenders come
-    // from the SalePayment rows; otherwise the single payment-type line with
-    // the grand total (unchanged legacy behavior).
+    // R1: every means of payment prints with its amount.
     const paymentLines = (sale.salePayments ?? [])
       .map((p) => {
         const method = String((p as any).paymentMethod ?? "")
@@ -2334,10 +2209,9 @@ export async function composeInvoicePayload(
         rcptLabelText: rcptLabel ? RCT_LABEL_DISPLAY[rcptLabel] ?? rcptLabel : null,
         isProforma: sale.isProforma,
         notFiscalized,
-        // CIS/VSDC spec §7.18/§15: only ONE original printout is allowed —
-        // reprintCount is incremented on every deliberate "download" of this
-        // invoice's PDF, so the first download (count reaches 1) stays the
-        // original and every one after (count > 1) renders as a COPY.
+        // CIS/VSDC spec §7.18/§15: only ONE original printout is allowed — reprintCount is
+        // incremented on every deliberate "download" of this invoice's PDF, so the first download
+        // (count reaches 1) stays the original and every one after (count > 1) renders as a COPY.
         isCopy: (sale.reprintCount ?? 0) > 1,
         currency,
         originalReceiptNumber,
@@ -2446,10 +2320,8 @@ export async function composeInvoicePayload(
 
 export const getInvoice = async (req: BranchAuthRequest, res: Response) => {
   try {
-    // ?allowPending=1 — the caller wants the composed invoice even before VSDC
-    // confirms it (to view/download it, stamped NOT FISCALISED). Without it the
-    // endpoint keeps returning 425 while fiscalization is in flight, which the
-    // POS/sales fiscalization poll relies on.
+    // ?allowPending=1 — the caller wants the composed invoice even before VSDC confirms it (to
+    // view/download it, stamped NOT FISCALISED).
     const allowUnfiscalized = String(req.query.allowPending ?? "") === "1"
     const invoiceData = await composeInvoicePayload(req, { allowUnfiscalized })
     if (!invoiceData) return res.status(404).json(apiError("Sale not found"))
@@ -2477,15 +2349,7 @@ function parsePdfFormat(value: unknown): InvoicePdfFormat {
   return q === "80MM" ? "80mm" : q === "A5" ? "A5" : "A4"
 }
 
-/**
- * CS/CR — print a copy of an existing NS/NR receipt.
- * POST /api/sales/:organizationId/:saleId/copy?format=A4|A5|80mm
- *
- * The copy reprints the original receipt's VSDC data (counter, timestamp,
- * internal data, signature, QR) under a COPY header title. Nothing is
- * sent to VSDC and no sale, refund, stock, payment, tax or accounting record
- * is created.
- */
+/** CS/CR — print a copy of an existing NS/NR receipt. */
 export const printReceiptCopy = async (req: BranchAuthRequest, res: Response) => {
   try {
     const saleIdParam = Number(req.params.saleId)
@@ -2505,9 +2369,7 @@ export const printReceiptCopy = async (req: BranchAuthRequest, res: Response) =>
       ? await generateEbmReceiptPdf80mm(invoiceData)
       : await generateEbmInvoicePdf(invoiceData, format === "A5" ? "A5" : "A4")
 
-    // Counted only after the copy rendered. Two atomic steps keep concurrent
-    // copies from losing an increment: the original always counts as issued
-    // (count >= 1), then this copy adds one.
+    // Counted only after the copy rendered.
     const saleId = Number(invoiceData.invoice.id)
     await prisma.sale.updateMany({ where: { id: saleId, reprintCount: { lt: 1 } }, data: { reprintCount: 1 } })
     const updated = await prisma.sale.update({
@@ -2554,9 +2416,9 @@ export const printReceiptCopy = async (req: BranchAuthRequest, res: Response) =>
 /** Authoritative backend-generated invoice PDF (A4, A5 or 80mm) for download, preview, sharing, and printing. */
 export const getInvoicePdf = async (req: BranchAuthRequest, res: Response) => {
   try {
-    // CIS §16/§22: official receipts wait for VSDC signature (425 while pending).
-    // ?allowPending=1 — POS/auto-print may request the composed PDF stamped
-    // NOT FISCALISED so the slip still prints immediately after a sale.
+    // CIS §16/§22: official receipts wait for VSDC signature (425 while pending). ?allowPending=1 —
+    // POS/auto-print may request the composed PDF stamped NOT FISCALISED so the slip still prints
+    // immediately after a sale.
     const allowUnfiscalized = String(req.query.allowPending ?? "") === "1"
     const invoiceData = await composeInvoicePayload(req, { allowUnfiscalized })
     if (!invoiceData) return res.status(404).json(apiError("Sale not found"))
@@ -2582,9 +2444,8 @@ export const getInvoicePdf = async (req: BranchAuthRequest, res: Response) => {
 }
 
 /**
- * CIS §7.28 — recover the last finalized receipt after power/paper failure so
- * the operator can reprint without re-entering the sale.
- * GET /api/sales/:organizationId/last-receipt
+ * CIS §7.28 — recover the last finalized receipt after power/paper failure so the operator can
+ * reprint without re-entering the sale.
  */
 export const getLastReceipt = async (req: BranchAuthRequest, res: Response) => {
   try {

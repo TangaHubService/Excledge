@@ -40,9 +40,8 @@ const router = Router();
 
 const orgAccess = requireOrganizationAccess();
 
-// Initiate and monitor a POS mobile-money collection using the configured
-// Paypack or direct MTN MoMo provider. The sale is created only after the
-// provider confirms that the collection completed.
+// Initiate and monitor a POS mobile-money collection using the configured Paypack or direct MTN
+// MoMo provider.
 router.post(
   "/:organizationId/mobile-money/initiate",
   authenticate,
@@ -156,9 +155,7 @@ router.post(
   refundSale
 );
 
-// What can still be refunded on a sale (original detail + per-line
-// remaining + prior refunds). Drives the refund UI; refundSale re-enforces
-// every rule, so this is read-only.
+// What can still be refunded on a sale (original detail + per-line remaining + prior refunds).
 router.get(
   "/:organizationId/:saleId/refundable",
   authenticate,

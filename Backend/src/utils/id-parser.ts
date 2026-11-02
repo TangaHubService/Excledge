@@ -1,6 +1,6 @@
 /**
- * Utility functions for parsing IDs from request parameters and query strings
- * Handles conversion from string to integer for migrated ID fields
+ * Utility functions for parsing IDs from request parameters and query strings Handles conversion
+ * from string to integer for migrated ID fields
  */
 
 export function parseId(id: string | undefined): number | null {

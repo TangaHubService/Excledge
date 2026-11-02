@@ -1,7 +1,4 @@
-/**
- * Rwanda monthly payroll: PAYE, RSSB pension, occupational hazards, maternity leave, and CBHI.
- * Rates live in one table so a law change is a new entry, and each run records the version it used.
- */
+/** Rwanda monthly payroll: PAYE, RSSB pension, occupational hazards, maternity leave, and CBHI. */
 export const RWANDA_PAYROLL_RULES = {
   version: "RW-2025-01",
   /** Monthly PAYE bands: income up to `upTo` is taxed at `rate` (the last band has no ceiling). */

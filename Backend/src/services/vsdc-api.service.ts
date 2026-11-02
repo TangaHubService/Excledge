@@ -15,9 +15,7 @@ function stringifyRraLog(value: unknown, indent?: number): string {
   }
 }
 
-// ──────────────────────────────────────────────
 // VSDC result-code table (RRA VSDC API Documentation v1.0.5 §4.14)
-// ──────────────────────────────────────────────
 
 /** `resultCd` values documented by the spec; "000" is the only success code. */
 const VSDC_RESULT_MESSAGES: Record<string, string> = {
@@ -52,11 +50,7 @@ const VSDC_RESULT_MESSAGES: Record<string, string> = {
   '999': 'There is an unknown error. Please ask the administrator',
 };
 
-/**
- * VSDC §4.14 codes are 3-digit strings ("000", "001", …). Some WAR builds
- * JSON-encode them as numbers (`0`, `1`) which would otherwise miss the
- * success / benign-empty checks below.
- */
+/** VSDC §4.14 codes are 3-digit strings ("000", "001", …). */
 export function normalizeVsdcResultCd(raw: unknown): string {
   if (raw == null) return '?';
   const s = String(raw).trim();
@@ -88,9 +82,7 @@ export function parseVsdcStatusCode(raw: unknown): {
   };
 }
 
-// ──────────────────────────────────────────────
 // Types
-// ──────────────────────────────────────────────
 
 export interface VsdcEnvelope {
   tin: string;
@@ -129,9 +121,7 @@ export interface VsdcApiResult {
   rawBody: unknown;
 }
 
-// ──────────────────────────────────────────────
 // Envelope builder
-// ──────────────────────────────────────────────
 
 export async function buildVsdcEnvelope(
   organizationId: number,
@@ -202,14 +192,8 @@ export interface VsdcDeviceTarget {
 }
 
 /**
- * Every VSDC device across every active taxpayer that the background jobs
- * (heartbeat, Z-report) must talk to.
- *
- * A device is per-branch: a target is emitted for each branch that carries
- * any RRA credential (`bhfId` / `ebmDeviceId` / `ebmSerialNo`). Only when an
- * org has NO configured branch but the org row itself has device credentials
- * is an org-level target emitted (legacy single-branch tenants). Orgs with no
- * credentials anywhere are skipped — there is nothing to be "offline" from.
+ * Every VSDC device across every active taxpayer that the background jobs (heartbeat, Z-report)
+ * must talk to.
  */
 export async function listActiveVsdcDevices(
   opts: { includeTrainingMode?: boolean } = {},
@@ -255,15 +239,8 @@ export async function listActiveVsdcDevices(
 }
 
 /**
- * RRA CIS/VSDC certification §22: the CIS must not issue a receipt of any type
- * unless it is connected to a functioning VSDC unit registered under the same
- * TIN. This guards the pre-conditions the CIS itself controls — a well-formed
- * 9-digit taxpayer TIN and a configured device serial (MRC) — so a checkout is
- * never completed against a device that can only ever be rejected. The
- * "same TIN" match itself is enforced server-side by VSDC (resultCd 901).
- *
- * Returns a human-readable error string when the device is not usable, or
- * `null` when the envelope is fit to submit.
+ * RRA CIS/VSDC certification §22: the CIS must not issue a receipt of any type unless it is
+ * connected to a functioning VSDC unit registered under the same TIN.
  */
 export function validateVsdcEnvelope(env: VsdcEnvelope): string | null {
   const tin = (env.tin ?? '').trim();
@@ -279,9 +256,7 @@ export function validateVsdcEnvelope(env: VsdcEnvelope): string | null {
   return null;
 }
 
-// ──────────────────────────────────────────────
 // HTTP transport
-// ──────────────────────────────────────────────
 
 function authHeader(): string | undefined {
   const { apiKey, apiSecret } = config.ebm;
@@ -296,9 +271,8 @@ function authHeader(): string | undefined {
 }
 
 /**
- * VSDC write/lookup bodies carry only `tin` + `bhfId` from the device envelope
- * (RRA VSDC API v1.0.5 JSON samples). `sdcId` / `mrcNo` / `dvcSrlNo` / `env`
- * are CIS-local credentials — spreading them into the body risks resultCd 910.
+ * VSDC write/lookup bodies carry only `tin` + `bhfId` from the device envelope (RRA VSDC API v1.0.5
+ * JSON samples).
  */
 export function vsdcRequestBody(
   envelope: Pick<VsdcEnvelope, 'tin' | 'bhfId'>,
@@ -379,9 +353,7 @@ async function postToEndpoint(
     }
 
     const parsed = parseVsdcResponse(json);
-    // Only a sale submission is expected to issue a receipt counter. Product,
-    // stock, and lookup endpoints can return a successful `000` response with
-    // `data: null`, which must not be treated as a fiscalisation failure.
+    // Only a sale submission is expected to issue a receipt counter.
     if (options.requiresReceiptNumber && !parsed.rcptNo) {
       return { success: false, error: 'Gateway response missing rcptNo', rawStatus: res.status, rawBody: json };
     }
@@ -396,15 +368,9 @@ async function postToEndpoint(
   }
 }
 
-// ──────────────────────────────────────────────
 // Response parser (RRA canonical fields)
-// ──────────────────────────────────────────────
 
-/**
- * Parse VSDC's compact `yyyyMMddHHmmss` timestamp into an ISO string `new Date()` can read.
- * VSDC stamps Kigali wall time (UTC+02:00, no DST); the offset is explicit so the
- * stored instant does not depend on the server's timezone.
- */
+/** Parse VSDC's compact `yyyyMMddHHmmss` timestamp into an ISO string `new Date()` can read. */
 function parseRraCompactDateTime(s: string): string {
   const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(s);
   if (!m) return s;
@@ -413,10 +379,9 @@ function parseRraCompactDateTime(s: string): string {
 }
 
 /**
- * Parse the response to `/trnsSales/saveSales`:
- * `{ resultCd, resultMsg, resultDt, data: { rcptNo, intrlData, rcptSign, totRcptNo, vsdcRcptPbctDate, sdcId, mrcNo } }`
- * (RRA VSDC API Documentation v1.0.5 §3.3.6.1). There is no QR payload in this
- * response — the CIS builds the QR string itself from these fields.
+ * Parse the response to `/trnsSales/saveSales`: `{ resultCd, resultMsg, resultDt, data: { rcptNo,
+ * intrlData, rcptSign, totRcptNo, vsdcRcptPbctDate, sdcId, mrcNo } }` (RRA VSDC API Documentation
+ * v1.0.5 §3.3.6.1).
  */
 export function parseVsdcResponse(raw: unknown): VsdcResponse {
   const fallback: VsdcResponse = {
@@ -468,12 +433,8 @@ function receiptDataBlock(raw: unknown): Record<string, unknown> {
 }
 
 /**
- * Fields a `/trnsSales/saveSales` success body must carry before an NR (or any
- * receipt) may be treated as fiscally confirmed. Missing any of them is not a
- * receipt — counters and signatures are never filled in locally.
- *
- * `training`: a TS/TR (`salesTyCd: "T"`) is confirmed by the same block minus
- * `intrlData`/`rcptSign`, which VSDC leaves empty for training (CIS §6).
+ * Fields a `/trnsSales/saveSales` success body must carry before an NR (or any receipt) may be
+ * treated as fiscally confirmed.
  */
 export function vsdcReceiptFieldErrors(raw: unknown, opts: { training?: boolean } = {}): string[] {
   const parsed = parseVsdcResponse(raw);
@@ -527,15 +488,8 @@ export type NrFiscalDecision =
   | { confirmed: false; retryable: boolean; error: string };
 
 /**
- * Decide whether a `/trnsSales/saveSales` submission (NS, NR, TS/TR, PS or a
- * cancellation) produced a printable receipt.
- * Timeouts, non-2xx HTTP replies, malformed bodies, business rejections, and
- * resultCd 924 without the original receipt block are not confirmations. 924
- * with a complete block is the only accepted replay — the signature still
- * comes from VSDC.
- *
- * `training`: the same decision for TS/TR/PS documents, which VSDC confirms
- * without intrlData/rcptSign (see `vsdcReceiptFieldErrors`).
+ * Decide whether a `/trnsSales/saveSales` submission (NS, NR, TS/TR, PS or a cancellation) produced
+ * a printable receipt.
  */
 export function decideVsdcReceiptResult(result: {
   success: boolean;
@@ -600,13 +554,11 @@ export function decideVsdcReceiptResult(result: {
 
 export const decideNrFiscalResult = decideVsdcReceiptResult;
 
-// ──────────────────────────────────────────────
 // Endpoint-specific API methods
-// ──────────────────────────────────────────────
 
 /**
- * POST /saveInvc — Primary invoice, refund, and void fiscalization.
- * operation: "SALE" | "REFUND" | "VOID"
+ * POST /saveInvc — Primary invoice, refund, and void fiscalization. operation: "SALE" | "REFUND" |
+ * "VOID"
  */
 export async function saveInvc(
   envelope: VsdcEnvelope,
@@ -625,14 +577,7 @@ export async function saveInvc(
   );
 }
 
-/**
- * POST the Electronic Journal text after a fiscalized sale (2018 spec Art. 6.5
- * EJ_DATA). The 2023 VSDC API defines no EJ endpoint, so this is used only when
- * EBM_EJ_SYNC_PATH is configured; otherwise the journal stays stored locally
- * (EbmTransaction.journalText) for inspector comparison. Best-effort: a failed
- * POST never fails the fiscalization — the journal text is retained and the
- * caller keeps ejSent=false so a later retry/inspection can resend it.
- */
+/** POST the Electronic Journal text after a fiscalized sale (2018 spec Art. 6.5 EJ_DATA). */
 export async function saveElectronicJournal(
   envelope: VsdcEnvelope,
   payload: { saleId: number; invcNo: number; rcptLabel: string; journalText: string },
@@ -644,12 +589,8 @@ export async function saveElectronicJournal(
   return postToEndpoint(path, vsdcRequestBody(envelope, payload as unknown as Record<string, unknown>), envelope.vsdcUrl);
 }
 
-// ──────────────────────────────────────────────
-// RRA master-data lookups (RRA VSDC API — Codes / Item Classification /
-// Customer / Select Item / Notices). Each returns the parsed `data` block or a
-// typed error; the response shapes differ per endpoint so they are not forced
-// through parseVsdcResponse.
-// ──────────────────────────────────────────────
+// RRA master-data lookups (RRA VSDC API — Codes / Item Classification / Customer / Select Item /
+// Notices).
 
 export interface VsdcLookupResult<T = unknown> {
   success: boolean
@@ -829,8 +770,8 @@ export function selectNotices(envelope: VsdcEnvelope, lastReqDt: string) {
 }
 
 /**
- * POST /items/saveItems — Product catalog item registration/updates
- * (VSDC API Documentation v1.0.5 §3.2.1 "ItemSaveReq").
+ * POST /items/saveItems — Product catalog item registration/updates (VSDC API Documentation v1.0.5
+ * §3.2.1 "ItemSaveReq").
  */
 export async function saveItem(
   envelope: VsdcEnvelope,
@@ -847,8 +788,8 @@ export async function saveItem(
 }
 
 /**
- * POST /items/saveItemComposition — BOM / item composition (ItemCpstSaveReq §3.3.4.2).
- * Used for client restore; not selectable back from the server.
+ * POST /items/saveItemComposition — BOM / item composition (ItemCpstSaveReq §3.3.4.2). Used for
+ * client restore; not selectable back from the server.
  */
 export async function saveItemComposition(
   envelope: VsdcEnvelope,
@@ -896,9 +837,7 @@ export async function savePurc(
   };
 }
 
-// ──────────────────────────────────────────────
 // Stock In/Out + Stock Master (RRA checklist §23, §72, §73)
-// ──────────────────────────────────────────────
 
 /** POST /stock/saveStockItems — record one stock IN or OUT movement (StockIoSaveReq). */
 export async function saveStockItems(envelope: VsdcEnvelope, payload: Record<string, unknown>): Promise<VsdcApiResult> {
@@ -967,9 +906,7 @@ export async function saveStockMaster(
   );
 }
 
-// ──────────────────────────────────────────────
 // B2B purchases (RRA checklist §70, §71)
-// ──────────────────────────────────────────────
 
 export interface RraPurchaseSalesLVO {
   spplrTin: string; spplrNm?: string; spplrBhfId?: string; spplrInvcNo: number
@@ -1051,8 +988,8 @@ export async function saveBrancheUser(
 }
 
 /**
- * POST /branches/saveBrancheInsurances — pharmacy insurance companies (BhfInsuranceSaveReq §3.3.3.3).
- * Optional for non-pharmacy CIS tenants.
+ * POST /branches/saveBrancheInsurances — pharmacy insurance companies (BhfInsuranceSaveReq
+ * §3.3.3.3). Optional for non-pharmacy CIS tenants.
  */
 export async function saveBrancheInsurance(
   envelope: VsdcEnvelope,
@@ -1062,9 +999,7 @@ export async function saveBrancheInsurance(
   return postToEndpoint('/branches/saveBrancheInsurances', vsdcRequestBody(envelope, payload), envelope.vsdcUrl);
 }
 
-// ──────────────────────────────────────────────
 // Import declarations (RRA checklist §66, §67, §68)
-// ──────────────────────────────────────────────
 
 export interface RraImportLVO {
   taskCd: string; dclDe: string; itemSeq: number; dclNo?: string; hsCd?: string; itemNm?: string
@@ -1074,9 +1009,7 @@ export interface RraImportLVO {
   itemCd?: string; itemClsCd?: string
 }
 
-// ──────────────────────────────────────────────
 // VSDC device initialization (RRA checklist §58)
-// ──────────────────────────────────────────────
 
 export interface RraInitInfo {
   tin?: string; taxprNm?: string; bsnsActv?: string
@@ -1090,12 +1023,7 @@ export interface RraInitInfo {
   vatTyCd?: number; ttTyCd?: string
 }
 
-/**
- * POST /initializer/selectInitInfo — one-time device initialization.
- * Confirms the device (TIN + bhfId + serial) is registered with RRA and returns
- * its SDC id, MRC number, and the last invoice/receipt numbers RRA has on record
- * so the CIS can seed its own sequences without colliding.
- */
+/** POST /initializer/selectInitInfo — one-time device initialization. */
 export function selectInitInfo(envelope: VsdcEnvelope) {
   if (config.ebm.useMock) {
     return Promise.resolve<VsdcLookupResult<{ info: RraInitInfo }>>({
@@ -1143,9 +1071,7 @@ export async function updateImportItems(envelope: VsdcEnvelope, payload: Record<
   return postToEndpoint('/imports/updateImportItems', vsdcRequestBody(envelope, payload), envelope.vsdcUrl);
 }
 
-/**
- * POST /selectImportInvc — Import declaration validation hooks.
- */
+/** POST /selectImportInvc — Import declaration validation hooks. */
 export async function selectImportInvc(
   envelope: VsdcEnvelope,
   payload: Record<string, unknown>,
@@ -1157,9 +1083,7 @@ export async function selectImportInvc(
   return postToEndpoint('/selectImportInvc', { ...envelopeFields, ...payload }, vsdcUrl);
 }
 
-/**
- * POST to a configurable status/sync endpoint for heartbeat checks.
- */
+/** POST to a configurable status/sync endpoint for heartbeat checks. */
 export async function vsdcHeartbeat(
   envelope: VsdcEnvelope,
 ): Promise<VsdcApiResult> {
@@ -1181,19 +1105,13 @@ export async function vsdcHeartbeat(
     };
   }
   const { vsdcUrl, tin, bhfId } = envelope;
-  // §3.3.2.1 CodeReq shape — a real, side-effect-free lookup used purely as a
-  // liveness probe. `lastReqDt` far in the past just means "give me everything",
-  // which is fine since the response itself (not its contents) is what we check.
+  // §3.3.2.1 CodeReq shape — a real, side-effect-free lookup used purely as a liveness probe.
   return postToEndpoint(statusPath, { tin, bhfId, lastReqDt: '20200101000000' }, vsdcUrl);
 }
 
 /**
- * Normalize `rptDe` to the 14-digit `yyyyMMddHHmmss` (`yyyyMMddHH24MISS`)
- * timestamp the VSDC validates against. An 8-digit report date (`yyyyMMdd`,
- * e.g. from `?date=` query params or daily-report code) is expanded to
- * start-of-day (`yyyyMMdd000000`); a 14-digit timestamp passes through
- * unchanged. This fixes VSDC error 910:
- * "Must be a valid date in yyyyMMddHH24MISS format. rejected value: '20260915'".
+ * Normalize `rptDe` to the 14-digit `yyyyMMddHHmmss` (`yyyyMMddHH24MISS`) timestamp the VSDC
+ * validates against.
  */
 export function toRptDeTimestampValue(rptDe: string): string {
   const digits = (rptDe ?? '').replace(/\D/g, '');
@@ -1201,25 +1119,7 @@ export function toRptDeTimestampValue(rptDe: string): string {
   return rptDe;
 }
 
-/**
- * POST /reports/saveZReports — daily Z (closing) report.
- *
- * Endpoint path and request shape confirmed against the RRA reference sandbox
- * (`ReportExcute.saveReportZ`, `@RequestMapping("/reports")` +
- * `@PostMapping("/saveZReports")`): the client only sends `{tin, bhfId,
- * rptDe}` — the device/edge software computes and stores the day's receipt
- * counts and totals itself from what it already recorded via
- * `/trnsSales/saveSales`, it does not take them as input.
- *
- * `rptDe` here is the **report generation timestamp**, `yyyyMMddHHmmss` (14
- * digits, Oracle `yyyyMMddHH24MISS`). 8-digit dates are normalized to
- * start-of-day via `toRptDeTimestampValue` for robustness.
- *
- * `/reports/saveZReports` has been seen to accept a request without returning a
- * conclusive success body, so callers should not treat a bare `saveZReport`
- * result as proof the day was closed — use `saveAndVerifyZReport`, which
- * confirms the close with `/reports/checkZReport` before recording it.
- */
+/** POST /reports/saveZReports — daily Z (closing) report. */
 export async function saveZReport(
   envelope: VsdcEnvelope,
   rptDe: string,
@@ -1230,16 +1130,7 @@ export async function saveZReport(
   return postToEndpoint('/reports/saveZReports', { tin: envelope.tin, bhfId: envelope.bhfId, rptDe: toRptDeTimestampValue(rptDe) }, envelope.vsdcUrl);
 }
 
-/**
- * POST /reports/checkZReport — look up a previously saved Z report.
- *
- * `rptDe` must be a 14-digit report timestamp (`yyyyMMddHHmmss` /
- * `yyyyMMddHH24MISS`) — the VSDC rejects an 8-digit `yyyyMMdd` date with
- * error 910 ("Must be a valid date in yyyyMMddHH24MISS format"). 8-digit
- * input is therefore normalized to `yyyyMMdd000000` via
- * `toRptDeTimestampValue` so date-only callers (`?date=yyyyMMdd`,
- * daily-report cross-checks) keep working.
- */
+/** POST /reports/checkZReport — look up a previously saved Z report. */
 export async function checkZReport(
   envelope: VsdcEnvelope,
   rptDe: string,
@@ -1265,12 +1156,8 @@ export interface ZReportOutcome {
 }
 
 /**
- * Close a day at the VSDC and prove it stuck: POST `/reports/saveZReports`,
- * then immediately confirm with `/reports/checkZReport` using the same
- * 14-digit generation timestamp. A Z close is only trustworthy for
- * certification evidence once `verified` is true; `saved && !verified` means
- * RRA took the request but has not yet surfaced the report and it should be
- * re-checked (via `GET /:org/z-report`).
+ * Close a day at the VSDC and prove it stuck: POST `/reports/saveZReports`, then immediately
+ * confirm with `/reports/checkZReport` using the same 14-digit generation timestamp.
  */
 export async function saveAndVerifyZReport(
   envelope: VsdcEnvelope,
@@ -1281,9 +1168,8 @@ export async function saveAndVerifyZReport(
   const rptDeTimestamp = `${ymd}${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
 
   const save = await saveZReport(envelope, rptDeTimestamp);
-  // The local VSDC WAR validates a 14-digit timestamp. The RRA server behind
-  // some sandbox builds requires an 8-digit day. Verify with the timestamp
-  // first, then with the day if RRA rejects the length.
+  // The local VSDC WAR validates a 14-digit timestamp. The RRA server behind some sandbox builds
+  // requires an 8-digit day.
   let check = await checkZReport(envelope, rptDeTimestamp);
   if (!check.success && /length must be between 8 and 8/i.test(check.error ?? '')) {
     check = await checkZReport(envelope, ymd);
@@ -1300,15 +1186,13 @@ export async function saveAndVerifyZReport(
   };
 }
 
-// ──────────────────────────────────────────────
 // Mock helper
-// ──────────────────────────────────────────────
 
 function mockResult(prefix: string, sdcId?: string): VsdcApiResult {
   const ref = `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   // rcptNo/totRcptNo must be numeric strings (parsed with parseInt downstream into
-  // EbmTransaction.sdcRcptNo/totalRcptNo), so this mirrors the real /trnsSales/saveSales
-  // response shape rather than the old free-text ref.
+  // EbmTransaction.sdcRcptNo/totalRcptNo), so this mirrors the real /trnsSales/saveSales response
+  // shape rather than the old free-text ref.
   const rcptNo = String(Math.floor(Date.now() / 1000) % 100000);
   const totRcptNo = String(Math.floor(Date.now() / 1000) % 1000000);
   const k = kigaliWallParts(new Date());

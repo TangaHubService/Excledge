@@ -26,23 +26,15 @@ import {
 } from "./training-mode.service"
 
 /**
- * Shared "commit a sale" pipeline used by both the POS checkout
- * (`createSale`) and proforma conversion (`convertProforma`). It owns the
- * server-side gatekeeping, the atomic sale transaction (stock, batches, invoice
- * numbering, outbox) and the bounded inline fiscalization wait.
- *
- * Behaviour is identical to the original inline `createSale` body — the only
- * addition is `proformaSourceId`, stamped on the created sale when the sale is
- * the NS result of converting a proforma.
+ * Shared "commit a sale" pipeline used by both the POS checkout (`createSale`) and proforma
+ * conversion (`convertProforma`).
  */
 
 export type CommitSaleItemInput = {
   productId?: number | string | null
   quantity: number
   unitPrice: number
-  /** Line discount amount (absolute money, tax-inclusive). Accepted by the
-   *  sales validation schema and read at commit time (dcAmt/dcRate
-   *  reconstruction) — declared here so the server-side pipeline typechecks. */
+  /** Line discount amount (absolute money, tax-inclusive). */
   discount?: number
   itemType?: "PRODUCT" | "RAW_MATERIAL" | "SERVICE"
   serviceName?: string | null
@@ -144,13 +136,8 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
     resolvedShiftId = active?.id
   }
 
-  // ── B2B purchase-code pre-check ──
-  // RRA rejects (resultCd 881/882, verified against the sandbox) any
-  // business-buyer sale submitted without a valid 6-character prcOrdCd.
-  // Catching this before the sale commits avoids completing a checkout
-  // (payment taken, stock deducted) that can never be fiscalized. Skipped for
-  // proforma: a quote stays editable/convertible and its code is allocated at
-  // submission time (step 4b / outbox worker) instead of blocking creation.
+  // ── B2B purchase-code pre-check ── RRA rejects (resultCd 881/882, verified against the sandbox)
+  // any business-buyer sale submitted without a valid 6-character prcOrdCd.
   if (!isProforma && isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
     const customer = await prisma.customer.findUnique({
       where: { id: customerId },
@@ -158,21 +145,17 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
     })
     const custTin = customer?.TIN?.trim() ?? ""
     const customerType = (customer?.customerType ?? "INDIVIDUAL").toUpperCase()
-    // Business buyers must present a real, valid RRA TIN: a fiscal receipt
-    // without one can never be accepted (910/884), so fail fast at checkout
-    // instead of completing a sale that can never be fiscalized. Walk-in
-    // individuals without a TIN are still served (see resolveCustTinForVsdc).
+    // Business buyers must present a real, valid RRA TIN: a fiscal receipt without one can never be
+    // accepted (910/884), so fail fast at checkout instead of completing a sale that can never be
+    // fiscalized.
     if (customerType !== "INDIVIDUAL" && !isValidRraTin(custTin)) {
       throw new CommitSaleError(
         400,
         `This ${customerType.toLowerCase()} customer ("${customer?.name ?? customerId}") has no valid 9-digit RRA TIN. Register the customer's real TIN before completing a fiscal sale.`,
       )
     }
-    // B2B purchase-code pre-check: a business buyer needs a real 6-character
-    // prcOrdCd on record (pool or customer fallback), otherwise the receipt
-    // can never be accepted (881/882). Individuals skip this — their code is
-    // allocated at submission time (sandbox mints buyer-scoped codes outside
-    // production; production B2C requirements must be confirmed with RRA).
+    // B2B purchase-code pre-check: a business buyer needs a real 6-character prcOrdCd on record
+    // (pool or customer fallback), otherwise the receipt can never be accepted (881/882).
     const needsCode = customerType === "CORPORATE" || customerType === "INSURANCE"
     if (needsCode) {
       const poolCount = await prisma.organizationPurchaseCode.count({
@@ -208,13 +191,9 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
     if (fromCatalog) item.itemType = fromCatalog
   }
 
-  // ── Fail-fast fiscal readiness ──
-  // A sale whose lines lack an RRA itemCd/itemClsCd can never be fiscalized:
-  // without this gate the checkout would commit (stock, payment) and only the
-  // outbox worker would dead-letter afterwards. When fiscal submission is on,
-  // reject such sales here with an actionable 400 instead. Ad-hoc service
-  // lines (no catalog product) are likewise unfiscalizable — services must be
-  // registered in the catalog with an RRA classification first.
+  // ── Fail-fast fiscal readiness ── A sale whose lines lack an RRA itemCd/itemClsCd can never be
+  // fiscalized: without this gate the checkout would commit (stock, payment) and only the outbox
+  // worker would dead-letter afterwards.
   if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
     for (const item of items) {
       const pid = parseInt(String(item.productId))
@@ -316,13 +295,10 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
     select: { vatRegistered: true, isTaxExempt: true },
   })
 
-  // ── Strict fiscal mode (2018 spec Art. 10, strict reading) ──
-  // When EBM_STRICT_MODE is on, the sale is not created at all unless the VSDC
-  // is provably reachable: the device envelope is validated and the device is
-  // probed with a live heartbeat BEFORE anything commits (stock, payments,
-  // numbering). Default mode keeps the transactional-outbox behavior instead
-  // (sale completes, official receipt withheld with HTTP 425 until confirmed).
-  // Training receipts go through VSDC too (CIS §6/§10), so they are not exempt.
+  // ── Strict fiscal mode (2018 spec Art. 10, strict reading) ── When EBM_STRICT_MODE is on, the
+  // sale is not created at all unless the VSDC is provably reachable: the device envelope is
+  // validated and the device is probed with a live heartbeat BEFORE anything commits (stock,
+  // payments, numbering).
   if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled && config.ebm.strictMode) {
     const envelope = await buildVsdcEnvelope(organizationId, branchId)
     const envelopeError = validateVsdcEnvelope(envelope)
@@ -414,11 +390,8 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         )
       }
 
-      // R9: per-rate legs for the server record, aggregated from the same
-      // net-based item math as the VSDC payload (exact Decimal sums, rounded
-      // once per band — money.service policy). NOTE on naming: RRA `taxblAmt`
-      // is the VAT-INCLUSIVE band base (band NET sales, totTaxblAmt == totAmt),
-      // not the VAT-exclusive figure in `taxableAmount`.
+      // R9: per-rate legs for the server record, aggregated from the same net-based item math as
+      // the VSDC payload (exact Decimal sums, rounded once per band — money.service policy).
       const rateBands: Record<string, { net: Decimal; tax: Decimal }> = {}
       for (const ti of taxSummary.items) {
         const slot = rateBands[ti.taxCode] ?? { net: new Decimal(0), tax: new Decimal(0) }
@@ -530,14 +503,6 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
       }
 
       // 4. Allocate an invoice/receipt number and create the sale together.
-      //
-      // EVERY receipt type — normal (NS), training (TS/TR) and proforma (PS) —
-      // is submitted to RRA VSDC, so every sale draws from the real gapless
-      // per-device sequence: the invoice number printed on the receipt is
-      // exactly the invcNo sent to VSDC. Proforma additionally keeps its local
-      // non-fiscal counter pair (localReceiptSeq / localReceiptTotalSeq) as the
-      // fallback receipt number until VSDC confirms the submission. Training
-      // does not: its TS/TR counter is issued by VSDC and never invented here.
       const generated = await generateInvoiceNumber(organizationId, branchId, tx)
       const invoiceNumber: string = generated.invoiceNumber
       const vsdcInvcNo: number = generated.vsdcInvcNo
@@ -589,9 +554,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         },
       } as any)
 
-      // 4b. Consume an organization-level RRA purchase code for business (B2B)
-      // buyers — for every receipt type, since training and proforma are
-      // fiscalized through VSDC like normal sales and need a code on record.
+      // 4b.
       const custTin = (newSale as any).customer?.TIN?.trim() ?? ""
       if (custTin && !custTin.startsWith("7")) {
         const allocated =
@@ -606,9 +569,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         }
       }
 
-      // 5. Record stock movements for PRODUCT items only. Skipped for
-      // proforma and training mode — neither is a real sale, so neither
-      // may consume (or fail on) real stock.
+      // 5. Record stock movements for PRODUCT items only.
       if (!isProforma && !trainingMode) {
         for (const item of productItems) {
           const saleItem = (newSale as any).saleItems?.find(
@@ -646,9 +607,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         }
       }
 
-      // 7. Write transactional outbox entry (atomic with the sale) for every
-      // receipt type — normal, training and proforma are all fiscalized
-      // through VSDC, so all of them need a submission row.
+      // 7.
       if (isEbmEnabled() && orgSettings.featureFlags.ebmIntegrationEnabled) {
         const operation: EbmOperation = "SALE"
         const idempotencyKey = `ebm-${operation}-${organizationId}-${newSale.id}`

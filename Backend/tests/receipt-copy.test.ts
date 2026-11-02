@@ -1,15 +1,4 @@
-/**
- * CS (Copy Sale) / CR (Copy Refund) — CIS spec §5.3, §6, §15; VSDC API v1.0.5.
- *
- * Covers the copy rules (pure), the copy/reprint/pdf endpoints against a
- * mocked Prisma and a stubbed VSDC (a copy reprints the original's VSDC data
- * under a COPY watermark and never reaches VSDC; only the reprint counter and
- * the audit log may be written), and the A4 / 80mm renderers with stress
- * fixtures.
- *
- * Every fiscal value below is a TEST fixture (prefixed TEST…) standing in
- * for what VSDC returned — never a production value.
- */
+/** CS (Copy Sale) / CR (Copy Refund) — CIS spec §5.3, §6, §15; VSDC API v1.0.5. */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import PDFDocument from "pdfkit"
 

@@ -1,11 +1,4 @@
-/**
- * NR (Normal Refund) audit tests — pure logic (no DB, no network).
- *
- * Covers the refund business rules end to end at the calculation level:
- * remaining quantities, over-refund rejection, duplicate protection (math
- * level), reason/justification rules, negative-leg consistency, original
- * eligibility, and the VSDC payload shape for full + partial refunds.
- */
+/** NR (Normal Refund) audit tests — pure logic (no DB, no network). */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Decimal } from '@prisma/client/runtime/library';
 import {

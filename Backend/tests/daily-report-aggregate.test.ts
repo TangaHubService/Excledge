@@ -5,9 +5,9 @@ import {
 } from '../src/services/daily-report-aggregate.service';
 
 /**
- * X/Z report totals against a set of sample receipts (R10/R11):
- * bucketing (NS/NR vs training/proforma/incomplete/copies) plus the
- * sales-vs-refund splits, per-rate legs, per-method legs and main groups.
+ * X/Z report totals against a set of sample receipts (R10/R11): bucketing (NS/NR vs
+ * training/proforma/incomplete/copies) plus the sales-vs-refund splits, per-rate legs, per-method
+ * legs and main groups.
  */
 
 function item(over: Record<string, unknown> = {}) {

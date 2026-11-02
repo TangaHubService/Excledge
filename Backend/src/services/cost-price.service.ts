@@ -9,9 +9,7 @@ export interface RecordCostPriceParams {
   userId: number;
 }
 
-/**
- * Record a cost price change for a batch
- */
+/** Record a cost price change for a batch */
 export async function recordCostPrice(params: RecordCostPriceParams) {
   const { batchId, unitCost, quantity, reason, reference, userId } = params;
 
@@ -37,9 +35,7 @@ export async function recordCostPrice(params: RecordCostPriceParams) {
   });
 }
 
-/**
- * Get cost price history for a batch
- */
+/** Get cost price history for a batch */
 export async function getCostPriceHistory(batchId: number, limit: number = 50) {
   return await prisma.costPriceHistory.findMany({
     where: { batchId },
@@ -57,9 +53,7 @@ export async function getCostPriceHistory(batchId: number, limit: number = 50) {
   });
 }
 
-/**
- * Get current cost price for a batch
- */
+/** Get current cost price for a batch */
 export async function getCurrentCostPrice(batchId: number) {
   const batch = await prisma.batch.findUnique({
     where: { id: batchId },
@@ -79,9 +73,7 @@ export async function getCurrentCostPrice(batchId: number) {
   };
 }
 
-/**
- * Calculate weighted average cost for a product across all batches
- */
+/** Calculate weighted average cost for a product across all batches */
 export async function getAverageCost(
   productId: number,
   organizationId: number,
@@ -99,9 +91,8 @@ export async function getAverageCost(
     where.branchId = branchId || null;
   }
 
-  // Always use global prisma client for read operations
-  // This is safe because getAverageCost is a read-only operation
-  // and doesn't need to be part of the transaction
+  // Always use global prisma client for read operations This is safe because getAverageCost is a
+  // read-only operation and doesn't need to be part of the transaction
   const batches = await prisma.batch.findMany({
     where,
     select: {
@@ -133,8 +124,8 @@ export async function getAverageCost(
 }
 
 /**
- * Get cost price at time of sale (for profit calculation)
- * This uses the batch's cost at the time of sale
+ * Get cost price at time of sale (for profit calculation) This uses the batch's cost at the time of
+ * sale
  */
 export async function getCostAtSale(
   batchId: number,
@@ -166,9 +157,7 @@ export async function getCostAtSale(
   return batch.unitCost.toNumber();
 }
 
-/**
- * Update batch cost price
- */
+/** Update batch cost price */
 export async function updateBatchCostPrice(
   batchId: number,
   newUnitCost: number,

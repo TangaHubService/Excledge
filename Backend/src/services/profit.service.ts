@@ -9,10 +9,7 @@ export interface CalculateProfitParams {
   saleDate: Date;
 }
 
-/**
- * Calculate profit for a sale item
- * Profit = (sellingPrice - costPrice) * quantity
- */
+/** Calculate profit for a sale item Profit = (sellingPrice - costPrice) * quantity */
 export async function calculateProfit(params: CalculateProfitParams): Promise<{
   costPrice: number;
   profit: number;
@@ -77,9 +74,7 @@ export async function calculateProfit(params: CalculateProfitParams): Promise<{
   };
 }
 
-/**
- * Calculate and store profit for all items in a sale
- */
+/** Calculate and store profit for all items in a sale */
 export async function calculateAndStoreProfitForSale(saleId: number) {
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
@@ -121,9 +116,7 @@ export async function calculateAndStoreProfitForSale(saleId: number) {
   return updatedItems;
 }
 
-/**
- * Get profit summary for a sale
- */
+/** Get profit summary for a sale */
 export async function getSaleProfitSummary(saleId: number) {
   const saleItems = await prisma.saleItem.findMany({
     where: { saleId },
@@ -159,9 +152,7 @@ export async function getSaleProfitSummary(saleId: number) {
   };
 }
 
-/**
- * Get profit report for a date range
- */
+/** Get profit report for a date range */
 export async function getProfitReport(
   organizationId: number,
   startDate: Date,

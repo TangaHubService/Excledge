@@ -6,9 +6,7 @@ import { logManualActivity } from '../middleware/activity-log.middleware';
 import type { BranchAuthRequest } from '../middleware/branchAuth.middleware';
 import { buildBranchFilter, getBranchIdForOperation } from '../middleware/branchAuth.middleware';
 
-/**
- * Create a new expense
- */
+/** Create a new expense */
 export const createExpense = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -96,9 +94,7 @@ export const createExpense = async (req: BranchAuthRequest, res: Response) => {
     }
 };
 
-/**
- * Get all expenses for an organization
- */
+/** Get all expenses for an organization */
 export const getExpenses = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -187,9 +183,7 @@ export const getExpenses = async (req: BranchAuthRequest, res: Response) => {
     }
 };
 
-/**
- * Update an expense
- */
+/** Update an expense */
 export const updateExpense = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -248,9 +242,7 @@ export const updateExpense = async (req: BranchAuthRequest, res: Response) => {
     }
 };
 
-/**
- * Delete an expense
- */
+/** Delete an expense */
 export const deleteExpense = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -303,9 +295,7 @@ export const deleteExpense = async (req: BranchAuthRequest, res: Response) => {
     }
 };
 
-/**
- * Get expense by ID
- */
+/** Get expense by ID */
 export const getExpenseById = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);

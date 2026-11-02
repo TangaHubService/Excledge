@@ -116,8 +116,8 @@ export const enqueuePosPrintJob = async (req: BranchAuthRequest, res: Response) 
 }
 
 /**
- * POS app: atomically claim the next pending job for this branch.
- * Returns null data when the queue is empty.
+ * POS app: atomically claim the next pending job for this branch. Returns null data when the queue
+ * is empty.
  */
 export const claimNextPosPrintJob = async (req: BranchAuthRequest, res: Response) => {
   try {

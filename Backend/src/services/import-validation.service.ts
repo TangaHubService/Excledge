@@ -23,9 +23,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 // Phone validation - accepts various formats (international, local, with/without spaces, dashes)
 const PHONE_REGEX = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,9}$/
 
-/**
- * Validate email format
- */
+/** Validate email format */
 export function validateEmail(email: string | null | undefined): ValidationResult {
   if (!email || email.trim() === "") {
     return { isValid: true, errors: [] } // Email is optional
@@ -41,9 +39,7 @@ export function validateEmail(email: string | null | undefined): ValidationResul
   return { isValid: true, errors: [] }
 }
 
-/**
- * Validate phone number format
- */
+/** Validate phone number format */
 export function validatePhone(phone: string | null | undefined, isRequired: boolean = true): ValidationResult {
   if (!phone || phone.trim() === "") {
     if (isRequired) {
@@ -67,9 +63,7 @@ export function validatePhone(phone: string | null | undefined, isRequired: bool
   return { isValid: true, errors: [] }
 }
 
-/**
- * Check for duplicate phone numbers within the file
- */
+/** Check for duplicate phone numbers within the file */
 export function checkDuplicatePhonesInFile(
   rows: any[],
   currentIndex: number,
@@ -102,9 +96,7 @@ export function checkDuplicatePhonesInFile(
   return { isValid: true, errors: [] }
 }
 
-/**
- * Check for duplicate emails within the file
- */
+/** Check for duplicate emails within the file */
 export function checkDuplicateEmailsInFile(
   rows: any[],
   currentIndex: number,
@@ -137,9 +129,7 @@ export function checkDuplicateEmailsInFile(
   return { isValid: true, errors: [] }
 }
 
-/**
- * Check if phone number already exists in database
- */
+/** Check if phone number already exists in database */
 export async function checkDuplicatePhoneInDB(
   phone: string,
   organizationId: number,
@@ -188,9 +178,7 @@ export async function checkDuplicatePhoneInDB(
   }
 }
 
-/**
- * Check if email already exists in database
- */
+/** Check if email already exists in database */
 export async function checkDuplicateEmailInDB(
   email: string,
   organizationId: number,
@@ -239,9 +227,7 @@ export async function checkDuplicateEmailInDB(
   }
 }
 
-/**
- * Validate customer row
- */
+/** Validate customer row */
 export async function validateCustomerRow(
   row: any,
   rowIndex: number,
@@ -343,9 +329,7 @@ export async function validateCustomerRow(
   }
 }
 
-/**
- * Validate supplier row
- */
+/** Validate supplier row */
 export async function validateSupplierRow(
   row: any,
   rowIndex: number,

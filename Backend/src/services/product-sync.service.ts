@@ -26,12 +26,8 @@ export async function syncProductToRra(
     return { success: true };
   }
 
-  // itemCd/qtyUnitCd are required by the real ItemSaveReq shape and are
-  // always allocated at product-creation time (see inventory.controller.ts).
-  // If either is still missing, refuse to sync rather than invent one — a
-  // fabricated itemCd would corrupt RRA's item registry for this taxpayer.
-  // itemClsCd is required by RRA VSDC specification — fail sync if not set
-  // instead of silently falling back to a generic code.
+  // itemCd/qtyUnitCd are required by the real ItemSaveReq shape and are always allocated at
+  // product-creation time (see inventory.controller.ts).
   if (!product.itemCd || !product.qtyUnitCd) {
     await prisma.product.update({
       where: { id: productId },
@@ -84,9 +80,9 @@ export async function syncProductToRra(
     const regrNm = user?.name ?? 'System';
     const regrId = user ? String(user.id) : 'system';
 
-    // Field names match RRA VSDC API Documentation v1.0.5 §3.3.4.1 (ItemSaveReq)
-    // exactly, so the payload can be read alongside the spec without translation.
-    // origin is stored on the product; fallback to org default if somehow missing
+    // Field names match RRA VSDC API Documentation v1.0.5 §3.3.4.1 (ItemSaveReq) exactly, so the
+    // payload can be read alongside the spec without translation. origin is stored on the product;
+    // fallback to org default if somehow missing
     const origin = product.origin ?? (await getOriginNationCode(product.organizationId));
     if (!origin) {
       await prisma.product.update({
@@ -162,9 +158,8 @@ export async function syncProductToRra(
 }
 
 /**
- * Set a product's selling price while stock is being accepted (purchase
- * confirmation / import approval). A changed price is re-registered with RRA
- * so `dftPrc` on /items/saveItems stays current.
+ * Set a product's selling price while stock is being accepted (purchase confirmation / import
+ * approval).
  */
 export async function applySellingPriceOnReceipt(
   organizationId: number,
@@ -187,8 +182,8 @@ export async function applySellingPriceOnReceipt(
 }
 
 /**
- * Async fire-and-forget wrapper for product sync.
- * Called from controller routes — never blocks the response.
+ * Async fire-and-forget wrapper for product sync. Called from controller routes — never blocks the
+ * response.
  */
 export function syncProductToRraAsync(productId: number, userId?: number): void {
   syncProductToRra(productId, userId).catch((err) =>

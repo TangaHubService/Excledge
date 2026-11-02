@@ -31,9 +31,7 @@ setInterval(() => {
   }
 }, 15 * 60 * 1000)
 
-/**
- * Create a new preview session
- */
+/** Create a new preview session */
 export function createPreviewSession(
   organizationId: number,
   entityType: "customer" | "supplier",
@@ -71,9 +69,7 @@ export function createPreviewSession(
   return sessionId
 }
 
-/**
- * Get a preview session by ID
- */
+/** Get a preview session by ID */
 export function getPreviewSession(sessionId: string): PreviewSession | null {
   const session = previewSessions.get(sessionId)
   
@@ -90,9 +86,7 @@ export function getPreviewSession(sessionId: string): PreviewSession | null {
   return session
 }
 
-/**
- * Delete a preview session
- */
+/** Delete a preview session */
 export function deletePreviewSession(sessionId: string): boolean {
   return previewSessions.delete(sessionId)
 }

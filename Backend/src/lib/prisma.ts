@@ -8,29 +8,18 @@ export interface BranchContext {
 
 export const branchStorage = new AsyncLocalStorage<BranchContext>()
 
-/**
- * Run a callback inside a branch-scoped context.
- * Every Prisma query within the callback will automatically be filtered
- * to the given branchId (or set of branchIds) on models that support it.
- */
+/** Run a callback inside a branch-scoped context. */
 export function withBranchScope<T>(branchId: number | number[] | undefined, fn: () => T): T {
   return branchStorage.run({ branchId }, fn)
 }
 
-/**
- * Get the current branch ID from AsyncLocalStorage (or undefined).
- */
+/** Get the current branch ID from AsyncLocalStorage (or undefined). */
 export function getCurrentBranchId(): number | number[] | undefined {
   return branchStorage.getStore()?.branchId
 }
 
-// ── Models that have a `branchId` field ──────────────────────────────────
-// NOTE: keep this in sync with prisma/schema.prisma. `Notification` was
-// listed here previously but the `notifications` table has no `branchId`
-// column — injecting one would throw P2022 ("column does not exist") the
-// moment branch scoping became active for that model. Notifications are
-// org-wide by design today; adding real per-branch notifications requires
-// a schema migration (a nullable `branchId` column) before re-adding it here.
+// ── Models that have a `branchId` field ──────────────────────────────── ── NOTE: keep this in
+// sync with prisma/schema.prisma.
 const BRANCH_AWARE_MODELS = new Set([
   'Sale',
   'Batch',
@@ -80,11 +69,8 @@ const prisma = global.prisma || new PrismaClient({
     },
 })
 
-// ── Prisma middleware: auto-inject branchId ──────────────────────────────
-// NOTE: The PostgreSQL session variable (app.current_branch_id) is intentionally
-// NOT set here. Doing so via $executeRawUnsafe doubles every query count and was
-// the primary driver of Node.js OOM crashes. Branch isolation is enforced below
-// via where-clause injection, which is the authoritative filter.
+// ── Prisma middleware: auto-inject branchId ──────────────────────────── ── NOTE: The PostgreSQL
+// session variable (app.current_branch_id) is intentionally NOT set here.
 prisma.$use(async (params, next) => {
   const ctx = branchStorage.getStore()
   const branchId = ctx?.branchId
@@ -113,10 +99,9 @@ prisma.$use(async (params, next) => {
     }
   }
 
-  // ── CREATE operations – inject branchId into data ──
-  // Only for a single resolved branch: a multi-branch (array) context can't
-  // determine which one branch a new record belongs to, so creates rely on
-  // the explicit, already-validated branchId in the request body instead.
+  // ── CREATE operations – inject branchId into data ── Only for a single resolved branch: a
+  // multi-branch (array) context can't determine which one branch a new record belongs to, so
+  // creates rely on the explicit, already-validated branchId in the request body instead.
   if (BRANCH_CREATE_OPS.has(params.action) && !Array.isArray(branchId)) {
     const args = params.args as Record<string, any> | undefined
     if (args?.data) {

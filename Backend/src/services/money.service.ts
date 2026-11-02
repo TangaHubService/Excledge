@@ -1,31 +1,6 @@
 import { Decimal } from '@prisma/client/runtime/library';
 
-/**
- * Central money + tax arithmetic for RRA CIS/VSDC totals (spec §R4/R11).
- *
- * Every receipt, VSDC payload and fiscal report MUST derive its amounts from
- * this module so the three can never disagree. Policy (chosen for R11):
- *
- *  1. Prices are tax-INCLUSIVE. Tax is extracted, never added on top:
- *       tax     = net − net / (1 + rate/100)
- *       taxable = net − tax
- *     where net = qty × unitPrice − discount (the DISCOUNTED amount is what
- *     goes into the totals).
- *  2. Exactness first: per-line math stays in exact `Decimal` arithmetic.
- *     Rounding (half-up, 2 dp) happens ONCE per tax-rate bucket and once for
- *     the receipt totals — never per line — so rounding drift cannot break
- *     the R11 invariants.
- *  3. Receipt totals are DEFINED as the sum of the rounded bands, so these
- *     hold by construction:
- *       TOTAL      = Σ band sales (incl. exempt)
- *       TOTAL TAX  = Σ band taxes
- *
- * Input price contract: `unitPrice` is the LIST (pre-discount) unit price and
- * `discount` the absolute tax-inclusive line discount. Callers that already
- * hold post-discount (charged) prices pass `discount: 0`. The POS sends
- * charged prices + a separate discount; `commitSale` reconstructs the list
- * price for storage while tax stays computed on the charged (net) leg.
- */
+/** Central money + tax arithmetic for RRA CIS/VSDC totals (spec §R4/R11). */
 
 export type FiscalBandCode = 'A' | 'B' | 'C' | 'D';
 
@@ -83,9 +58,9 @@ export interface FiscalTotalsResult {
 function toDecimal(value: MoneyInput | undefined | null, fallback = 0): Decimal {
   if (value === undefined || value === null) return new Decimal(fallback);
   if (value instanceof Decimal) return value;
-  // Through the shortest string form so binary-float inputs (0.2, 10.03)
-  // enter the arithmetic exactly instead of carrying float residue that
-  // could flip a half-cent boundary at rounding time.
+  // Through the shortest string form so binary-float inputs (0.2, 10.03) enter the arithmetic
+  // exactly instead of carrying float residue that could flip a half-cent boundary at rounding
+  // time.
   return typeof value === 'number' ? new Decimal(String(value)) : new Decimal(value);
 }
 
@@ -94,25 +69,15 @@ export function round2(value: MoneyInput): number {
   return toDecimal(value).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
 }
 
-/**
- * Exact difference of two money numbers, rounded half-up to 2 dp.
- * Converts through the shortest string form first so binary-float inputs
- * like 10.03 - 0.07 come out as exactly 9.96.
- */
+/** Exact difference of two money numbers, rounded half-up to 2 dp. */
 export function diff2(a: MoneyInput, b: MoneyInput): number {
   const d = new Decimal(String(a)).minus(new Decimal(String(b)));
   return d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
 }
 
 /**
- * Band-level tax for a rounded band NET and a percent rate, rounded half-up
- * once (policy ii). This is the R4 sample formula: 5340.00 x 18/118 = 814.58.
- *
- * A band's tax is ALWAYS derived this way — never summed from per-line
- * taxes. Per-line taxes are already rounded to cents by the Decimal(15,2)
- * storage columns, so summing them can land a cent away from the exact
- * band value (768.81 + 45.76 = 814.57 vs the exact 814.58). Receipts, VSDC
- * bands, Sale legs and reports all use this derivation and therefore agree.
+ * Band-level tax for a rounded band NET and a percent rate, rounded half-up once (policy ii). This
+ * is the R4 sample formula: 5340.00 x 18/118 = 814.58.
  */
 export function bandTaxFromNet(net: MoneyInput, ratePercent: MoneyInput): number {
   const n = toDecimal(net);
@@ -126,9 +91,8 @@ export function bandTaxFromNet(net: MoneyInput, ratePercent: MoneyInput): number
 export function computeFiscalLine(line: FiscalLineInput): FiscalLineResult {
   const qty = toDecimal(line.quantity);
   const price = toDecimal(line.unitPrice);
-  // No sign clamp: refund legs carry negative gross AND negative discount
-  // (mirrored storage), so net = gross − discount stays correct for both
-  // signs. Input policing (discount ≥ 0 on sales) belongs to validation.
+  // No sign clamp: refund legs carry negative gross AND negative discount (mirrored storage), so
+  // net = gross − discount stays correct for both signs.
   const discount = toDecimal(line.discount, 0);
   const rate = toDecimal(line.taxRate, 0);
 
@@ -147,8 +111,8 @@ export function computeFiscalLine(line: FiscalLineInput): FiscalLineResult {
 const BAND_INDEX: Record<FiscalBandCode, number> = { A: 0, B: 1, C: 2, D: 3 };
 
 /**
- * Aggregate exact per-line results into rounded per-rate bands.
- * `bandRates` carries the statutory percent per slot (informational only).
+ * Aggregate exact per-line results into rounded per-rate bands. `bandRates` carries the statutory
+ * percent per slot (informational only).
  */
 export function computeFiscalTotals(
   lines: FiscalLineInput[],

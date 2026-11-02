@@ -8,10 +8,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
     apiVersion: '2025-11-17.clover',
 });
 
-/**
- * Handle Stripe webhook events
- * IMPORTANT: This endpoint must use raw body, not JSON parsed body
- */
+/** Handle Stripe webhook events IMPORTANT: This endpoint must use raw body, not JSON parsed body */
 export const handleStripeWebhook = async (
     req: Request,
     res: Response

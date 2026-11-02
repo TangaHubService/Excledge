@@ -1,14 +1,6 @@
 /**
- * Migration Script: StockMovement to InventoryLedger
- * 
- * This script migrates all data from the StockMovement table to InventoryLedger.
- * It preserves all historical data including timestamps, quantities, and references.
- * 
- * Usage:
- *   npx ts-node src/scripts/migrate-stock-movement.ts
- * 
- * Or with tsx:
- *   npx tsx src/scripts/migrate-stock-movement.ts
+ * Migration Script: StockMovement to InventoryLedger This script migrates all data from the
+ * StockMovement table to InventoryLedger.
  */
 
 import { PrismaClient, StockMovementType } from '@prisma/client';
@@ -29,9 +21,7 @@ interface StockMovementRecord {
   createdAt: Date;
 }
 
-/**
- * Map StockMovementType to InventoryMovementType and Direction
- */
+/** Map StockMovementType to InventoryMovementType and Direction */
 function mapMovementType(type: StockMovementType): {
   movementType: string;
   direction: 'IN' | 'OUT';
@@ -55,9 +45,7 @@ function mapMovementType(type: StockMovementType): {
   return { movementType: 'ADJUSTMENT', direction: 'IN' };
 }
 
-/**
- * Calculate running balance for a product up to a given date
- */
+/** Calculate running balance for a product up to a given date */
 async function getRunningBalanceUpTo(
   organizationId: number,
   productId: number,
@@ -90,9 +78,7 @@ async function getRunningBalanceUpTo(
   return balance;
 }
 
-/**
- * Migrate a single StockMovement record to InventoryLedger
- */
+/** Migrate a single StockMovement record to InventoryLedger */
 async function migrateStockMovement(record: StockMovementRecord): Promise<void> {
   try {
     // Check if already migrated (by reference)
@@ -170,9 +156,7 @@ async function migrateStockMovement(record: StockMovementRecord): Promise<void> 
   }
 }
 
-/**
- * Main migration function
- */
+/** Main migration function */
 async function migrateStockMovements() {
   console.log('Starting StockMovement to InventoryLedger migration...\n');
 

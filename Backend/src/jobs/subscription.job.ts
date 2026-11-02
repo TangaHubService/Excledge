@@ -34,9 +34,8 @@ export const subscriptionReminderJob = cron.schedule("0 9 * * *", async () => {
 
   let sent = 0
   for (const subscription of expiringSubscriptions) {
-    // Reuse the same warning-level computation the API/frontend use, so the
-    // 7-day/3-day thresholds can never drift out of sync with what's shown
-    // in the UI.
+    // Reuse the same warning-level computation the API/frontend use, so the 7-day/3-day thresholds
+    // can never drift out of sync with what's shown in the UI.
     const summary = subscriptionService.computeSubscriptionSummary(subscription)
     if (summary.warningLevel !== "yellow" && summary.warningLevel !== "orange") continue
 
@@ -51,11 +50,8 @@ export const subscriptionReminderJob = cron.schedule("0 9 * * *", async () => {
 })
 
 /**
- * Run one round of subscription status transitions
- * (ACTIVE/TRIALING -> GRACE_PERIOD -> EXPIRED) and deactivate orgs with no
- * remaining valid subscription.
- *
- * Exported so it can be called both from the hourly cron AND at server boot.
+ * Run one round of subscription status transitions (ACTIVE/TRIALING -> GRACE_PERIOD -> EXPIRED) and
+ * deactivate orgs with no remaining valid subscription.
  */
 export async function runImmediateSubscriptionTransition(): Promise<void> {
   const now = new Date()
@@ -72,9 +68,8 @@ export async function runImmediateSubscriptionTransition(): Promise<void> {
 
   for (const subscription of enteringGrace) {
     const gracePeriodDays = subscription.gracePeriodDays || config.subscription.gracePeriodDays
-    // gracePeriodEndsAt is normally already set at purchase time, but fall
-    // back to computing it here for older rows (e.g. trial subscriptions)
-    // that predate this column being populated.
+    // gracePeriodEndsAt is normally already set at purchase time, but fall back to computing it
+    // here for older rows (e.g. trial subscriptions) that predate this column being populated.
     const gracePeriodEndsAt =
       subscription.gracePeriodEndsAt && subscription.gracePeriodEndsAt.getTime() > (subscription.endDate ?? now).getTime()
         ? subscription.gracePeriodEndsAt
@@ -107,9 +102,9 @@ export async function runImmediateSubscriptionTransition(): Promise<void> {
     console.log(`Moved ${enteringGrace.length} subscription(s) into GRACE_PERIOD`)
   }
 
-  // GRACE_PERIOD -> EXPIRED (+ deactivate the org, but only if it has no
-  // other still-valid subscription — a latent bug in the old daily job
-  // deactivated unconditionally, which would be wrong for a multi-subscription org).
+  // GRACE_PERIOD -> EXPIRED (+ deactivate the org, but only if it has no other still-valid
+  // subscription — a latent bug in the old daily job deactivated unconditionally, which would be
+  // wrong for a multi-subscription org).
   const expiring = await prisma.subscription.findMany({
     where: { status: "GRACE_PERIOD", gracePeriodEndsAt: { lte: now } },
     include: {
@@ -162,7 +157,7 @@ export async function runImmediateSubscriptionTransition(): Promise<void> {
 
 /**
  * Hourly status-transition job — delegates to runImmediateSubscriptionTransition.
- * requireActiveSubscription and every other consumer trust `status` alone (not
- * endDate), so this job is what keeps that status honest.
+ * requireActiveSubscription and every other consumer trust `status` alone (not endDate), so this
+ * job is what keeps that status honest.
  */
 export const subscriptionStatusTransitionJob = cron.schedule("0 * * * *", runImmediateSubscriptionTransition)

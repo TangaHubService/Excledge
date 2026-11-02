@@ -12,14 +12,8 @@ export const getSuppliers = async (req: BranchAuthRequest, res: Response) => {
         const organizationId = parseInt(req.params.organizationId)
         const { showInactive } = req.query
 
-        // Suppliers are organization-wide records (the Supplier model has no
-        // branchId column) — they are not owned by a single branch, so no
-        // branch filter is applied here. Filtering by `purchaseOrders.some({branchId})`
-        // was previously attempted, but that hides suppliers that have not yet
-        // had a purchase order raised against them in the selected branch,
-        // including every newly created supplier. Branch isolation for
-        // suppliers is unnecessary since the data itself is org-scoped, not
-        // branch-scoped; access is still limited to members of the organization.
+        // Suppliers are organization-wide records (the Supplier model has no branchId column) —
+        // they are not owned by a single branch, so no branch filter is applied here.
         const where: any = { organizationId }
         if (showInactive !== 'true') {
             where.isActive = true
@@ -182,9 +176,7 @@ export const deleteSupplier = async (req: BranchAuthRequest, res: Response) => {
     }
 }
 
-/**
- * Bulk import suppliers from Excel file
- */
+/** Bulk import suppliers from Excel file */
 export const bulkImportSuppliers = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
@@ -293,9 +285,7 @@ export const bulkImportSuppliers = async (req: BranchAuthRequest, res: Response)
     }
 }
 
-/**
- * Preview supplier import - validates but does not save
- */
+/** Preview supplier import - validates but does not save */
 export const previewImportSuppliers = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
@@ -339,9 +329,7 @@ export const previewImportSuppliers = async (req: BranchAuthRequest, res: Respon
     }
 }
 
-/**
- * Confirm supplier import - saves valid records
- */
+/** Confirm supplier import - saves valid records */
 export const confirmImportSuppliers = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)

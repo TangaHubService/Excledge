@@ -6,18 +6,12 @@ import { prisma } from '../lib/prisma';
 type PrismaClientOrTx = typeof prisma | Prisma.TransactionClient;
 
 /**
- * Generates and validates the RRA `itemCd` (VSDC API Documentation v1.0.5,
- * §4.17) and derives the `qtyUnitCd` companion field from the product's
- * measurement unit, since the UI only ever asks for `measurementUnit` and
- * `pkgUnitCd` — never the raw RRA codes.
+ * Generates and validates the RRA `itemCd` (VSDC API Documentation v1.0.5, §4.17) and derives the
+ * `qtyUnitCd` companion field from the product's measurement unit, since the UI only ever asks for
+ * `measurementUnit` and `pkgUnitCd` — never the raw RRA codes.
  */
 
-/**
- * Gets the origin nation code for an organization's product registration.
- * Reads OrganizationSetting.preferences.originCountryCode — never invents
- * a country (including RW). Callers must require origin on the product
- * when this returns null.
- */
+/** Gets the origin nation code for an organization's product registration. */
 export async function getOriginNationCode(
   organizationId: number,
   client: PrismaClientOrTx = prisma,
@@ -31,22 +25,7 @@ export async function getOriginNationCode(
   return configured || null;
 }
 
-/**
- * Fallback RRA item-classification code (§3.3.2.2) used when a product has
- * none set. There is no synced RRA classification-code list in this system
- * yet (that's a separate feature: pulling and caching `/itemClass/selectItemsClass`),
- * so this generic code is a known, documented compliance gap — not a bug.
- * It's shared across item registration and sale-time invoice lines, so both
- * always agree on classification even when no real code has been entered.
- *
- * Value verified live against the local RRA VSDC sandbox (POST
- * /items/saveItems, 2026-08-26): the previous placeholder here,
- * '5020230302', comes back `resultCd: "910"` ("Invalid item class code").
- * '5059690800' — the code used in the VSDC spec's own JSON examples — is
- * accepted (`resultCd: "000"`). Products can still override this via the
- * `itemClsCd` field. Product create/sync now require an explicit classification —
- * this constant remains only for legacy sale-line fallbacks that still need one.
- */
+/** Fallback RRA item-classification code (§3.3.2.2) used when a product has none set. */
 export const DEFAULT_ITEM_CLASSIFICATION_CD = '5059690800';
 
 // Fallback only for building itemCd when an older row lacks pkgUnitCd.
@@ -60,11 +39,7 @@ export function itemTypeCodeDigit(itemType: ItemType): '1' | '2' | '3' {
   return '2';
 }
 
-/**
- * Maps the app's MeasurementUnit enum to an RRA quantity-unit code (§4.6).
- * RRA's table has no millilitre code, so ML (and the catch-all OTHER) fall
- * back to the generic "unit/piece" code rather than a wrong volume unit.
- */
+/** Maps the app's MeasurementUnit enum to an RRA quantity-unit code (§4.6). */
 const QTY_UNIT_CD_BY_MEASUREMENT_UNIT: Record<string, string> = {
   PCS: 'U',
   KG: 'KG',
@@ -83,13 +58,8 @@ export function deriveQtyUnitCd(measurementUnit: string | null | undefined): str
 }
 
 /**
- * Builds the itemCd candidate string per §4.17:
- *   <origin> + productTypeDigit + pkgUnitCd + qtyUnitCd + 7-digit sequence
- * e.g. "RW2CTKG0000012", "UG2NTBA0000013", "KE1CTKG0000014"
- *
- * Exported (as well as wrapped by `allocateItemCd` below) so bulk-import
- * flows can allocate a contiguous block of sequence numbers for one
- * `createMany` call instead of counting per row.
+ * Builds the itemCd candidate string per §4.17: <origin> + productTypeDigit + pkgUnitCd + qtyUnitCd
+ * + 7-digit sequence e.g.
  */
 export function buildItemCd(itemType: ItemType, pkgUnitCd: string | null | undefined, qtyUnitCd: string, seq: number, origin: string): string {
   const typeDigit = itemTypeCodeDigit(itemType);
@@ -98,20 +68,9 @@ export function buildItemCd(itemType: ItemType, pkgUnitCd: string | null | undef
 }
 
 /**
- * Atomically reserves `increment` more sequence numbers for this org's
- * itemCd counter and returns the *last* one in the newly reserved block
- * (so a single allocation's number is the return value itself, and an
- * N-sized block is [returned-N+1 .. returned]).
- *
- * Uses the same INSERT..ON CONFLICT..RETURNING pattern as
- * VsdcDeviceCounter/OrganizationInvoiceCounter (rra-ebm.service.ts) —
- * Postgres has no native per-key auto-increment, so this hand-rolls one
- * scoped to `organizationId`. The first-ever call for an org seeds past the
- * count of items already carrying an itemCd (allocated under the older
- * count()-based scheme, or otherwise present), so a pre-existing sequence
- * is never reissued/collided with. Callers should run this inside the same
- * transaction as the row(s) that consume the number(s), so a reserved
- * sequence is never left unused (a permanent gap) if that insert fails.
+ * Atomically reserves `increment` more sequence numbers for this org's itemCd counter and returns
+ * the *last* one in the newly reserved block (so a single allocation's number is the return value
+ * itself, and an N-sized block is [returned-N+1 .. returned]).
  */
 async function nextItemCdSequence(
   organizationId: number,
@@ -132,11 +91,7 @@ async function nextItemCdSequence(
   return Number(rows[0]?.nextSequence ?? 0);
 }
 
-/**
- * Allocates a fresh, unique itemCd for a product about to be created.
- * Pass the transaction's `tx` as `client` when creating the product inside a
- * `prisma.$transaction`, so the allocation rolls back together with it.
- */
+/** Allocates a fresh, unique itemCd for a product about to be created. */
 export async function allocateItemCd(
   organizationId: number,
   itemType: ItemType,
@@ -150,12 +105,9 @@ export async function allocateItemCd(
 }
 
 /**
- * Atomically reserves a contiguous block of `count` sequence numbers for a
- * bulk create — returns the base such that item `i` (0-indexed) uses
- * `base + i + 1`, matching `allocateItemCd`'s single-item numbering.
- * Note: The origin parameter is not used here since the block allocation
- * only reserves sequence numbers. The caller must use buildItemCd with
- * the appropriate origin for each product.
+ * Atomically reserves a contiguous block of `count` sequence numbers for a bulk create — returns
+ * the base such that item `i` (0-indexed) uses `base + i + 1`, matching `allocateItemCd`'s
+ * single-item numbering.
  */
 export async function allocateItemCdBlock(
   organizationId: number,

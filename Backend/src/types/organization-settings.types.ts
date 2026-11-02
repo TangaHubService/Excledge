@@ -1,14 +1,9 @@
-/**
- * Strict shapes for the JSON blobs stored on OrganizationSetting. The database
- * only guarantees `Json`, so every read must be cast through these interfaces
- * and defensively merged with DEFAULT_SETTINGS — never trust a raw row.
- */
+/** Strict shapes for the JSON blobs stored on OrganizationSetting. */
 
-/** Controls which individual sidebar links a workspace can see — one key per
- *  nav item (not per section), so an org can hide e.g. just "Scan Invoice"
- *  without losing the rest of Orders. Keying by nav id keeps this extensible:
- *  a new nav item ships with a new optional key and no migration, and any org
- *  missing the key falls back to `visible`. */
+/**
+ * Controls which individual sidebar links a workspace can see — one key per nav item (not per
+ * section), so an org can hide e.g. just "Scan Invoice" without losing the rest of Orders.
+ */
 export interface ISidebarConfig {
   home: boolean;
   dashboard: boolean;
@@ -87,6 +82,8 @@ export interface IOrganizationSettings {
   /** Business/taxpayer is registered for VAT. False → every sale uses RRA tax
    *  code D regardless of product category. Mirrors Organization.vatRegistered. */
   vatRegistered: boolean;
+  /** VSDC device configured: EBM and negative-stock flags are read-only. */
+  fiscalFlagsLocked?: boolean;
   /** RRA EBM/VSDC device credentials configurable from Organization Settings. */
   ebmConfig?: {
     tin?: string;
@@ -137,10 +134,9 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
   },
   featureFlags: {
     allowNegativeStock: false,
-    // Defaults to true: this must match the pre-existing always-on behavior
-    // (gated only by the global config.ebm.enabled flag) for every org that
-    // hasn't explicitly visited Settings, or EBM/RRA submission would silently
-    // stop for organizations that never touched this toggle.
+    // Defaults to true: this must match the pre-existing always-on behavior (gated only by the
+    // global config.ebm.enabled flag) for every org that hasn't explicitly visited Settings, or
+    // EBM/RRA submission would silently stop for organizations that never touched this toggle.
     ebmIntegrationEnabled: true,
     requireStockAdjustmentApproval: false,
     allowManualDiscounts: true,
@@ -160,9 +156,8 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
       varianceThreshold: 0,
     },
   },
-// Defaults to true: matches the existing behavior where VAT-registered
-// products charge 18%, so organizations that never touch this setting keep
-// their current tax treatment.
+// Defaults to true: matches the existing behavior where VAT-registered products charge 18%, so
+// organizations that never touch this setting keep their current tax treatment.
   vatRegistered: true,
   ebmConfig: {
     tin: "",

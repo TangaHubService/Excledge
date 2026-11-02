@@ -19,11 +19,7 @@ import {
   type PluReportData,
 } from "../services/fiscal-report-pdf.service"
 
-/**
- * On-hand quantity per product as of a cut-off, summed IN − OUT over the
- * ledger. `runningBalance` is per branch, so it cannot represent an
- * all-branches view; products with no movement before the cut-off are 0.
- */
+/** On-hand quantity per product as of a cut-off, summed IN − OUT over the ledger. */
 async function stockOnHandAt(
   organizationId: number,
   productIds: number[],
@@ -211,11 +207,8 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
   }
 }
 
-// ──────────────────────────────────────────────
-// C10: PLU (Price Look-Up) report (RRA CIS/VSDC spec §21) — per-item-code
-// quantity and revenue summary, the report format RRA testers ask for
-// alongside X/Z reports.
-// ──────────────────────────────────────────────
+// C10: PLU (Price Look-Up) report (RRA CIS/VSDC spec §21) — per-item-code quantity and revenue
+// summary, the report format RRA testers ask for alongside X/Z reports.
 interface PluRow {
   itemCd: string
   productId: number | null
@@ -376,8 +369,8 @@ export const getPluReport = async (req: BranchAuthRequest, res: Response) => {
 }
 
 /**
- * Printable (80 mm thermal) PLU report — RRA Article 21.
- * GET /reports/plu/:organizationId/pdf?startDate=&endDate=&sortBy=
+ * Printable (80 mm thermal) PLU report — RRA Article 21. GET
+ * /reports/plu/:organizationId/pdf?startDate=&endDate=&sortBy=
  */
 export const getPluReportPdf = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -688,12 +681,7 @@ export const getDebtorsReport = async (req: BranchAuthRequest, res: Response) =>
     const organizationId = parseInt(req.params.organizationId)
 
     // Customer has no branchId column of its own (it's an org-wide record — see
-    // customer.controller.ts). Spreading buildBranchFilter() (`{branchId: ...}`)
-    // directly here would throw P2022 since `customers.branchId` does not exist.
-    // A debtor report is inherently about customers who already have a
-    // debt-creating sale, so scoping through that relation is both safe (no
-    // "invisible until first transaction" problem) and matches "only debtors
-    // with activity in this branch".
+    // customer.controller.ts).
     const debtSaleCondition = { OR: [{ paymentType: "DEBT" as const }, { paymentType: "MIXED" as const }] }
     const branchId = req.selectedBranchId
     const branchIds = req.selectedBranchIds
@@ -991,10 +979,8 @@ export const getDebtPaymentsReport = async (req: BranchAuthRequest, res: Respons
     const organizationId = parseInt(req.params.organizationId);
     const { startDate, endDate } = req.query;
 
-    // DebtPayment has no branchId column of its own — it belongs to a branch
-    // via its sale, so filtering must go through that relation. Spreading
-    // buildBranchFilter() (which yields `{branchId: ...}`) directly here would
-    // throw P2022 since `debt_payments.branchId` does not exist.
+    // DebtPayment has no branchId column of its own — it belongs to a branch via its sale, so
+    // filtering must go through that relation.
     const branchId = req.selectedBranchId;
     const branchIds = req.selectedBranchIds;
     const saleBranchFilter =
@@ -1206,11 +1192,9 @@ async function calculateOpeningBalance(organizationId: number, startDate: Date):
 
   if (cashBalance) {
     console.log(`[CashFlow] Found cached balance: ${cashBalance.balance} from ${cashBalance.balanceDate}`);
-    // If we have a cached balance, we need to add transactions from that balance date up to startDate
-    // But for now, let's assume the cached balance is the ONLY source of truth if it exists.
-    // Wait, if the cached balance is from last month, we still need transactions between then and now.
-    // The previous logic just returned it. This might be a bug if the cache isn't strictly "yesterday's close".
-    // For now, let's just log it.
+    // If we have a cached balance, we need to add transactions from that balance date up to
+    // startDate But for now, let's assume the cached balance is the ONLY source of truth if it
+    // exists.
     return cashBalance.balance.toNumber();
   } else {
     console.log(`[CashFlow] No cached balance found. Calculating from history.`);
@@ -1579,9 +1563,7 @@ export const getStockHistory = async (req: BranchAuthRequest, res: Response) => 
   }
 };
 
-/**
- * Get profit report
- */
+/** Get profit report */
 export const getProfitReportController = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -1605,19 +1587,16 @@ export const getProfitReportController = async (req: BranchAuthRequest, res: Res
   }
 };
 
-// ──────────────────────────────────────────────
-// C9: X / Z Daily Report (RRA CIS/VSDC spec §6)
-// X = interim totals since last Z-report (does NOT reset counters)
-// Z = end-of-day legal record (resets daily counters)
-// ──────────────────────────────────────────────
+// C9: X / Z Daily Report (RRA CIS/VSDC spec §6) X = interim totals since last Z-report (does NOT
+// reset counters) Z = end-of-day legal record (resets daily counters)
 
 function fix2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
 /**
- * Parse a VSDC rptDe timestamp (`yyyyMMddHHmmss`, local wall time) as used by
- * the nightly Z job's `rra_sync_cursors` rows. Returns null when malformed.
+ * Parse a VSDC rptDe timestamp (`yyyyMMddHHmmss`, local wall time) as used by the nightly Z job's
+ * `rra_sync_cursors` rows. Returns null when malformed.
  */
 function parseRptDeTimestamp(raw: string | null | undefined): Date | null {
   const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec((raw ?? '').trim());
@@ -1631,11 +1610,7 @@ function parseRptDeTimestamp(raw: string | null | undefined): Date | null {
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-/**
- * Shared X/Z daily-report aggregation (RRA CIS/VSDC spec §6 / Articles 7, 18,
- * 19). Consumed by both the JSON endpoint and the printable PDF endpoint so the
- * two can never disagree.
- */
+/** Shared X/Z daily-report aggregation (RRA CIS/VSDC spec §6 / Articles 7, 18, 19). */
 async function buildDailyReport(
   req: BranchAuthRequest,
   organizationId: number,
@@ -1657,13 +1632,9 @@ async function buildDailyReport(
     if (Object.keys(bFilter).length) Object.assign(branchFilter, bFilter);
   }
 
-  // R10 skipped-report rule: when closes were missed, this report covers the
-  // whole period since the previous SUCCESSFUL Z close (cursor
-  // rra_sync_cursors `zReport:<branchId>`, written by the nightly Z job).
-  // A FAILED attempt is not a close — the window falls back to start-of-day.
-  // Limitation: only the latest attempt is stored, so a failure that
-  // overwrote an older success still falls back to start-of-day (close
-  // history is the follow-up).
+  // R10 skipped-report rule: when closes were missed, this report covers the whole period since the
+  // previous SUCCESSFUL Z close (cursor rra_sync_cursors `zReport:<branchId>`, written by the
+  // nightly Z job).
   let periodStart = dayStart;
   let previousCloseAt: string | null = null;
   let coversSinceLastZ = false;
@@ -1753,11 +1724,9 @@ async function buildDailyReport(
     address: branch?.address ?? org?.address ?? null,
   };
 
-  // Split into NS/NR buckets — TS/TR (training mode) receipts are excluded
-  // entirely from the legal sales/refund totals below and reported separately
-  // (spec §18.1.15/§19.1.15), since they never happened as real business
-  // transactions. Proforma (PS) and incomplete (DRAFT/PENDING/held) are also
-  // reported separately (§18.1.16 / §18.1.20).
+  // Split into NS/NR buckets — TS/TR (training mode) receipts are excluded entirely from the legal
+  // sales/refund totals below and reported separately (spec §18.1.15/§19.1.15), since they never
+  // happened as real business transactions.
   const {
     fiscalSales,
     normalSales,
@@ -1768,10 +1737,8 @@ async function buildDailyReport(
     incompleteDrafts,
   } = splitReportSales(sales as any);
 
-  // Sales/refund legs aggregated by the pure, unit-tested aggregator so the
-  // controller and the fiscal record can never disagree on the money math.
-  // Band taxes derive once per band from the band NET and the programmed
-  // rates (money.service policy) — the rates are fetched first for that.
+  // Sales/refund legs aggregated by the pure, unit-tested aggregator so the controller and the
+  // fiscal record can never disagree on the money math.
   const [rateA, rateB, rateC, rateD] = await getTaxRatesBySlot(organizationId);
   const taxRates: Record<string, number> = {
     A: rateA, B: rateB, C: rateC, D: rateD, E: 0,
@@ -1896,8 +1863,8 @@ export const getDailyReport = async (req: BranchAuthRequest, res: Response) => {
 };
 
 /**
- * Printable (80 mm thermal) X/Z daily report — RRA Articles 7, 18, 19.
- * GET /reports/daily/:organizationId/pdf?type=X|Z&date=&branchId=
+ * Printable (80 mm thermal) X/Z daily report — RRA Articles 7, 18, 19. GET
+ * /reports/daily/:organizationId/pdf?type=X|Z&date=&branchId=
  */
 export const getDailyReportPdf = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -1920,14 +1887,9 @@ export const getDailyReportPdf = async (req: BranchAuthRequest, res: Response) =
   }
 };
 
-// ──────────────────────────────────────────────
-// CIS Electronic Journal (RRA CIS/VSDC spec §5 / checklist §44)
-// The EJ text is built at the same time as every normal receipt and contains
-// the same data as the printed slip; `ejSent` reports whether it was actually
-// transmitted to the VSDC (2018 Art. 6.5, requires EBM_EJ_SYNC_PATH).
-// These endpoints expose it for inspection and for the certification tester's
-// EJ-vs-slip comparison.
-// ──────────────────────────────────────────────
+// CIS Electronic Journal (RRA CIS/VSDC spec §5 / checklist §44) The EJ text is built at the same
+// time as every normal receipt and contains the same data as the printed slip; `ejSent` reports
+// whether it was actually transmitted to the VSDC (2018 Art. 6.5, requires EBM_EJ_SYNC_PATH).
 
 export const getElectronicJournal = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -1987,9 +1949,9 @@ export const getElectronicJournal = async (req: BranchAuthRequest, res: Response
 };
 
 /**
- * GET /reports/electronic-journal/:organizationId/:saleId
- * Returns the EJ record for one sale plus the sale's own line items and totals,
- * so a reviewer can confirm the journal matches the printed slip (§44).
+ * GET /reports/electronic-journal/:organizationId/:saleId Returns the EJ record for one sale plus
+ * the sale's own line items and totals, so a reviewer can confirm the journal matches the printed
+ * slip (§44).
  */
 export const getElectronicJournalEntry = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -2059,11 +2021,8 @@ export const getElectronicJournalEntry = async (req: BranchAuthRequest, res: Res
   }
 };
 
-// ──────────────────────────────────────────────
-// Detailed purchases report (RRA checklist §25)
-// Includes local purchase orders plus an `importation` block from
-// rra_import_items (checklist §66–68).
-// ──────────────────────────────────────────────
+// Detailed purchases report (RRA checklist §25) Includes local purchase orders plus an
+// `importation` block from rra_import_items (checklist §66–68).
 
 export const getPurchasesReport = async (req: BranchAuthRequest, res: Response) => {
   try {

@@ -13,16 +13,7 @@ import {
 } from './vsdc-api.service';
 import logger from '../utils/logger';
 
-/**
- * RRA VSDC master-data sync (RRA checklist §59, §61, §62, §64, §65).
- *
- * The Codes, Item-Classification and Notices lists are pulled incrementally
- * (each sync sends the stored `lastReqDt` so RRA only returns rows changed
- * since the last run) and cached locally so the CIS drives its own
- * dropdowns/enumerations from the authoritative list rather than hard-coded
- * tables. Customer lookup is on-demand (verify one TIN). Select-Item is a
- * reconciliation pull that diffs RRA's item registry against the local catalog.
- */
+/** RRA VSDC master-data sync (RRA checklist §59, §61, §62, §64, §65). */
 
 export type RraSyncResource = 'codes' | 'itemClasses' | 'notices' | 'items';
 
@@ -55,9 +46,7 @@ async function saveCursor(
   });
 }
 
-// ──────────────────────────────────────────────────────────────
 // Codes (§59)
-// ──────────────────────────────────────────────────────────────
 
 export async function syncRraCodes(organizationId: number, branchId?: number | null): Promise<RraSyncOutcome> {
   const resource: RraSyncResource = 'codes';
@@ -124,9 +113,7 @@ export async function syncRraCodes(organizationId: number, branchId?: number | n
   return { resource, ok: true, fetched, upserted, lastReqDt: runAt };
 }
 
-// ──────────────────────────────────────────────────────────────
 // Item classification / UNSPSC (§61)
-// ──────────────────────────────────────────────────────────────
 
 export async function syncRraItemClasses(organizationId: number, branchId?: number | null): Promise<RraSyncOutcome> {
   const resource: RraSyncResource = 'itemClasses';
@@ -173,9 +160,7 @@ export async function syncRraItemClasses(organizationId: number, branchId?: numb
   return { resource, ok: true, fetched: list.length, upserted, lastReqDt: runAt };
 }
 
-// ──────────────────────────────────────────────────────────────
 // Notices (§65)
-// ──────────────────────────────────────────────────────────────
 
 export async function syncRraNotices(organizationId: number, branchId?: number | null): Promise<RraSyncOutcome> {
   const resource: RraSyncResource = 'notices';
@@ -221,9 +206,7 @@ export async function syncRraNotices(organizationId: number, branchId?: number |
   return { resource, ok: true, fetched: list.length, upserted, lastReqDt: runAt };
 }
 
-// ──────────────────────────────────────────────────────────────
 // Customer lookup (§62)
-// ──────────────────────────────────────────────────────────────
 
 export async function verifyCustomerTin(
   organizationId: number,
@@ -262,9 +245,7 @@ export async function verifyCustomerTin(
   return { found: true, taxprNm: match.taxprNm, taxprSttsCd: match.taxprSttsCd, raw: res.raw };
 }
 
-// ──────────────────────────────────────────────────────────────
 // Select Item — RRA-side reconciliation (§64)
-// ──────────────────────────────────────────────────────────────
 
 export interface RraItemDiff {
   rraOnly: RraItemLVO[];
@@ -334,9 +315,7 @@ export async function pullRraItems(
   return { ok: true, items: rraItems, diff };
 }
 
-// ──────────────────────────────────────────────────────────────
 // Bulk sync (cron entry point)
-// ──────────────────────────────────────────────────────────────
 
 export async function syncAllRraMasterData(organizationId: number, branchId?: number | null): Promise<RraSyncOutcome[]> {
   const outcomes: RraSyncOutcome[] = [];

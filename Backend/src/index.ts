@@ -78,9 +78,7 @@ const app = express();
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
 
-/* ----------------------------------
-   🔐 FIXED CORS CONFIG
-------------------------------------- */
+/* 🔐 FIXED CORS CONFIG */
 
 const allowedOrigins = [
   ...(process.env.FRONTEND_URL || "http://localhost:5173")
@@ -114,23 +112,17 @@ app.use(cors({
 }));
 
 
-/* ----------------------------------
-   🔄 WEBHOOKS FIRST — RAW BODY
-------------------------------------- */
+/* 🔄 WEBHOOKS FIRST — RAW BODY */
 app.use('/api/webhooks', express.raw({ type: 'application/json' }), webhookRoutes);
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-/* ----------------------------------
-   🔌 SOCKET.IO INITIALIZATION
-------------------------------------- */
+/* 🔌 SOCKET.IO INITIALIZATION */
 
 initSocket(httpServer);
 
-/* ----------------------------------
-   📌 API ROUTES
-------------------------------------- */
+/* 📌 API ROUTES */
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -187,18 +179,16 @@ mountApiDocs(app);
 // Serve uploaded files statically
 app.use('/uploads', express.static('uploads'));
 
-/* ----------------------------------
-   🏥 HEALTH CHECK
-------------------------------------- */
+/* 🏥 HEALTH CHECK */
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Business Management API is running" })
 })
 
-/* ----------------------------------
-   🔖 CIS SOFTWARE VERSION (RRA CIS/VSDC §21)
-   Verifiable software version; the same value is printed on every receipt.
-------------------------------------- */
+/*
+ * 🔖 CIS SOFTWARE VERSION (RRA CIS/VSDC §21) Verifiable software version; the same value is printed
+ * on every receipt.
+ */
 
 app.get(["/api/version", "/version"], (req, res) => {
   res.json({
@@ -210,9 +200,7 @@ app.get(["/api/version", "/version"], (req, res) => {
 
 app.use(errorHandler);
 
-/* ----------------------------------
-   ⏰ CRON JOBS — prevent running twice
-------------------------------------- */
+/* ⏰ CRON JOBS — prevent running twice */
 
 if (process.env.RUN_JOBS !== "false") {
   subscriptionReminderJob.start();
@@ -226,18 +214,15 @@ if (process.env.RUN_JOBS !== "false") {
   rraMasterDataJob.start();
   stockSyncJob.start();
 
-  // Run an immediate subscription status transition on boot so that
-  // overdue statuses (TRIALING, ACTIVE, GRACE_PERIOD) are always caught
-  // even if the hourly cron was down for a while.
+  // Run an immediate subscription status transition on boot so that overdue statuses (TRIALING,
+  // ACTIVE, GRACE_PERIOD) are always caught even if the hourly cron was down for a while.
   runImmediateSubscriptionTransition().catch((err) =>
     console.error("Boot-time subscription transition failed:", err)
   );
 }
 
 
-/* ----------------------------------
-   🚀 START SERVER
-------------------------------------- */
+/* 🚀 START SERVER */
 
 httpServer.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

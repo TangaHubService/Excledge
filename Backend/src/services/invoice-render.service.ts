@@ -1,8 +1,8 @@
 import { formatInvoiceAmount, formatInvoiceDateTime } from "./invoice-format.service"
 import { SYSTEM_FOOTER, SYSTEM_POWERED_BY, NOT_OFFICIAL_RECEIPT_NOTICE, NOT_FISCALIZED_TITLE, NOT_FISCALIZED_NOTICE } from "./system-branding.service"
-// invoice-pdf.service only imports RenderInvoicePayload/RenderInvoiceLineItem
-// as types (`import type`, erased at build time), so importing its runtime
-// helpers here does not create a circular module dependency at runtime.
+// invoice-pdf.service only imports RenderInvoicePayload/RenderInvoiceLineItem as types (`import
+// type`, erased at build time), so importing its runtime helpers here does not create a circular
+// module dependency at runtime.
 import { documentIndicator, headerIndicator, isCopyDocument, isFormalNoticeIndicator, isProformaDocument, isRefundTransaction, printsQrCode, refundReferenceLine, bandSalesLabel, salesBands, taxBandRows, transactionSubTitle } from "./invoice-pdf.service"
 
 type NullableString = string | null | undefined
@@ -62,11 +62,7 @@ export interface RenderInvoiceTotals {
   grandTotal: number
 }
 
-/**
- * Raw sale-level charges (as stored on the Sale row). The frontend recomputes
- * the derived `totals` from these + the line items so the displayed numbers can
- * never drift from the lines being rendered.
- */
+/** Raw sale-level charges (as stored on the Sale row). */
 export interface RenderInvoiceCharges {
   vatAmount: number
   taxableAmount: number
@@ -153,17 +149,14 @@ export interface RenderInvoicePayload {
     /** The copied receipt's own VSDC counter (`168/258 NS`). */
     copyOfReceiptNumber?: NullableString
     /**
-     * Set when this document was produced for a real sale that VSDC has not yet
-     * confirmed ("pending" — still being submitted/retried, or "failed" —
-     * permanently dead-lettered). Such a PDF/receipt is watermarked NOT
-     * FISCALISED and is not a valid tax receipt. Absent/null on a normal
-     * fiscalized sale and on proformas.
+     * Set when this document was produced for a real sale that VSDC has not yet confirmed
+     * ("pending" — still being submitted/retried, or "failed" — permanently dead-lettered).
      */
     notFiscalized?: "pending" | "failed" | null
     currency: string
     /**
-     * Printed as REF. NORMAL RECEIPT#: the SDC `rcptNo` VSDC returned for the
-     * original sale (spec 14.1 "SDC receipt number", e.g. `201`).
+     * Printed as REF. NORMAL RECEIPT#: the SDC `rcptNo` VSDC returned for the original sale (spec
+     * 14.1 "SDC receipt number", e.g.
      */
     originalReceiptNumber?: NullableString
     /** Original sale's VSDC invcNo — the value submitted as this refund's `orgInvcNo`. */

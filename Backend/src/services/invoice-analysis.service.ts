@@ -1,10 +1,10 @@
 import { prisma } from '../lib/prisma';
 import type { PoMatchStatus } from '@prisma/client';
 
-// ── Tolerances ───────────────────────────────────────────────────────────
-// Same 2%-or-1-unit slack used for line-level math verification client-side —
-// OCR/vision extraction and header-level rounding on the source document both
-// introduce small, expected drift that shouldn't itself be flagged as a discrepancy.
+// ── Tolerances ───────────────────────────────────────────────────────── ── Same 2%-or-1-unit
+// slack used for line-level math verification client-side — OCR/vision extraction and header-level
+// rounding on the source document both introduce small, expected drift that shouldn't itself be
+// flagged as a discrepancy.
 const HEADER_MATH_TOLERANCE_RATIO = 0.02;
 const HEADER_MATH_TOLERANCE_MIN = 1;
 const PO_TOTAL_TOLERANCE_RATIO = 0.05;
@@ -139,9 +139,8 @@ async function matchPurchaseOrder(params: {
     return { status: 'MATCHED', purchaseOrderId: po.id, detail: 'PO number, supplier, and total reconcile' };
   }
 
-  // No PO number printed on the invoice — fall back to a fuzzy match so a
-  // human reviewer isn't left with zero leads. Only auto-match when exactly
-  // one candidate fits; ambiguity is left UNMATCHED rather than guessed.
+  // No PO number printed on the invoice — fall back to a fuzzy match so a human reviewer isn't left
+  // with zero leads.
   if (!params.supplierId || params.totalAmount == null) {
     return { status: 'UNMATCHED', purchaseOrderId: null, detail: 'No PO number and insufficient data to fuzzy-match' };
   }
@@ -173,10 +172,9 @@ async function matchPurchaseOrder(params: {
 }
 
 /**
- * Runs immediately after AI extraction (or manual edit) to turn raw extracted
- * data into business meaning: does the math add up, are there duplicate
- * lines, does this look like a fraud/compliance risk, and does it match a PO
- * already in the system. Writes findings back onto the invoice/items.
+ * Runs immediately after AI extraction (or manual edit) to turn raw extracted data into business
+ * meaning: does the math add up, are there duplicate lines, does this look like a fraud/compliance
+ * risk, and does it match a PO already in the system.
  */
 export async function analyzeInvoice(invoiceId: number): Promise<void> {
   const invoice = await prisma.supplierInvoice.findUnique({

@@ -2,8 +2,8 @@ import cron from 'node-cron';
 import { isEbmEnabled, processEbmOutboxBatch } from '../services/ebm-outbox.service';
 
 /**
- * Process the EBM transactional outbox every 2 minutes.
- * Handles PENDING, PROCESSING (orphan reconciliation), and FAILED retries.
+ * Process the EBM transactional outbox every 2 minutes. Handles PENDING, PROCESSING (orphan
+ * reconciliation), and FAILED retries.
  */
 export const ebmOutboxJob = cron.schedule('*/2 * * * *', async () => {
   if (!isEbmEnabled()) {

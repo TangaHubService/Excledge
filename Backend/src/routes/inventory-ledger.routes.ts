@@ -14,10 +14,8 @@ import {
 const router = Router();
 
 /**
- * Inventory Ledger Routes
- * 
- * All routes are protected and require authentication
- * All routes require organizationId in params
+ * Inventory Ledger Routes All routes are protected and require authentication All routes require
+ * organizationId in params
  */
 
 // Stock IN - Add stock to inventory

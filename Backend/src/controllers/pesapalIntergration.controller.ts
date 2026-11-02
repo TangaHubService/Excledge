@@ -40,12 +40,7 @@ export const pesapalIpnController = async (req: Request, res: Response) => {
             // Get transaction status
             const transaction = await getTransactionStatus(OrderTrackingId);
 
-            // Update subscription based on payment status. Look up by the merchant
-            // reference stored on the subscription (same as the browser callback
-            // handler) rather than by organizationId/planId + status:'ACTIVE' —
-            // that older lookup could never find a brand-new PENDING subscription,
-            // so a purchase confirmed only via IPN (no browser callback) would
-            // never activate.
+            // Update subscription based on payment status.
             if (transaction.payment_status_description === 'Completed') {
                 const subscription = await prisma.subscription.findFirst({
                     where: {

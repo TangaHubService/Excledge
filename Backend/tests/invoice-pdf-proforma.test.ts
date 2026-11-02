@@ -5,10 +5,8 @@ import { generateEbmReceiptPdf80mm } from "../src/services/invoice-receipt-pdf.s
 import type { RenderInvoicePayload } from "../src/services/invoice-render.service"
 
 /**
- * A proforma / training slip still awaiting VSDC confirmation carries no
- * signature, internal data or SDC receipt counter yet. The printed slip must
- * still show the transaction date/time and the (local) receipt number under
- * SDC INFORMATION — regression guard for those lines silently dropping.
+ * A proforma / training slip still awaiting VSDC confirmation carries no signature, internal data
+ * or SDC receipt counter yet.
  */
 function proformaFixture(): RenderInvoicePayload {
   return {
@@ -115,9 +113,9 @@ describe("proforma / training slip fiscal block", () => {
       () => generateEbmReceiptPdf80mm(training),
     ]) {
       const blob = (await captureText(run)).join("\n")
-      // Same fiscal block as proforma: repeats SDC ID, keeps the shared
-      // summary rows (Payment Mode / Items Number print for every receipt
-      // type per the RRA sample layout) and no bare software-version line.
+      // Same fiscal block as proforma: repeats SDC ID, keeps the shared summary rows (Payment Mode
+      // / Items Number print for every receipt type per the RRA sample layout) and no bare
+      // software-version line.
       expect(blob).toMatch(/SDC ID\s*:\s*SDC012000250/)
       expect(blob).toMatch(/RECEIPT NUMBER\s*:\s*12\/9 TS/)
       expect(blob).not.toMatch(/Software version/)
@@ -125,9 +123,9 @@ describe("proforma / training slip fiscal block", () => {
   })
 
   it("a fiscalized training receipt shows the returned VSDC response (Q3)", async () => {
-    // Training IS submitted to VSDC: once confirmed, the receipt prints the
-    // returned signature/internal data/QR alongside the TRAINING MODE title
-    // (and keeps the not-official notice per R7), never NOT FISCALISED.
+    // Training IS submitted to VSDC: once confirmed, the receipt prints the returned
+    // signature/internal data/QR alongside the TRAINING MODE title (and keeps the not-official
+    // notice per R7), never NOT FISCALISED.
     const training = proformaFixture()
     training.invoice.isProforma = false
     training.invoice.rcptLabel = "TS"

@@ -10,9 +10,7 @@ import {
 } from '../services/batch.service';
 import { logManualActivity } from '../middleware/activity-log.middleware';
 
-/**
- * Get all batches for a product
- */
+/** Get all batches for a product */
 export const getProductBatches = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -33,9 +31,7 @@ export const getProductBatches = async (req: BranchAuthRequest, res: Response) =
   }
 };
 
-/**
- * Get a single batch by ID
- */
+/** Get a single batch by ID */
 export const getBatch = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -54,9 +50,7 @@ export const getBatch = async (req: BranchAuthRequest, res: Response) => {
   }
 };
 
-/**
- * Create a new batch
- */
+/** Create a new batch */
 export const createBatchController = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -118,9 +112,7 @@ export const createBatchController = async (req: BranchAuthRequest, res: Respons
   }
 };
 
-/**
- * Select batches for sale (FIFO/LIFO/AVERAGE)
- */
+/** Select batches for sale (FIFO/LIFO/AVERAGE) */
 export const selectBatches = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);

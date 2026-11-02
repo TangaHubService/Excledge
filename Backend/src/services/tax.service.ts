@@ -55,21 +55,7 @@ export class TaxService {
         }
     }
 
-    /**
-     * Determine the effective RRA tax code for a product on a sale.
-     *
-     * The business's tax configuration and the product's own tax category are
-     * independent concepts, applied in this order of precedence:
-     *  - When the taxpayer/entity is legally tax-exempt (e.g. NGO, diplomatic
-     *    mission), every line uses code A ("VAT exempt") regardless of the
-     *    product's own category or VAT-registration status.
-     *  - Otherwise, when the taxpayer is NOT VAT registered, every line uses
-     *    code D ("Taxpayer not registered for VAT") regardless of category.
-     *  - Otherwise (VAT registered, not exempt), the product's configured tax
-     *    category (A = VAT exempt, B = 18% standard, C = export/zero-rated)
-     *    applies. A product is never silently downgraded to D just because it
-     *    has no tax-registration number of its own.
-     */
+    /** Determine the effective RRA tax code for a product on a sale. */
     static resolveProductTaxCode(
         productTaxCode: RraTaxCode | null | undefined,
         category: TaxCategory,

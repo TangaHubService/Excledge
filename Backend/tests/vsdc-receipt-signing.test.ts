@@ -1,11 +1,6 @@
 /**
- * Receipt-signing lifecycle against VSDC API v1.0.5 `/trnsSales/saveSales`:
- * payload → HTTP → response decision → persisted fiscal record → composed
- * invoice → printed 80mm + A4 receipt.
- *
- * VSDC is a stubbed `fetch`; persistence is an in-memory Prisma stand-in.
- * The outbox worker, the response parser, the invoice composer and both PDF
- * renderers are the real code. Every fiscal value is a TEST fixture.
+ * Receipt-signing lifecycle against VSDC API v1.0.5 `/trnsSales/saveSales`: payload → HTTP →
+ * response decision → persisted fiscal record → composed invoice → printed 80mm + A4 receipt.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import PDFDocument from "pdfkit"

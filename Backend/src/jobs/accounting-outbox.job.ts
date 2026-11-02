@@ -4,9 +4,7 @@ import {
   processAccountingOutboxBatch,
 } from "../services/accounting-outbox.service";
 
-/**
- * Deliver ERP accounting outbox events to the Accounting microservice.
- */
+/** Deliver ERP accounting outbox events to the Accounting microservice. */
 export const accountingOutboxJob = cron.schedule("*/2 * * * *", async () => {
   if (!isAccountingIntegrationEnabled()) return;
   try {

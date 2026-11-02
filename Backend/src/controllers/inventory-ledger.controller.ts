@@ -18,10 +18,7 @@ const STOCK_ADJUSTMENT_APPROVER_ROLES = ['ADMIN', 'BRANCH_MANAGER'];
 /** Ledger quantities are Decimal(15,3) — keep kg/litre fractions instead of truncating. */
 const parseStockQty = (v: unknown): number => Math.round(parseFloat(String(v)) * 1000) / 1000;
 
-/**
- * POST /inventory/in
- * Add stock to inventory (Stock IN)
- */
+/** POST /inventory/in Add stock to inventory (Stock IN) */
 export const addStockToInventory = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -93,10 +90,7 @@ export const addStockToInventory = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/**
- * POST /inventory/out
- * Remove stock from inventory (Stock OUT)
- */
+/** POST /inventory/out Remove stock from inventory (Stock OUT) */
 export const removeStockFromInventory = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -162,10 +156,7 @@ export const removeStockFromInventory = async (req: AuthRequest, res: Response) 
   }
 };
 
-/**
- * POST /inventory/adjustment
- * Adjust stock (can be positive or negative)
- */
+/** POST /inventory/adjustment Adjust stock (can be positive or negative) */
 export const adjustInventoryStock = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -202,9 +193,9 @@ export const adjustInventoryStock = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // When the org requires approval, only managers may apply an adjustment
-    // directly — there's no pending-approval queue, so other roles are
-    // simply blocked and must ask a manager to perform it themselves.
+    // When the org requires approval, only managers may apply an adjustment directly — there's no
+    // pending-approval queue, so other roles are simply blocked and must ask a manager to perform
+    // it themselves.
     const orgSettings = await getOrganizationSettings(organizationId);
     if (
       orgSettings.featureFlags.requireStockAdjustmentApproval &&
@@ -250,10 +241,7 @@ export const adjustInventoryStock = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/**
- * GET /inventory/ledger
- * Get ledger entries with filtering and pagination
- */
+/** GET /inventory/ledger Get ledger entries with filtering and pagination */
 export const getInventoryLedger = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -293,10 +281,7 @@ export const getInventoryLedger = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/**
- * GET /inventory/summary
- * Get inventory summary since inception or from a specific date
- */
+/** GET /inventory/summary Get inventory summary since inception or from a specific date */
 export const getInventorySummaryReport = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -332,8 +317,7 @@ export const getInventorySummaryReport = async (req: AuthRequest, res: Response)
 };
 
 /**
- * GET /inventory/current-stock/:productId
- * Get current stock for a product (calculated from ledger)
+ * GET /inventory/current-stock/:productId Get current stock for a product (calculated from ledger)
  */
 export const getCurrentStockLevel = async (req: AuthRequest, res: Response) => {
   try {
@@ -365,8 +349,7 @@ export const getCurrentStockLevel = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * GET /inventory/history/:productId
- * Get complete inventory history for a product since inception
+ * GET /inventory/history/:productId Get complete inventory history for a product since inception
  */
 export const getProductInventoryHistory = async (req: AuthRequest, res: Response) => {
   try {
@@ -399,8 +382,8 @@ export const getProductInventoryHistory = async (req: AuthRequest, res: Response
 };
 
 /**
- * POST /inventory/recalculate/:productId
- * Recalculate product stock from ledger (useful for data integrity)
+ * POST /inventory/recalculate/:productId Recalculate product stock from ledger (useful for data
+ * integrity)
  */
 export const recalculateStock = async (req: AuthRequest, res: Response) => {
   try {

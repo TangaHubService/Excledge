@@ -114,9 +114,8 @@ async function branchAverageCost(tx: Prisma.TransactionClient, organizationId: n
 }
 
 /**
- * Queues one stock movement for Accounting in the same transaction that wrote the ledger row, so the
- * valuation subledger sees every movement exactly once. The cost is the row's own cost, the cost the
- * caller used (e.g. the batch a sale drew from), or the branch's batch average.
+ * Queues one stock movement for Accounting in the same transaction that wrote the ledger row, so
+ * the valuation subledger sees every movement exactly once.
  */
 export async function enqueueInventoryMovementAccountingEvent(
   tx: Prisma.TransactionClient,
@@ -188,7 +187,7 @@ export async function enqueueInventoryMovementAccountingEvent(
 
 /**
  * Queues the organization's current stock by branch, valued at each branch's batch average, as
- * Accounting's opening inventory. Accounting applies it once per item and branch.
+ * Accounting's opening inventory.
  */
 export async function enqueueInventoryOpeningSnapshot(organizationId: number) {
   const [latest, batches, branches] = await Promise.all([
@@ -267,11 +266,7 @@ export async function enqueueInventoryOpeningSnapshot(organizationId: number) {
   return { queued: true, lines: lines.length, uncosted };
 }
 
-/**
- * A scanned supplier invoice becomes a supplier bill in Accounting once it is imported. Stock
- * imported from it is already on Goods Received Not Invoiced at cost (`receivedAtCost`), which the
- * bill clears; the rest of the invoice goes to purchases.
- */
+/** A scanned supplier invoice becomes a supplier bill in Accounting once it is imported. */
 export async function enqueueScannedSupplierBillAccountingEvent(
   invoiceId: number,
   receivedAtCost: number,
@@ -349,7 +344,7 @@ type PayrollRunForAccounting = {
 
 /**
  * Approval accrues the payroll (expense against PAYE, RSSB and net salaries payable); payment
- * clears net salaries payable. Both are queued in the caller's transaction.
+ * clears net salaries payable.
  */
 export async function enqueuePayrollAccountingEvent(
   tx: Prisma.TransactionClient,
@@ -548,10 +543,7 @@ export async function enqueueCustomerPaymentAccountingEvent(
 
 const SUPPLIER_PAYMENT_EVENT = "SUPPLIER_PAYMENT_MADE";
 
-/**
- * Takes a supplier payment's event back off the queue so the payment can be deleted. Returns false once the
- * event may have reached Accounting (it was picked up for sending); the payment then stays in the books.
- */
+/** Takes a supplier payment's event back off the queue so the payment can be deleted. */
 export async function withdrawSupplierPaymentAccountingEvent(
   tx: OutboxWriter,
   input: { organizationId: number; paymentId: number },
@@ -596,11 +588,7 @@ export async function enqueueSupplierPaymentAccountingEvent(
   });
 }
 
-/**
- * Goods received against a purchase order. The stock value itself reaches Accounting through the
- * PURCHASE inventory movements; this event records the receipt so a later supplier bill for the same
- * order clears goods received not invoiced instead of booking the purchase twice.
- */
+/** Goods received against a purchase order. */
 export async function enqueueGoodsReceivedAccountingEvent(
   tx: OutboxWriter,
   input: {

@@ -1,20 +1,4 @@
-/**
- * NS (Normal Sale) receipt audit — requirement-under-test evidence.
- *
- * Covers Steps 5+6 of the audit without needing a DB or network:
- *  - VSDC payload shape for an NS sale (2023 spec §3.3.6.1)
- *  - tax-inclusive B-18% math (tax = amount x 18/118)
- *  - mixed A-EX/B/discount/service payload bands
- *  - buyer TIN/phone variants
- *  - payment codes incl. mixed tender
- *  - itemCd vs itemClsCd orientation
- *  - QR string format (§7.24.7)
- *  - EJ text block content
- *  - receipt-content print rules (B always printed, zero-rate only when used)
- *  - NS carries no COPY/TRAINING/PROFORMA title and no NOT-OFFICIAL notice
- *  - amount/date formatting, dash-every-4 grouping
- *  - VSDC response parsing + non-"000" error classification
- */
+/** NS (Normal Sale) receipt audit — requirement-under-test evidence. */
 import { describe, it, expect } from 'vitest';
 import { Decimal } from '@prisma/client/runtime/library';
 import {

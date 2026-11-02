@@ -21,7 +21,7 @@ function validIntegrationKey(presented: unknown) {
 
 /**
  * Emails an Accounting notification to the organization's members: the targeted user, or members
- * with the targeted role, or owners, admins and accountants. Called by the Accounting server.
+ * with the targeted role, or owners, admins and accountants.
  */
 router.post("/notifications/email", async (req, res) => {
   if (!validIntegrationKey(req.header("x-integration-key"))) {

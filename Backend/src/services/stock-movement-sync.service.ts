@@ -7,15 +7,7 @@ import { getTaxRateForCode } from './rra-code.service';
 import { bandTaxFromNet } from './money.service';
 import logger from '../utils/logger';
 
-/**
- * RRA Stock In/Out + Stock Master sync (RRA VSDC v1.0.5, S8).
- *
- * Every inventory movement — including SALE (sarTyCd 11, positive qty) — is
- * reported via /stock/saveStockItems, then the remaining quantity via
- * /stockMaster/saveStockMaster. saveSales is the sales transaction; it never
- * replaces the stock movement API. Order per sale: invoice ack first, then
- * stock in/out, then stock master (gated below).
- */
+/** RRA Stock In/Out + Stock Master sync (RRA VSDC v1.0.5, S8). */
 
 /** VSDC §4.19 Stock In/Out (`sarTyCd`) — mapped from our movement type + direction. */
 export function sarTyCdFor(
@@ -81,12 +73,7 @@ async function resolveTransferCounterparty(entry: {
   return { tin: transfer.organization?.TIN ?? null, name: other.name, bhfId: other.bhfId ?? null };
 }
 
-/**
- * Reserve the next SAR number for a ledger row and persist it in the same
- * transaction. The org-scoped advisory lock serializes concurrent submitters
- * (fire-and-forget per movement + the cron batch), so two rows can never be
- * handed the same max+1.
- */
+/** Reserve the next SAR number for a ledger row and persist it in the same transaction. */
 async function reserveSarNo(organizationId: number, ledgerId: number): Promise<number> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`sar:${organizationId}`}))`;
@@ -103,10 +90,8 @@ async function reserveSarNo(organizationId: number, ledgerId: number): Promise<n
 }
 
 /**
- * Submit one InventoryLedger entry to RRA (/stock/saveStockItems) and then
- * push the item's new remaining quantity (/stockMaster/saveStockMaster).
- * Idempotent: a row already SYNCED is skipped; a persisted `ebmSarNo` is reused
- * on retry so RRA does not reject a duplicate SAR number.
+ * Submit one InventoryLedger entry to RRA (/stock/saveStockItems) and then push the item's new
+ * remaining quantity (/stockMaster/saveStockMaster).
  */
 const inFlight = new Set<number>();
 
@@ -146,9 +131,8 @@ async function submitOne(ledgerId: number): Promise<{ success: boolean; error?: 
     return { success: true };
   }
 
-  // S8 order: a SALE stock-out (11) must never be sent before its sales
-  // invoice. Defer (leave PENDING, no FAILED) until the linked sale's invoice
-  // is fiscalized. Linkage: ledger reference = saleNumber.
+  // S8 order: a SALE stock-out (11) must never be sent before its sales invoice. Defer (leave
+  // PENDING, no FAILED) until the linked sale's invoice is fiscalized.
   if (entry.movementType === 'SALE' && entry.reference) {
     const linkedSale = await prisma.sale.findFirst({
       where: { saleNumber: entry.reference, organizationId: entry.organizationId },
@@ -206,11 +190,7 @@ async function submitOne(ledgerId: number): Promise<{ success: boolean; error?: 
   const taxblAmt = fix2(splyAmt - taxAmt);
 
   const sarNo = entry.ebmSarNo ?? (await reserveSarNo(entry.organizationId, ledgerId));
-  // orgSarNo: original SAR number for refund/return rows (new sarNo + link to
-  // the original 11). Resolved from the original SALE ledger row for the same
-  // product/branch. Live VSDC rejects null orgSarNo (910), and accepts 0 for
-  // original movements (proven by SYNCED rows) — so originals send 0 and only
-  // true returns carry a link.
+  // orgSarNo: original SAR number for refund/return rows (new sarNo + link to the original 11).
   let orgSarNo: number | null = (entry as any).ebmOrgSarNo ?? null;
   if (orgSarNo == null && entry.movementType === 'RETURN_CUSTOMER') {
     const meta = (entry as any).metadata as { originalSaleNumber?: string } | null;
@@ -288,9 +268,9 @@ async function submitOne(ledgerId: number): Promise<{ success: boolean; error?: 
   };
 
   try {
-    // S14: header totals must equal the sums of the item lines (single-item
-    // payload today — validated explicitly so a future multi-line change fails
-    // loudly instead of sending inconsistent totals).
+    // S14: header totals must equal the sums of the item lines (single-item payload today —
+    // validated explicitly so a future multi-line change fails loudly instead of sending
+    // inconsistent totals).
     const lineSums = (payload.itemList as Array<{ taxblAmt: number; taxAmt: number; totAmt: number }>)
       .reduce((a, l) => ({ taxbl: a.taxbl + l.taxblAmt, tax: a.tax + l.taxAmt, tot: a.tot + l.totAmt }), { taxbl: 0, tax: 0, tot: 0 });
     if (
@@ -359,11 +339,7 @@ export function submitStockLedgerEntryToEbmAsync(ledgerId: number): void {
   );
 }
 
-/**
- * Process PENDING/FAILED stock ledger rows in batch (cron job). PENDING and
- * FAILED rows are drained as separate slices so rows that keep failing (e.g. a
- * product without itemCd) can never starve new movements of their slot.
- */
+/** Process PENDING/FAILED stock ledger rows in batch (cron job). */
 export async function processStockSyncBatch(
   limit = 25,
 ): Promise<{ processed: number; succeeded: number; failed: number; deferred: number }> {
@@ -404,10 +380,8 @@ export async function processStockSyncBatch(
 }
 
 /**
- * Re-queue this org's FAILED ledger rows so the next batch retries them. Used
- * by the "sync stock now" endpoint. A NULL status means "not reported" by
- * design (e.g. confirmed RRA purchases, whose stock-in RRA already booked via
- * savePurchases) and must never be queued — that would double-count at RRA.
+ * Re-queue this org's FAILED ledger rows so the next batch retries them. Used by the "sync stock
+ * now" endpoint.
  */
 export async function queuePendingStockForOrg(organizationId: number): Promise<number> {
   const res = await prisma.inventoryLedger.updateMany({

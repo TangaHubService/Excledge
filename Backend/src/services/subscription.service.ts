@@ -55,9 +55,7 @@ export class SubscriptionService {
     private prisma: PrismaClient;
     private stripe: Stripe;
 
-    /**
-     * Verifies a Stripe webhook event using the provided payload, signature, and secret
-     */
+    /** Verifies a Stripe webhook event using the provided payload, signature, and secret */
     public verifyWebhookEvent(payload: any, signature: string, secret: string) {
         return this.stripe.webhooks.constructEvent(payload, signature, secret);
     }
@@ -69,11 +67,7 @@ export class SubscriptionService {
         });
     }
 
-    /**
-     * Server-authoritative total for a purchase/renewal. MONTHLY is a flat
-     * monthlyPrice * months; YEARLY only accepts whole years (months must be a
-     * multiple of 12) and applies the configured discount per year.
-     */
+    /** Server-authoritative total for a purchase/renewal. */
     calculateTotal(params: { monthlyPrice: number; months: number; billingMode: BillingMode }): number {
         const { monthlyPrice, months, billingMode } = params;
 
@@ -99,11 +93,8 @@ export class SubscriptionService {
     }
 
     /**
-     * Renewal-vs-fresh rule: if the current subscription's endDate is still in
-     * the future, extend from that endDate (startDate is unchanged). Otherwise
-     * (already past endDate, whether EXPIRED or mid grace period) the new term
-     * starts from now. This single rule reproduces both worked examples in the
-     * spec without needing a separate branch for "in grace period".
+     * Renewal-vs-fresh rule: if the current subscription's endDate is still in the future, extend
+     * from that endDate (startDate is unchanged).
      */
     resolveValidityWindow(params: {
         existingSubscription?: { startDate: Date | null; endDate: Date | null } | null;
@@ -128,10 +119,9 @@ export class SubscriptionService {
     }
 
     /**
-     * Validates the purchase request, computes the server-side total, and
-     * records the pending purchase intent on the subscription row so the
-     * payment-gateway completion handler (finalizeSubscriptionPurchase) can
-     * apply it once payment is confirmed. Never trusts a client-supplied total.
+     * Validates the purchase request, computes the server-side total, and records the pending
+     * purchase intent on the subscription row so the payment-gateway completion handler
+     * (finalizeSubscriptionPurchase) can apply it once payment is confirmed.
      */
     async preparePurchase(params: {
         organizationId: number;
@@ -159,9 +149,9 @@ export class SubscriptionService {
             status: 'PENDING',
         };
 
-        // The row we mutate in place for this org+plan lineage (existing pattern
-        // used by pesapalOrderRequest/initiatePaypackPayment) — reused rather than
-        // creating a new row per purchase/renewal.
+        // The row we mutate in place for this org+plan lineage (existing pattern used by
+        // pesapalOrderRequest/initiatePaypackPayment) — reused rather than creating a new row per
+        // purchase/renewal.
         const existingForPlan = await this.prisma.subscription.findFirst({
             where: {
                 organizationId,
@@ -216,12 +206,7 @@ export class SubscriptionService {
         return { subscription, totalAmount, monthlyPrice: plan.price, ref };
     }
 
-    /**
-     * Single completion path shared by every payment rail's webhook/IPN
-     * handler. Idempotent on paymentId — safe to call more than once for the
-     * same transaction (Pesapal in particular can fire both an IPN and a
-     * browser callback for the same payment).
-     */
+    /** Single completion path shared by every payment rail's webhook/IPN handler. */
     async finalizeSubscriptionPurchase(params: {
         subscriptionId: number;
         paymentId: string;
@@ -336,10 +321,8 @@ export class SubscriptionService {
     }
 
     /**
-     * Single source of truth for "does this org currently have access" plus the
-     * human-facing warning copy from spec section 11. Replaces the
-     * hasActiveSubscription/subscriptionStatus/subscriptionEndDate computation
-     * that used to be duplicated across auth.controller.ts and organization.controller.ts.
+     * Single source of truth for "does this org currently have access" plus the human-facing
+     * warning copy from spec section 11.
      */
     computeSubscriptionSummary(
         subscription: { status: SubscriptionStatus; endDate: Date | null; gracePeriodEndsAt: Date | null; gracePeriodDays?: number | null } | null | undefined,

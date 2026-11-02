@@ -7,12 +7,8 @@ import { syncRraImports } from '../services/rra-import.service';
 import logger from '../utils/logger';
 
 /**
- * Daily incremental pull of the RRA VSDC master data every EBM-enabled
- * organisation depends on — Codes (§59), item classifications / UNSPSC (§61)
- * and notices (§65). Each sync is incremental (sends the stored `lastReqDt`),
- * so a daily cadence keeps the local caches fresh without re-pulling
- * everything. Runs early morning, before trading, at a different minute from
- * the Z-report job.
+ * Daily incremental pull of the RRA VSDC master data every EBM-enabled organisation depends on —
+ * Codes (§59), item classifications / UNSPSC (§61) and notices (§65).
  */
 export const rraMasterDataJob = cron.schedule('20 4 * * *', async () => {
   if (!isEbmEnabled()) return;

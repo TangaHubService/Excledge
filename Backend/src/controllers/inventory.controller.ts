@@ -47,10 +47,8 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
       select: { trainingMode: true },
     }))?.trainingMode === true
 
-    // SERVICE items carry no batch rows (not stock-tracked), so the branch
-    // scoping must not exclude them — only PRODUCT rows need a matching batch.
-    // Training mode also includes zero-stock catalog items that have never
-    // been received at this branch, so cashiers can practice selling them.
+    // SERVICE items carry no batch rows (not stock-tracked), so the branch scoping must not exclude
+    // them — only PRODUCT rows need a matching batch.
     const branchCondition = branchFilter.branchId && !trainingMode
       ? {
           OR: [
@@ -124,9 +122,7 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
       prisma.product.count({ where }),
     ])
 
-    // -------------------------------------------------------
     // 1. Single-pass stock aggregation from batches
-    // -------------------------------------------------------
     const branchForLedger =
       req.selectedBranchId !== null && req.selectedBranchId !== undefined
         ? req.selectedBranchId
@@ -162,9 +158,7 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
       quantity: stockMap[product.id] ?? 0,
     }));
 
-    // -------------------------------------------------------
     // 2. Branch-scoped low-stock count (raw SQL)
-    // -------------------------------------------------------
     const lowStockProducts = branchForLedger !== undefined
       ? Number((await prisma.$queryRaw<Array<{ count: bigint }>>`
           SELECT COUNT(*)::int as count
@@ -358,11 +352,9 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       ));
     }
 
-    // ── RRA compliance: enforce tax code D for non-VAT-registered taxpayers ──
-    // When vatRegistered = false, the VSDC mandates code D ("Taxpayer not
-    // registered for VAT") on every transaction line. Storing any other code
-    // would cause a mismatch between the product catalogue and the tax applied
-    // at point-of-sale, resulting in RRA EBM submission errors.
+    // ── RRA compliance: enforce tax code D for non-VAT-registered taxpayers ── When vatRegistered
+    // = false, the VSDC mandates code D ("Taxpayer not registered for VAT") on every transaction
+    // line.
     const orgVatInfo = await prisma.organization.findUnique({
       where: { id: organizationId },
       select: { vatRegistered: true },
@@ -392,10 +384,9 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
         throw new Error(`Origin country "${resolvedOrigin}" is not in the RRA country list (class 05). Sync RRA codes first.`);
       }
 
-      // Allocated from the same atomic per-organization counter table the
-      // create() below runs against, inside this same transaction, so a
-      // sequence number is only ever consumed if the product actually commits
-      // — no gap is left behind if create() fails for an unrelated reason.
+      // Allocated from the same atomic per-organization counter table the create() below runs
+      // against, inside this same transaction, so a sequence number is only ever consumed if the
+      // product actually commits — no gap is left behind if create() fails for an unrelated reason.
       const itemCd = await allocateItemCd(organizationId!, resolvedItemType, pkgUnitCd, resolvedQtyUnitCd, resolvedOrigin, tx)
 
       const product = await tx.product.create({
@@ -437,9 +428,7 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
 
       // Skip batch and ledger for SERVICE items — no inventory tracking
       if (!isService) {
-        // Create batch record to link product to branch. Cost basis is the
-        // purchase price (what was actually paid for stock) — falling back to
-        // the sales price only when no purchase price was provided.
+        // Create batch record to link product to branch.
         const batchUnitCost = purchasePrice != null && purchasePrice !== ''
           ? Number(purchasePrice)
           : (unitPrice ? Number(unitPrice) : 0);
@@ -500,10 +489,9 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
       return product;
     }
 
-    // itemCd is allocated from an atomic per-organization counter (see
-    // createProductInTx above), so a genuine collision shouldn't happen —
-    // this retry is a defensive fallback for the same transient-error class
-    // openShift() in shift.service.ts retries on.
+    // itemCd is allocated from an atomic per-organization counter (see createProductInTx above), so
+    // a genuine collision shouldn't happen — this retry is a defensive fallback for the same
+    // transient-error class openShift() in shift.service.ts retries on.
     let result: any
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
@@ -590,9 +578,7 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
       }
 
       // Also check for existing Batches that would violate the compound unique key
-      // (productId_batchNumber_branchId). Since batches reference products via FK,
-      // a batch can only exist if its product does. This catches any edge case
-      // where a product exists but was missed by the above check.
+      // (productId_batchNumber_branchId).
       const existingBatches = await prisma.batch.findMany({
         where: {
           organizationId,
@@ -650,11 +636,10 @@ export const createProducts = async (req: BranchAuthRequest, res: Response) => {
       }
     }
 
-    // Use transaction to ensure all products, batches, and ledger entries are atomic.
-    // itemCd sequence numbers are allocated as one contiguous block (base count
-    // + row index) inside the same transaction as the createMany, so a whole
-    // retry of the transaction on conflict re-allocates a fresh block — same
-    // conflict-retry pattern as createProduct/openShift.
+    // Use transaction to ensure all products, batches, and ledger entries are atomic. itemCd
+    // sequence numbers are allocated as one contiguous block (base count + row index) inside the
+    // same transaction as the createMany, so a whole retry of the transaction on conflict
+    // re-allocates a fresh block — same conflict-retry pattern as createProduct/openShift.
     let result: any
     const orgOrigin = await getOriginNationCode(organizationId!);
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -866,6 +851,18 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
           '(Taxpayer Not Registered for VAT) per RRA CIS regulations.'
         ));
       }
+      // Items moved to B by the VAT switch can change their tax type only once.
+      if (normalizedTaxCode !== existingProduct.taxCode) {
+        if (existingProduct.taxCodeReviewedAt) {
+          return res.status(422).json(apiError(
+            'The tax category of this item was already updated once after VAT registration and can no longer be changed.'
+          ));
+        }
+        if (existingProduct.taxCodeReviewPending) {
+          data.taxCodeReviewPending = false;
+          data.taxCodeReviewedAt = new Date();
+        }
+      }
       data.taxCode = normalizedTaxCode;
       data.taxCategory = TaxService.getTaxCategory(normalizedTaxCode as any);
     }
@@ -907,12 +904,9 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
     if (l4SalePrice !== undefined) data.l4SalePrice = l4SalePrice === '' ? null : l4SalePrice
     if (l5SalePrice !== undefined) data.l5SalePrice = l5SalePrice === '' ? null : l5SalePrice
 
-    // Auto-propagate edits back to RRA. syncProductToRra() skips an item whose
-    // ebmSyncStatus is already SYNCED, so a rename (or any other field that
-    // appears in the /items/saveItems payload) would never reach the VSDC.
-    // When one of those fields actually changes on a registered item, clear the
-    // skip-guard so the async sync below re-registers it. /items/saveItems is an
-    // upsert on itemCd, so this updates the existing RRA record in place.
+    // Auto-propagate edits back to RRA. syncProductToRra() skips an item whose ebmSyncStatus is
+    // already SYNCED, so a rename (or any other field that appears in the /items/saveItems payload)
+    // would never reach the VSDC.
     const RRA_SYNCED_FIELDS = [
       'name', 'itemClsCd', 'itemType', 'itemStandardName', 'origin',
       'pkgUnitCd', 'qtyUnitCd', 'taxCode', 'batchNumber', 'barcode', 'unitPrice',
@@ -934,9 +928,9 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
       data.ebmSyncStatus = 'PENDING'
     }
 
-    // itemCd is generated once and then permanent (it's the identifier RRA
-    // knows the item by) — only backfill it for legacy rows that never got
-    // one; never regenerate an itemCd that's already registered.
+    // itemCd is generated once and then permanent (it's the identifier RRA knows the item by) —
+    // only backfill it for legacy rows that never got one; never regenerate an itemCd that's
+    // already registered.
     let product: any
     if (!existingProduct.itemCd) {
       const resolvedItemType = (data.itemType ?? existingProduct.itemType) as 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE'

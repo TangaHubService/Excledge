@@ -1,9 +1,4 @@
-/**
- * RRA CIS/VSDC Art. 7.5: amounts print with 2 decimals and a dot separator.
- * Thousands grouping is deliberately OFF (useGrouping: false) — "1180.00",
- * never "1,180.00" — so the printed receipt matches the fiscal record byte
- * for byte regardless of server locale.
- */
+/** RRA CIS/VSDC Art. 7.5: amounts print with 2 decimals and a dot separator. */
 export function formatInvoiceAmount(value: number | string | null | undefined): string {
   const amount = Number(value ?? 0)
   if (!Number.isFinite(amount)) return "0.00"
@@ -15,8 +10,8 @@ export function formatInvoiceAmount(value: number | string | null | undefined): 
 }
 
 /**
- * Item quantity on a fiscal receipt (CIS §24.4.1, §16 samples "x 1.00",
- * "x 0.200"): at least 2 decimals, up to 3, dot separator, no grouping.
+ * Item quantity on a fiscal receipt (CIS §24.4.1, §16 samples "x 1.00", "x 0.200"): at least 2
+ * decimals, up to 3, dot separator, no grouping.
  */
 export function formatReceiptQuantity(value: number | string | null | undefined): string {
   const quantity = Number(value ?? 0)
@@ -46,12 +41,7 @@ export function formatInvoiceQuantity(value: number | string | null | undefined)
 /** IANA zone for every timestamp printed on a fiscal document or sent to VSDC. */
 export const RRA_TIME_ZONE = "Africa/Kigali"
 
-/**
- * Wall-clock parts of `date` in Africa/Kigali, independent of the server's
- * own timezone. Receipt dates, QR timestamps and VSDC date fields must all
- * agree with each other (and with the taxpayer's wall clock), so they all go
- * through here instead of the Date get*() accessors.
- */
+/** Wall-clock parts of `date` in Africa/Kigali, independent of the server's own timezone. */
 export function kigaliWallParts(date: Date): {
   year: string
   month: string

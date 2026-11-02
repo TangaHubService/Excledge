@@ -6,6 +6,8 @@ import { emailService } from "../services/email.service";
 import { generateStrongPassword } from "../utils/generatePassword";
 import { auditLogger } from "../utils/auditLogger";
 import { lockReceiptModeForChange } from "../services/training-mode.service";
+import { syncProductToRraAsync } from "../services/product-sync.service";
+import { TaxService } from "../services/tax.service";
 import { deleteFromCloudinary, uploadToCloudinary } from "../config/cloudinary";
 import { SubscriptionService } from "../services/subscription.service";
 import {
@@ -15,7 +17,7 @@ import {
 import type { OrganizationSettingsPatch } from "../types/organization-settings.types";
 import { checkMrc, MrcFormatError } from "../utils/mrc";
 
-import { Prisma } from "@prisma/client";
+import { Prisma, RraTaxCode } from "@prisma/client";
 import type { Request, Response } from "express";
 
 const subscriptionService = new SubscriptionService(prisma);
@@ -107,9 +109,9 @@ export const getOrganizationById = async (req: Request, res: Response) => {
       },
     });
 
-    // Check subscription status — the most recently-ending subscription that's
-    // still ACTIVE/TRIALING/GRACE_PERIOD (grace-period rows have an endDate in
-    // the past by definition, so this intentionally doesn't filter on endDate).
+    // Check subscription status — the most recently-ending subscription that's still
+    // ACTIVE/TRIALING/GRACE_PERIOD (grace-period rows have an endDate in the past by definition, so
+    // this intentionally doesn't filter on endDate).
     const relevantSubscription = organization.subscriptions
       .filter(sub => sub.status === 'ACTIVE' || sub.status === 'TRIALING' || sub.status === 'GRACE_PERIOD')
       .sort((a, b) => (b.endDate?.getTime() ?? 0) - (a.endDate?.getTime() ?? 0))[0] ?? null;
@@ -290,17 +292,15 @@ export const updateOrganization = async (req: Request, res: Response) => {
 
     const existingOrg = await prisma.organization.findUnique({
       where: { id },
-      select: { trainingMode: true, mrcNo: true, TIN: true },
+      select: { trainingMode: true, mrcNo: true, TIN: true, vatRegistered: true },
     });
     const previousTrainingMode = existingOrg?.trainingMode ?? false;
+    // Non-VAT → VAT: every D item becomes B (one correction allowed, see updateProduct).
+    const becameVatRegistered =
+      vatRegistered !== undefined && !!vatRegistered && existingOrg?.vatRegistered === false;
+    let vatSwitchedProductIds: number[] = [];
 
-    // CIS spec §7.2: a TIN change is a total VSDC reset. The device, its SDC
-    // identity, the per-device invoice/purchase counters and the RRA sync
-    // cursors all belong to the old TIN, so they are cleared and every device
-    // must be re-initialized (validateVsdcEnvelope refuses until it is). The
-    // change is refused while documents are still queued for the old TIN.
-    // Historical invoices are kept untouched for audit; only the numbering
-    // seed ignores them (sequences restart after the reset, §7.3).
+    // CIS spec §7.2: a TIN change is a total VSDC reset.
     const previousTin = existingOrg?.TIN?.trim() || "";
     const nextTin = typeof TIN === "string" ? TIN.trim() : undefined;
     const tinChanged = nextTin !== undefined && previousTin !== "" && nextTin !== previousTin;
@@ -355,6 +355,25 @@ export const updateOrganization = async (req: Request, res: Response) => {
           data: { ebmSyncStatus: null, ebmError: "Not reported: organization TIN was reset" },
         });
       }
+      if (becameVatRegistered) {
+        const items = await tx.product.findMany({
+          where: { organizationId: id, deletedAt: null, OR: [{ taxCode: "D" }, { taxCode: null }] },
+          select: { id: true },
+        });
+        vatSwitchedProductIds = items.map((p) => p.id);
+        if (vatSwitchedProductIds.length > 0) {
+          await tx.product.updateMany({
+            where: { id: { in: vatSwitchedProductIds } },
+            data: {
+              taxCode: "B",
+              taxCategory: TaxService.getTaxCategory(RraTaxCode.B),
+              taxCodeReviewPending: true,
+              taxCodeReviewedAt: null,
+              ebmSyncStatus: "PENDING",
+            },
+          });
+        }
+      }
       return tx.organization.update({
         where: { id },
         data: {
@@ -386,10 +405,8 @@ export const updateOrganization = async (req: Request, res: Response) => {
           ...(mrc.value !== undefined
             ? { mrcNo: mrc.value }
             : {}),
-          // CIS §5.3/§16: while on, every new sale is a Training Sale (TS) and
-          // only TS receipts can be refunded (as TR). Training receipts go to
-          // VSDC as salesTyCd 'T' and never touch stock, debt, payments or
-          // accounting. Admin-only, same as the other fiscal-behavior fields.
+          // CIS §5.3/§16: while on, every new sale is a Training Sale (TS) and only TS receipts can
+          // be refunded (as TR).
           ...(trainingMode !== undefined
             ? { trainingMode }
             : {}),
@@ -404,6 +421,17 @@ export const updateOrganization = async (req: Request, res: Response) => {
     });
     if (organization instanceof TinResetBlockedError) {
       return res.status(409).json({ error: organization.message, code: "TIN_RESET_BLOCKED_UNSENT" });
+    }
+    if (becameVatRegistered) {
+      // Re-send the items to RRA with their new tax type.
+      for (const productId of vatSwitchedProductIds) syncProductToRraAsync(productId);
+      await auditLogger.system(req, {
+        type: 'SETTINGS_UPDATE',
+        description: `Organization registered for VAT: ${vatSwitchedProductIds.length} item(s) moved from tax type D to B (one correction allowed per item)`,
+        entityType: 'Organization',
+        entityId: organization.id,
+        metadata: { setting: 'vatRegistered', from: false, to: true, productsConverted: vatSwitchedProductIds.length },
+      });
     }
     if (tinChanged) {
       await auditLogger.system(req, {
@@ -433,8 +461,11 @@ export const updateOrganization = async (req: Request, res: Response) => {
     }
 
     res.json({
-      message: "Organization updated successfully",
+      message: becameVatRegistered
+        ? `Organization updated. ${vatSwitchedProductIds.length} item(s) moved to tax type B — review them: each can be changed once.`
+        : "Organization updated successfully",
       organization,
+      vatSwitchedProducts: vatSwitchedProductIds.length,
     });
   } catch (error) {
     console.error("Error updating organization:", error);

@@ -39,8 +39,8 @@ const logWebhook = (message: string, data?: any) => {
 };
 
 /**
- * Handle Pesapal webhook/callback
- * This is called when Pesapal sends a notification about a transaction
+ * Handle Pesapal webhook/callback This is called when Pesapal sends a notification about a
+ * transaction
  */
 export const handlePesapalWebhook = async (req: Request, res: Response) => {
     try {
@@ -84,9 +84,7 @@ export const handlePesapalWebhook = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Get transaction status from Pesapal API
- */
+/** Get transaction status from Pesapal API */
 async function getTransactionStatus(orderTrackingId: string): Promise<PesapalTransactionStatus> {
     try {
         const tokenData = await pesapalToken();
@@ -106,9 +104,7 @@ async function getTransactionStatus(orderTrackingId: string): Promise<PesapalTra
     }
 }
 
-/**
- * Handle completed transaction - similar to Paypack's handleProcessedTransaction
- */
+/** Handle completed transaction - similar to Paypack's handleProcessedTransaction */
 async function handleCompletedTransaction(transactionStatus: PesapalTransactionStatus) {
     try {
         logWebhook('Processing completed transaction', {
@@ -141,11 +137,10 @@ async function handleCompletedTransaction(transactionStatus: PesapalTransactionS
             return;
         }
 
-        /** -------------------------------------------
-         *   PAYMENT SUCCESS → NEW ACTIVATION OR RENEWAL
-         *   via the shared, gateway-agnostic completion path
-         *   (idempotency guard lives inside this call).
-         *  ------------------------------------------- */
+        /**
+         * PAYMENT SUCCESS → NEW ACTIVATION OR RENEWAL via the shared, gateway-agnostic completion
+         * path (idempotency guard lives inside this call).
+         */
         const result = await subscriptionService.finalizeSubscriptionPurchase({
             subscriptionId: subscription.id,
             paymentId: transactionStatus.order_tracking_id,

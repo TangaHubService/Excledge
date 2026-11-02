@@ -26,10 +26,10 @@ export const recordDebtPayment = async (req: BranchAuthRequest, res: Response) =
         const organizationId = parseInt(req.params.organizationId);
         const { amount, paymentMethod = 'CASH', reference, notes } = req.body;
         const userId = parseInt(req.user?.userId as string);
-        // Only the single-branch case can be enforced inside the raw, row-locking
-        // query below; a multi-branch assignment (selectedBranchIds) falls back to
-        // organization-level scoping here — the app has no path today that grants
-        // a user more than one branch, so this is a defensive no-op in practice.
+        // Only the single-branch case can be enforced inside the raw, row-locking query below; a
+        // multi-branch assignment (selectedBranchIds) falls back to organization-level scoping here
+        // — the app has no path today that grants a user more than one branch, so this is a
+        // defensive no-op in practice.
         const branchId = req.selectedBranchId ?? null;
 
         if (!userId) {
@@ -38,9 +38,7 @@ export const recordDebtPayment = async (req: BranchAuthRequest, res: Response) =
 
         // Start a transaction
         const result = await prisma.$transaction(async (tx) => {
-            // 1. Lock the sale row first — concurrent partial payments on the same
-            // sale must serialize, or two requests can both read the same debt
-            // balance and each independently think their payment fits within it.
+            // 1.
             const [lockedSale] = await tx.$queryRaw<Array<{
                 id: number; customerId: number; debtAmount: string; status: string; branchId: number | null; saleNumber: string | null;
             }>>`

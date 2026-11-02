@@ -1,14 +1,6 @@
 /**
- * Parity between what was sent to / returned by VSDC (`/trnsSales/saveSales`)
- * and what the CIS prints on the receipt (80mm, A4/A5, HTML).
- *
- * The fiscal truth is the persisted EbmTransaction.responseData:
- *   { raw: <VSDC reply>, normalized: <parsed reply>, requestPayload: <TrnsSalesSaveWrReq> }
- * Catalog rows (product name/itemCd), customer rows and tax-rate settings can
- * change after a sale; a reprint or copy must still print exactly what VSDC
- * holds, so the printed values are read back from this record.
- *
- * Pure functions only (no DB) so the rules are unit-testable.
+ * Parity between what was sent to / returned by VSDC (`/trnsSales/saveSales`) and what the CIS
+ * prints on the receipt (80mm, A4/A5, HTML).
  */
 import { formatInvoiceAmount, groupFiscalValue, kigaliWallParts } from "./invoice-format.service"
 import { isCopyDocument, isProformaDocument, isTrainingDocument, taxGroups } from "./invoice-pdf.service"
@@ -139,14 +131,8 @@ const money = (n: number) => Math.round(Math.abs(n) * 100) / 100
 const sameMoney = (a: number | null, b: number) => a != null && money(a) === money(b)
 
 /**
- * Every printed value that has a counterpart in the persisted VSDC
- * request/response, compared field by field. Returns human-readable
- * mismatches; empty means the printout agrees with the fiscal record.
- * Fields absent from the record are not compared.
- *
- * Refunds: VSDC receives positive magnitudes (the sandbox rejects negative
- * supply amounts) while the CIS receipt prints them negative, so amounts are
- * compared by magnitude and the sign is checked separately.
+ * Every printed value that has a counterpart in the persisted VSDC request/response, compared field
+ * by field.
  */
 export function vsdcReceiptParityErrors(
   payload: RenderInvoicePayload,
@@ -281,11 +267,9 @@ const compactDate = (c: string) => `${c.slice(6, 8)}/${c.slice(4, 6)}/${c.slice(
 const compactTime = (c: string) => `${c.slice(8, 10)}:${c.slice(10, 12)}:${c.slice(12, 14)}`
 
 /**
- * Checks the text a renderer actually drew (80mm / A4 / A5 PDF) against the
- * stored VSDC exchange and the EBM spec receipt samples (13.1 NS, 14.1 NR,
- * 15.1 CR, 16.1 TS, 17.1 PS): every VSDC value must appear verbatim, and the
- * designation lines must match the receipt type. `originalRecord` is the
- * refunded sale's record (refunds only).
+ * Checks the text a renderer actually drew (80mm / A4 / A5 PDF) against the stored VSDC exchange
+ * and the EBM spec receipt samples (13.1 NS, 14.1 NR, 15.1 CR, 16.1 TS, 17.1 PS): every VSDC value
+ * must appear verbatim, and the designation lines must match the receipt type.
  */
 export function vsdcPrintedTextErrors(
   text: string,

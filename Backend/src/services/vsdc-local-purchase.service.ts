@@ -11,16 +11,9 @@ import { allocatePurchaseInvcNo } from './vsdc-purchase-counter.service';
 import logger from '../utils/logger';
 
 /**
- * Local purchases from suppliers outside EBM (received purchase orders,
- * imported supplier invoices) registered at RRA through
- * /trnsPurchase/savePurchases with regTyCd 'M' (VSDC API v1.0.5 §3.3.7.2).
- *
- * Each receipt event is one row, written in the same transaction as its stock
- * so nothing is lost. savePurchases (pchsSttsCd 02) books the stock-in at RRA,
- * so the receipt's ledger rows are written with skipEbmSync — sending them
- * again through /stock/saveStockItems would double-count, exactly as for
- * confirmed EBM purchases. The CIS invcNo is allocated once and reused on
- * retry; a row already SYNCED is never resent.
+ * Local purchases from suppliers outside EBM (received purchase orders, imported supplier invoices)
+ * registered at RRA through /trnsPurchase/savePurchases with regTyCd 'M' (VSDC API v1.0.5
+ * §3.3.7.2).
  */
 
 const A_D = ['A', 'B', 'C', 'D'] as const;

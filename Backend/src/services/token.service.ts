@@ -25,11 +25,7 @@ export interface TokenPair {
   refreshToken: string;
 }
 
-/**
- * Generate a pair of access and refresh tokens
- * @param payload Token payload (user info)
- * @returns Object containing both access and refresh tokens
- */
+/** Generate a pair of access and refresh tokens */
 export function generateTokenPair(payload: TokenPayload): TokenPair {
   const accessToken = jwt.sign(payload, JWT_SECRET, {
     expiresIn: JWT_ACCESS_EXPIRY,
@@ -42,12 +38,7 @@ export function generateTokenPair(payload: TokenPayload): TokenPair {
   return { accessToken, refreshToken };
 }
 
-/**
- * Generate only a new access token from a valid refresh token
- * @param refreshToken Valid refresh token
- * @param newPayload Updated payload for access token
- * @returns New access token
- */
+/** Generate only a new access token from a valid refresh token */
 export function generateAccessToken(
   refreshToken: string,
   newPayload: TokenPayload
@@ -67,11 +58,7 @@ export function generateAccessToken(
   }
 }
 
-/**
- * Verify and decode any JWT token
- * @param token JWT token to verify
- * @returns Decoded token payload
- */
+/** Verify and decode any JWT token */
 export function verifyToken(token: string): TokenPayload {
   try {
     return jwt.verify(token, JWT_SECRET) as TokenPayload;
@@ -80,20 +67,14 @@ export function verifyToken(token: string): TokenPayload {
   }
 }
 
-/**
- * Calculate the expiry date for refresh token storage
- * @returns DateTime 7 days from now
- */
+/** Calculate the expiry date for refresh token storage */
 export function getRefreshTokenExpiry(): Date {
   const expiry = new Date();
   expiry.setDate(expiry.getDate() + 7);
   return expiry;
 }
 
-/**
- * Calculate the expiry date for access token storage (for DB record)
- * @returns DateTime 15 minutes from now
- */
+/** Calculate the expiry date for access token storage (for DB record) */
 export function getAccessTokenExpiry(): Date {
   const expiry = new Date();
   expiry.setMinutes(expiry.getMinutes() + 15);

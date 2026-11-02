@@ -4,9 +4,8 @@ import { processStockSyncBatch } from '../services/stock-movement-sync.service';
 import logger from '../utils/logger';
 
 /**
- * Push queued (non-sale) inventory movements to the VSDC as Stock In/Out
- * records + Stock Master updates (RRA checklist §72/§73). Runs every 5 minutes
- * as a backstop; movement write paths mark rows PENDING and this drains them.
+ * Push queued (non-sale) inventory movements to the VSDC as Stock In/Out records + Stock Master
+ * updates (RRA checklist §72/§73).
  */
 export const stockSyncJob = cron.schedule('*/5 * * * *', async () => {
   if (!isEbmEnabled()) return;

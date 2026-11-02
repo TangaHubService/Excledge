@@ -1,8 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 
-// ── S8/S11/S14 + scenarios (a)-(g): sale 11 after invoice ack, positive qty,
-// orgSarNo lineage (never 0), header/line totals, S12 idempotency, oversell
-// serialization guard. DB-free via prisma/vsdc mocks.
+// ── S8/S11/S14 + scenarios (a)-(g): sale 11 after invoice ack, positive qty, orgSarNo lineage
+// (never 0), header/line totals, S12 idempotency, oversell serialization guard.
 
 const callOrder: string[] = []
 let ledgerRow: any = null

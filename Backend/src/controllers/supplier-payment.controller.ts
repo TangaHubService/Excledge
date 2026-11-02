@@ -20,9 +20,7 @@ function purchaseOrderBranchFilter(req: BranchAuthRequest) {
     return {};
 }
 
-/**
- * Record a supplier payment
- */
+/** Record a supplier payment */
 export const recordSupplierPayment = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -72,9 +70,9 @@ export const recordSupplierPayment = async (req: BranchAuthRequest, res: Respons
             });
         }
 
-        // Read-check-create must be atomic and the PO row locked, or two concurrent
-        // payment submissions can both read the same pre-payment total, both pass
-        // the overpayment check, and together overpay the PO.
+        // Read-check-create must be atomic and the PO row locked, or two concurrent payment
+        // submissions can both read the same pre-payment total, both pass the overpayment check,
+        // and together overpay the PO.
         let newTotal = 0;
         let totalPaid = 0;
         const payment = await prisma.$transaction(async (tx) => {
@@ -180,9 +178,7 @@ export const recordSupplierPayment = async (req: BranchAuthRequest, res: Respons
     }
 };
 
-/**
- * Get all supplier payments
- */
+/** Get all supplier payments */
 export const getSupplierPayments = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -271,9 +267,7 @@ export const getSupplierPayments = async (req: BranchAuthRequest, res: Response)
     }
 };
 
-/**
- * Get supplier payment by ID
- */
+/** Get supplier payment by ID */
 export const getSupplierPaymentById = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -346,9 +340,7 @@ export const getSupplierPaymentById = async (req: BranchAuthRequest, res: Respon
     }
 };
 
-/**
- * Delete a supplier payment
- */
+/** Delete a supplier payment */
 export const deleteSupplierPayment = async (req: AuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);

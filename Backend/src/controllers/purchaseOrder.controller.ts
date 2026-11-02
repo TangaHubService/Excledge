@@ -78,9 +78,8 @@ export const createPurchaseOrder = async (req: BranchAuthRequest, res: Response)
         const { supplierId, items, notes, expectedDate } = req.body
         const branchId = getBranchIdForOperation(req)
 
-        // Cross-tenant guard: supplierId/productId are caller-supplied IDs and must
-        // belong to this organization, or another tenant's records could silently
-        // get attached to this PO.
+        // Cross-tenant guard: supplierId/productId are caller-supplied IDs and must belong to this
+        // organization, or another tenant's records could silently get attached to this PO.
         const supplier = await prisma.supplier.findFirst({
             where: { id: supplierId, organizationId },
             select: { id: true },

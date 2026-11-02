@@ -16,8 +16,6 @@ function normalizeJwtRole(role: unknown): string {
 /**
  * Verify the authenticated user is a member of the organization referenced in route params.
  * SYSTEM_OWNER bypasses (tenant APIs are not their primary surface).
- *
- * @param organizationIdParam - route param name (default `organizationId`; use `id` for `/organizations/:id`)
  */
 export function requireOrganizationAccess(organizationIdParam: string = "organizationId") {
   return async (req: OrganizationAccessRequest, res: Response, next: NextFunction) => {

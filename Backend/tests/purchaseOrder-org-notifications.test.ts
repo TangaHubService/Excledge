@@ -32,6 +32,12 @@ vi.mock("../src/services/inventory-ledger.service", () => ({
   removeStock: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../src/services/vsdc-local-purchase.service", () => ({
+  isLocalPurchaseRegistrationOn: vi.fn().mockResolvedValue(false),
+  queueLocalPurchase: vi.fn().mockResolvedValue(null),
+  registerLocalPurchaseAsync: vi.fn(),
+}));
+
 vi.mock("../src/services/notification.service", () => {
   return {
     default: class {

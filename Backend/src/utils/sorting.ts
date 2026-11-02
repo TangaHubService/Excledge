@@ -3,11 +3,7 @@ import type { ParsedQs } from 'qs'
 export type SortDirection = 'asc' | 'desc'
 export type SortMap = Record<string, Record<string, unknown>>
 
-/**
- * Builds a Prisma orderBy value from public query parameters using an explicit
- * allowlist. Unknown fields fall back to the endpoint default instead of being
- * passed to Prisma.
- */
+/** Builds a Prisma orderBy value from public query parameters using an explicit allowlist. */
 export function getOrderBy(
   query: ParsedQs,
   allowed: SortMap,

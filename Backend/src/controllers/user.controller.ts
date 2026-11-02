@@ -189,8 +189,6 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 };
 
 // Roles assignable to an organization member through the update-user endpoint.
-// SYSTEM_OWNER is a platform-level role, not something granted within an
-// organization, so it is intentionally excluded here.
 const ASSIGNABLE_ROLES = ["ADMIN", "BRANCH_MANAGER", "ACCOUNTANT", "SELLER"];
 // Roles that only a SYSTEM_OWNER may ever modify (role or account status).
 const PROTECTED_TARGET_ROLES = ["ADMIN", "SYSTEM_OWNER"];

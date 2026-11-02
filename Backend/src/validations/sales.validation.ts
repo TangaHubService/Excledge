@@ -51,8 +51,8 @@ export const createSaleSchema = z.object({
     customerId: z.coerce.number().positive('Customer ID required'),
     items: z.array(saleItemSchema).min(1, 'Sale must have at least one item'),
     // Optional: a PROFORMA quote collects no payment, so the frontend sends
-    // debtAmount/cashAmount/insuranceAmount without a paymentType — the
-    // controller derives finalPaymentType from those amounts when omitted.
+    // debtAmount/cashAmount/insuranceAmount without a paymentType — the controller derives
+    // finalPaymentType from those amounts when omitted.
     paymentType: z.enum(['CASH', 'DEBT', 'INSURANCE', 'MIXED', 'MOBILE_MONEY', 'CREDIT_CARD', 'BANK_CHECK']).optional(),
     cashAmount: money('Cash amount cannot be negative').optional(),
     debtAmount: money('Debt amount cannot be negative').optional(),
@@ -109,16 +109,13 @@ export const cancelSaleSchema = z.object({
 
 export const refundSaleSchema = z.object({
   body: z.object({
-    // Human justification for the refund — always required (an NR without a
-    // recorded reason is rejected). Code 13 ("Other reason") additionally
-    // needs a real explanation (min 5 chars, enforced in the controller).
+    // Human justification for the refund — always required (an NR without a recorded reason is
+    // rejected).
     reason: z.string().min(1, 'Refund reason is required').max(500),
     // RRA refund reason code (VSDC code class 32, sent as rfdRsnCd). Optional
     // for backwards compatibility — the controller defaults it to '06 Refund'.
     rfdRsnCd: z.string().regex(/^\d{2}$/, 'Refund reason code must be two digits').optional(),
-    // Partial refund selection. Omitted (or empty) = full refund of every
-    // remaining line. Each entry refunds part of ONE original sale item and
-    // must stay within that line's remaining refundable quantity.
+    // Partial refund selection. Omitted (or empty) = full refund of every remaining line.
     items: z.array(z.object({
       saleItemId: z.coerce.number().positive('Sale item ID required'),
       quantity: z.coerce.number().positive('Refund quantity must be positive'),
@@ -140,11 +137,8 @@ export type UpdateProformaInput = z.infer<typeof updateProformaSchema>;
 export type ConvertProformaInput = z.infer<typeof convertProformaSchema>;
 
 /**
- * Pre-approval correction (2018 spec Art. 12): fix a COMPLETED sale that the
- * VSDC has NOT yet confirmed, replacing it with a corrected sale that
- * references the cancelled original. Only unfiscalized sales qualify — once
- * VSDC has approved (SUCCEEDED), the receipt is immutable and only a
- * refund/void may follow.
+ * Pre-approval correction (2018 spec Art. 12): fix a COMPLETED sale that the VSDC has NOT yet
+ * confirmed, replacing it with a corrected sale that references the cancelled original.
  */
 export const correctSaleSchema = z.object({
   body: z.object({

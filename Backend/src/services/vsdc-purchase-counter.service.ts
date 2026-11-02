@@ -1,11 +1,9 @@
 import { prisma } from '../lib/prisma';
 
 /**
- * The CIS's own purchase invoice number (TrnsPurchaseSaveReq.invcNo, VSDC API
- * v1.0.5 §3.3.7.2): a monotonic sequence per VSDC device, kept beside the sales
- * counter in vsdc_device_counters and seeded at init from lastPchsInvcNo. The
- * supplier's invoice number is a separate field (spplrInvcNo) and never used
- * as invcNo.
+ * The CIS's own purchase invoice number (TrnsPurchaseSaveReq.invcNo, VSDC API v1.0.5 §3.3.7.2): a
+ * monotonic sequence per VSDC device, kept beside the sales counter in vsdc_device_counters and
+ * seeded at init from lastPchsInvcNo.
  */
 export function purchaseCounterKey(bhfId: string | null | undefined, branchId: number | null | undefined): string {
   return `pchs:${bhfId ? `bhf:${bhfId}` : `branch:${branchId ?? 0}`}`;

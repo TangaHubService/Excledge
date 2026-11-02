@@ -17,13 +17,7 @@ export function queueStockSync(entry: { id?: number; ebmSyncStatus?: string | nu
   });
 }
 
-/**
- * Serialize concurrent writers for the same (org, product, branch) stock.
- * The availability check is a ledger aggregate (non-locking groupBy), so two
- * simultaneous sales could both pass and oversell. The products-row FOR UPDATE
- * below does not serialize the aggregate read. A transaction-scoped advisory
- * lock on the stock key closes the race; it is released at commit/rollback.
- */
+/** Serialize concurrent writers for the same (org, product, branch) stock. */
 export async function acquireStockLock(
   tx: any,
   organizationId: number,
@@ -36,20 +30,8 @@ export async function acquireStockLock(
 
 
 /**
- * Inventory Ledger Service
- *
- * This service implements an append-only ledger pattern for inventory tracking.
- * Current stock is calculated from the ledger, not stored as a mutable value.
- *
- * Key principles:
- * - Append-only: No updates or deletes
- * - Immutable history: Every movement is permanently recorded
- * - Source of truth: Ledger is the authoritative record (per branch)
- * - Concurrent safe: Uses database transactions
- *
- * Note: `Product.quantity` is updated as a legacy cache when ledger rows change.
- * For multi-branch organizations it does not represent branch-specific stock;
- * use ledger aggregates (or APIs that call `getCurrentStock` with `branchId`).
+ * Inventory Ledger Service This service implements an append-only ledger pattern for inventory
+ * tracking.
  */
 
 // Constants for movement types
@@ -94,10 +76,7 @@ export interface AddStockParams {
   expiryDate?: Date | string;
   note?: string;
   metadata?: Record<string, any>;
-  /**
-   * Skip queuing this movement for the RRA Stock In/Out sync.
-   * Default is false.
-   */
+  /** Skip queuing this movement for the RRA Stock In/Out sync. Default is false. */
   skipEbmSync?: boolean;
   batchId?: number | null;
   tx?: any; // Optional transaction client for use within existing transactions
@@ -156,8 +135,8 @@ export interface GetSummaryParams {
 }
 
 /**
- * Get the current stock balance for a product (and optionally branch)
- * Calculated from ledger entries - this is the source of truth
+ * Get the current stock balance for a product (and optionally branch) Calculated from ledger
+ * entries - this is the source of truth
  */
 export async function getCurrentStock(
   organizationId: number,
@@ -190,9 +169,7 @@ export async function getCurrentStock(
   return currentStock;
 }
 
-/**
- * Get running balance at a specific point in time
- */
+/** Get running balance at a specific point in time */
 export async function getStockAtDate(
   organizationId: number,
   productId: number,
@@ -234,10 +211,7 @@ export async function getStockAtDate(
   return balance;
 }
 
-/**
- * Add stock to inventory (Stock IN)
- * This is the primary function for adding inventory
- */
+/** Add stock to inventory (Stock IN) This is the primary function for adding inventory */
 export async function addStock(params: AddStockParams) {
   const {
     organizationId,
@@ -318,9 +292,8 @@ export async function addStock(params: AddStockParams) {
     });
     await enqueueInventoryMovementAccountingEvent(tx, ledgerEntry);
 
-    // Update product quantity cache (global aggregate across all branches)
-    // Use incremental update so branch-specific operations don't overwrite
-    // stock belonging to other branches
+    // Update product quantity cache (global aggregate across all branches) Use incremental update
+    // so branch-specific operations don't overwrite stock belonging to other branches
     await tx.product.update({
       where: { id: productId },
       data: {
@@ -372,9 +345,7 @@ export async function addStock(params: AddStockParams) {
   return entry;
 }
 
-/**
- * Active branch to book stock against: an explicit id, otherwise the org default.
- */
+/** Active branch to book stock against: an explicit id, otherwise the org default. */
 export async function resolveActiveBranchId(
   organizationId: number,
   preferred?: number | null,
@@ -389,10 +360,8 @@ export async function resolveActiveBranchId(
 }
 
 /**
- * Book a received quantity into both the ledger and the branch batch that POS
- * / inventory listings use as on-hand stock. `addStock` alone only updates the
- * ledger + Product.quantity cache, so EBM receipts would raise VSDC stock
- * without changing what cashiers see locally.
+ * Book a received quantity into both the ledger and the branch batch that POS / inventory listings
+ * use as on-hand stock.
  */
 export async function receiveStockOnBranch(params: AddStockParams) {
   const branchId = await resolveActiveBranchId(params.organizationId, params.branchId);
@@ -442,10 +411,7 @@ export async function receiveStockOnBranch(params: AddStockParams) {
   return entry;
 }
 
-/**
- * Remove stock from inventory (Stock OUT)
- * This is the primary function for removing inventory
- */
+/** Remove stock from inventory (Stock OUT) This is the primary function for removing inventory */
 export async function removeStock(params: RemoveStockParams) {
   const {
     organizationId,
@@ -577,10 +543,7 @@ export async function removeStock(params: RemoveStockParams) {
   return entry;
 }
 
-/**
- * Adjust stock (can be positive or negative)
- * Used for manual corrections and adjustments
- */
+/** Adjust stock (can be positive or negative) Used for manual corrections and adjustments */
 export async function adjustStock(params: AdjustStockParams) {
   const {
     organizationId,
@@ -635,9 +598,9 @@ export async function adjustStock(params: AdjustStockParams) {
   const entry = await prisma.$transaction(async (tx) => {
     // Serialize writers for this stock key (oversell guard — S2/S14).
     await acquireStockLock(tx, organizationId, productId, branchId);
-    // Lock product row using FOR UPDATE to prevent race conditions — matches
-    // addStock/removeStock so a concurrent sale/adjustment on the same product
-    // can't read the same pre-adjustment balance and push stock negative.
+    // Lock product row using FOR UPDATE to prevent race conditions — matches addStock/removeStock
+    // so a concurrent sale/adjustment on the same product can't read the same pre-adjustment
+    // balance and push stock negative.
     const lockedProduct = await tx.$queryRaw<Array<{ id: number }>>`
       SELECT id
       FROM products
@@ -713,9 +676,7 @@ export async function adjustStock(params: AdjustStockParams) {
   return entry;
 }
 
-/**
- * Get ledger entries with pagination and filtering
- */
+/** Get ledger entries with pagination and filtering */
 export async function getLedger(params: GetLedgerParams) {
   const {
     organizationId,
@@ -807,9 +768,7 @@ export async function getLedger(params: GetLedgerParams) {
   };
 }
 
-/**
- * Get inventory summary since inception or from a specific date
- */
+/** Get inventory summary since inception or from a specific date */
 export async function getInventorySummary(params: GetSummaryParams) {
   const {
     organizationId,
@@ -917,8 +876,8 @@ export async function getInventorySummary(params: GetSummaryParams) {
 }
 
 /**
- * Helper function to get current stock within a transaction
- * Used internally to ensure consistency during ledger writes
+ * Helper function to get current stock within a transaction Used internally to ensure consistency
+ * during ledger writes
  */
 export async function getCurrentStockInTransaction(
   tx: any,
@@ -949,9 +908,8 @@ export async function getCurrentStockInTransaction(
     },
   });
 
-  // If no ledger entries exist for this product+branch, return 0
-  // (the product.quantity cache is a cross-branch aggregate and must not be
-  // used as a branch-specific value)
+  // If no ledger entries exist for this product+branch, return 0 (the product.quantity cache is a
+  // cross-branch aggregate and must not be used as a branch-specific value)
   if (stockAggregates.length === 0) {
     return 0;
   }
@@ -965,8 +923,8 @@ export async function getCurrentStockInTransaction(
 }
 
 /**
- * Recalculate and update product quantity cache from ledger
- * Useful for data integrity checks or after manual ledger corrections
+ * Recalculate and update product quantity cache from ledger Useful for data integrity checks or
+ * after manual ledger corrections
  */
 export async function recalculateProductStock(
   organizationId: number,
@@ -985,9 +943,7 @@ export async function recalculateProductStock(
   return currentStock;
 }
 
-/**
- * Get inventory history for a product since inception
- */
+/** Get inventory history for a product since inception */
 export async function getInventoryHistory(
   organizationId: number,
   productId: number,

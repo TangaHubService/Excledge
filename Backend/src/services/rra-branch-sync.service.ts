@@ -17,8 +17,8 @@ import {
 } from './vsdc-api.service';
 
 /**
- * VSDC branch / customer / user / composition / stock-move sync
- * (RRA VSDC API v1.0.5 §3.3.2.4, §3.3.3.1–3.3.3.2, §3.3.4.2, §3.3.8.1).
+ * VSDC branch / customer / user / composition / stock-move sync (RRA VSDC API v1.0.5 §3.3.2.4,
+ * §3.3.3.1–3.3.3.2, §3.3.4.2, §3.3.8.1).
  */
 
 function clamp(s: string | null | undefined, max: number): string {
@@ -177,8 +177,8 @@ export function syncCustomerToRraAsync(
 }
 
 /**
- * POST /branches/saveBrancheInsurances — push one pharmacy insurance company.
- * Only applies to CustomerType.INSURANCE with a non-empty isrccCd.
+ * POST /branches/saveBrancheInsurances — push one pharmacy insurance company. Only applies to
+ * CustomerType.INSURANCE with a non-empty isrccCd.
  */
 export async function syncInsuranceToRra(
   organizationId: number,
@@ -237,11 +237,7 @@ export function syncInsuranceToRraAsync(
   });
 }
 
-/**
- * saveBrancheUsers requires a `pwd`. It is a random per-user value kept only
- * for this payload: never the login password, never derived from its hash,
- * and never logged. Created once and reused so re-syncs send the same value.
- */
+/** saveBrancheUsers requires a `pwd`. */
 async function vsdcRegistrationPassword(userId: number): Promise<string> {
   const existing = await (prisma as any).vsdcUserCredential.findUnique({ where: { userId }, select: { pwd: true } });
   if (existing) return existing.pwd;
@@ -413,13 +409,7 @@ export async function syncRraStockMoves(
   return { ok: true, fetched: list.length, stockList: list };
 }
 
-/**
- * S12: apply HQ↔branch movements from /stock/selectStockItems to local
- * inventory. Idempotent: each (sarNo, itemCd) is booked at most once, keyed by
- * reference `RRA-SAR-{sarNo}`. Incoming branch moves book as TRANSFER_IN
- * (sarTyCd 04) through the centralized ledger service. Movements for unknown
- * itemCd are skipped (counted) — never invent products from a stock move.
- */
+/** S12: apply HQ↔branch movements from /stock/selectStockItems to local inventory. */
 export async function applyRraStockMoves(
   organizationId: number,
   stockList: RraStockMoveLVO[],

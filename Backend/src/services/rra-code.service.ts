@@ -2,12 +2,8 @@ import { prisma } from '../lib/prisma';
 import logger from '../utils/logger';
 
 /**
- * Centralized RRA master-data code service.
- *
- * Source of truth is `/code/selectCodes` (RRA checklist §59), cached in
- * `rra_codes`. Class IDs below were verified live against the VSDC sandbox
- * (`rraVsdcSandbox`, 2026-09-18) — do not "correct" them from older spec
- * tables (those numbered tax types as 24 and countries as 14).
+ * Centralized RRA master-data code service. Source of truth is `/code/selectCodes` (RRA checklist
+ * §59), cached in `rra_codes`.
  */
 
 /** VSDC code-class IDs as returned by `/code/selectCodes`. */
@@ -76,14 +72,7 @@ export interface RraCodeCatalog {
   cachedCount: number;
 }
 
-/** ERP payment method → RRA payment code class '07' mapping.
- *
- * Verified against the live RRA code list (`POST /code/selectCodes`, class
- * '07 Payment Type'): 01 CASH, 02 CREDIT, 03 CASH/CREDIT (mixed tender on one
- * receipt), 04 BANK CHECK, 05 DEBIT&CREDIT CARD, 06 MOBILE MONEY, 07 OTHER.
- * A sale on credit (DEBT — nothing collected at checkout) is RRA '02', not
- * '07'. A MIXED tender (cash + debt/insurance on one receipt) is '03'.
- */
+/** ERP payment method → RRA payment code class '07' mapping. */
 const ERP_TO_RRA_PAYMENT_METHOD: Record<string, string> = {
   CASH: '01',
   CREDIT_CARD: '05',
@@ -107,8 +96,8 @@ const ERP_TO_RRA_PAYMENT_METHOD: Record<string, string> = {
 };
 
 /**
- * Last-resort refund reasons when class 32 has not been synced yet.
- * Prefer `getRefundReasonCodesForOrg()` which reads the cache.
+ * Last-resort refund reasons when class 32 has not been synced yet. Prefer
+ * `getRefundReasonCodesForOrg()` which reads the cache.
  */
 export const RRA_REFUND_REASON_CODES: RefundReasonCode[] = [
   { code: '01', name: 'Missing Quantity', description: null },
@@ -137,8 +126,8 @@ const TAX_CATEGORY_BY_CODE: Record<string, string> = {
 };
 
 /**
- * Get all active codes for a given RRA code class from the local cache.
- * Returns [] when the class has never been synced (callers decide fallback).
+ * Get all active codes for a given RRA code class from the local cache. Returns [] when the class
+ * has never been synced (callers decide fallback).
  */
 export async function getRraCodes(
   organizationId: number,
@@ -155,9 +144,7 @@ export async function getRraCodes(
   });
 }
 
-/**
- * Get a specific RRA code by class and code value.
- */
+/** Get a specific RRA code by class and code value. */
 export async function getRraCode(
   organizationId: number,
   cdCls: RraCodeClass,
@@ -323,8 +310,8 @@ export async function getRraCodeCatalog(organizationId: number): Promise<RraCode
 }
 
 /**
- * Validate that an ERP payment method has a valid RRA payment code mapping.
- * Returns the RRA code or throws a descriptive error.
+ * Validate that an ERP payment method has a valid RRA payment code mapping. Returns the RRA code or
+ * throws a descriptive error.
  */
 export async function getRraPaymentCode(
   organizationId: number,
@@ -358,8 +345,8 @@ export async function getRraPaymentCode(
 }
 
 /**
- * Get all available ERP → RRA payment method mappings with their RRA names.
- * Useful for UI dropdowns and validation.
+ * Get all available ERP → RRA payment method mappings with their RRA names. Useful for UI dropdowns
+ * and validation.
  */
 export async function getPaymentMethodMappings(
   organizationId: number,
@@ -387,8 +374,8 @@ export async function getRefundReasonCodesForOrg(organizationId: number): Promis
 }
 
 /**
- * Validate a refund reason code against the RRA code-class-32 list.
- * Returns the code if valid, throws if not.
+ * Validate a refund reason code against the RRA code-class-32 list. Returns the code if valid,
+ * throws if not.
  */
 export function validateRefundReasonCode(code: string, cached?: RefundReasonCode[]): string {
   const list = cached?.length ? cached : RRA_REFUND_REASON_CODES;
@@ -408,16 +395,16 @@ export async function validateRefundReasonCodeForOrg(organizationId: number, cod
 }
 
 /**
- * Get all valid refund reason codes for UI selection (last-resort static list).
- * Prefer `getRefundReasonCodesForOrg` when an organization id is available.
+ * Get all valid refund reason codes for UI selection (last-resort static list). Prefer
+ * `getRefundReasonCodesForOrg` when an organization id is available.
  */
 export function getRefundReasonCodes(): RefundReasonCode[] {
   return RRA_REFUND_REASON_CODES;
 }
 
 /**
- * Last-resort quantity/packing unit sets used only when class 10/17 have not
- * been synced. Prefer `getQtyUnitSet` / `getPkgUnitSet`.
+ * Last-resort quantity/packing unit sets used only when class 10/17 have not been synced. Prefer
+ * `getQtyUnitSet` / `getPkgUnitSet`.
  */
 export const RRA_QTY_UNIT_CODES: ReadonlySet<string> = new Set([
   '4B', 'AV', 'BA', 'BE', 'BG', 'BL', 'BLL', 'BX', 'CA', 'CEL', 'CMT', 'CR',
@@ -451,9 +438,9 @@ export async function getPkgUnitSet(organizationId: number): Promise<ReadonlySet
 }
 
 /**
- * Resolve a product's quantity-unit code to an RRA-accepted value: the stored
- * code when it is a real RRA code, otherwise the code derived from the sale
- * line's measurement unit, otherwise the generic 'U'.
+ * Resolve a product's quantity-unit code to an RRA-accepted value: the stored code when it is a
+ * real RRA code, otherwise the code derived from the sale line's measurement unit, otherwise the
+ * generic 'U'.
  */
 export function resolveQtyUnitCd(
   stored: string | null | undefined,
@@ -469,8 +456,8 @@ export function resolveQtyUnitCd(
 }
 
 /**
- * Resolve a product's packing-unit code to an RRA-accepted value: the stored
- * code when it is a real RRA code, otherwise 'CT'.
+ * Resolve a product's packing-unit code to an RRA-accepted value: the stored code when it is a real
+ * RRA code, otherwise 'CT'.
  */
 export function resolvePkgUnitCd(
   stored: string | null | undefined,
@@ -482,8 +469,8 @@ export function resolvePkgUnitCd(
 }
 
 /**
- * Check if a payment method requires a purchase code (business TIN).
- * Business TINs are non-7-prefix; individual TINs start with 7.
+ * Check if a payment method requires a purchase code (business TIN). Business TINs are
+ * non-7-prefix; individual TINs start with 7.
  */
 export function requiresPurchaseCode(custTin: string): boolean {
   const tin = custTin.trim();

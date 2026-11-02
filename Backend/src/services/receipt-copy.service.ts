@@ -1,15 +1,6 @@
 /**
- * Copy Sale (CS) / Copy Refund (CR) rules — CIS spec §5.3, §6 and §15.
- *
- * A copy is a reprint of an existing, VSDC-confirmed Normal Sale (NS) or
- * Normal Refund (NR). It is NOT a new fiscal transaction: VSDC API v1.0.5
- * `TrnsSalesSaveWrReq.salesTyCd` accepts only "N", so nothing is submitted to
- * VSDC and no new sale, refund, stock movement, payment, tax or accounting
- * entry is created. The printed copy reproduces the original receipt's fiscal
- * identity exactly (SDC ID, A/B receipt counter, internal data, signature,
- * VSDC timestamp, MRC, QR) and is marked only by the COPY header title.
- *
- * Pure functions only (no DB) so the rules are unit-testable.
+ * Copy Sale (CS) / Copy Refund (CR) rules — CIS spec §5.3, §6 and §15. A copy is a reprint of an
+ * existing, VSDC-confirmed Normal Sale (NS) or Normal Refund (NR).
  */
 import type { RenderInvoicePayload } from "./invoice-render.service"
 
@@ -52,12 +43,7 @@ export interface CopySource {
   status: string
 }
 
-/**
- * CS for a Normal Sale, CR for a Normal Refund. Derived from the receipt's own
- * label — never from the sale's refund status, since an NS that was later
- * refunded is still a sale receipt and its copy is CS. Legacy rows without a
- * label are NR when they reference an original sale, NS otherwise.
- */
+/** CS for a Normal Sale, CR for a Normal Refund. */
 export function resolveCopyLabel(source: CopySource): CopyLabel {
   const label = source.rcptLabel?.trim().toUpperCase() || null
   if (source.isProforma || label === "PS") {
@@ -105,9 +91,8 @@ const isPositiveInt = (n: unknown): n is number => typeof n === "number" && Numb
 const hasText = (v: unknown): boolean => typeof v === "string" && v.trim().length > 0
 
 /**
- * The stored VSDC confirmation of the original receipt must be complete before
- * a copy can be printed. A copy reproduces these values — it never fills a gap
- * with a configured device value, a local counter or a fabricated signature.
+ * The stored VSDC confirmation of the original receipt must be complete before a copy can be
+ * printed.
  */
 export function assertCopyableFiscalRecord(tx: StoredFiscalRecord | null | undefined, copyLabel: CopyLabel): void {
   const sourceLabel = copyLabel === "CS" ? "NS" : "NR"
@@ -159,11 +144,7 @@ export function assertCopyableFiscalRecord(tx: StoredFiscalRecord | null | undef
   }
 }
 
-/**
- * Marks a composed original receipt as its CS/CR copy. Only the designation
- * fields change — items, totals, taxes, payments, customer, SDC information
- * and QR are carried over untouched from the original.
- */
+/** Marks a composed original receipt as its CS/CR copy. */
 export function applyCopyDesignation(
   payload: RenderInvoicePayload,
   copy: { label: CopyLabel; copyNumber: number | null },

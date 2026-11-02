@@ -6,11 +6,9 @@ import { NOT_FISCALIZED_NOTICE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_NOTICE, SYST
 import { dataUrlBuffer, documentIndicator, headerIndicator, isCopyDocument, isFormalNoticeIndicator, isProformaDocument, isRefundTransaction, isTrainingDocument, printsQrCode, refundReferenceLine, safe, bandSalesLabel, salesBands, taxBandRows, taxGroups, transactionSubTitle } from "./invoice-pdf.service"
 
 /**
- * Narrow, continuous "thermal roll" layout for 80mm POS printers — the
- * classic CIS/VSDC receipt format shown in the technical spec's own worked
- * examples (§13–17), as an alternative to the A4 sheet from
- * invoice-pdf.service.ts. Both renderers consume the same RenderInvoicePayload,
- * so nothing about how a sale is composed changes between formats.
+ * Narrow, continuous "thermal roll" layout for 80mm POS printers — the classic CIS/VSDC receipt
+ * format shown in the technical spec's own worked examples (§13–17), as an alternative to the A4
+ * sheet from invoice-pdf.service.ts.
  */
 
 // 80mm paper at 72pt/inch, with a small margin on each side for the printer's
@@ -38,12 +36,7 @@ function centeredText(doc: PDFKit.PDFDocument, text: string, y: number, bold = f
   return y + doc.heightOfString(text, { width: CONTENT_WIDTH }) + 1
 }
 
-/**
- * Left-aligned label + right-aligned value on the same line, like a receipt
- * column pair. When the value is too wide to share the line (very large
- * totals), the value drops to its own right-aligned line instead of
- * overprinting the label.
- */
+/** Left-aligned label + right-aligned value on the same line, like a receipt column pair. */
 function labelValueLine(doc: PDFKit.PDFDocument, label: string, value: string, y: number, bold = false): number {
   doc.font(bold ? FONT_BOLD : FONT).fontSize(6.2)
   const labelWidth = CONTENT_WIDTH - doc.widthOfString(value) - 6
@@ -64,11 +57,7 @@ function wrappedLine(doc: PDFKit.PDFDocument, text: string, y: number, size = 6.
   return y + doc.heightOfString(text, { width: CONTENT_WIDTH }) + 1
 }
 
-/**
- * Draws the whole receipt starting at `startY` and returns the final y
- * position. Called twice: once on a tall scratch page purely to learn the
- * total content height, then again on the real, exactly-sized page.
- */
+/** Draws the whole receipt starting at `startY` and returns the final y position. */
 function drawReceipt(
   doc: PDFKit.PDFDocument,
   data: RenderInvoicePayload,
@@ -78,10 +67,9 @@ function drawReceipt(
 ): number {
   let y = startY
 
-  // Same two logos as the A4 layout (invoice-pdf.service.ts drawHeader):
-  // the RRA logo on the left, the EBM certification seal on the right —
-  // just stacked side by side instead of flanking the full-width company
-  // block, since 80mm paper has no room for that.
+  // Same two logos as the A4 layout (invoice-pdf.service.ts drawHeader): the RRA logo on the left,
+  // the EBM certification seal on the right — just stacked side by side instead of flanking the
+  // full-width company block, since 80mm paper has no room for that.
   const logoSize = 28
   let usedLogoRow = false
   if (companyLogo) {
@@ -185,9 +173,8 @@ function drawReceipt(
   y += 2
   dashedLine(doc, y)
   y += 5
-  // R1: every means of payment prints with its amount. Split tenders print
-  // one row each; otherwise the single payment-type line (legacy behavior).
-  // A proforma (spec 17.1) prints neither payment nor ITEMS NUMBER.
+  // R1: every means of payment prints with its amount. Split tenders print one row each; otherwise
+  // the single payment-type line (legacy behavior).
   if (!isProformaDocument(data)) {
     const payLines = data.payment.lines?.length
       ? data.payment.lines.map((l) => ({ label: l.label, amount: l.amount }))
@@ -235,9 +222,7 @@ function drawReceipt(
   y += 2
   dashedLine(doc, y)
   y += 5
-  // Bottom block matches RRA sample: plain CIS/VSDC sequence under
-  // "RECEIPT NUMBER" (e.g. "RECEIPT NUMBER:8"), distinct from the SDC
-  // counter pair printed above ("1190/1190 NS").
+  // Bottom block matches RRA sample: plain CIS/VSDC sequence under "RECEIPT NUMBER" (e.g.
   y = wrappedLine(doc, `RECEIPT NUMBER: ${safe(data.invoice.invoiceNumber, "-")}`, y)
   const invoiceDate = formatInvoiceDateTime(data.invoice.invoiceDate)
   if (invoiceDate.date || invoiceDate.time) {

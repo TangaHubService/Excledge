@@ -1,12 +1,6 @@
 /**
- * TS (Training Sale) / TR (Training Refund) — CIS spec §5.3, §6, §10, §11, §16;
- * VSDC API v1.0.5 TrnsSalesSaveWrReq (salesTyCd code table 4.8: T = training).
- *
- * Covers mode/label rules, the VSDC wire payload, VSDC response handling
- * (success without signature, missing/malformed fields, timeouts, rejections,
- * 924 replays), refund eligibility, the electronic journal, the composed
- * receipt and the A4 / 80mm renderers — all against fixtures and a mocked
- * Prisma. No network, no database.
+ * TS (Training Sale) / TR (Training Refund) — CIS spec §5.3, §6, §10, §11, §16; VSDC API v1.0.5
+ * TrnsSalesSaveWrReq (salesTyCd code table 4.8: T = training).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import PDFDocument from "pdfkit"
@@ -99,9 +93,9 @@ import { renderSalesInvoiceHtml } from "../src/services/invoice-render.service"
 // ── VSDC fixtures ──────────────────────────────────────────────────────────
 
 /**
- * Verbatim body returned by the RRA reference VSDC (rraVsdcSandbox 3.0.2) for
- * a salesTyCd "T" / rcptTyCd "S" submission on 2026-10-13: training counter 2,
- * shared total counter 203, and intrlData / rcptSign deliberately empty.
+ * Verbatim body returned by the RRA reference VSDC (rraVsdcSandbox 3.0.2) for a salesTyCd "T" /
+ * rcptTyCd "S" submission on 2026-10-13: training counter 2, shared total counter 203, and
+ * intrlData / rcptSign deliberately empty.
  */
 const LIVE_TS_RESPONSE = {
   resultCd: "000",

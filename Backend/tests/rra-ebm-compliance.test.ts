@@ -11,9 +11,7 @@ import type { RenderInvoicePayload, RenderInvoiceLineItem } from '../src/service
 import { RraTaxCode, TaxCategory } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
-// ============================================================================
 // Module 1: Global Setup & Security — Tax Code Mapping & Rate Enforcement
-// ============================================================================
 describe('RRA TAX CODE MAPPING (TAX_A / B / C / D)', () => {
   describe('getTaxCode — maps TaxCategory to RraTaxCode', () => {
     it('maps STANDARD → B (18% Taxable)', () => {
@@ -117,9 +115,7 @@ describe('RRA TAX CODE MAPPING (TAX_A / B / C / D)', () => {
   });
 });
 
-// ============================================================================
 // Module 2: INVOICE — Response Parsing (RRA VSDC API v1.0.5 §3.3.6.1)
-// ============================================================================
 describe('INVOICE — parseVsdcResponse (/trnsSales/saveSales response)', () => {
   it('parses a successful sales-transaction response', () => {
     const vsdcResponse = {
@@ -192,9 +188,7 @@ describe('parseVsdcStatusCode (§4.14 API Response Code)', () => {
   });
 });
 
-// ============================================================================
 // Module 3: REFUND — Gateway Error Parsing
-// ============================================================================
 describe('REFUND — error response parsing', () => {
   it('parseGatewayResponse extracts qrPayload from RRA nested structure', () => {
     const raw = {
@@ -217,9 +211,7 @@ describe('REFUND — error response parsing', () => {
   });
 });
 
-// ============================================================================
 // Module 4: Error Message Extraction
-// ============================================================================
 describe('gatewayErrorMessage', () => {
   it('extracts message from HTTP JSON body', () => {
     const http = { json: { message: 'Total amount is different' }, status: 400 };
@@ -237,9 +229,7 @@ describe('gatewayErrorMessage', () => {
   });
 });
 
-// ============================================================================
 // Module 5: INVENTORY / ITEMS — Edge Cases
-// ============================================================================
 describe('INVENTORY — response parsing edge cases', () => {
   it('parses RRA inventory error response (empty reference)', () => {
     const errorResponse = {
@@ -253,9 +243,7 @@ describe('INVENTORY — response parsing edge cases', () => {
   });
 });
 
-// ============================================================================
 // Module 6: Calculation Precision — Item Tax Calculation
-// ============================================================================
 describe('TAX CALCULATION — decimal precision and resilience', () => {
   describe('calculateItemTax', () => {
     const standardRate = new Decimal(18);
@@ -330,10 +318,8 @@ describe('TAX CALCULATION — decimal precision and resilience', () => {
   });
 });
 
-// ============================================================================
 // Module 7: RECEIPT RENDERING — shared helpers used by all three renderers
 // (invoice-pdf.service, invoice-render.service, invoice-receipt-pdf.service)
-// ============================================================================
 
 function makeItem(overrides: Partial<RenderInvoiceLineItem> = {}): RenderInvoiceLineItem {
   return {
@@ -415,10 +401,8 @@ describe('taxGroups — A/B/C/D totals only for bands used on line items', () =>
   });
 });
 
-// ============================================================================
 // REFUND fiscalisation — RRA checklist §9/§56 (a refund mirrors the original
 // with the correct tax code and every amount negated)
-// ============================================================================
 
 function makeRefundSale(): SaleWithRelations {
   return {
@@ -517,9 +501,7 @@ describe('documentIndicator / isFormalNoticeIndicator — RRA checklist §55', (
   });
 });
 
-// ============================================================================
 // RRA code class 32 — refund reasons are the RRA-controlled list, nothing else
-// ============================================================================
 describe('RRA refund reason codes (code class 32)', () => {
   it('exposes exactly the 13 RRA codes with RRA names', () => {
     const codes = getRefundReasonCodes();
@@ -544,10 +526,8 @@ describe('RRA refund reason codes (code class 32)', () => {
   });
 });
 
-// ============================================================================
 // Customer TIN — valid TINs pass through, business buyers without one block,
 // walk-in individuals get the documented placeholder (never the seller TIN)
-// ============================================================================
 describe('resolveCustTinForVsdc — safe customer TIN handling', () => {
   const base = { id: 9, saleNumber: 'SALE-1' };
 
@@ -592,9 +572,7 @@ describe('resolveCustTinForVsdc — safe customer TIN handling', () => {
   });
 });
 
-// ============================================================================
 // Payload guards — no fake prcOrdCd, no synthetic itemCd, sanitized unit codes
-// ============================================================================
 describe('buildRraSendReceiptPayload — submission guards', () => {
   function makeSale(over: Partial<SaleWithRelations> = {}): SaleWithRelations {
     return {
@@ -712,10 +690,10 @@ describe('buildRraSendReceiptPayload — submission guards', () => {
     expect(bare.receipt.topMsg).toBe('Seller');
   });
 
-  it('does not send taxRtF / taxRtTt (not in TrnsSalesSaveWrReq)', () => {
+  it('sends taxRtF / taxRtTt (present in the sandbox WAR TrnsSalesSaveWrReq)', () => {
     const p = buildRraSendReceiptPayload(makeSale(), { TIN: '100000000', name: 'Seller', address: null }, '01') as any;
-    expect(p).not.toHaveProperty('taxRtF');
-    expect(p).not.toHaveProperty('taxRtTt');
+    expect(p).toHaveProperty('taxRtF');
+    expect(p).toHaveProperty('taxRtTt');
     expect(p).toHaveProperty('taxRtA');
     expect(p).toHaveProperty('taxRtD');
   });

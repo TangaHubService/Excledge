@@ -31,9 +31,7 @@ export interface SelectedBatch {
   expiryDate?: Date;
 }
 
-/**
- * Create a new batch for a product
- */
+/** Create a new batch for a product */
 export async function createBatch(params: CreateBatchParams) {
   const {
     productId,
@@ -148,9 +146,7 @@ export async function createBatch(params: CreateBatchParams) {
   return batch;
 }
 
-/**
- * Get all batches for a product
- */
+/** Get all batches for a product */
 export async function getBatchesForProduct(
   productId: number,
   organizationId: number,
@@ -192,9 +188,7 @@ export async function getBatchesForProduct(
   });
 }
 
-/**
- * Select batches for sale using FIFO, LIFO, or AVERAGE method
- */
+/** Select batches for sale using FIFO, LIFO, or AVERAGE method */
 export async function selectBatchesForSale(
   params: BatchSelectionParams,
   tx?: any // Optional transaction client for use within transactions
@@ -276,9 +270,7 @@ export async function selectBatchesForSale(
   return selectedBatches;
 }
 
-/**
- * Update batch quantity after sale
- */
+/** Update batch quantity after sale */
 async function deductBatchQuantityLocked(
   tx: any,
   batchId: number,
@@ -327,9 +319,7 @@ export async function updateBatchQuantity(
   return prisma.$transaction((tx) => deductBatchQuantityLocked(tx, batchId, quantityToDeduct, organizationId));
 }
 
-/**
- * Get batch by ID
- */
+/** Get batch by ID */
 export async function getBatchById(batchId: number, organizationId: number) {
   return await prisma.batch.findFirst({
     where: {
@@ -368,9 +358,7 @@ export async function getBatchById(batchId: number, organizationId: number) {
   });
 }
 
-/**
- * Get current stock for a product (helper function)
- */
+/** Get current stock for a product (helper function) */
 async function getCurrentStockInTransaction(
   tx: any,
   organizationId: number,

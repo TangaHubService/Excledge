@@ -14,11 +14,10 @@ import { renderSalesInvoiceHtml, type RenderInvoicePayload } from '../src/servic
 import { NOT_OFFICIAL_RECEIPT_NOTICE } from '../src/services/system-branding.service';
 
 /**
- * RRA Article-4 audit (read-only, no DB, no production-code change).
- * - Builds one SaleWithRelations per receipt label with: goods item, service
- *   item, discounted item, items under different tax rates incl. tax-exempt,
- *   client TIN + phone.
- * - Verifies VSDC payload arithmetic + stores rendered outputs for inspection.
+ * RRA Article-4 audit (read-only, no DB, no production-code change). - Builds one SaleWithRelations
+ * per receipt label with: goods item, service item, discounted item, items under different tax
+ * rates incl. tax-exempt, client TIN + phone. - Verifies VSDC payload arithmetic + stores rendered
+ * outputs for inspection.
  */
 
 const OUT_DIR = '/tmp/rra-art4-audit';
@@ -36,12 +35,9 @@ function capturePdfText(run: () => Promise<Buffer>): Promise<string[]> {
 
 const SELLER = { TIN: '100000000', name: 'Audit Taxpayer Ltd', address: 'KN 3 Rd, Kigali', phone: '+250788000000' };
 
-// Nets (tax-inclusive, post-discount):
-//  B goods:  2 x 1180 = 2360  -> tax 2360*18/118 = 360.00
-//  A exempt service: 1 x 1000 - 100 disc = 900 -> tax 0
-//  C zero-rated goods (discounted): 3 x 500=1500 - 150 = 1350 -> tax 0
-//  D non-taxable goods: 1 x 750 = 750 -> tax 0
-//  TOTAL = 5360, TOTAL TAX = 360
+// Nets (tax-inclusive, post-discount): B goods: 2 x 1180 = 2360 -> tax 2360*18/118 = 360.00 A
+// exempt service: 1 x 1000 - 100 disc = 900 -> tax 0 C zero-rated goods (discounted): 3 x 500=1500
+// - 150 = 1350 -> tax 0 D non-taxable goods: 1 x 750 = 750 -> tax 0 TOTAL = 5360, TOTAL TAX = 360
 const EXPECTED = { total: 5360, taxB: 360, totalTax: 360 };
 
 function auditSale(rcptLabel: string, refund: boolean): SaleWithRelations {
@@ -223,19 +219,14 @@ describe('ART4 audit — one rendered receipt per label (NS,NR,CS,CR,TS,TR,PS)',
         expect(html).not.toContain(NOT_OFFICIAL_RECEIPT_NOTICE); // copy: COPY header title only
       }
       if (label === 'NR') {
-        // Implemented (PDF only): NR prints the original-receipt reference +
-        // negative amounts. NOTE the HTML renderer (invoice-render.service.ts)
-        // never prints originalReceiptNumber — the reference is PDF-only.
-        // Verified on the A4 PDF text below, not the HTML above.
+        // Implemented (PDF only): NR prints the original-receipt reference + negative amounts.
         const drawn = await capturePdfText(() => generateEbmInvoicePdf(payload, 'A4'));
         expect(drawn.join('\n')).toContain('9100');           // refund references original
         expect(html).toContain('-5360.00');                  // negative amounts, no grouping (Art 7.5)
       }
-      // NOTE (spec gaps, asserted in the "known-gaps" block below, not here):
-      // - CR/TR render titles COPY / TRAINING MODE (documentIndicator) and
-      //   isRefundTransaction() only recognises NR, so CR/TR omit the
-      //   REF. NORMAL RECEIPT# line even though originalReceiptNumber='9100'
-      //   is supplied. See gap G-refund-ref.
+      // NOTE (spec gaps, asserted in the "known-gaps" block below, not here): - CR/TR render titles
+      // COPY / TRAINING MODE (documentIndicator) and isRefundTransaction() only recognises NR, so
+      // CR/TR omit the REF.
     }, 30000);
   }
 
@@ -285,10 +276,8 @@ describe('ART4 audit — documented spec gaps (passing assertions on current beh
   });
 
   it('G-watermark (Art 11/7.18): designation prints once as header title; no diagonal watermark, no below-header/above-items repeats', async () => {
-    // invoice-pdf.service.ts:630-632 explicitly states no center stamp is ever
-    // drawn; drawHeader prints the indicator once at y=76/91. Spec requires the
-    // COPY/TRAINING/PROFORMA label below the header AND above the items AND as
-    // a watermark, at >=2x amount text size.
+    // invoice-pdf.service.ts:630-632 explicitly states no center stamp is ever drawn; drawHeader
+    // prints the indicator once at y=76/91.
     const p = auditRenderPayload('CS', false);
     expect(documentIndicator(p)).toBe('COPY');
     expect(isFormalNoticeIndicator('COPY')).toBe(false);
@@ -323,8 +312,6 @@ describe('ART4 audit — VSDC failure: no receipt is issued', () => {
 
   it('gate evidence: composeInvoicePayload throws FiscalizationPendingError unless outbox SUCCEEDED (sales.controller.ts:1411-1426) and getInvoicePdf returns 425 (sales.controller.ts:1787-1790)', async () => {
     // Static gate — verified by code read + the NOT FISCALISED stamp below.
-    // A pending/failed sale composed with allowUnfiscalized renders the
-    // provisional title instead of a fiscal receipt.
     const p = auditRenderPayload('NS', false);
     p.invoice.notFiscalized = 'pending';
     p.certification.isCertified = false;

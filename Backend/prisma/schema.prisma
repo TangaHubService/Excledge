@@ -195,10 +195,7 @@ model Payslip {
   @@map("payslips")
 }
 
-/// Per-organization workspace customization: sidebar visibility, feature flags, and
-/// preferences. Modeled as JSON so new settings ship without a migration (Phase 1 —
-/// "Zero-Downtime Adaptability"); each field defaults to `{}` so older rows never
-/// need backfilling and the app-layer DEFAULT_SETTINGS fallback stays the source of truth.
+/// Per-organization workspace customization: sidebar visibility, feature flags, and preferences.
 model OrganizationSetting {
   id             Int      @id @default(autoincrement())
   organizationId Int      @unique
@@ -237,10 +234,8 @@ model Branch {
   metadata             Json?
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
-  // Running total across every locally-numbered (non-fiscal) receipt on this
-  // branch — proforma today, any future local-only type tomorrow. This is the
-  // "B" (total counter) in the printed "A/B RT" receipt number (spec §7.25),
-  // paired with Sale.localReceiptSeq ("A", the per-type counter).
+  // Running total across every locally-numbered (non-fiscal) receipt on this branch — proforma
+  // today, any future local-only type tomorrow.
   localReceiptTotalSeq Int          @default(0) @map("local_receipt_total_seq")
 
   // Relations
@@ -589,6 +584,9 @@ model Product {
   minStock             Int                   @default(10)
   taxCategory          TaxCategory           @default(STANDARD)
   taxCode              RraTaxCode?
+  // Moved D → B on the VAT switch; the tax type can then be changed once.
+  taxCodeReviewPending Boolean               @default(false)
+  taxCodeReviewedAt    DateTime?
   measurementUnit      MeasurementUnit       @default(PCS)
   itemType             ItemType              @default(PRODUCT)
   ebmSyncStatus        EbmSyncStatus         @default(PENDING)
@@ -631,9 +629,7 @@ model Product {
   bomParent            BomComponent[]        @relation("BomParent")
   ProductionRun        ProductionRun[]
 
-  // RRA itemCd must be unique per taxpayer (VSDC spec §4.17). NULLs (items
-  // never synced to EBM) are exempt from a Postgres unique index, so this
-  // doesn't block products created before EBM was enabled.
+  // RRA itemCd must be unique per taxpayer (VSDC spec §4.17).
   @@unique([organizationId, itemCd])
   @@index([name])
   @@index([sku])
@@ -646,10 +642,8 @@ model Product {
   @@map("products")
 }
 
-/// Raw Material → Finished Product composition (RRA spec: item composition is used
-/// to calculate the BOM of final processed items). Each row defines that one
-/// unit of the parent (finished) product requires `quantity` of the component
-/// (raw material).
+/// Raw Material → Finished Product composition (RRA spec: item composition is used to calculate the
+/// BOM of final processed items).
 model BomComponent {
   id                 Int          @id @default(autoincrement())
   parentProductId    Int
@@ -786,11 +780,8 @@ model Sale {
   invoiceNumber        String?          @unique @map("invoice_number")
   vatAmount            Decimal          @default(0) @db.Decimal(15, 2)
   taxableAmount        Decimal          @default(0) @db.Decimal(15, 2)
-  // R9 server-side record: per-rate VAT-inclusive band bases (totTaxablAmtA-D;
-  // equals band NET sales, so SUM == totalAmount) and band taxes (totTaxA-D).
-  // Populated at commit from the same band math as the VSDC payload;
-  // historical rows predate the columns and stay NULL (reports derive bands
-  // from SaleItems instead).
+  // R9 server-side record: per-rate VAT-inclusive band bases (totTaxablAmtA-D; equals band NET
+  // sales, so SUM == totalAmount) and band taxes (totTaxA-D).
   taxblAmtA            Decimal?         @db.Decimal(15, 2) @map("taxbl_amt_a")
   taxblAmtB            Decimal?         @db.Decimal(15, 2) @map("taxbl_amt_b")
   taxblAmtC            Decimal?         @db.Decimal(15, 2) @map("taxbl_amt_c")
@@ -801,16 +792,13 @@ model Sale {
   taxAmtD              Decimal?         @db.Decimal(15, 2) @map("tax_amt_d")
   rcptLabel            RcptLabel? // RRA receipt type label (B4): NS/NR/CS/CR/TS/TR/PS
   vsdcInvcNo           Int?             @map("vsdc_invc_no") // Raw numeric invoice number sent to VSDC as invcNo (reused as orgInvcNo on refund)
-  // Local, non-fiscal per-branch/per-rcptLabel counter (BranchReceiptCounter) —
-  // kept for proforma/training sales as the fallback receipt number printed
-  // until VSDC confirms the submission (all receipt types are fiscalized and
-  // receive a real vsdcInvcNo/sdcRcptNo). This is the "A" in the printed
-  // "A/B RT" receipt counter (spec §7.25) — count within this receipt type only.
+  // Local, non-fiscal per-branch/per-rcptLabel counter (BranchReceiptCounter) — kept for
+  // proforma/training sales as the fallback receipt number printed until VSDC confirms the
+  // submission (all receipt types are fiscalized and receive a real vsdcInvcNo/sdcRcptNo).
   localReceiptSeq      Int?             @map("local_receipt_seq")
-  // The "B" in "A/B RT" — a running total across every locally-numbered
-  // receipt type on this branch (Branch.localReceiptTotalSeq), captured at
-  // creation time so it stays fixed even as later local receipts advance the
-  // branch's counter further.
+  // The "B" in "A/B RT" — a running total across every locally-numbered receipt type on this branch
+  // (Branch.localReceiptTotalSeq), captured at creation time so it stays fixed even as later local
+  // receipts advance the branch's counter further.
   localReceiptTotalSeq Int?             @map("local_receipt_total_seq")
   debtPayments         DebtPayment[]
   ebmQueueItems        EbmQueue[]       @relation("SaleEbmQueue")
@@ -1073,11 +1061,6 @@ model InventoryLedger {
   createdAt      DateTime              @default(now())
   batchId        Int?
   // RRA Stock In/Out sync (/stock/saveStockItems + /stockMaster/saveStockMaster).
-  // SALE rows are queued (sarTyCd 11) only after their sales invoice is
-  // fiscalized (S8 order); PENDING = ready, SYNCED = acked, FAILED = retry.
-  // ebmOrgSarNo stores orgSarNo (original SAR number) for refund/return rows;
-  // NULL = no original linked yet. Wire default for originals is 0 (live VSDC
-  // rejects null orgSarNo; 0 accepted for original movements).
   ebmSyncStatus  EbmSyncStatus?
   ebmSarNo       Int?
   ebmOrgSarNo    Int?
@@ -1175,11 +1158,8 @@ model OrganizationInvoiceCounter {
   @@map("organization_invoice_counters")
 }
 
-/// Atomic sequence for VSDC invoice numbers (`invcNo`), keyed by the VSDC
-/// device (`bhfId`) rather than by branch. RRA requires these numbers to be
-/// unique per device, but several branches can share one device, so a
-/// per-branch counter can re-emit a number the device already accepted → VSDCMS
-/// error 924. Seeding starts past the highest number ever used by the org.
+/// Atomic sequence for VSDC invoice numbers (`invcNo`), keyed by the VSDC device (`bhfId`) rather
+/// than by branch.
 model VsdcDeviceCounter {
   organizationId Int
   deviceKey      String
@@ -1191,13 +1171,8 @@ model VsdcDeviceCounter {
   @@map("vsdc_device_counters")
 }
 
-/// Atomic per-organization sequence for the itemCd §4.17 numeric suffix
-/// (RW + productTypeDigit + pkgUnitCd + qtyUnitCd + 7-digit sequence).
-/// Replaces the earlier count()-based allocation (item-code.service.ts) with
-/// a true DB-level increment — same INSERT..ON CONFLICT..RETURNING pattern as
-/// VsdcDeviceCounter/OrganizationInvoiceCounter, since Postgres has no native
-/// per-key auto-increment. Seeded past the highest sequence already in use so
-/// existing itemCd values already registered with RRA are never reissued.
+/// Atomic per-organization sequence for the itemCd §4.17 numeric suffix (RW + productTypeDigit +
+/// pkgUnitCd + qtyUnitCd + 7-digit sequence).
 model ProductItemCdCounter {
   organizationId Int
   nextSequence   Int          @default(0)
@@ -1209,8 +1184,6 @@ model ProductItemCdCounter {
 }
 
 /// Organization-level RRA test purchase codes (single-use, issued per buyer TIN).
-/// Configured once at the organization (not per customer/branch) and consumed
-/// one-per-business-sale so repeat sales to the same buyer get a fresh code.
 model OrganizationPurchaseCode {
   id             Int          @id @default(autoincrement())
   organizationId Int
@@ -1343,9 +1316,7 @@ model ErpAccountingOutbox {
   @@map("erp_accounting_outbox")
 }
 
-/// Local cache of the RRA VSDC "Codes" master list (/code/selectCodes,
-/// RRA checklist §59). One row per (class, code); organised by class so the
-/// CIS can populate its own dropdowns/enumerations from the authoritative list.
+/// Local cache of the RRA VSDC "Codes" master list (/code/selectCodes, RRA checklist §59).
 model RraCode {
   id             Int          @id @default(autoincrement())
   organizationId Int
@@ -1367,9 +1338,8 @@ model RraCode {
   @@map("rra_codes")
 }
 
-/// Local cache of the RRA VSDC item-classification list / UNSPSC
-/// (/itemClass/selectItemsClass, RRA checklist §61). Backs the classification
-/// picker shown when creating an item, replacing the hard-coded fallback code.
+/// Local cache of the RRA VSDC item-classification list / UNSPSC (/itemClass/selectItemsClass, RRA
+/// checklist §61).
 model RraItemClass {
   id             Int          @id @default(autoincrement())
   organizationId Int
@@ -1407,9 +1377,7 @@ model RraNotice {
 }
 
 /// B2B purchase transactions issued TO this taxpayer, pulled from RRA via
-/// /trnsPurchase/selectTrnsPurchaseSales (RRA checklist §70). The operator
-/// reviews each one and confirms it (/trnsPurchase/savePurchases with
-/// pchsSttsCd, RRA checklist §71), which records the purchase and its stock-in.
+/// /trnsPurchase/selectTrnsPurchaseSales (RRA checklist §70).
 model VsdcLocalPurchase {
   id             Int      @id @default(autoincrement())
   organizationId Int
@@ -1497,10 +1465,8 @@ enum RraPurchaseStatus {
   REJECTED
 }
 
-/// Import declaration line items received from RRA via /imports/selectImportItems
-/// (RRA checklist §66). The operator classifies + approves/rejects each one
-/// (/imports/updateImportItems, RRA checklist §68); an approval books the
-/// stock-in. §67: each pull's request date must be later than the previous one.
+/// Import declaration line items received from RRA via /imports/selectImportItems (RRA checklist
+/// §66).
 model RraImportItem {
   id              Int             @id @default(autoincrement())
   organizationId  Int
@@ -1545,8 +1511,6 @@ enum RraImportStatus {
 }
 
 /// Per-organization incremental-sync cursor for each RRA master-data resource.
-/// `lastReqDt` is sent as the `lastReqDt` request parameter so each sync only
-/// pulls rows changed since the previous run.
 model RraSyncCursor {
   id             Int          @id @default(autoincrement())
   organizationId Int

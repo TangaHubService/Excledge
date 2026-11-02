@@ -17,20 +17,7 @@ import { getTaxationTypes } from './rra-code.service';
 import { submitStockLedgerEntryToEbm } from './stock-movement-sync.service';
 import logger from '../utils/logger';
 
-/**
- * RRA import declarations (RRA checklist §66, §67, §68).
- *
- *  §66  syncRraImports()          — pull import-declaration lines from RRA
- *                                   (/imports/selectImportItems) and cache them.
- *  §67  request-date validation   — each pull's request date must be strictly
- *                                   later than the previous one.
- *  §68  approveRraImport() /      — classify + approve or reject a line
- *       rejectRraImport()           (/imports/updateImportItems). An approval
- *                                   links/creates a product and books the
- *                                   stock-in as an Import (sarTyCd 01).
- *  §74  realtime stock            — after local booking, submit stock IO +
- *                                   stock master to VSDC immediately.
- */
+/** RRA import declarations (RRA checklist §66, §67, §68). */
 
 const QTY_UNIT_TO_MEASUREMENT: Record<string, string> = {
   U: 'PCS', KG: 'KG', LTR: 'LTR', MTR: 'MTR', BX: 'BOX', PR: 'PAIR', DZ: 'DOZEN', GRM: 'GRAM',
@@ -81,9 +68,8 @@ export async function syncRraImports(
 
   const prevCursor = await getCursor(organizationId);
 
-  // §67: a manually-specified request date must be strictly after the previous
-  // request. `requestDate` is yyyy-mm-dd; the cursor is yyyyMMddHHmmss.
-  // Blank / whitespace requestDate (e.g. Bruno `""`) means "use the stored cursor".
+  // §67: a manually-specified request date must be strictly after the previous request.
+  // `requestDate` is yyyy-mm-dd; the cursor is yyyyMMddHHmmss.
   const requestDate = opts.requestDate?.trim() || undefined;
   let lastReqDt: string;
   if (requestDate) {

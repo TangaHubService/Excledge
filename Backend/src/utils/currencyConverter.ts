@@ -2,10 +2,7 @@ import https from 'https';
 
 const EXCHANGE_RATE_API_URL = 'https://api.exchangerate-api.com/v4/latest/USD';
 
-/**
- * Get the latest USD to RWF exchange rate.
- * @returns {Promise<number>} The exchange rate.
- */
+/** Get the latest USD to RWF exchange rate. */
 export const getUsdToRwfRate = (): Promise<number> => {
     return new Promise((resolve) => {
         https.get(EXCHANGE_RATE_API_URL, (res) => {
@@ -34,11 +31,7 @@ export const getUsdToRwfRate = (): Promise<number> => {
     });
 };
 
-/**
- * Convert USD to RWF.
- * @param {number} usdAmount The amount in USD.
- * @returns {Promise<number>} The amount in RWF.
- */
+/** Convert USD to RWF. */
 export const convertUsdToRwf = async (usdAmount: number): Promise<number> => {
     const rate = await getUsdToRwfRate();
     return usdAmount * rate;

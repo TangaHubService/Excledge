@@ -9,17 +9,8 @@ function zReportResource(branchId: number | null): string {
 }
 
 /**
- * Automated daily Z (closing) report — RRA CIS/VSDC spec §6/§18/§19 requires
- * the device's daily counters to be legally closed out once per business day.
- * Filed per VSDC device (per branch, with the org-level fallback for legacy
- * single-branch tenants). Training-mode orgs are skipped — there is no real
- * day to close.
- *
- * Each close is save + verify (`saveAndVerifyZReport`): the day is only counted
- * as closed once `/reports/checkZReport` confirms RRA has it. The outcome is
- * persisted to `rra_sync_cursors` (resource `zReport:<branchId>`) so there is
- * durable certification evidence and the operator can spot a device that saved
- * but did not verify.
+ * Automated daily Z (closing) report — RRA CIS/VSDC spec §6/§18/§19 requires the device's daily
+ * counters to be legally closed out once per business day.
  */
 export const zReportJob = cron.schedule('55 23 * * *', async () => {
   if (!isEbmEnabled()) {

@@ -1,26 +1,6 @@
 /**
  * RRA VSDC purchase-code checksum (replica of the sandbox WAR's
- * CheckApiConnection.decryptPurchaseCode). The sandbox rejects any purchase
- * code (resultCd 882 "Purchase code is invalid") unless the code embeds a
- * checksum derived from the buyer TIN and the seller's (org) TIN. Codes we
- * pool ourselves must therefore be generated with this algorithm, not just
- * sequential numbers.
- *
- * The real algorithm (decompiled from rraVsdcSandbox3.0.2.war):
- *   decryptPurchaseCode(prcOrdCd, custTin, tin)
- *     v1 = validateNumber( abs(custTin - tin) % 1000 )         // 3-digit
- *     if reverseStringSuper(prcOrdCd, v1)  return true
- *     if reverseStringSuperNew(prcOrdCd, v1) return true
- *     v2 = (tin - custTin) * 6 % 1000  (or abs(diff)+5 when negative)
- *     v2 = validateNumber(v2)
- *     if reverseStringSuper(prcOrdCd, v2)  return true
- *     return reverseStringSuperNew(prcOrdCd, v2)
- *
- * reverseStringSuper / reverseStringSuperNew permute the 3-digit value and
- * compare against slices of the 6-char code, with digit-pair tables
- * (validateSecondNumber / validateSecondNumberNew). This module exposes a
- * checker and a generator so the purchase-code pool can be topped up with
- * codes the sandbox will actually accept.
+ * CheckApiConnection.decryptPurchaseCode).
  */
 
 /** validateNumber: pad single/double-digit checksums to 3 digits. */
@@ -60,8 +40,8 @@ const SECOND_NUMBER_NEW: Record<string, string[]> = {
 };
 
 /**
- * Decode which digit-3 candidate strings are expected for a (buyerTin, tin)
- * pair. Returns the two 3-char candidates used by reverse* comparisons.
+ * Decode which digit-3 candidate strings are expected for a (buyerTin, tin) pair. Returns the two
+ * 3-char candidates used by reverse* comparisons.
  */
 export function purchaseCodeChecksumCandidates(buyerTin: string, sellerTin: string): string[] {
   const cust = parseInt(buyerTin, 10);
@@ -137,14 +117,7 @@ export function isValidPurchaseCode(code: string, buyerTin: string, sellerTin: s
   return reverseStringSuper(code, v2) || reverseStringSuperNew(code, v2);
 }
 
-/**
- * Generate purchase codes the sandbox accepts for a (buyerTin, sellerTin).
- * Uses the reverseStringSuperNew fast path (c[2]='0', c[3]=candidate[0], valid
- * digit pairs). Each generated code is unique within the returned batch.
- *
- * Starts at a time-based offset into the candidate space so repeated DB resets
- * don't keep minting the same early codes VSDC already burned (resultCd 883).
- */
+/** Generate purchase codes the sandbox accepts for a (buyerTin, sellerTin). */
 export function generateValidPurchaseCodes(
   buyerTin: string,
   sellerTin: string,

@@ -46,9 +46,9 @@ export const initiatePaypackPayment = async (req: Request, res: Response) => {
                 }
             );
 
-            // Paypack assigns its own transaction ref, which is what the webhook
-            // looks up subscriptions by — overwrite our placeholder ref with it
-            // while preserving the months/billingMode/totalAmount already stored.
+            // Paypack assigns its own transaction ref, which is what the webhook looks up
+            // subscriptions by — overwrite our placeholder ref with it while preserving the
+            // months/billingMode/totalAmount already stored.
             if (response.data?.ref) {
                 await prisma.subscription.update({
                     where: { id: subscription.id },

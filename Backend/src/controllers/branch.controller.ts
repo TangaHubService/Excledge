@@ -17,9 +17,7 @@ import {
 } from '../services/branch.service';
 import { auditLogger } from '../utils/auditLogger';
 
-/**
- * Get all branches for an organization
- */
+/** Get all branches for an organization */
 export const getBranchesController = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -34,9 +32,7 @@ export const getBranchesController = async (req: AuthRequest, res: Response) => 
   }
 };
 
-/**
- * Get a single branch by ID
- */
+/** Get a single branch by ID */
 export const getBranch = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -55,9 +51,7 @@ export const getBranch = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/**
- * Get branches for current user
- */
+/** Get branches for current user */
 export const getUserBranchesController = async (req: AuthRequest, res: Response) => {
   try {
     const userId = parseInt(req.user?.userId);
@@ -73,9 +67,7 @@ export const getUserBranchesController = async (req: AuthRequest, res: Response)
   }
 };
 
-/**
- * Get primary branch for current user
- */
+/** Get primary branch for current user */
 export const getUserPrimaryBranchController = async (req: AuthRequest, res: Response) => {
   try {
     const userId = parseInt(req.user?.userId);
@@ -93,9 +85,7 @@ export const getUserPrimaryBranchController = async (req: AuthRequest, res: Resp
   }
 };
 
-/**
- * Create a new branch
- */
+/** Create a new branch */
 export const createBranchController = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -137,9 +127,7 @@ export const createBranchController = async (req: AuthRequest, res: Response) =>
   }
 };
 
-/**
- * Update a branch
- */
+/** Update a branch */
 export const updateBranchController = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -199,9 +187,7 @@ export const updateBranchController = async (req: AuthRequest, res: Response) =>
   }
 };
 
-/**
- * Set a branch as the organization's default branch
- */
+/** Set a branch as the organization's default branch */
 export const setDefaultBranchController = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -224,9 +210,7 @@ export const setDefaultBranchController = async (req: AuthRequest, res: Response
   }
 };
 
-/**
- * Delete a branch
- */
+/** Delete a branch */
 export const deleteBranchController = async (req: AuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -248,9 +232,7 @@ export const deleteBranchController = async (req: AuthRequest, res: Response) =>
   }
 };
 
-/**
- * Assign user to branch
- */
+/** Assign user to branch */
 export const assignUserToBranchController = async (req: AuthRequest, res: Response) => {
   try {
     const branchId = parseInt(req.params.id);
@@ -285,9 +267,7 @@ export const assignUserToBranchController = async (req: AuthRequest, res: Respon
   }
 };
 
-/**
- * Remove user from branch
- */
+/** Remove user from branch */
 export const removeUserFromBranchController = async (req: AuthRequest, res: Response) => {
   try {
     const branchId = parseInt(req.params.id);
@@ -313,9 +293,7 @@ export const removeUserFromBranchController = async (req: AuthRequest, res: Resp
   }
 };
 
-/**
- * Get all users assigned to a branch
- */
+/** Get all users assigned to a branch */
 export const getBranchUsersController = async (req: AuthRequest, res: Response) => {
   try {
     const branchId = parseInt(req.params.id);

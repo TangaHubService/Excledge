@@ -1,19 +1,6 @@
 import { round2 } from './money.service';
 
-/**
- * Pure Normal Refund (NR) calculation + eligibility rules.
- *
- * Everything here is intentionally free of Prisma/Express so the refund math
- * and business rules (spec Art. 7.17, 12) are unit-testable without a DB:
- *  - remaining refundable quantity per original line (partial refunds)
- *  - negated refund legs scaled from the original lines (never "positive
- *    legs with a negative total")
- *  - original-receipt eligibility (NS only — never NR/copy/training/proforma)
- *  - refund-reason/justification requirements
- *
- * Money arrives as plain numbers (the controller normalizes Decimals before
- * calling in); every monetary leg is rounded once with round2.
- */
+/** Pure Normal Refund (NR) calculation + eligibility rules. */
 
 export interface OriginalRefundLine {
   saleItemId: number;
@@ -82,30 +69,15 @@ export class RefundRuleError extends Error {
 }
 
 /**
- * Identity of a refundable line. productId when present, otherwise the
- * service name (ad-hoc service lines have no product). Two original lines
- * for the same product share a key — remaining is tracked per key so split
- * lines can never jointly exceed what was sold.
+ * Identity of a refundable line. productId when present, otherwise the service name (ad-hoc service
+ * lines have no product).
  */
 export function refundLineKey(line: { productId: number | null; serviceName: string | null }): string {
   if (line.productId != null) return `P:${line.productId}`;
   return `S:${(line.serviceName ?? '').trim().toLowerCase() || '?'}`;
 }
 
-/**
- * Guard an original sale before any refund math. Throws RefundRuleError when
- * the receipt may not be refunded:
- *  - nonexistent / wrong status (only COMPLETED or PARTIALLY_REFUNDED)
- *  - itself a refund (NR — originalSaleId set) or any non-NS label
- *    (NR/TR/CR/TS/PS/CS) — legacy rows with no label are treated as NS
- *  - proforma (quotes are edited/converted, never refunded)
- *  - no VSDC invoice number (nothing was ever fiscalized under it, so no
- *    orgInvcNo could reference it)
- *
- * Training mode: only a Training Sale (TS) is refundable (as TR), and a TS
- * only while training mode is on — a real NS can never be refunded from a
- * training session, nor a TS from normal mode.
- */
+/** Guard an original sale before any refund math. */
 export function assertOriginalRefundable(sale: {
   id: number;
   status: string;
@@ -163,15 +135,8 @@ export function assertOriginalRefundable(sale: {
 }
 
 /**
- * The original NS must already carry a real VSDC confirmation. An allocated
- * `vsdcInvcNo` is only the CIS sequence — it is not a receipt. Refunding
- * before that confirmation dead-letters the original sale (the worker refuses
- * to submit a SALE once its status is REFUNDED) and leaves the NR with nothing
- * to reference, so no signed refund receipt is ever issued.
- *
- * `training`: a TS is confirmed by VSDC without intrlData/rcptSign (CIS §6),
- * so only those two are not required — the VSDC counter, SDC ID and VSDC
- * timestamp still are.
+ * The original NS must already carry a real VSDC confirmation. An allocated `vsdcInvcNo` is only
+ * the CIS sequence — it is not a receipt.
  */
 export function assertOriginalConfirmed(conf: {
   submissionStatus: string | null;
@@ -204,9 +169,7 @@ export function assertOriginalConfirmed(conf: {
 }
 
 /**
- * Printed REF. NORMAL RECEIPT# of a refund: the original sale's invoice number
- * (`orgInvcNo`, e.g. `149`), the same value the VSDC prints on its own NR —
- * not the original's SDC `rcptNo` and not the "n/m NS" counter pair.
+ * Printed REF. NORMAL RECEIPT# of a refund: the original sale's invoice number (`orgInvcNo`, e.g.
  */
 export function formatOriginalReceiptReference(originalInvcNo: number | null | undefined): string | null {
   return typeof originalInvcNo === 'number' && Number.isInteger(originalInvcNo) && originalInvcNo > 0
@@ -214,18 +177,7 @@ export function formatOriginalReceiptReference(originalInvcNo: number | null | u
     : null;
 }
 
-/**
- * VSDC API v1.0.5 `TrnsSalesSaveWrReq` shape for a Normal Refund.
- *
- * The sandbox rejects a negative supply amount with resultCd 910, so the wire
- * document is a fresh positive sales transaction (`salesTyCd=N`, `rcptTyCd=R`,
- * `salesSttsCd=05`) whose magnitudes are only the refunded lines. The CIS
- * receipt and the stored sale keep those same amounts negative. `orgInvcNo` is
- * the original NS `invcNo`, never the SDC receipt counter and never 0.
- *
- * `training`: a TR is the same document with `salesTyCd=T`, referencing the
- * original TS `invcNo`.
- */
+/** VSDC API v1.0.5 `TrnsSalesSaveWrReq` shape for a Normal Refund. */
 export function assertNrWirePayload(payload: Record<string, unknown>, opts: { training?: boolean } = {}): void {
   const errors: string[] = [];
   const str = (k: string) => (typeof payload[k] === 'string' ? (payload[k] as string) : '');
@@ -284,11 +236,7 @@ export function consumedByKey(prior: PriorRefundLeg[]): Map<string, number> {
   return consumed;
 }
 
-/**
- * Remaining refundable quantity per original line. When several original
- * lines share a key, already-refunded quantity is consumed FIFO across them
- * so the per-line figures always sum to the key's true remaining.
- */
+/** Remaining refundable quantity per original line. */
 export function remainingByLine(
   original: OriginalRefundLine[],
   prior: PriorRefundLeg[],
@@ -305,16 +253,7 @@ export function remainingByLine(
   });
 }
 
-/**
- * Build the negated refund legs. `requested` is null/empty for a full refund
- * (every line's full remaining); otherwise each entry refunds part of one
- * original line. Every requested quantity must be > 0 and within that line's
- * remaining — anything else is an over-refund and throws.
- *
- * Scaling is proportional per line (q/Q): a 3-of-10 partial refund of a
- * 50000/9000-tax line yields exactly -15000 total / -2700 tax, so the legs
- * stay mathematically consistent at any quantity.
- */
+/** Build the negated refund legs. */
 export function planRefundLines(
   original: OriginalRefundLine[],
   prior: PriorRefundLeg[],
@@ -323,9 +262,8 @@ export function planRefundLines(
   const remaining = new Map(remainingByLine(original, prior).map((r) => [r.saleItemId, r.remaining]));
   const byId = new Map(original.map((l) => [l.saleItemId, l]));
 
-  // Aggregate the request per key first: several request entries may target
-  // lines sharing one product, and jointly they must not exceed the key's
-  // remaining either.
+  // Aggregate the request per key first: several request entries may target lines sharing one
+  // product, and jointly they must not exceed the key's remaining either.
   const want: Array<{ line: OriginalRefundLine; qty: number }> = [];
   if (!requested || requested.length === 0) {
     for (const line of original) {
@@ -414,12 +352,7 @@ export function summarizeRefund(planned: PlannedRefundLine[]): RefundTotals {
   return { totalRefundAmount: total, totalRefundVat: vat, totalRefundTaxable: round2(total - vat), bands };
 }
 
-/**
- * Refund reason + justification rules. The RRA code itself is validated
- * against code class 32 by the controller (DB-backed); here: a justification
- * is always required, and code 13 ("Other reason") additionally requires a
- * real explanation (min 5 chars) instead of a one-word note.
- */
+/** Refund reason + justification rules. */
 export function assertRefundReason(rfdRsnCd: string, justification: string | null | undefined): void {
   const text = (justification ?? '').trim();
   if (!text) {

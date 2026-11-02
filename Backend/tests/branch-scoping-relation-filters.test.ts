@@ -1,11 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-// Regression guard for a P2022-class bug: models that don't have their own
-// `branchId` column (Customer, DebtPayment, SupplierPayment, StockTransfer)
-// must never have `{branchId: ...}` spread directly into their `where`
-// clause — Prisma throws "column does not exist" the moment a branch is
-// selected. Filtering for these models must go through the relation that
-// actually carries branchId (sale, purchaseOrder, fromBranchId/toBranchId).
+// Regression guard for a P2022-class bug: models that don't have their own `branchId` column
+// (Customer, DebtPayment, SupplierPayment, StockTransfer) must never have `{branchId: ...}` spread
+// directly into their `where` clause — Prisma throws "column does not exist" the moment a branch is
+// selected.
 
 vi.mock("../src/lib/prisma", () => ({
   prisma: {

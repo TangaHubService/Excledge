@@ -17,6 +17,7 @@ vi.mock("../src/lib/prisma", () => ({
     branch: {
       updateMany: (...a: any[]) => (branchUpdateMany as any)(...a),
       findFirst: vi.fn(async () => ({ bhfId: "00", ebmSerialNo: null, mrcNo: stored.branch })),
+      count: vi.fn(async () => 0),
     },
     $queryRaw: vi.fn(async () => [{ sidebarConfig: {}, featureFlags: {}, preferences: {} }]),
   },

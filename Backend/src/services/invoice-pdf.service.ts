@@ -7,10 +7,7 @@ import { TAX_RATE_BY_SLOT } from "./rra-ebm.service"
 import { Decimal } from "@prisma/client/runtime/library"
 import { bandTaxFromNet } from "./money.service"
 
-// The layout below is authored in A4 coordinate space. A5 output renders the
-// exact same layout scaled down to fit an A5 sheet (RRA checklist §18: the CIS
-// may print the invoice on different formats as long as every required field
-// is present).
+// The layout below is authored in A4 coordinate space.
 const PAGE_WIDTH = 595.28
 const PAGE_HEIGHT = 841.89
 const A5_WIDTH = 419.53
@@ -76,33 +73,22 @@ export function dataUrlBuffer(value?: string | null): Buffer | null {
   }
 }
 
-/**
- * The designation title printed on the receipt. PROFORMA and TRAINING MODE take
- * priority over COPY — reprinting a training/proforma receipt must never lose
- * that designation and start looking like an ordinary copied transaction.
- * COPY (§15) only applies to reprints of a NORMAL receipt in the first place.
- *
- * Every designation is printed once, as the title at the top, plus the "not an
- * official receipt" notice (EBM spec receipt examples 15.1 CR, 16.1 TS, 17.1 PS).
- */
+/** The designation title printed on the receipt. */
 export function documentIndicator(data: RenderInvoicePayload): string {
   const label = safe(data.invoice.rcptLabel).toUpperCase()
   if (data.invoice.isProforma || label === "PS") return "PROFORMA"
   if (label === "TS" || label === "TR") return TRAINING_MODE_LABEL
   if (data.invoice.isCopy || label === "CS" || label === "CR") return "COPY"
-  // A real sale downloaded before VSDC confirmed it: the title makes clear the
-  // document is provisional. Ranks below COPY/TRAINING/PROFORMA (which can't be
-  // pending anyway) and above the plain refund/blank case.
+  // A real sale downloaded before VSDC confirmed it: the title makes clear the document is
+  // provisional.
   if (data.invoice.notFiscalized) return NOT_FISCALIZED_TITLE
   if (label === "NR" || (!label && data.invoice.status === "REFUNDED")) return REFUND_DOCUMENT_LABEL
   return ""
 }
 
 /**
- * Whether the refund-specific content (REF. NORMAL RECEIPT# + refund notice)
- * should print — independent of the watermark title above. A *copied* refund
- * (NR reprinted, watermark title "COPY") is still a refund and must keep
- * showing its reference to the original sale, per spec §15's own CR example.
+ * Whether the refund-specific content (REF. NORMAL RECEIPT# + refund notice) should print —
+ * independent of the watermark title above.
  */
 export function isRefundTransaction(data: RenderInvoicePayload): boolean {
   const label = safe(data.invoice.rcptLabel).toUpperCase()
@@ -120,11 +106,7 @@ export function isProformaDocument(data: RenderInvoicePayload): boolean {
   return !!data.invoice.isProforma || safe(data.invoice.rcptLabel).toUpperCase() === "PS"
 }
 
-/**
- * Reference from a refund to the receipt it reverses. The spec uses the same
- * "REF. NORMAL RECEIPT#" wording on every refund sample (NR §14, CR §15); for
- * a TR the referenced counter itself carries the TS label.
- */
+/** Reference from a refund to the receipt it reverses. The spec uses the same "REF. */
 export function refundReferenceLine(data: RenderInvoicePayload, separator = ": "): string {
   const ref = safe(data.invoice.originalReceiptNumber)
   return ref ? `REF. NORMAL RECEIPT#${separator}${ref}` : ""
@@ -141,16 +123,16 @@ export function headerIndicator(data: RenderInvoicePayload): string {
 }
 
 /**
- * QR code on signed receipts: NS/NR and their CS/CR reprints, which carry the
- * original's QR unchanged. TS/PS are unsigned and carry none.
+ * QR code on signed receipts: NS/NR and their CS/CR reprints, which carry the original's QR
+ * unchanged. TS/PS are unsigned and carry none.
  */
 export function printsQrCode(data: RenderInvoicePayload): boolean {
   return !isTrainingDocument(data) && !isProformaDocument(data)
 }
 
 /**
- * Title printed under a COPY / TRAINING MODE heading: REFUND for a CR or TR
- * (spec 15.1: COPY, then REFUND). A sale copy/TS has none, like an NS.
+ * Title printed under a COPY / TRAINING MODE heading: REFUND for a CR or TR (spec 15.1: COPY, then
+ * REFUND). A sale copy/TS has none, like an NS.
  */
 export function transactionSubTitle(data: RenderInvoicePayload): string {
   const indicator = documentIndicator(data)
@@ -160,9 +142,8 @@ export function transactionSubTitle(data: RenderInvoicePayload): string {
 
 
 /**
- * TRAINING MODE and PROFORMA carry the "not an official receipt" notice
- * between the items and TOTAL. A COPY is marked only by its header title, and
- * a genuine NORMAL sale/refund (label "" or REFUND) carries no notice.
+ * TRAINING MODE and PROFORMA carry the "not an official receipt" notice between the items and
+ * TOTAL.
  */
 export function isFormalNoticeIndicator(indicator: string): boolean {
   return indicator !== "" && indicator !== REFUND_DOCUMENT_LABEL && indicator !== "COPY"
@@ -455,10 +436,8 @@ export interface BandTaxItem {
 }
 
 /**
- * Band-level taxes derived from each band's NET (money.service policy:
- * derived, never summed from per-line cents). `rates` is the programmed
- * A/B/C/D tuple; non-A/B/C/D codes fall back to summing stored line taxes.
- * Signed nets (refunds) yield signed taxes.
+ * Band-level taxes derived from each band's NET (money.service policy: derived, never summed from
+ * per-line cents).
  */
 export function bandTaxAmounts(
   items: BandTaxItem[],
@@ -540,11 +519,10 @@ function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): numbe
 /** Draws the SDC block and returns the y just below its last line. */
 function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): number {
   const sdc = data.sdcInformation
-  // Slips still awaiting VSDC confirmation (including proforma/training
-  // originals printed via allowPending) carry no VSDC signature yet, but the
-  // printout must still show the transaction's date/time and receipt number —
-  // fall back to the invoice-level values whenever the fiscal-specific fields
-  // are absent.
+  // Slips still awaiting VSDC confirmation (including proforma/training originals printed via
+  // allowPending) carry no VSDC signature yet, but the printout must still show the transaction's
+  // date/time and receipt number — fall back to the invoice-level values whenever the
+  // fiscal-specific fields are absent.
   const sdcDate = formatInvoiceDateTime(sdc.sdcDateTime || sdc.date || data.invoice.invoiceDate)
   const sdcReceiptNo = safe(sdc.receiptNumber) || safe(data.invoice.receiptNumber)
   const invoiceDate = formatInvoiceDateTime(data.invoice.invoiceDate)
@@ -646,11 +624,7 @@ function drawFinalFooter(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): v
     })
 }
 
-/**
- * Generate the authoritative portrait EBM invoice entirely on the backend.
- * `paper` is "A4" (default) or "A5" — A5 renders the identical layout scaled to
- * fit the smaller sheet.
- */
+/** Generate the authoritative portrait EBM invoice entirely on the backend. */
 export async function generateEbmInvoicePdf(
   data: RenderInvoicePayload,
   paper: "A4" | "A5" = "A4",

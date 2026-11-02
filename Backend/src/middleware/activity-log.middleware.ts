@@ -18,9 +18,7 @@ export interface ManualActivityLogParams {
   branchId?: number | null;
 }
 
-/**
- * Manually log an activity
- */
+/** Manually log an activity */
 export async function logManualActivity(params: ManualActivityLogParams) {
   try {
     const activityLogService = new ActivityLogService(prisma);

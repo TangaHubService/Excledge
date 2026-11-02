@@ -19,18 +19,7 @@ import { syncProductToRra, applySellingPriceOnReceipt } from './product-sync.ser
 import { allocatePurchaseInvcNo } from './vsdc-purchase-counter.service';
 import logger from '../utils/logger';
 
-/**
- * RRA B2B purchases (RRA checklist §70, §71).
- *
- *  §70  syncRraPurchases()   — pull the B2B sales issued to this taxpayer
- *                              (/trnsPurchase/selectTrnsPurchaseSales) and
- *                              cache them for review.
- *  §71  confirmRraPurchase() — record/confirm a received purchase
- *                              (/trnsPurchase/savePurchases, pchsSttsCd='02'),
- *                              which also books the stock-in at RRA; then push
- *                              /stockMaster/saveStockMaster for remaining qty.
- *                              Reject sends pchsSttsCd='04' (Canceled) to VSDC.
- */
+/** RRA B2B purchases (RRA checklist §70, §71). */
 
 /** §4.11 Transaction Progress — used as pchsSttsCd. */
 const PCHS_STTS = { APPROVED: '02', CANCELED: '04' } as const;
@@ -403,9 +392,8 @@ function purchasePrcOrdCd(
 }
 
 /**
- * The CIS invcNo for this purchase document, allocated once and persisted so a
- * retry resends the same number. A confirm after a rejected attempt, or a
- * reject, reuses it too: it identifies the CIS's record of this purchase.
+ * The CIS invcNo for this purchase document, allocated once and persisted so a retry resends the
+ * same number.
  */
 async function cisInvcNoForRraPurchase(
   organizationId: number,
@@ -457,8 +445,8 @@ async function pushStockMastersAfterPurchase(
 }
 
 /**
- * Reject a pending B2B purchase at VSDC (pchsSttsCd 04 Canceled) then mark local REJECTED.
- * When EBM is off, only the local status is updated.
+ * Reject a pending B2B purchase at VSDC (pchsSttsCd 04 Canceled) then mark local REJECTED. When EBM
+ * is off, only the local status is updated.
  */
 async function rejectRraPurchaseAtVsdc(
   organizationId: number,
@@ -753,11 +741,8 @@ export async function confirmRraPurchase(
       data: { status: 'CONFIRMED', confirmedAt: new Date() },
     });
 
-    // §74: a confirmed purchase affects local stock in real time.
-    // Stock IO (sarTyCd 02) and stock master are synchronized with VSDC.
-    // Passing skipEbmSync: false ensures ebmSyncStatus is 'PENDING', which
-    // triggers queueStockSync asynchronously (non-blocking) to push
-    // /stock/saveStockItems followed by /stockMaster/saveStockMaster.
+    // §74: a confirmed purchase affects local stock in real time. Stock IO (sarTyCd 02) and stock
+    // master are synchronized with VSDC.
     const stockBranchId = await resolveActiveBranchId(organizationId, opts.branchId);
     let stockBooked = 0;
     if (stockBranchId != null) {

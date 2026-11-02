@@ -1,13 +1,6 @@
 /**
- * Jest-only compatibility shim for the `vitest` import used by the fiscal
- * suites (rra-ebm-compliance, invoice-pdf, invoice-pdf-proforma,
- * fiscal-report-pdf). Mapped via jest.config.ts `moduleNameMapper` — vitest
- * itself ignores this file and resolves the real `vitest` package.
- *
- * Only the subset actually used by those suites is bridged
- * (describe/it/expect + vi.spyOn/vi.fn). Suites that rely on vitest module
- * mocking (`vi.mock`, hoisted by vitest) stay vitest-exclusive and are
- * excluded from the jest run (see jest.config.ts).
+ * Jest-only compatibility shim for the `vitest` import used by the fiscal suites
+ * (rra-ebm-compliance, invoice-pdf, invoice-pdf-proforma, fiscal-report-pdf).
  */
 const g = globalThis as any;
 

@@ -26,6 +26,5 @@ registerProvider(new CashPaymentProvider());
 registerProvider(new PaypackPaymentProvider());
 registerProvider(new MtnMoMoPaymentProvider());
 
-// Stripe provider can be added when Stripe is configured
-// Flutterwave provider can be added when Flutterwave is configured
-// Bank Transfer is handled as a manual method
+// Stripe provider can be added when Stripe is configured Flutterwave provider can be added when
+// Flutterwave is configured Bank Transfer is handled as a manual method

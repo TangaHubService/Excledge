@@ -138,10 +138,9 @@ export const uploadAndScanInvoice = async (req: BranchAuthRequest, res: Response
       },
     });
 
-    // Semantic analysis (math verification, duplicate lines, fraud score, PO
-    // match) runs on whatever was just extracted, regardless of source — it
-    // doesn't care whether the client used the AI call or the Tesseract
-    // fallback. Non-fatal: a bug here shouldn't block the upload response.
+    // Semantic analysis (math verification, duplicate lines, fraud score, PO match) runs on
+    // whatever was just extracted, regardless of source — it doesn't care whether the client used
+    // the AI call or the Tesseract fallback.
     if (items.length > 0) {
       try {
         await analyzeInvoice(invoice.id);
@@ -504,10 +503,9 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
     const receiptLines: LocalPurchaseLine[] = [];
     const receiptLedgerIds: number[] = [];
 
-    // Each item gets its own transaction: once a Postgres statement fails, the
-    // whole transaction is aborted and refuses further commands (25P02), so a
-    // single bad item can't be allowed to share a transaction with the others
-    // (or with the ERROR-status write that records its own failure).
+    // Each item gets its own transaction: once a Postgres statement fails, the whole transaction is
+    // aborted and refuses further commands (25P02), so a single bad item can't be allowed to share
+    // a transaction with the others (or with the ERROR-status write that records its own failure).
     for (const item of invoice.items) {
       const action = actionsMap.get(item.id);
 
@@ -527,9 +525,7 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
             const mergedData = { ...item, ...(action.data || {}) };
             const qty = parseInt(String(mergedData.quantity)) || 0;
             const unitPrice = clampMoney(parseFloat(String(mergedData.unitPrice)) || 0);
-            // Selling price must never default to cost — that's a zero-margin (or free)
-            // product. Prefer the OCR-extracted selling price; if none was extracted,
-            // fall back to a configured markup over cost rather than cost itself.
+            // Selling price must never default to cost — that's a zero-margin (or free) product.
             const extractedSellingPrice = mergedData.sellingPrice != null
               ? clampMoney(parseFloat(String(mergedData.sellingPrice)))
               : 0;
@@ -589,10 +585,8 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
               committedLine = { productId: action.productId, quantity: qty, unitCost: unitPrice, expiryDate };
               if (ledgerEntry?.id) receiptLedgerIds.push(ledgerEntry.id);
 
-              // NOTE (stock S14): addStock above already increments
-              // Product.quantity via the centralized ledger service. Do NOT
-              // add a second product.update increment here — that would
-              // double-count the cache (ledger runningBalance stays correct).
+              // NOTE (stock S14): addStock above already increments Product.quantity via the
+              // centralized ledger service.
 
               await tx.supplierInvoiceItem.update({
                 where: { id: item.id },
@@ -604,10 +598,8 @@ export const importInvoiceProducts = async (req: BranchAuthRequest, res: Respons
               });
 
             } else {
-              // Create new product — create with quantity 0; the addStock
-              // below (centralized ledger service) performs the single
-              // Product.quantity increment. Creating with qty AND calling
-              // addStock would double-count (S14).
+              // Create new product — create with quantity 0; the addStock below (centralized ledger
+              // service) performs the single Product.quantity increment.
               const newProduct = await tx.product.create({
                 data: {
                   name: String(mergedData.productName || 'Unknown Product'),

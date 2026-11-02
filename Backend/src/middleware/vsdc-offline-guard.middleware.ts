@@ -2,22 +2,15 @@ import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import { error as apiError } from '../utils/apiResponse';
 
-// C11: offline block threshold. The VSDC stops issuing receipt numbers after
-// 24 hours without internet (2023 spec §2.2), so the CIS blocks new receipt
-// generation past the same window — the guard mirrors the device, it does not
-// invent a stricter one. Override with VSDC_OFFLINE_BLOCK_MS in .env.
-// (A previous 2h default was stricter than the spec with no basis in it.)
-// Read lazily (not at module load) so tests and process env changes apply.
+// C11: offline block threshold.
 function getOfflineBlockMs(): number {
   return Number(process.env.VSDC_OFFLINE_BLOCK_MS ?? 24 * 60 * 60 * 1000);
 }
 
 /**
- * Check whether the VSDC has been reachable within the configured window.
- *
- * - Returns `true` if contact was made within the allowed window.
- * - Logs a warning at 80% of the threshold.
- * - Throws a structured error beyond the block threshold (default 2h).
+ * Check whether the VSDC has been reachable within the configured window. - Returns `true` if
+ * contact was made within the allowed window. - Logs a warning at 80% of the threshold. - Throws a
+ * structured error beyond the block threshold (default 2h).
  */
 export async function verifyVsdcOnlineStatus(organizationId: number): Promise<boolean> {
   const org = await prisma.organization.findUnique({
@@ -41,9 +34,7 @@ export async function verifyVsdcOnlineStatus(organizationId: number): Promise<bo
   // Training receipts (TS/TR) go through the VSDC like every other type
   // (CIS §6/§22), so training mode gets no exemption here.
 
-  // No VSDC device configured anywhere (org or branch) — there is nothing to
-  // be "offline" from. Fiscalisation itself still fails/queues per sale; the
-  // hard block only makes sense once a device exists.
+  // No VSDC device configured anywhere (org or branch) — there is nothing to be "offline" from.
   const hasDevice = Boolean(org.ebmDeviceId || org.ebmSerialNo || org.branches.length > 0);
   if (!hasDevice) {
     return true;
@@ -82,15 +73,7 @@ export async function verifyVsdcOnlineStatus(organizationId: number): Promise<bo
   return true;
 }
 
-/**
- * Express middleware — applies 24-hour offline guard to any route it's mounted on.
- *
- * Usage:
- *   router.post('/sales', vsdcOnlineGuard, salesController.createSale);
- *
- * Expects `req.params.organizationId` to be set (by param resolution middleware
- * or from the route path).
- */
+/** Express middleware — applies 24-hour offline guard to any route it's mounted on. */
 export function vsdcOnlineGuard(req: Request, res: Response, next: NextFunction): void {
   const orgId = parseInt(req.params.organizationId, 10);
   if (!orgId || isNaN(orgId)) {

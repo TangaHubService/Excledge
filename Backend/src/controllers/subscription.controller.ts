@@ -14,11 +14,7 @@ import { config } from '../config';
 import { isEbmEnabled } from '../services/rra-ebm.service';
 import { fiscalizeSubscriptionPayment } from '../services/billing-ebm.service';
 
-/**
- * Get all active subscription plans with features
- * @route GET /api/subscriptions/plans
- * @access Public
- */
+/** Get all active subscription plans with features */
 export const getPlans = async (req: Request, res: Response) => {
     try {
         const plans = await prisma.subscriptionPlan.findMany({
@@ -73,11 +69,7 @@ export const getPlans = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Get a specific plan by ID
- * @route GET /api/subscriptions/plans/:id
- * @access Public
- */
+/** Get a specific plan by ID */
 export const getPlanById = async (req: Request, res: Response) => {
     try {
         const id = parseInt(req.params.id);
@@ -115,11 +107,7 @@ export const getPlanById = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Create Stripe checkout session for a subscription
- * @route POST /api/subscriptions/organizations/:organizationId/checkout
- * @access Private
- */
+/** Create Stripe checkout session for a subscription */
 export const createCheckout = async (req: Request, res: Response) => {
     try {
         const planId = Number(req.body.planId);
@@ -229,11 +217,7 @@ export const createCheckout = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Verify payment after successful checkout
- * @route GET /api/subscriptions/organizations/:organizationId/verify
- * @access Private
- */
+/** Verify payment after successful checkout */
 export const verifyPayment = async (req: Request, res: Response) => {
     try {
         const { sessionId } = req.query;
@@ -375,11 +359,7 @@ export const verifyPayment = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Get all subscriptions for an organization
- * @route GET /api/subscriptions/organizations/:organizationId/subscriptions
- * @access Private
- */
+/** Get all subscriptions for an organization */
 export const getUserSubscriptions = async (req: Request, res: Response) => {
     try {
         const organizationId = Number(req.params.organizationId);
@@ -453,11 +433,7 @@ export const getUserSubscriptions = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Get current active subscription for an organization
- * @route GET /api/subscriptions/organizations/:organizationId/current
- * @access Private
- */
+/** Get current active subscription for an organization */
 export const getCurrentSubscription = async (req: Request, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -517,11 +493,7 @@ export const getCurrentSubscription = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Get subscription by ID
- * @route GET /api/subscriptions/organizations/:organizationId/subscriptions/:id
- * @access Private
- */
+/** Get subscription by ID */
 export const getSubscriptionById = async (req: Request, res: Response) => {
     try {
         const organizationId = Number(req.params.organizationId);
@@ -561,11 +533,7 @@ export const getSubscriptionById = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Cancel subscription
- * @route POST /api/subscriptions/organizations/:organizationId/subscriptions/:id/cancel
- * @access Private
- */
+/** Cancel subscription */
 export const cancelSubscription = async (req: Request, res: Response) => {
     try {
         const organizationId = Number(req.params.organizationId);
@@ -633,11 +601,7 @@ export const cancelSubscription = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Reactivate subscription
- * @route POST /api/subscriptions/organizations/:organizationId/subscriptions/:id/reactivate
- * @access Private
- */
+/** Reactivate subscription */
 export const reactivateSubscription = async (req: Request, res: Response) => {
     try {
         const organizationId = Number(req.params.organizationId);
@@ -695,11 +659,7 @@ export const reactivateSubscription = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Renew subscription
- * @route POST /api/subscriptions/organizations/:organizationId/subscriptions/:id/renew
- * @access Private
- */
+/** Renew subscription */
 export const renewSubscription = async (req: Request, res: Response) => {
     try {
         const organizationId = Number(req.params.organizationId);
@@ -737,11 +697,7 @@ export const renewSubscription = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Update subscription auto-renewal setting
- * @route PATCH /api/subscriptions/organizations/:organizationId/subscriptions/:id/auto-renew
- * @access Private
- */
+/** Update subscription auto-renewal setting */
 export const updateAutoRenew = async (req: Request, res: Response) => {
     try {
         const { id, organizationId } = req.params;
@@ -798,11 +754,7 @@ export const updateAutoRenew = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Get subscription statistics for an organization
- * @route GET /api/subscriptions/organizations/:organizationId/stats
- * @access Private
- */
+/** Get subscription statistics for an organization */
 export const getSubscriptionStats = async (req: Request, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -918,11 +870,7 @@ export const getSubscriptionStats = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Get payment history for an organization
- * @route GET /api/subscriptions/organizations/:organizationId/payments
- * @access Private
- */
+/** Get payment history for an organization */
 export const getPaymentHistory = async (req: Request, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId);
@@ -1014,11 +962,7 @@ export const getPaymentHistory = async (req: Request, res: Response) => {
     }
 };
 
-/**
- * Check if organization has access to a specific feature
- * @route GET /api/subscriptions/organizations/:organizationId/features/:featureKey
- * @access Private
- */
+/** Check if organization has access to a specific feature */
 export const checkFeatureAccess = async (req: Request, res: Response) => {
     try {
         const organizationId = Number(req.params.organizationId);

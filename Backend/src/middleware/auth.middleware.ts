@@ -77,14 +77,8 @@ export const authorize = (...roles: string[]) => {
 };
 
 /**
- * Deny-list middleware — blocks the request if the user's role is in the
- * provided list. Use this for "everyone EXCEPT these roles" scenarios.
- *
- * Respects per-organization role from requireOrganizationAccess just like
- * authorize() does.
- *
- * @example
- * router.get("/subscriptions", authenticate, restrictRoles("SELLER"), ...);
+ * Deny-list middleware — blocks the request if the user's role is in the provided list. Use this
+ * for "everyone EXCEPT these roles" scenarios.
  */
 export const restrictRoles = (...roles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {

@@ -7,9 +7,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder_
     apiVersion: '2025-11-17.clover',
 });
 
-/**
- * Get or create Stripe customer for an organization
- */
+/** Get or create Stripe customer for an organization */
 export const getOrCreateCustomer = async (
     organizationId: string | number,
     email: string,
@@ -56,9 +54,7 @@ export const getOrCreateCustomer = async (
     return customer.id;
 };
 
-/**
- * Create or get Stripe product and price for a subscription plan
- */
+/** Create or get Stripe product and price for a subscription plan */
 export const createProductAndPrice = async (
     plan: SubscriptionPlan,
     convertedAmount?: number,
@@ -122,9 +118,7 @@ export const createProductAndPrice = async (
     };
 };
 
-/**
- * Create Stripe checkout session
- */
+/** Create Stripe checkout session */
 export const createCheckoutSession = async (params: {
     organizationId: string | number;
     planId: string | number;
@@ -223,9 +217,7 @@ export const createCheckoutSession = async (params: {
     return session;
 };
 
-/**
- * Handle successful payment
- */
+/** Handle successful payment */
 export const handleSuccessfulPayment = async (sessionId: string) => {
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
         expand: ['payment_intent', 'subscription'],
@@ -307,9 +299,7 @@ export const handleSuccessfulPayment = async (sessionId: string) => {
     return subscription;
 };
 
-/**
- * Handle subscription cancellation
- */
+/** Handle subscription cancellation */
 export const cancelSubscription = async (subscriptionId: string | number) => {
     const subscription = await prisma.subscription.findUniqueOrThrow({
         where: { id: Number(subscriptionId) },
@@ -339,9 +329,7 @@ export const cancelSubscription = async (subscriptionId: string | number) => {
     });
 };
 
-/**
- * Handle subscription reactivation (resume)
- */
+/** Handle subscription reactivation (resume) */
 export const reactivateSubscription = async (subscriptionId: string | number) => {
     const subscription = await prisma.subscription.findUniqueOrThrow({
         where: { id: Number(subscriptionId) },
@@ -357,9 +345,8 @@ export const reactivateSubscription = async (subscriptionId: string | number) =>
             });
         } catch (error) {
             console.error('Error reactivating Stripe subscription:', error);
-            // We'll continue to update locally even if Stripe fails, 
-            // but ideally we should alert the user if strict synchronization is required.
-            // For now, assume optimistic local update is preferred.
+            // We'll continue to update locally even if Stripe fails, but ideally we should alert
+            // the user if strict synchronization is required.
         }
     } else {
         console.warn(`No Stripe subscription ID found for subscription ${subscriptionId}. Reactivating locally only.`);
@@ -377,8 +364,8 @@ export const reactivateSubscription = async (subscriptionId: string | number) =>
 };
 
 /**
- * Renew an expired or canceled subscription
- * This creates a new subscription in Stripe using the customer's default payment method
+ * Renew an expired or canceled subscription This creates a new subscription in Stripe using the
+ * customer's default payment method
  */
 export const renewSubscription = async (subscriptionId: string | number) => {
     const subscription = await (prisma.subscription as any).findUniqueOrThrow({
@@ -415,9 +402,8 @@ export const renewSubscription = async (subscriptionId: string | number) => {
         }
     });
 
-    // Update local subscription or create a new one?
-    // The user probably wants the current one to show as renewed or a new record.
-    // Usually, we create a new subscription record for the new period.
+    // Update local subscription or create a new one? The user probably wants the current one to
+    // show as renewed or a new record.
     const startDate = new Date();
     let endDate: Date | undefined;
 
@@ -448,9 +434,7 @@ export const renewSubscription = async (subscriptionId: string | number) => {
     return newSubscription;
 };
 
-/**
- * Handle webhook events from Stripe
- */
+/** Handle webhook events from Stripe */
 export const handleWebhook = async (event: Stripe.Event) => {
     console.log(`Processing webhook event: ${event.type}`);
 
@@ -488,9 +472,7 @@ export const handleWebhook = async (event: Stripe.Event) => {
     }
 };
 
-/**
- * Handle checkout.session.completed webhook
- */
+/** Handle checkout.session.completed webhook */
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     try {
         await handleSuccessfulPayment(session.id);
@@ -501,9 +483,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     }
 }
 
-/**
- * Handle payment_intent.succeeded webhook
- */
+/** Handle payment_intent.succeeded webhook */
 async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
     console.log(`Payment succeeded: ${paymentIntent.id}`);
 
@@ -523,9 +503,7 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
     }
 }
 
-/**
- * Handle payment_intent.payment_failed webhook
- */
+/** Handle payment_intent.payment_failed webhook */
 async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
     console.log(`Payment failed: ${paymentIntent.id}`);
 
@@ -562,9 +540,7 @@ interface ExtendedInvoice extends Stripe.Invoice {
     payment_intent?: string | Stripe.PaymentIntent;
 }
 
-/**
- * Handle customer.subscription.updated webhook
- */
+/** Handle customer.subscription.updated webhook */
 async function handleSubscriptionUpdated(stripeSubscription: Stripe.Subscription) {
     const subscription = await prisma.subscription.findFirst({
         where: {
@@ -591,9 +567,7 @@ async function handleSubscriptionUpdated(stripeSubscription: Stripe.Subscription
     }
 }
 
-/**
- * Handle customer.subscription.deleted webhook
- */
+/** Handle customer.subscription.deleted webhook */
 async function handleSubscriptionDeleted(stripeSubscription: Stripe.Subscription) {
     const subscription = await prisma.subscription.findFirst({
         where: {
@@ -615,9 +589,7 @@ async function handleSubscriptionDeleted(stripeSubscription: Stripe.Subscription
     }
 }
 
-/**
- * Handle invoice.payment_succeeded webhook
- */
+/** Handle invoice.payment_succeeded webhook */
 async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     const extendedInvoice = invoice as unknown as ExtendedInvoice;
     if (!extendedInvoice.subscription) return;
@@ -656,9 +628,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     }
 }
 
-/**
- * Handle invoice.payment_failed webhook
- */
+/** Handle invoice.payment_failed webhook */
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     const extendedInvoice = invoice as unknown as ExtendedInvoice;
     if (!extendedInvoice.subscription) return;
@@ -682,9 +652,7 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     }
 }
 
-/**
- * Map Stripe subscription status to our SubscriptionStatus enum
- */
+/** Map Stripe subscription status to our SubscriptionStatus enum */
 function mapStripeStatus(stripeStatus: Stripe.Subscription.Status): SubscriptionStatus {
     const statusMap: Record<string, SubscriptionStatus> = {
         active: 'ACTIVE',
@@ -699,9 +667,7 @@ function mapStripeStatus(stripeStatus: Stripe.Subscription.Status): Subscription
     return statusMap[stripeStatus] || 'PENDING';
 }
 
-/**
- * Get subscription with details
- */
+/** Get subscription with details */
 export const getSubscription = async (subscriptionId: string | number) => {
     return prisma.subscription.findUnique({
         where: { id: Number(subscriptionId) },

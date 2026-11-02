@@ -39,6 +39,7 @@ vi.mock("../src/lib/prisma", () => ({
     },
     user: { findUnique: vi.fn(async () => ({ id: 2, name: "Importer" })) },
     organization: { update: vi.fn(async () => ({})) },
+    inventoryLedger: { update: vi.fn(async () => ({})) },
   },
 }))
 

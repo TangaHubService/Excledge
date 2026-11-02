@@ -36,9 +36,7 @@ import type {
   MeasurementUnit,
 } from '@prisma/client';
 
-// ──────────────────────────────────────────────
 // Types
-// ──────────────────────────────────────────────
 
 export interface SaleOutboxInput {
   organizationId: number;
@@ -66,27 +64,15 @@ type OutboxPayloadV1 = {
   operation: EbmOperation;
 };
 
-// ──────────────────────────────────────────────
 // Helpers
-// ──────────────────────────────────────────────
 
 function generateIdempotencyKey(orgId: number, operation: EbmOperation, saleId: number): string {
   return `ebm-${operation}-${orgId}-${saleId}`;
 }
 
-// ──────────────────────────────────────────────
 // Module 2: Atomic Checkout with Transactional Outbox
-// ──────────────────────────────────────────────
 
-/**
- * Create a sale and write an EBM outbox entry in a single atomic transaction.
- *
- * Guarantees:
- *  - Inventory deduction, balance update, and outbox write are ACID.
- *  - Idempotency key is unique at the DB level, preventing double-submission
- *    even if the outbox worker crashes and restarts.
- *  - Sale is always completed; VSDC submission is async via the outbox.
- */
+/** Create a sale and write an EBM outbox entry in a single atomic transaction. */
 export async function createSaleWithOutbox(input: SaleOutboxInput) {
   const {
     organizationId, branchId, userId, customerId,
@@ -234,9 +220,7 @@ export async function createSaleWithOutbox(input: SaleOutboxInput) {
   return sale;
 }
 
-// ──────────────────────────────────────────────
 // payDebt — now inside a transaction
-// ──────────────────────────────────────────────
 
 export async function payDebtWithTransaction(
   saleId: number,
@@ -274,19 +258,11 @@ export async function payDebtWithTransaction(
   });
 }
 
-// ──────────────────────────────────────────────
 // Module 4: Resilient Outbox Worker & Reconciler
-// ──────────────────────────────────────────────
 
 /**
- * Process pending EBM outbox entries in batch.
- *
- * 1. Orphan recovery: a stale PROCESSING entry is resent as the SAME document
- *    (same invcNo). The VSDC API has no receipt lookup, so a heartbeat can
- *    never prove an earlier attempt was signed; VSDC itself answers 924 if it
- *    was, and only a complete receipt block is ever accepted as success.
- * 2. Idempotent dispatch: every VSDC payload carries the idempotencyKey.
- * 3. Cursor persistence: on success, saves sdcDateTime and updates organization sync state.
+ * Process pending EBM outbox entries in batch. 1. Orphan recovery: a stale PROCESSING entry is
+ * resent as the SAME document (same invcNo).
  */
 export async function processEbmOutboxBatch(limit = 25): Promise<{
   processed: number;
@@ -298,9 +274,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
     return { processed: 0, succeeded: 0, failed: 0 };
   }
 
-  // A VSDC call can take up to the configured request timeout. Do not let the
-  // cron job (or another checkout) reclaim a row that is still being sent by a
-  // live worker. Only genuinely stale PROCESSING rows are reconciled.
+  // A VSDC call can take up to the configured request timeout.
   const staleProcessingBefore = new Date(
     Date.now() - Math.max(config.ebm.requestTimeoutMs * 2, 60_000),
   );
@@ -326,11 +300,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
   }
 
   for (const row of rows) {
-    // Claim the row before building its payload or calling VSDC. The previous
-    // implementation selected then updated it, allowing simultaneous requests
-    // from the immediate checkout worker and the cron worker to both submit the
-    // same fiscal receipt. `updatedAt` makes this conditional update a lease for
-    // stale PROCESSING rows as well.
+    // Claim the row before building its payload or calling VSDC.
     const claim = await prisma.ebmOutbox.updateMany({
       where: { id: row.id, status: row.status, updatedAt: row.updatedAt },
       data: { status: 'PROCESSING' },
@@ -404,15 +374,8 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
     const tourismRate = await getTourismTaxRate(row.organizationId);
     const rateOpts = { taxRates, taxRateTourism: tourismRate };
 
-    // ── Auto-allocate an RRA purchase code when the sale has none on record ──
-    // The sandbox rejects every sale without a real single-use code (881/882).
-    // Allocation is strictly buyer-scoped (consumeAnyOrgPurchaseCode): a code
-    // pooled for another buyer TIN carries the wrong checksum and is rejected
-    // with 882, so we never borrow across buyers. When this buyer's pool is
-    // empty the payload builder throws an actionable top-up error and the row
-    // retries with backoff until the operator tops the pool up.
-    // Only persists when an allocation is actually made, so retries reuse the
-    // same code (a consumed code cannot be re-submitted: 883).
+    // ── Auto-allocate an RRA purchase code when the sale has none on record ── The sandbox rejects
+    // every sale without a real single-use code (881/882).
     if (row.operation === 'SALE') {
       const needsCode = !(sale.prcOrdCd?.trim())
         && !(sale.customer?.prcOrdCd?.trim());
@@ -529,11 +492,10 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         continue;
       }
       try {
-        // RRA refund reason (code class 32, sent as rfdRsnCd): the operator's
-        // selection travels on the outbox payload (preferred) with the refund
-        // sale's stored code as fallback; anything outside RRA's list is a
-        // permanent error (the sandbox rejects it with 910), so validate
-        // before submitting. Default '06 Refund' when neither carries one.
+        // RRA refund reason (code class 32, sent as rfdRsnCd): the operator's selection travels on
+        // the outbox payload (preferred) with the refund sale's stored code as fallback; anything
+        // outside RRA's list is a permanent error (the sandbox rejects it with 910), so validate
+        // before submitting.
         const rawRsn = (row.payload as { rfdRsnCd?: string })?.rfdRsnCd
           ?? (sale as unknown as { rfdRsnCd?: string | null }).rfdRsnCd
           ?? DEFAULT_RFD_RSN_CD;
@@ -548,13 +510,9 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
           failed += 1;
           continue;
         }
-        // A refund is a fresh fiscal document (new invcNo, salesSttsCd=05),
-        // so it needs its own unconsumed purchase code for the customer TIN —
-        // a code already consumed by the original sale is rejected (883), and
-        // a missing/invalid one is rejected (881/882).
-        // A retry reuses the code already allocated to this refund (the VSDC may
-        // have accepted the earlier attempt); a burned code is replaced by the
-        // 882/883 handler below.
+        // A refund is a fresh fiscal document (new invcNo, salesSttsCd=05), so it needs its own
+        // unconsumed purchase code for the customer TIN — a code already consumed by the original
+        // sale is rejected (883), and a missing/invalid one is rejected (881/882).
         const allocatedCode = (sale as SaleWithRelations & { prcOrdCd?: string | null }).prcOrdCd?.trim();
         if (!allocatedCode) {
           const refundCustTin = effectiveBuyerTin(sale);
@@ -577,9 +535,8 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
           rfdRsnCd,
           ...rateOpts,
         });
-        // VSDC remark is the human justification (max 400). The code travels
-        // separately as rfdRsnCd. Stored sale amounts stay negative; the wire
-        // magnitudes are positive (sandbox 910 on a negative supply amount).
+        // VSDC remark is the human justification (max 400). The code travels separately as
+        // rfdRsnCd.
         payload.remark = clampField(justification, 400);
         payload.idempotencyKey = row.idempotencyKey;
         assertNrWirePayload(payload, { training: isTrainingLabel(sale.rcptLabel) });
@@ -629,22 +586,8 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         continue;
       }
       try {
-        // A cancellation is a NEW sales-transaction document (fresh invcNo)
-        // with cnclDt/cnclReqDt set, salesSttsCd='04' and orgInvcNo = the
-        // original NS invcNo. The sandbox rejects a resubmitted invcNo (924).
-        // A 2026-08-10 sandbox run answered 910 to orgInvcNo on a void; if that
-        // recurs the row dead-letters with the VSDC message rather than
-        // silently sending 0.
-        //
-        // A void is a fresh submission, so it needs a fresh unconsumed
-        // purchase code too: reusing the original sale's (already consumed)
-        // code is rejected with 883. Allocate a new valid one for the buyer.
-        //
-        // A retry (timeout, stale lease) must resend the SAME cancellation
-        // document: the invcNo allocated on the first attempt is kept on the
-        // outbox payload, so VSDC can answer 924 instead of receiving a second
-        // cancellation under a new number. Its purchase code stays on the sale
-        // unless the 882/883 handler burned and cleared it.
+        // A cancellation is a NEW sales-transaction document (fresh invcNo) with cnclDt/cnclReqDt
+        // set, salesSttsCd='04' and orgInvcNo = the original NS invcNo.
         const voidState = (row.payload ?? {}) as { voidInvcNo?: number };
         const storedVoidInvcNo =
           Number.isInteger(voidState.voidInvcNo) && (voidState.voidInvcNo as number) > 0 ? (voidState.voidInvcNo as number) : null;
@@ -685,10 +628,9 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       }
     }
 
-    // ── Record attempt in EbmTransaction (audit trail) ──
-    // Retries re-use the transaction row created on the first attempt
-    // (idempotencyKey is unique), resetting it to SUBMITTED instead of failing
-    // the duplicate insert.
+    // ── Record attempt in EbmTransaction (audit trail) ── Retries re-use the transaction row
+    // created on the first attempt (idempotencyKey is unique), resetting it to SUBMITTED instead of
+    // failing the duplicate insert.
     const txRow = await prisma.ebmTransaction.upsert({
       where: { idempotencyKey: row.idempotencyKey },
       create: {
@@ -712,15 +654,11 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
     });
 
     try {
-      // Every receipt type goes through VSDC (CIS §6). Training (TS/TR)
-      // travels as salesTyCd 'T' and proforma (PS) as 'P' (see
-      // buildRraSendReceiptPayload), so VSDC records them under their own
-      // counters without a signature.
+      // Every receipt type goes through VSDC (CIS §6).
       const envelope = await buildVsdcEnvelope(row.organizationId, sale.branchId);
 
-      // §22: never submit against a device that is not usable (missing/invalid
-      // TIN or no MRC serial). Retryable — the operator can fix the config and
-      // the next cron cycle picks the row back up.
+      // §22: never submit against a device that is not usable (missing/invalid TIN or no MRC
+      // serial).
       const envelopeError = validateVsdcEnvelope(envelope);
       if (envelopeError) {
         await failSubmission(txRow.id, envelopeError);
@@ -741,9 +679,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
       }
 
       logger.info(`[EBM-OUTBOX] row ${row.id}: calling saveInvc (${config.ebm.apiUrl ?? ''}/trnsSales/saveSales) — prcOrdCd=${payload.prcOrdCd ?? 'N/A'}, custTin=${(payload.receipt as any)?.custTin ?? 'N/A'}, invcNo=${(payload as any).invcNo ?? 'N/A'}`);
-      // Sandbox purchase codes survive DB resets in VSDC's ledger. On 882/883,
-      // burn the poisoned code and immediately try a fresh one (same cycle)
-      // instead of waiting for the next cron tick.
+      // Sandbox purchase codes survive DB resets in VSDC's ledger.
       const MAX_PRC_RETRIES = 8;
       let result = await saveInvc(envelope, payload);
       logger.info(`[EBM-OUTBOX] row ${row.id}: saveInvc returned success=${result.success} error=${result.error ?? 'none'} rawStatus=${result.rawStatus} rawBody=${JSON.stringify(result.rawBody)?.slice(0, 500)}`);
@@ -786,11 +722,8 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
         logger.info(`[EBM-OUTBOX] row ${row.id}: saveInvc retry returned success=${result.success} error=${result.error ?? 'none'}`);
       }
 
-      // Every document type is confirmed only by a complete VSDC receipt block
-      // (rcptNo, totRcptNo, intrlData, rcptSign, sdcId, mrcNo, vsdcRcptPbctDate).
-      // A bare rcptNo, a 924 without the original block, a non-2xx reply or a
-      // timeout is not a receipt. Training (TS/TR) and proforma (PS) get the
-      // same check minus the signature fields VSDC leaves empty for them.
+      // Every document type is confirmed only by a complete VSDC receipt block (rcptNo, totRcptNo,
+      // intrlData, rcptSign, sdcId, mrcNo, vsdcRcptPbctDate).
       const isTraining = isUnsignedLabel(sale.rcptLabel);
       const decision = decideVsdcReceiptResult(result, {
         training: isTraining,
@@ -875,20 +808,18 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
             ebmInvoiceNumber: vsdc.rcptNo,
             submittedAt: new Date(),
             sdcDateTime: sdcDateTime as any,
-            // B1 dedicated columns — sdcRcptNo/totalRcptNo are the "A"/"B" halves
-            // of the required A/B RT receipt counter (§7.24.4/7.25); VSDC does not
-            // return a QR payload — the CIS builds the QR string itself (qrCode.ts).
+            // B1 dedicated columns — sdcRcptNo/totalRcptNo are the "A"/"B" halves of the required
+            // A/B RT receipt counter (§7.24.4/7.25); VSDC does not return a QR payload — the CIS
+            // builds the QR string itself (qrCode.ts).
             sdcRcptNo: vsdc.rcptNo ? parseInt(vsdc.rcptNo, 10) || null : null,
             totalRcptNo: vsdc.totRcptNo ? parseInt(vsdc.totRcptNo, 10) || null : null,
             sdcId: vsdc.sdcId || null,
             internalData: vsdc.intrlData || null,
             receiptSignature: vsdc.vsdcSignature || null,
             rcptLabel: rcptLabel as any,
-            // C8 electronic journal: the text is always stored for inspector
-            // comparison. ejSent means TRANSMITTED to the VSDC (2018 Art. 6.5),
-            // not merely stored — it flips to true only when the EJ POST below
-            // is acknowledged. Without EBM_EJ_SYNC_PATH there is no 2023-API
-            // endpoint to send it to, so it stays stored-but-unsent.
+            // C8 electronic journal: the text is always stored for inspector comparison. ejSent
+            // means TRANSMITTED to the VSDC (2018 Art. 6.5), not merely stored — it flips to true
+            // only when the EJ POST below is acknowledged.
             journalText: ejText,
             ejSent: false,
             responseData: { raw: result.rawBody, normalized: vsdc, requestPayload: payload } as any,
@@ -913,9 +844,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
 
       succeeded += 1;
       logger.info(`[EBM-OUTBOX] row ${row.id}: SUCCEEDED — rcptNo=${vsdc.rcptNo}, sdcId=${vsdc.sdcId ?? 'N/A'}, sdcDateTime=${sdcDateTime?.toISOString() ?? 'N/A'}`);
-      // C8 follow-up: transmit the journal text when a device EJ endpoint is
-      // configured. Best-effort — a failure here never un-fiscalizes the sale;
-      // the text is retained and ejSent stays false so it can be resent.
+      // C8 follow-up: transmit the journal text when a device EJ endpoint is configured.
       if (ejText && config.ebm.ejSyncPath) {
         try {
           const ejRes = await saveElectronicJournal(envelope, {
@@ -937,10 +866,8 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
           logger.warn(`[EBM-OUTBOX] row ${row.id}: EJ POST threw — ${e instanceof Error ? e.message : e} (journal retained, ejSent=false)`);
         }
       }
-      // S8 order: the sales invoice is now acked — the linked SALE stock-out
-      // rows (sarTyCd 11) become eligible for /stock/saveStockItems. The stock
-      // worker gates on this ack, but kick it immediately instead of waiting
-      // for the next cron tick.
+      // S8 order: the sales invoice is now acked — the linked SALE stock-out rows (sarTyCd 11)
+      // become eligible for /stock/saveStockItems.
       if (row.operation === 'SALE' || row.operation === 'REFUND') {
         setImmediate(() => {
           import('./stock-movement-sync.service')
@@ -976,9 +903,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
   return { processed, succeeded, failed };
 }
 
-// ──────────────────────────────────────────────
 // Internal helpers
-// ──────────────────────────────────────────────
 
 async function failSubmission(ebmTransactionId: number, message: string): Promise<void> {
   await prisma.ebmTransaction.update({
@@ -996,12 +921,7 @@ function scheduleNextRetry(currentRetryCount: number): Date {
   return new Date(Date.now() + delayMs);
 }
 
-/**
- * Classify a payload-build failure. A missing purchase code is TRANSIENT (the
- * operator tops the pool up and the retry succeeds), so the row backs off
- * with retries; anything else structural (bad tax code, bad TIN, unknown
- * product) can never heal and dead-letters immediately with the reason.
- */
+/** Classify a payload-build failure. */
 async function handleBuildError(
   row: { id: number; retryCount: number },
   e: unknown,
@@ -1027,21 +947,14 @@ async function handleBuildError(
   });
 }
 
-/**
- * Sentinel `nextAttemptAt` for a DEAD_LETTER row. `nextAttemptAt` is a
- * non-nullable `DateTime`, so instead of `null` we store a far-future timestamp
- * meaning "never retry" — the worker only selects PENDING/PROCESSING/FAILED
- * rows whose `nextAttemptAt` is in the past, so DEAD_LETTER entries stay put.
- */
+/** Sentinel `nextAttemptAt` for a DEAD_LETTER row. */
 function deadLetterAttemptAt(): Date {
   return new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000);
 }
 
 /**
- * Manually re-queue a FAILED or DEAD_LETTER outbox row so the worker will
- * attempt fiscalization again (e.g. after fixing a missing itemClsCd).
- * Resets status to PENDING with nextAttemptAt=now and optionally kicks the
- * batch processor immediately.
+ * Manually re-queue a FAILED or DEAD_LETTER outbox row so the worker will attempt fiscalization
+ * again (e.g. after fixing a missing itemClsCd).
  */
 export async function retryEbmOutboxEntry(
   organizationId: number,

@@ -10,10 +10,10 @@ import { getOrderBy } from "../utils/sorting"
 import { isValidCustomerPhone, isValidCustomerTin } from "../validations/customers.validation"
 
 /**
- * Rejects a phone/TIN pair that's malformed or swapped before it ever reaches
- * the database — this is what ultimately becomes custTin/custMblNo on the
- * RRA VSDC sale payload (rra-ebm.service.ts), so garbage or crossed values
- * here would otherwise surface as a VSDC 910-class rejection at sale time.
+ * Rejects a phone/TIN pair that's malformed or swapped before it ever reaches the database — this
+ * is what ultimately becomes custTin/custMblNo on the RRA VSDC sale payload (rra-ebm.service.ts),
+ * so garbage or crossed values here would otherwise surface as a VSDC 910-class rejection at sale
+ * time.
  */
 function validateCustomerContactFields(phone: unknown, tin: unknown): string | null {
   const phoneValue = typeof phone === "string" ? phone.trim() : ""
@@ -76,12 +76,8 @@ export const getCustomers = async (req: BranchAuthRequest, res: Response) => {
       where.customerType = customerTypeValue
     }
 
-    // Customers are organization-wide records (the Customer model has no
-    // branchId column), so no branch filter is applied here. Filtering by
-    // `sales.some({branchId})` was previously attempted, but that hid every
-    // customer that had not yet made a purchase in the selected branch,
-    // including newly created customers — the same root-cause bug as
-    // suppliers (see supplier.controller.ts getSuppliers).
+    // Customers are organization-wide records (the Customer model has no branchId column), so no
+    // branch filter is applied here.
     const customers = await prisma.customer.findMany({
       where,
       select: {
@@ -147,9 +143,9 @@ export const getCustomerById = async (req: BranchAuthRequest, res: Response) => 
       return res.status(400).json({ error: "Organization ID is required" })
     }
 
-    // Customers themselves are org-wide (see getCustomers), but their sales
-    // history is branch-scoped data — a branch-restricted user must only see
-    // the sales that happened in their own branch(es).
+    // Customers themselves are org-wide (see getCustomers), but their sales history is
+    // branch-scoped data — a branch-restricted user must only see the sales that happened in their
+    // own branch(es).
     const branchFilter = buildBranchFilter(req)
 
     const customer = await prisma.customer.findFirst({
@@ -212,11 +208,9 @@ export const createCustomer = async (req: BranchAuthRequest, res: Response) => {
       customerType = type
     }
 
-    // Individuals may also hold a real RRA TIN (RRA issues TINs to persons
-    // too) — store it whenever a valid one is supplied, for every customer
-    // type, so fiscal receipts use the customer's real TIN instead of a
-    // walk-in placeholder. Business buyers are still required to have one
-    // (see customers.validation.ts).
+    // Individuals may also hold a real RRA TIN (RRA issues TINs to persons too) — store it whenever
+    // a valid one is supplied, for every customer type, so fiscal receipts use the customer's real
+    // TIN instead of a walk-in placeholder.
     const resolvedTin = TIN || tin || null
 
     const contactError = validateCustomerContactFields(phone, resolvedTin)
@@ -288,9 +282,9 @@ export const updateCustomer = async (req: BranchAuthRequest, res: Response) => {
       updateData.isrccCd = null
       updateData.isrcRt = null
     }
-    // Only drop the stored TIN when the customer is (re)typed as INDIVIDUAL
-    // without a TIN in the same request — an explicitly supplied TIN is kept
-    // for every customer type (individuals may hold a real RRA TIN too).
+    // Only drop the stored TIN when the customer is (re)typed as INDIVIDUAL without a TIN in the
+    // same request — an explicitly supplied TIN is kept for every customer type (individuals may
+    // hold a real RRA TIN too).
     if (type === 'INDIVIDUAL' && TIN === undefined && tin === undefined) {
       updateData.TIN = null
     }
@@ -303,9 +297,9 @@ export const updateCustomer = async (req: BranchAuthRequest, res: Response) => {
       return res.status(404).json({ error: "Customer not found" })
     }
 
-    // Validate against the *resulting* phone/TIN, not just whichever field
-    // this particular request happens to touch — a request that only changes
-    // one of the pair must still be checked against the other's existing value.
+    // Validate against the *resulting* phone/TIN, not just whichever field this particular request
+    // happens to touch — a request that only changes one of the pair must still be checked against
+    // the other's existing value.
     const resolvedPhone = updateData.phone !== undefined ? updateData.phone : existingCustomer.phone
     const resolvedTin = updateData.TIN !== undefined ? updateData.TIN : existingCustomer.TIN
     const contactError = validateCustomerContactFields(resolvedPhone, resolvedTin)

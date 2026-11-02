@@ -2,11 +2,7 @@ import { Prisma, ShiftStatus, SaleStatus, CashMovementType } from '@prisma/clien
 import { prisma } from '../lib/prisma';
 import { getOrganizationSettings } from './organization-settings.service';
 
-/**
- * A shift that can still accept transactions / be closed. REOPENED appears
- * when a submitted closing was rejected (manager decision) or an admin
- * reopened a closed shift — operations must continue as if it were OPEN.
- */
+/** A shift that can still accept transactions / be closed. */
 export const ACTIVE_SHIFT_STATUSES: ShiftStatus[] = [ShiftStatus.OPEN, ShiftStatus.REOPENED];
 
 export interface OpenShiftParams {
@@ -43,8 +39,8 @@ export interface SubmitCloseParams {
 }
 
 /**
- * Get the caller's currently open shift, if any (a user may only have one
- * open shift at a time). REOPENED shifts remain "active" for operations.
+ * Get the caller's currently open shift, if any (a user may only have one open shift at a time).
+ * REOPENED shifts remain "active" for operations.
  */
 export async function getActiveShift(organizationId: number, userId: number) {
   return prisma.shift.findFirst({
@@ -80,11 +76,8 @@ export async function openShift(params: OpenShiftParams) {
     }
   }
 
-  // generateShiftNumber() counts existing rows and is not atomic with the
-  // create() below, so two near-simultaneous opens (double-click, two
-  // registers) can compute the same number. Shift opens are low-frequency
-  // enough that a bounded retry on the unique-constraint conflict is simpler
-  // and safer than introducing a dedicated counter table under time pressure.
+  // generateShiftNumber() counts existing rows and is not atomic with the create() below, so two
+  // near-simultaneous opens (double-click, two registers) can compute the same number.
   for (let attempt = 0; attempt < 5; attempt++) {
     const shiftNumber = await generateShiftNumber(organizationId);
     try {
@@ -120,9 +113,8 @@ export async function getShiftById(shiftId: number, organizationId: number) {
 }
 
 /**
- * Cash/payment-method breakdown for a shift, computed on the fly from its
- * sales rather than persisted, so it always reflects the latest
- * sale/payment/refund/expense/movement state.
+ * Cash/payment-method breakdown for a shift, computed on the fly from its sales rather than
+ * persisted, so it always reflects the latest sale/payment/refund/expense/movement state.
  */
 export async function computeShiftSummary(shiftId: number, organizationId: number) {
   const shift = await getShiftById(shiftId, organizationId);
@@ -219,11 +211,7 @@ export async function computeShiftSummary(shiftId: number, organizationId: numbe
   };
 }
 
-/**
- * Paginated shift history with role-safe filters. The controller passes a
- * `where` already scoped by branch access + explicit filters; this service
- * only adds pagination, sorting and the include graph.
- */
+/** Paginated shift history with role-safe filters. */
 export async function listShifts(organizationId: number, where: Prisma.ShiftWhereInput, filters: ListShiftFilters) {
   const page = filters.page ?? 1;
   const limit = filters.limit ?? 20;
@@ -264,11 +252,7 @@ export async function startClose(shiftId: number, organizationId: number, userId
   return { shift: updated, summary };
 }
 
-/**
- * Submit the reconciliation. Sets the shift to PENDING_APPROVAL when the
- * business requires approval, or when the variance exceeds the configured
- * threshold; otherwise it closes immediately.
- */
+/** Submit the reconciliation. */
 export async function submitClose(params: SubmitCloseParams) {
   const { shiftId, organizationId, userId, actualCash, actualMobileMoney, varianceReason, closingNotes, denominationCounts } = params;
 
@@ -321,10 +305,7 @@ export async function submitClose(params: SubmitCloseParams) {
   return { shift: closed, summary: { ...summary, actualCash, difference }, needsApproval };
 }
 
-/**
- * Manager approves a pending closing. PENDING_APPROVAL → CLOSED.
- * Recorded for audit: who, when, and why.
- */
+/** Manager approves a pending closing. PENDING_APPROVAL → CLOSED. */
 export async function approveClose(shiftId: number, organizationId: number, approverId: number, reason?: string) {
   const shift = await getShiftById(shiftId, organizationId);
   if (shift.status !== ShiftStatus.PENDING_APPROVAL) {
@@ -347,8 +328,8 @@ export async function approveClose(shiftId: number, organizationId: number, appr
 }
 
 /**
- * Manager rejects a pending closing. PENDING_APPROVAL → REOPENED so the
- * cashier can correct the count and resubmit. Recorded for audit.
+ * Manager rejects a pending closing. PENDING_APPROVAL → REOPENED so the cashier can correct the
+ * count and resubmit.
  */
 export async function rejectClose(shiftId: number, organizationId: number, reviewerId: number, reason?: string) {
   const shift = await getShiftById(shiftId, organizationId);

@@ -5,13 +5,8 @@ import { computeFiscalTotals, bandTaxFromNet } from '../src/services/money.servi
 import { bandTaxAmounts, salesBands, taxBandRows, taxGroups } from '../src/services/invoice-pdf.service';
 
 /**
- * RRA CIS/VSDC totals — the three spec worked cases as exact-value tests,
- * plus R11 invariants, refund negation, zero-rate label behavior and the
- * per-line-cent vs band-derivation rule.
- *
- * Money math via the central money.service; wire shape via
- * buildRraSendReceiptPayload on receipt-shaped fakes (stored legs mimic the
- * DB-rounded Decimal(15,2) columns).
+ * RRA CIS/VSDC totals — the three spec worked cases as exact-value tests, plus R11 invariants,
+ * refund negation, zero-rate label behavior and the per-line-cent vs band-derivation rule.
  */
 
 const D = (v: number | string) => new Decimal(v);

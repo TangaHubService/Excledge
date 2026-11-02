@@ -2,13 +2,11 @@ import { ActivityType, LogModule, LogStatus } from '@prisma/client';
 import { logManualActivity } from '../middleware/activity-log.middleware';
 
 /**
- * Standardized Audit Logger
- * Simplifies logging across different modules by automatically capturing request context.
+ * Standardized Audit Logger Simplifies logging across different modules by automatically capturing
+ * request context.
  */
 export const auditLogger = {
-    /**
-     * Log an activity for any module
-     */
+    /** Log an activity for any module */
     log: async (req: any, module: LogModule, params: {
         type: ActivityType,
         description: string,

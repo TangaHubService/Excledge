@@ -33,9 +33,8 @@ export const config = {
     yearlyDiscountPercent: Number.parseFloat(process.env.SUBSCRIPTION_YEARLY_DISCOUNT_PERCENT || "20"),
   },
   inventory: {
-    // Applied when auto-creating a product from a scanned supplier invoice and
-    // OCR couldn't extract a selling price — keeps the product from going live
-    // priced at cost (zero margin). Tune per business via env if needed.
+    // Applied when auto-creating a product from a scanned supplier invoice and OCR couldn't extract
+    // a selling price — keeps the product from going live priced at cost (zero margin).
     defaultMarkupPercent: Number.parseFloat(process.env.DEFAULT_PRODUCT_MARKUP_PERCENT || "20"),
   },
   cloudinary: {
@@ -52,20 +51,18 @@ export const config = {
     defaultTin: process.env.EBM_DEFAULT_TIN || "",
     defaultBhfId: process.env.EBM_DEFAULT_BHF_ID || "00",
     defaultDvcSrlNo: process.env.EBM_DEFAULT_DVC_SRL_NO || "",
-    // Canonical RRA VSDC endpoints (RRA VSDC API Documentation v1.0.5, §3.2.1)
-    // Sale, refund, and cancellation all go through the same sales-transaction
-    // endpoint — they're distinguished by rcptTyCd/salesSttsCd/orgInvcNo in the
-    // payload, not by URL.
+    // Canonical RRA VSDC endpoints (RRA VSDC API Documentation v1.0.5, §3.2.1) Sale, refund, and
+    // cancellation all go through the same sales-transaction endpoint — they're distinguished by
+    // rcptTyCd/salesSttsCd/orgInvcNo in the payload, not by URL.
     salePath: process.env.EBM_SALE_PATH || "/trnsSales/saveSales",
     refundPath: process.env.EBM_REFUND_PATH || "/trnsSales/saveSales",
     voidPath: process.env.EBM_VOID_PATH || "/trnsSales/saveSales",
     // itemPath now matches the real VSDC path (§3.2.1: POST /items/saveItems),
     // fixed alongside product-sync.service.ts's payload shape.
     itemPath: process.env.EBM_ITEM_PATH || "/items/saveItems",
-    // DEPRECATED: stock and purchase now use the real VSDC routes directly in
-    // vsdc-api.service.ts (/stock/saveStockItems, /stockMaster/saveStockMaster,
-    // /trnsPurchase/savePurchases, /trnsPurchase/selectTrnsPurchaseSales). These
-    // env overrides are kept only so an old .env doesn't break startup.
+    // DEPRECATED: stock and purchase now use the real VSDC routes directly in vsdc-api.service.ts
+    // (/stock/saveStockItems, /stockMaster/saveStockMaster, /trnsPurchase/savePurchases,
+    // /trnsPurchase/selectTrnsPurchaseSales).
     movementPath: process.env.EBM_MOVEMENT_PATH || "/selectMvmt",
     purchasePath: process.env.EBM_PURCHASE_PATH || "/savePurc",
     importPath: process.env.EBM_IMPORT_PATH || "/selectImportInvc",
@@ -73,25 +70,14 @@ export const config = {
     requestTimeoutMs: Number.parseInt(process.env.EBM_REQUEST_TIMEOUT_MS || "1000", 10),
     useMock: process.env.EBM_USE_MOCK === "true",
     maxQueueRetries: Number.parseInt(process.env.EBM_MAX_QUEUE_RETRIES || "10", 10),
-    // Strict fiscal mode (2018 spec Art. 10, strict reading): when "true", a
-    // sale is not created at all unless the VSDC is reachable and the receipt
-    // is confirmed within the inline wait. Default "false" keeps the
-    // transactional-outbox behavior (sale completes, official receipt withheld
-    // with HTTP 425 until VSDC confirms). Strict mode has a real availability
-    // cost — every checkout gains a VSDC round-trip — so it is opt-in.
+    // Strict fiscal mode (2018 spec Art. 10, strict reading): when "true", a sale is not created at
+    // all unless the VSDC is reachable and the receipt is confirmed within the inline wait.
     strictMode: process.env.EBM_STRICT_MODE === "true",
     // Optional Electronic Journal transmission (2018 spec Art. 6.5 EJ_DATA).
-    // The 2023 VSDC API (§3.3.6.1) defines no EJ endpoint, so the journal is
-    // stored locally and exposed for inspection by default. Set
-    // EBM_EJ_SYNC_PATH to the device path that accepts the journal text
-    // (e.g. "/ej/saveEj") to POST it after every fiscalized sale; EbmTransaction
-    // .ejSent is true only when that POST is acknowledged.
     ejSyncPath: process.env.EBM_EJ_SYNC_PATH || "",
-    // "/status" is not a real VSDC route (verified 404 against the RRA sandbox)
-    // — there is no dedicated heartbeat endpoint in the spec. /code/selectCodes
-    // is a real, side-effect-free lookup, so a successful response from it is
-    // used as the liveness probe instead. Override via env if a genuine status
-    // endpoint becomes available on production RRA infrastructure.
+    // "/status" is not a real VSDC route (verified 404 against the RRA sandbox) — there is no
+    // dedicated heartbeat endpoint in the spec. /code/selectCodes is a real, side-effect-free
+    // lookup, so a successful response from it is used as the liveness probe instead.
     statusCheckPath: process.env.EBM_STATUS_CHECK_PATH || "/code/selectCodes",
     securityKey: process.env.EBM_SECURITY_KEY || "",
     // ── EBM 2.1 / OSDC (Online Sales Data Controller) integration ────────────

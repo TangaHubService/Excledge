@@ -177,10 +177,9 @@ export async function verifyCustomer(req: BranchAuthRequest, res: Response) {
 // ── Select Item reconciliation (§64) ──────────────────────────
 
 /**
- * POST /:organizationId/rra/items/:productId/sync
- * Force-register one product with RRA (used by the reconcile view to push a
- * local-only item, or to apply RRA's value on a mismatch then re-register).
- * Optional body: { itemClsCd?, taxCode? } — applied to the product first.
+ * POST /:organizationId/rra/items/:productId/sync Force-register one product with RRA (used by the
+ * reconcile view to push a local-only item, or to apply RRA's value on a mismatch then
+ * re-register).
  */
 export async function syncOneProduct(req: BranchAuthRequest, res: Response) {
   try {
@@ -512,11 +511,7 @@ export async function masterDataStatus(req: BranchAuthRequest, res: Response) {
 
 // ── Fiscal document lookups (refund reasons / payment mappings) ──
 
-/**
- * RRA refund reason codes (code class 32) for the refund-reason dropdown.
- * Served from the centralized RRA code service — the same list the fiscal
- * refund validator enforces, so the UI can never offer a code VSDC rejects.
- */
+/** RRA refund reason codes (code class 32) for the refund-reason dropdown. */
 export async function listRefundReasons(req: BranchAuthRequest, res: Response) {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -540,8 +535,8 @@ export async function getCodeCatalog(req: BranchAuthRequest, res: Response) {
 }
 
 /**
- * ERP → RRA payment-method mappings with the RRA code names, for checkout
- * display and operator validation.
+ * ERP → RRA payment-method mappings with the RRA code names, for checkout display and operator
+ * validation.
  */
 export async function listPaymentMappings(req: BranchAuthRequest, res: Response) {
   try {
@@ -658,8 +653,8 @@ export async function pushInsurance(req: BranchAuthRequest, res: Response) {
 }
 
 /**
- * CIS §7.26 — auditor overview of software settings and fiscal database state.
- * GET /organizations/:organizationId/rra/audit-overview
+ * CIS §7.26 — auditor overview of software settings and fiscal database state. GET
+ * /organizations/:organizationId/rra/audit-overview
  */
 export async function getAuditOverview(req: BranchAuthRequest, res: Response) {
   try {

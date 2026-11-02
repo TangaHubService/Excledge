@@ -37,13 +37,7 @@ export async function getEbmOutbox(req: BranchAuthRequest, res: Response) {
   }
 }
 
-/**
- * GET /:organizationId/ebm-status — VSDC presence indicator payload.
- * Derives reachability from the persisted last-contact timestamp (updated on
- * every real successful VSDC call/heartbeat) rather than a synthetic probe,
- * since a bare unauthenticated GET to the gateway root is not representative
- * of the authenticated POST endpoints actual fiscalisation traffic uses.
- */
+/** GET /:organizationId/ebm-status — VSDC presence indicator payload. */
 export async function getEbmStatus(req: BranchAuthRequest, res: Response) {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -118,8 +112,8 @@ export async function checkEbmOutboxStatus(req: BranchAuthRequest, res: Response
 }
 
 /**
- * POST /:organizationId/ebm-outbox/:id/retry — re-queue FAILED / DEAD_LETTER
- * (unfiscalized) entries after the underlying issue is fixed.
+ * POST /:organizationId/ebm-outbox/:id/retry — re-queue FAILED / DEAD_LETTER (unfiscalized) entries
+ * after the underlying issue is fixed.
  */
 export async function retryEbmOutbox(req: BranchAuthRequest, res: Response) {
   try {
@@ -144,8 +138,8 @@ export async function retryEbmOutbox(req: BranchAuthRequest, res: Response) {
 }
 
 /**
- * POST /:organizationId/ebm/initialize — one-time RRA VSDC device initialization
- * (RRA checklist §58). Body: { branchId? }.
+ * POST /:organizationId/ebm/initialize — one-time RRA VSDC device initialization (RRA checklist
+ * §58). Body: { branchId? }.
  */
 export async function initializeDevice(req: BranchAuthRequest, res: Response) {
   try {
@@ -180,19 +174,16 @@ export async function initializeDevice(req: BranchAuthRequest, res: Response) {
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 /**
- * `yyyyMMdd` report date — expanded to a 14-digit `yyyyMMddHH24MISS`
- * timestamp (`yyyyMMdd000000`) inside `checkZReport`, which is what the VSDC
- * validates against (error 910 rejects a bare 8-digit `rptDe`).
+ * `yyyyMMdd` report date — expanded to a 14-digit `yyyyMMddHH24MISS` timestamp (`yyyyMMdd000000`)
+ * inside `checkZReport`, which is what the VSDC validates against (error 910 rejects a bare 8-digit
+ * `rptDe`).
  */
 function toRptDeDate(d: Date): string {
   return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
 }
 
 /**
- * POST /:organizationId/z-report — trigger the daily Z (closing) report for
- * a branch's VSDC device. Manually triggered for now; day-end cutoff timing
- * is an operational policy decision (per-branch closing hour) that isn't
- * automated yet.
+ * POST /:organizationId/z-report — trigger the daily Z (closing) report for a branch's VSDC device.
  */
 export async function submitZReport(req: BranchAuthRequest, res: Response) {
   try {
@@ -223,10 +214,8 @@ export async function submitZReport(req: BranchAuthRequest, res: Response) {
 }
 
 /**
- * GET /:organizationId/z-report?branchId=&date=yyyyMMdd[HHmmss] — look up a
- * previously saved Z report for a given day (defaults to today). A bare
- * 8-digit date is expanded to `yyyyMMdd000000` inside `checkZReport` because
- * the VSDC requires `yyyyMMddHH24MISS` (error 910 otherwise).
+ * GET /:organizationId/z-report?branchId=&date=yyyyMMdd[HHmmss] — look up a previously saved Z
+ * report for a given day (defaults to today).
  */
 export async function getZReportStatus(req: BranchAuthRequest, res: Response) {
   try {

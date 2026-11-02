@@ -12,13 +12,7 @@ export interface BranchAuthRequest extends AuthRequest {
     branchScope?: 'ALL' | 'LIMITED';
 }
 
-/**
- * Resolve the effective org-level role for a user.
- * Checks, in order:
- * 1. `organizationRole` on request (set by `requireOrganizationAccess`)
- * 2. `user.role` from JWT (which reflects org role after login)
- * 3. Queries `UserOrganization` for the active org from JWT
- */
+/** Resolve the effective org-level role for a user. Checks, in order: 1. */
 async function resolveOrgRole(req: AuthRequest): Promise<{ role: string; orgId: number | null; isOwner: boolean }> {
     const orgAccessReq = req as OrganizationAccessRequest;
     if (orgAccessReq.organizationRole) {
@@ -45,13 +39,9 @@ async function resolveOrgRole(req: AuthRequest): Promise<{ role: string; orgId: 
 }
 
 /**
- * Branch authorization middleware
- * Extracts optional branchId from query and validates user access
- * 
- * Rules:
- * - No branchId parameter → returns all data (selectedBranchId = null)
- * - Specific branchId → validates access and returns branch + org-level data
- * - ADMIN at org level can access ALL branches
+ * Branch authorization middleware Extracts optional branchId from query and validates user access
+ * Rules: - No branchId parameter → returns all data (selectedBranchId = null) - Specific branchId →
+ * validates access and returns branch + org-level data - ADMIN at org level can access ALL branches
  * - BRANCH_MANAGER, SELLER, ACCOUNTANT are LIMITED to assigned branches
  */
 export const branchAuth = async (
@@ -78,19 +68,18 @@ export const branchAuth = async (
         const userBranchIds = userBranches.map(ub => ub.branchId);
         req.branchIds = userBranchIds;
 
-        // SYSTEM_OWNER always has full access.
-        // ADMIN has full access if they're an org owner OR have no branch restrictions.
-        // Other roles (BRANCH_MANAGER, ACCOUNTANT, SELLER) are always LIMITED.
+        // SYSTEM_OWNER always has full access. ADMIN has full access if they're an org owner OR
+        // have no branch restrictions.
         const hasBranchRestrictions = userBranchIds.length > 0;
         const canAccessAll = orgRole === UserRole.SYSTEM_OWNER ||
             (orgRole === UserRole.ADMIN && (!hasBranchRestrictions || isOwner));
 
         req.branchScope = canAccessAll ? 'ALL' : 'LIMITED';
 
-        // Get branchId from the query string OR request body (write endpoints send it
-        // in the body, e.g. createSale/createProduct) — both must be validated the
-        // same way, otherwise a branch-restricted user could bypass this check by
-        // simply putting an arbitrary branchId in the body instead of the query.
+        // Get branchId from the query string OR request body (write endpoints send it in the body,
+        // e.g. createSale/createProduct) — both must be validated the same way, otherwise a
+        // branch-restricted user could bypass this check by simply putting an arbitrary branchId in
+        // the body instead of the query.
         const branchIdParam = (req.query.branchId as string | undefined) ??
             (req.body?.branchId != null ? String(req.body.branchId) : undefined);
         let branchId: number | null = null;
@@ -102,12 +91,10 @@ export const branchAuth = async (
             }
         }
 
-        // If no branchId specified:
-        // - Users with 'ALL' scope (SYSTEM_OWNER, or org-owning ADMIN) see everything.
-        // - LIMITED users (BRANCH_MANAGER, ACCOUNTANT, SELLER, or branch-restricted ADMIN)
-        //   MUST NOT fall through to unfiltered data — default them to their own
-        //   assigned branch(es). This is the authoritative fix for branch isolation:
-        //   omitting ?branchId must never be usable to see other branches' data.
+        // If no branchId specified: - Users with 'ALL' scope (SYSTEM_OWNER, or org-owning ADMIN)
+        // see everything. - LIMITED users (BRANCH_MANAGER, ACCOUNTANT, SELLER, or branch-restricted
+        // ADMIN) MUST NOT fall through to unfiltered data — default them to their own assigned
+        // branch(es).
         if (branchId === null) {
             if (canAccessAll) {
                 req.selectedBranchId = null;
@@ -149,12 +136,9 @@ export const branchAuth = async (
 };
 
 /**
- * Helper function to build branch filter for Prisma queries
- * Includes organization-level data (branch_id = NULL) when filtering by branch
- * 
- * Rules:
- * - No branchId (null) → no filter, returns all data
- * - Specific branchId → returns branch data + org-level data (branch_id = NULL)
+ * Helper function to build branch filter for Prisma queries Includes organization-level data
+ * (branch_id = NULL) when filtering by branch Rules: - No branchId (null) → no filter, returns all
+ * data - Specific branchId → returns branch data + org-level data (branch_id = NULL)
  */
 export function buildBranchFilter(req: BranchAuthRequest) {
     const branchId = req.selectedBranchId;
@@ -174,8 +158,8 @@ export function buildBranchFilter(req: BranchAuthRequest) {
     return {};
 }
 /**
- * Helper function to get branch ID for write operations
- * Write operations (create, update) require a specific branch ID
+ * Helper function to get branch ID for write operations Write operations (create, update) require a
+ * specific branch ID
  */
 export function getBranchIdForOperation(req: BranchAuthRequest): number {
     // For write operations, we need a specific branch ID
@@ -192,11 +176,10 @@ export function getBranchIdForOperation(req: BranchAuthRequest): number {
 }
 
 /**
- * Same as `getBranchIdForOperation`, but when the caller supplies no branch ID
- * (e.g. an org-owner/ADMIN operating at "All branches" scope) it resolves a
- * concrete default branch instead of failing: the org's primary branch, else a
- * branch with an EBM/VSDC device, else any single branch. Used by write flows
- * that must always land on a real branch (e.g. sale creation for fiscalization).
+ * Same as `getBranchIdForOperation`, but when the caller supplies no branch ID (e.g. an
+ * org-owner/ADMIN operating at "All branches" scope) it resolves a concrete default branch instead
+ * of failing: the org's primary branch, else a branch with an EBM/VSDC device, else any single
+ * branch.
  */
 export async function resolveBranchIdForWrite(req: BranchAuthRequest): Promise<number> {
     const explicit = req.selectedBranchId ||
@@ -221,8 +204,8 @@ export async function resolveBranchIdForWrite(req: BranchAuthRequest): Promise<n
 }
 
 /**
- * Middleware to require specific branch access
- * Use this for endpoints that MUST have a branch (e.g., creating a sale)
+ * Middleware to require specific branch access Use this for endpoints that MUST have a branch
+ * (e.g., creating a sale)
  */
 export const requireBranchId = async (
     req: BranchAuthRequest,

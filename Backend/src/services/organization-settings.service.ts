@@ -10,9 +10,7 @@ import {
 } from "../types/organization-settings.types";
 import { normalizeMrcOrThrow } from "../utils/mrc";
 
-/** Shallow-merges a possibly-partial/legacy JSON blob onto its typed default.
- *  Keeps records created before a key existed (or written by an older app
- *  version) fully populated without a backfill migration. */
+/** Shallow-merges a possibly-partial/legacy JSON blob onto its typed default. */
 function withDefaults<T extends object>(defaults: T, stored: unknown): T {
   if (!stored || typeof stored !== "object" || Array.isArray(stored)) {
     return defaults;
@@ -20,9 +18,10 @@ function withDefaults<T extends object>(defaults: T, stored: unknown): T {
   return { ...defaults, ...(stored as Partial<T>) };
 }
 
-/** Fetches an organization's settings, applying DEFAULT_SETTINGS for any
- *  missing record or missing key. Never throws for a missing row — a brand
- *  new organization simply gets the platform defaults. */
+/**
+ * Fetches an organization's settings, applying DEFAULT_SETTINGS for any missing record or missing
+ * key.
+ */
 export async function getOrganizationSettings(
   organizationId: number
 ): Promise<IOrganizationSettings> {
@@ -41,16 +40,40 @@ export async function getOrganizationSettings(
     }),
   ]);
 
-  return toTypedSettings(row, org?.vatRegistered ?? false, org ?? undefined, branch ?? undefined);
+  const settings = toTypedSettings(row, org?.vatRegistered ?? false, org ?? undefined, branch ?? undefined);
+  return enforceFiscalFlags(settings, await hasVsdcDevice(organizationId));
 }
 
-/**
- * Atomically applies a partial settings patch. Uses Postgres jsonb `||` to
- * merge at the database level instead of read-modify-write in application
- * code, so two concurrent requests patching different keys (e.g. one toggling
- * `allowNegativeStock`, another toggling `ebmIntegrationEnabled`) can never
- * silently clobber each other's change (classic lost-update race).
- */
+/** Whether a VSDC device is configured on the org or any branch. */
+async function hasVsdcDevice(organizationId: number): Promise<boolean> {
+  const [org, branchCount] = await Promise.all([
+    prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { ebmDeviceId: true, ebmSerialNo: true },
+    }),
+    prisma.branch.count({ where: { organizationId, ebmSerialNo: { not: null } } }),
+  ]);
+  return Boolean(org?.ebmDeviceId || org?.ebmSerialNo || branchCount > 0);
+}
+
+/** Forces EBM on and negative stock off for a fiscalised org (CIS Art. 7.8 / 7.30). */
+export function enforceFiscalFlags(
+  settings: IOrganizationSettings,
+  fiscalised: boolean
+): IOrganizationSettings {
+  if (!fiscalised) return settings;
+  return {
+    ...settings,
+    fiscalFlagsLocked: true,
+    featureFlags: {
+      ...settings.featureFlags,
+      ebmIntegrationEnabled: true,
+      allowNegativeStock: false,
+    },
+  };
+}
+
+/** Atomically applies a partial settings patch. */
 export async function upsertOrganizationSettings(
   organizationId: number,
   patch: OrganizationSettingsPatch
@@ -128,12 +151,13 @@ export async function upsertOrganizationSettings(
     select: { bhfId: true, ebmSerialNo: true, mrcNo: true },
   });
 
-  return toTypedSettings(
+  const settings = toTypedSettings(
     rows[0] ?? null,
     org?.vatRegistered ?? false,
     org ?? undefined,
     branch ?? undefined
   );
+  return enforceFiscalFlags(settings, await hasVsdcDevice(organizationId));
 }
 
 function toTypedSettings(row: {

@@ -13,15 +13,7 @@ import { buildVsdcEnvelope, saveInvc, decideVsdcReceiptResult } from './vsdc-api
 import { submitSalesToOsdc } from './rra-osdc.service';
 import { getRraPaymentCode } from './rra-code.service';
 
-/**
- * RRA EBM fiscalization for subscription (billing) receipts.
- *
- * Subscription plan payments are fiscalized exactly like sales receipts: the
- * tenant organization is the fiscal seller (it holds the EBM/VSDC device + TIN),
- * and the plan is issued as a single-line receipt. This reuses the same payload
- * builder, sequence allocator, and VSDC/OSDC submission paths as sales, so sandbox
- * and production behaviour stay consistent with the tested sales flow.
- */
+/** RRA EBM fiscalization for subscription (billing) receipts. */
 
 const DEFAULT_BRANCH_LABEL = 'NS'; // Normal Sale
 
@@ -39,8 +31,8 @@ function paymentMethodToPaymentType(method: string): string {
 }
 
 /**
- * Build a synthetic SaleWithRelations from a completed subscription payment so
- * the shared RRA payload builder + submission paths can be reused unchanged.
+ * Build a synthetic SaleWithRelations from a completed subscription payment so the shared RRA
+ * payload builder + submission paths can be reused unchanged.
  */
 export async function buildPaymentSaleLikeObject(params: {
   payment: {
@@ -220,9 +212,8 @@ export async function fiscalizeSubscriptionPayment(params: {
 
   let payload: Record<string, unknown>;
   try {
-    // A subscription receipt is a fresh fiscal document for the org-as-buyer,
-    // so it needs its own unconsumed purchase code — the sandbox rejects the
-    // submission without one (resultCd 881/882).
+    // A subscription receipt is a fresh fiscal document for the org-as-buyer, so it needs its own
+    // unconsumed purchase code — the sandbox rejects the submission without one (resultCd 881/882).
     const buyerTin = (org.TIN ?? '').trim();
     const code = buyerTin
       ? await consumeAnyOrgPurchaseCode(params.organizationId, payment.id, prisma, buyerTin)
