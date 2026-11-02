@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import type { Prisma } from '@prisma/client';
 import { isEbmEnabled, fix2, toRraDate, toRraDateTime } from './rra-ebm.service';
+import { emitToBranch, emitToOrganization } from '../utils/socket';
 import {
   buildVsdcEnvelope,
   selectPurchases,
@@ -469,6 +470,11 @@ async function rejectRraPurchaseAtVsdc(
       where: { id: rp.id },
       data: { status: 'REJECTED', remark: opts.remark?.trim() || rp.remark },
     });
+    try {
+      const payload = { purchaseId: rp.id, status: 'REJECTED', organizationId, branchId: opts.branchId, rejectedAt: new Date() };
+      emitToOrganization(organizationId, 'purchaseRejected', payload);
+      if (opts.branchId != null) emitToBranch(organizationId, opts.branchId, 'purchaseRejected', payload);
+    } catch (e) { /* ignore */ }
     return { success: true };
   }
 
@@ -577,6 +583,25 @@ async function rejectRraPurchaseAtVsdc(
       data: { lastSuccessfulVdsContact: new Date() },
     });
     logger.info(`[EBM] rejected RRA purchase #${rp.id} at VSDC (pchsSttsCd=${PCHS_STTS.CANCELED})`);
+
+    // Notify clients via socket.io that a purchase was rejected.
+    try {
+      const payload = {
+        purchaseId: rp.id,
+        status: 'REJECTED',
+        organizationId,
+        branchId: opts.branchId,
+        remark: opts.remark,
+        rejectedAt: new Date(),
+      };
+      emitToOrganization(organizationId, 'purchaseRejected', payload);
+      if (opts.branchId != null) {
+        emitToBranch(organizationId, opts.branchId, 'purchaseRejected', payload);
+      }
+    } catch (e) {
+      logger.warn(`[EBM] socket emit purchaseRejected failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
     return { success: true };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Purchase rejection failed';
@@ -728,11 +753,11 @@ export async function confirmRraPurchase(
       data: { status: 'CONFIRMED', confirmedAt: new Date() },
     });
 
-    // §74: a confirmed purchase must affect local stock in real time. RRA has
-    // already booked the stock-in from /trnsPurchase/savePurchases (pchsSttsCd
-    // 02), so these ledger rows are written with skipEbmSync — re-sending them
-    // via /stock/saveStockItems would double-count the same receipt at the VSDC.
-    // receiveStockOnBranch also upserts the branch batch POS/inventory read.
+    // §74: a confirmed purchase affects local stock in real time.
+    // Stock IO (sarTyCd 02) and stock master are synchronized with VSDC.
+    // Passing skipEbmSync: false ensures ebmSyncStatus is 'PENDING', which
+    // triggers queueStockSync asynchronously (non-blocking) to push
+    // /stock/saveStockItems followed by /stockMaster/saveStockMaster.
     const stockBranchId = await resolveActiveBranchId(organizationId, opts.branchId);
     let stockBooked = 0;
     if (stockBranchId != null) {
@@ -756,20 +781,10 @@ export async function confirmRraPurchase(
           batchNumber: reference,
           expiryDate: ov?.expiryDate,
           note: `Confirmed RRA purchase from ${rp.spplrNm ?? rp.spplrTin}`,
-          skipEbmSync: true,
+          skipEbmSync: false,
         });
         stockBooked += 1;
       }
-
-      // savePurchases books IO at RRA but not stock master — push remaining qty.
-      await pushStockMastersAfterPurchase(
-        envelope,
-        organizationId,
-        stockBranchId,
-        resolved.map((r) => r.product),
-        regr,
-        rraPurchaseId,
-      );
     } else {
       logger.warn(`[EBM] confirm RRA purchase #${rraPurchaseId}: no active branch — local stock not booked`);
     }
@@ -779,6 +794,26 @@ export async function confirmRraPurchase(
       data: { lastSuccessfulVdsContact: new Date() },
     });
     logger.info(`[EBM] confirmed RRA purchase #${rraPurchaseId} — ${stockBooked} item(s) booked into branch ${stockBranchId ?? '-'} stock`);
+
+    // Notify clients via socket.io that a purchase was confirmed.
+    try {
+      const payload = {
+        purchaseId: rraPurchaseId,
+        status: 'CONFIRMED',
+        organizationId,
+        branchId: stockBranchId,
+        itemsCount: itemList.length,
+        totalAmount: totAmt,
+        confirmedAt: new Date(),
+      };
+      emitToOrganization(organizationId, 'purchaseConfirmed', payload);
+      if (stockBranchId != null) {
+        emitToBranch(organizationId, stockBranchId, 'purchaseConfirmed', payload);
+      }
+    } catch (e) {
+      logger.warn(`[EBM] socket emit purchaseConfirmed failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
     return { success: true };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Purchase confirmation failed';

@@ -12,7 +12,7 @@ import {
   clampField,
   withBranchSellerAddress,
 } from './rra-ebm.service';
-import { getRraPaymentCode, validateRefundReasonCodeForOrg, DEFAULT_RFD_RSN_CD, getTaxRatesBySlot } from './rra-code.service';
+import { getRraPaymentCode, validateRefundReasonCodeForOrg, DEFAULT_RFD_RSN_CD, getTaxRatesBySlot, getTourismTaxRate } from './rra-code.service';
 import {
   buildVsdcEnvelope,
   saveInvc,
@@ -401,7 +401,8 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
     }
 
     const taxRates = await getTaxRatesBySlot(row.organizationId);
-    const rateOpts = { taxRates };
+    const tourismRate = await getTourismTaxRate(row.organizationId);
+    const rateOpts = { taxRates, taxRateTourism: tourismRate };
 
     // ── Auto-allocate an RRA purchase code when the sale has none on record ──
     // The sandbox rejects every sale without a real single-use code (881/882).

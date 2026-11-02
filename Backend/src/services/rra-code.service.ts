@@ -187,7 +187,7 @@ function asOptions(entries: RraCodeEntry[]): Array<{ code: string; label: string
 
 /** Last-resort A/B/C/D rates when class 04 has not been synced. Never invent a code. */
 const LAST_RESORT_TAX_RATES: Record<string, number> = { A: 0, B: 18, C: 0, D: 0 };
-const LAST_RESORT_TOURISM_TAX_RATE = 3;
+export const LAST_RESORT_TOURISM_TAX_RATE = 3;
 
 export async function getTaxationTypes(organizationId: number): Promise<TaxationType[]> {
   const rows = await getRraCodes(organizationId, RRA_CD_CLS.TAXATION_TYPE);

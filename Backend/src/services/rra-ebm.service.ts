@@ -4,7 +4,7 @@ import type { Decimal } from '@prisma/client/runtime/library';
 import type { Prisma } from '@prisma/client';
 import { isValidPurchaseCode, generateValidPurchaseCodes } from './purchase-code.checksum';
 import { deriveQtyUnitCd } from './item-code.service';
-import { getRraPaymentCode, requiresPurchaseCode, resolvePkgUnitCd, resolveQtyUnitCd } from './rra-code.service';
+import { getRraPaymentCode, requiresPurchaseCode, resolvePkgUnitCd, resolveQtyUnitCd, LAST_RESORT_TOURISM_TAX_RATE, getTourismTaxRate } from './rra-code.service';
 import { diff2, bandTaxFromNet } from './money.service';
 import { kigaliWallParts } from './invoice-format.service';
 import { vsdcSalesTyCdForLabel } from './training-mode.service';
@@ -627,6 +627,7 @@ export function buildRraSendReceiptPayload(
      */
     invcNoOverride?: number;
     taxRates?: [number, number, number, number];
+    taxRateTourism?: number;
   } = {},
 ): Record<string, unknown> {
   const rcptTyCd = rcptTyCdFromLabel(sale.rcptLabel);
@@ -863,6 +864,9 @@ export function buildRraSendReceiptPayload(
     taxRtB: (opts.taxRates ?? TAX_RATE_BY_SLOT)[1],
     taxRtC: (opts.taxRates ?? TAX_RATE_BY_SLOT)[2],
     taxRtD: (opts.taxRates ?? TAX_RATE_BY_SLOT)[3],
+    // VSDC reference implementation validates these; must match spec/actual rate
+    taxRtF: (opts.taxRates ?? TAX_RATE_BY_SLOT)[1],
+    taxRtTt: opts.taxRateTourism ?? LAST_RESORT_TOURISM_TAX_RATE,
     taxAmtA: taxAmt[0],
     taxAmtB: taxAmt[1],
     taxAmtC: taxAmt[2],
