@@ -32,6 +32,7 @@ import {
   Building2,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { toastError } from "../../../lib/friendly-error";
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import { PageHeader } from "../../../components/common/PageHeader";
 
@@ -74,7 +75,7 @@ export default function WarehouseManagement() {
       setWarehouses(Array.isArray(data) ? data : (data as any).warehouses || []);
     } catch (err: any) {
       setError(err.message || 'Failed to load warehouses');
-      toast.error(err.message || 'Failed to load warehouses');
+      toastError(err, "Could not load warehouses");
     } finally {
       setLoading(false);
     }
@@ -129,7 +130,7 @@ export default function WarehouseManagement() {
       handleCloseDialog();
       fetchWarehouses();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to save warehouse');
+      toastError(err, "Could not save warehouse");
     }
   };
 
@@ -139,7 +140,7 @@ export default function WarehouseManagement() {
       toast.success('Warehouse deleted successfully');
       fetchWarehouses();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to delete warehouse');
+      toastError(err, "Could not delete warehouse");
     }
   };
 
@@ -150,7 +151,7 @@ export default function WarehouseManagement() {
       toast.success('Warehouse updated successfully');
       await fetchWarehouses();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to update warehouse');
+      toastError(err, "Could not update warehouse");
     } finally {
       setTogglingId(null);
     }

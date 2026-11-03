@@ -1638,6 +1638,7 @@ async function buildDailyReport(
   let periodStart = dayStart;
   let previousCloseAt: string | null = null;
   let coversSinceLastZ = false;
+  let lastClose: { at: Date; verified: boolean } | null = null;
   try {
     const cursor = await prisma.rraSyncCursor.findFirst({
       where: {
@@ -1648,7 +1649,10 @@ async function buildDailyReport(
     });
     if (cursor && /^(VERIFIED|SAVED_UNVERIFIED)/.test(cursor.lastResult ?? '')) {
       const prev = parseRptDeTimestamp(cursor.lastReqDt);
-      if (prev && prev > dayStart) {
+      lastClose = prev ? { at: prev, verified: cursor.lastResult!.startsWith('VERIFIED') } : null;
+      // Only a close BEFORE this day widens the window back to it; a close during or after the
+      // day must not hide the day's earlier sales.
+      if (prev && prev < dayStart) {
         periodStart = prev;
         previousCloseAt = prev.toISOString();
         coversSinceLastZ = true;
@@ -1782,9 +1786,10 @@ async function buildDailyReport(
         const envelope = await buildVsdcEnvelope(organizationId, targetBranchId);
         const rptDe = `${reportDate.getFullYear()}${pad2(reportDate.getMonth() + 1)}${pad2(reportDate.getDate())}`;
         const result = await checkZReport(envelope, rptDe);
+        const savedAt = lastClose && lastClose.at >= dayStart && lastClose.at <= dayEnd ? lastClose.at.toISOString() : undefined;
         vsdcConfirmation = result.success
-          ? { checked: true, rptDe }
-          : { checked: true, rptDe, error: result.error ?? 'VSDC has no Z-report on record for this date' };
+          ? { checked: true, rptDe, savedAt }
+          : { checked: true, rptDe, savedAt, error: result.error ?? 'VSDC has no Z-report on record for this date' };
       } catch (e: any) {
         vsdcConfirmation = { checked: false, error: e instanceof Error ? e.message : 'VSDC lookup failed' };
       }
@@ -2111,6 +2116,38 @@ export const getPurchasesReport = async (req: BranchAuthRequest, res: Response) 
             qty: i.qty ? i.qty.toNumber() : null,
             invcFcurAmt: i.invcFcurAmt ? i.invcFcurAmt.toNumber() : null,
             invcFcurCd: i.invcFcurCd,
+            status: i.status,
+          })),
+        };
+      })(),
+      // Supplier invoices received from RRA (selectTrnsPurchaseSales) — purchases made without a local PO.
+      rraPurchases: await (async () => {
+        const pWhere: any = { organizationId };
+        if (where.orderedAt) {
+          // RraPurchase.salesDt is yyyyMMdd text; range-filter on the string.
+          const d = (v: any) => new Date(v).toISOString().slice(0, 10).replace(/-/g, '');
+          pWhere.salesDt = { gte: d(where.orderedAt.gte), lte: d(where.orderedAt.lte) };
+        }
+        const invoices = await prisma.rraPurchase.findMany({ where: pWhere, orderBy: [{ salesDt: 'desc' }, { id: 'desc' }], take: 500 });
+        const byStatus = { PENDING: 0, CONFIRMED: 0, REJECTED: 0 };
+        for (const i of invoices) byStatus[i.status] += 1;
+        const fix = (n: number) => Math.round(n * 100) / 100;
+        return {
+          summary: {
+            invoices: invoices.length,
+            ...byStatus,
+            totalAmt: fix(invoices.reduce((s, i) => s + Number(i.totAmt ?? 0), 0)),
+            totalTax: fix(invoices.reduce((s, i) => s + Number(i.totTaxAmt ?? 0), 0)),
+          },
+          items: invoices.map((i) => ({
+            id: i.id,
+            spplrTin: i.spplrTin,
+            spplrNm: i.spplrNm,
+            spplrInvcNo: String(i.spplrInvcNo),
+            salesDt: i.salesDt,
+            totItemCnt: i.totItemCnt,
+            totTaxAmt: Number(i.totTaxAmt ?? 0),
+            totAmt: Number(i.totAmt ?? 0),
             status: i.status,
           })),
         };

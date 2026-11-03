@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
+import { friendlyMessage } from "../../../lib/friendly-error";
 import { Loader2, Smartphone, Wallet, CheckCircle2, Lock } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -128,7 +129,7 @@ export function OpenShiftPage() {
       const result = await apiClient.getShiftSummary(shift.id);
       setSummary(result.summary ?? null);
     } catch (requestError: any) {
-      const message = requestError?.response?.data?.error ?? requestError?.message ?? 'Failed to open shift.';
+      const message = friendlyMessage(requestError, 'Could not open shift');
       setError(message);
       toast.error(message);
     } finally {
@@ -152,7 +153,7 @@ export function OpenShiftPage() {
       setSummary(null);
       setActualCash('');
     } catch (requestError: any) {
-      const message = requestError?.response?.data?.error ?? requestError?.message ?? 'Failed to close shift.';
+      const message = friendlyMessage(requestError, 'Could not close shift');
       setError(message);
       toast.error(message);
     } finally {

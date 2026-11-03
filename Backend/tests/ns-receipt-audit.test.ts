@@ -274,9 +274,9 @@ describe('NS-9: receipt content print rules', () => {
     expect(documentIndicator(data)).toBe('');
     expect(isFormalNoticeIndicator(documentIndicator(data)) || !data.certification.isCertified).toBe(false);
   });
-  it('amounts use 2 decimals with dot separator and NO thousands grouping; dates are DD/MM/YYYY (Kigali); fiscal values group by 4', () => {
-    expect(formatInvoiceAmount(1180)).toBe('1180.00');
-    expect(formatInvoiceAmount(5360)).toBe('5360.00');
+  it('amounts use 2 decimals with dot separator and comma thousands grouping; dates are DD/MM/YYYY (Kigali); fiscal values group by 4', () => {
+    expect(formatInvoiceAmount(1180)).toBe('1,180.00');
+    expect(formatInvoiceAmount(5360)).toBe('5,360.00');
     expect(formatInvoiceAmount(814.576)).toBe('814.58');
     // 10:20:30Z == 12:20:30 in Kigali (UTC+2, no DST) — same instant, taxpayer wall clock.
     const d = formatInvoiceDateTime(new Date('2026-10-01T10:20:30.000Z'));

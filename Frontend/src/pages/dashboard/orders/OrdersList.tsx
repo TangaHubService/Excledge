@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { friendlyMessage, toastError } from "../../../lib/friendly-error";
 import {
     Plus,
     Search,
@@ -78,9 +79,9 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                 setFilteredOrders(ordersList);
             } catch (err) {
                 console.error('Error fetching orders:', err);
-                const errorMessage = err instanceof Error ? err.message : 'Failed to load orders';
+                const errorMessage = friendlyMessage(err, 'Could not load orders');
                 setError(errorMessage);
-                toast.error(`${t('purchaseOrders.fetchError')}: ${errorMessage}`);
+                toastError(err, t('purchaseOrders.fetchError'));
             } finally {
                 setLoading(false);
             }
@@ -140,8 +141,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
             }
         } catch (err) {
             console.error('Error updating status:', err);
-            const errorMessage = err instanceof Error ? err.message : t('purchaseOrders.updateError');
-            toast.error(`${t('common.error')}: ${errorMessage}`);
+            toastError(err, t('purchaseOrders.updateError'));
         } finally {
             setUpdatingStatus(prev => ({ ...prev, [orderId]: false }));
         }
@@ -167,8 +167,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
             }
         } catch (error) {
             console.error('Error deleting order:', error);
-            const errorMessage = error instanceof Error ? error.message : t('common.deleteError');
-            toast.error(`${t('common.error')}: ${errorMessage}`);
+            toastError(error, t('common.deleteError'));
         } finally {
             setIsDeleting(false);
             setDeleteDialogOpen(false);
@@ -240,8 +239,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
             }
         } catch (err) {
             console.error('Error receiving items:', err);
-            const errorMessage = err instanceof Error ? err.message : t('purchaseOrders.updateError');
-            toast.error(`${t('common.error')}: ${errorMessage}`);
+            toastError(err, t('purchaseOrders.updateError'));
         } finally {
             setIsReceiving(false);
         }

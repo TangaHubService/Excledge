@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { toast } from 'react-toastify';
+import { toastError } from "../../lib/friendly-error";
 import { CheckCircle, XCircle, Clock, Ban, Download, Mail, Loader2 } from 'lucide-react';
 import { pdf } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
@@ -137,7 +138,7 @@ const Payments: React.FC<PaymentsProps> = ({ payments, isLoading, error, onUpdat
       toast.success('Invoice resent to subscriber email');
     } catch (err: any) {
       console.error('Failed to resend invoice:', err);
-      toast.error(err?.message || 'Failed to resend invoice');
+      toastError(err, "Could not resend invoice");
     } finally {
       setResendingId(null);
     }

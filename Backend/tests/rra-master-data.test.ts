@@ -15,6 +15,7 @@ vi.mock("../src/lib/prisma", () => ({
     rraCode: { upsert: vi.fn(async (a: any) => { codeUpserts.push(a); return a.create }) },
     rraItemClass: { upsert: vi.fn(async (a: any) => { classUpserts.push(a); return a.create }) },
     rraNotice: { upsert: vi.fn(async () => ({})) },
+    $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
     customer: { updateMany: vi.fn(async (a: any) => { customerUpdateManyArgs = a; return { count: 1 } }) },
     product: { findMany: vi.fn(async () => [
       { id: 1, name: "Widget", itemCd: "RW2CTU0000001", itemClsCd: "5059690800", taxCode: "B", unitPrice: 100, ebmSyncStatus: "SYNCED" },

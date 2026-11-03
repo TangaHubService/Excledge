@@ -12,7 +12,7 @@ import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { SearchableSelect } from '../../../components/ui/SearchableSelect';
 import { Loader2, TrendingUp, TrendingDown, Package, DollarSign } from 'lucide-react';
-import { toast } from 'react-toastify';
+import { toastError } from "../../../lib/friendly-error";
 import { Badge } from '../../../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table';
 import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response';
@@ -147,7 +147,7 @@ export default function InventorySummaryDashboard() {
     } catch (err: any) {
       console.error('Error fetching inventory summary:', err);
       setError(err.message || 'Failed to load inventory summary');
-      toast.error(err.message || 'Failed to load inventory summary');
+      toastError(err, "Could not load inventory summary");
     } finally {
       setLoading(false);
     }

@@ -1,11 +1,14 @@
-/** RRA CIS/VSDC Art. 7.5: amounts print with 2 decimals and a dot separator. */
+/**
+ * RRA CIS/VSDC Art. 7.5: amounts print with 2 decimals and a dot decimal separator. Thousands are
+ * grouped with commas (10,000.00) for readability, at the business's request.
+ */
 export function formatInvoiceAmount(value: number | string | null | undefined): string {
   const amount = Number(value ?? 0)
   if (!Number.isFinite(amount)) return "0.00"
   return amount.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-    useGrouping: false,
+    useGrouping: true,
   })
 }
 

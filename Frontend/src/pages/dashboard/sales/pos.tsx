@@ -19,6 +19,7 @@ import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle,
 } from '../../../components/ui/drawer'
 import { toast } from 'react-toastify'
+import { toastError } from "../../../lib/friendly-error";
 import { apiClient } from '../../../lib/api-client'
 import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response'
 import { offlineQueue } from '../../../utils/offlineQueue'
@@ -538,7 +539,7 @@ export default function SalesForm() {
                 })
                 setIsSuccessOpen(true)
               } catch (e: any) {
-                toast.error(e?.message ?? 'Failed to reprint last receipt')
+                toastError(e, "Could not reprint last receipt")
               }
             },
           },
@@ -761,13 +762,16 @@ export default function SalesForm() {
   )
 
   const inStockProducts = useMemo(() => {
-    const base = products.filter(p => isSellable(p, trainingMode))
+    // Non-VAT taxpayers only sell tax code D items (also guards a stale offline product cache).
+    const base = products.filter(p =>
+      isSellable(p, trainingMode) && (vatRegistered || (p.taxCode ?? '').toUpperCase() === 'D'),
+    )
     const typed = productTypeFilter === 'ALL'
       ? base
       : base.filter(p => (p.itemType ?? 'PRODUCT') === productTypeFilter)
     if (activeCategory === 'All') return typed
     return typed.filter(p => p.category?.toLowerCase() === activeCategory.toLowerCase())
-  }, [products, activeCategory, productTypeFilter, trainingMode])
+  }, [products, activeCategory, productTypeFilter, trainingMode, vatRegistered])
 
   // A USB/Bluetooth barcode scanner behaves like a keyboard: it types the barcode digits into
   // whichever input is focused, then sends Enter.
@@ -775,13 +779,15 @@ export default function SalesForm() {
     if (e.key !== 'Enter' || !searchTerm.trim()) return
     e.preventDefault()
     const term = searchTerm.trim()
-    const exactBarcodeMatch = products.find(p => p.barcode && p.barcode === term)
+    const exactBarcodeMatch = products.find(p =>
+      p.barcode && p.barcode === term && (vatRegistered || (p.taxCode ?? '').toUpperCase() === 'D'),
+    )
     const candidate = exactBarcodeMatch ?? (inStockProducts.length === 1 ? inStockProducts[0] : null)
     if (!candidate) return
     addToCart(candidate)
     setSearchTerm('')
     requestAnimationFrame(() => searchInputRef.current?.focus())
-  }, [searchTerm, products, inStockProducts, addToCart])
+  }, [searchTerm, products, inStockProducts, addToCart, vatRegistered])
 
   const handleOpenPayment = useCallback(() => {
     if (cart.length === 0) { toast.error(t('pos.noItemsInCart')); return }
@@ -916,8 +922,8 @@ export default function SalesForm() {
       const res = await apiClient.getProducts({ page: 1, limit: 10000, search: '', branchId: selectedBranchId })
       setProducts(productsFromInventoryResponse(res).filter(p => isSellable(p, trainingMode)))
     } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.response?.data?.errors?.[0]?.message || error?.message || t('pos.paymentError')
-      toast.error(msg)
+      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.response?.data?.errors?.[0]?.message || error?.message || ''
+      toastError(error?.response?.data?.errors?.[0]?.message ? { ...error, message: msg } : error, t('pos.paymentError'))
       if (msg.includes('stock')) {
         try {
           const res = await apiClient.getProducts({ page: 1, limit: 10000, search: '', branchId: selectedBranchId })
@@ -988,8 +994,8 @@ export default function SalesForm() {
       setIsSuccessOpen(true)
       setCart([])
     } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.response?.data?.errors?.[0]?.message || error?.message || t('pos.paymentError')
-      toast.error(msg)
+      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.response?.data?.errors?.[0]?.message || error?.message || ''
+      toastError(error?.response?.data?.errors?.[0]?.message ? { ...error, message: msg } : error, t('pos.paymentError'))
     } finally {
       setIsSubmitting(false)
     }
@@ -1011,7 +1017,7 @@ export default function SalesForm() {
     } catch (e: any) {
       console.error('Failed to build sale invoice:', e)
       if (e?.response?.status === 425) {
-        toast.error(t('pos.stillFiscalizing') || 'Still confirming with the tax authority (VSDC) — try again in a moment.')
+        toast.error(t('pos.stillFiscalizing'))
       } else {
         toast.error(t('sales.invoiceGenerationError') || 'Failed to generate invoice')
       }

@@ -6,6 +6,7 @@ import { Input } from '../../../components/ui/input';
 import { apiClient } from '../../../lib/api-client';
 import { Download, FileSpreadsheet, Loader2, Save } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { toastError } from "../../../lib/friendly-error";
 import { ImportPreviewTable } from '../../../components/imports/ImportPreviewTable';
 import type { PreviewRow } from '../../../components/imports/ImportPreviewTable';
 import {
@@ -49,7 +50,7 @@ export function CustomerImport({ onSuccess }: CustomerImportProps) {
         setPreviewData(response);
         setIsPreviewDialogOpen(true);
       } catch (error: any) {
-        toast.error(error.message || t('import.failedToPreview'));
+        toastError(error, t('import.failedToPreview'));
       } finally {
         setPreviewing(false);
       }
@@ -70,7 +71,7 @@ export function CustomerImport({ onSuccess }: CustomerImportProps) {
       document.body.removeChild(a);
       toast.success(t('import.templateDownloaded'));
     } catch (error: any) {
-      toast.error(error.message || t('import.failedToDownloadTemplate'));
+      toastError(error, t('import.failedToDownloadTemplate'));
     }
   };
 
@@ -117,7 +118,7 @@ export function CustomerImport({ onSuccess }: CustomerImportProps) {
         onSuccess();
       }
     } catch (error: any) {
-      toast.error(error.message || t('import.failedToConfirm'));
+      toastError(error, t('import.failedToConfirm'));
     } finally {
       setConfirming(false);
     }
@@ -139,7 +140,7 @@ export function CustomerImport({ onSuccess }: CustomerImportProps) {
       document.body.removeChild(a);
       toast.success(t('import.errorFileDownloaded'));
     } catch (error: any) {
-      toast.error(error.message || t('import.failedToDownloadError'));
+      toastError(error, t('import.failedToDownloadError'));
     }
   };
 

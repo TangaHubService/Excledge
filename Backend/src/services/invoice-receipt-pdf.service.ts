@@ -182,11 +182,12 @@ function drawReceipt(
     for (const pl of payLines) {
       y = labelValueLine(doc, safe(pl.label, "CASH").toUpperCase(), formatInvoiceAmount(pl.amount), y)
     }
-    y = labelValueLine(doc, "ITEMS NUMBER", String(data.items.length), y)
-    y += 2
-    dashedLine(doc, y)
-    y += 6
   }
+  // A proforma has no payment lines but still shows the item count.
+  y = labelValueLine(doc, "ITEMS NUMBER", String(data.items.length), y)
+  y += 2
+  dashedLine(doc, y)
+  y += 6
 
   const sdc = data.sdcInformation
   // Spec samples: "SDC INFORMATION" heading directly followed by the fiscal

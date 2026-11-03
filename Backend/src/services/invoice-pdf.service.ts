@@ -479,7 +479,7 @@ function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): numbe
   }
   rows.push([`Total Tax${currencyLabel}`, totalTax])
   // Spec order: payment method(s), then ITEMS NUMBER. A proforma (spec 17.1)
-  // prints neither.
+  // prints no payment lines, but still shows the item count.
   if (!isProformaDocument(data)) {
     // R1: every means of payment with its amount; single line legacy otherwise.
     if (data.payment.lines?.length) {
@@ -489,10 +489,10 @@ function drawSummary(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): numbe
     } else {
       rows.push([safe(data.invoice.paymentMethod, "CASH").toUpperCase(), data.totals.grandTotal])
     }
-    // Item counter is a count, not money — print it as a plain integer ("4",
-    // never "4.00").
-    rows.push(["Items Number", String(data.items.length)])
   }
+  // Item counter is a count, not money — print it as a plain integer ("4",
+  // never "4.00").
+  rows.push(["Items Number", String(data.items.length)])
 
   const x = 341
   const y = 649

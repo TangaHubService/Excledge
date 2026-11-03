@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Loader2, RefreshCw, Truck, X } from "lucide-react";
+import { CheckCircle2, ChevronRight, Loader2, RefreshCw, Truck, X } from "lucide-react";
 import { SearchableSelect } from "../../../components/ui/SearchableSelect";
 import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
 import { toast } from "react-toastify";
+import { toastError } from "../../../lib/friendly-error";
 import { apiClient } from "../../../lib/api-client";
 import { Button } from "../../../components/ui/button";
+import { StatusBadge } from "../../../components/ui/status-badge";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import {
@@ -98,6 +100,11 @@ const PURCHASES_DEFAULT_LAST_REQ = "20190524000000";
 const money = (n: number | null | undefined) =>
   (Number(n ?? 0)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const formatInt = (n: number | null | undefined) => (Number(n ?? 0)).toLocaleString("en-US");
+/** RRA sends sale dates as yyyyMMdd. */
+const formatSalesDt = (raw: string | null | undefined): string => {
+  const d = (raw ?? "").replace(/\D/g, "");
+  return d.length >= 8 ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : raw || "—";
+};
 
 const formatLastReqDt = (raw: string | null | undefined): string => {
   if (!raw) return "";
@@ -196,7 +203,7 @@ export function RraPurchasesPage() {
         }
       }
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load purchases");
+      toastError(e, "Could not load purchases");
       setPurchasesLastReq(PURCHASES_DEFAULT_LAST_REQ);
     }
   }, [applyPurchasesPayload, purchaseStatusFilter]);
@@ -209,10 +216,10 @@ export function RraPurchasesPage() {
       const res = await apiClient.syncRraPurchases();
       const out = unwrapApiData(res);
       applyPurchasesPayload(out, { replaceList: false });
-      toast.success(`Pulled ${out?.cached ?? 0} purchase(s) from RRA`);
+      toast.success(`Received ${out?.cached ?? 0} purchase(s) from RRA.`);
       await load();
     } catch (e: any) {
-      toast.error(e?.message ?? "Purchase pull failed");
+      toastError(e, "Could not get purchases from RRA");
     } finally {
       setBusy(false);
     }
@@ -287,11 +294,11 @@ export function RraPurchasesPage() {
         prcOrdCd: code || undefined,
         remark: reject ? (rejectReason.trim() || undefined) : undefined,
       });
-      toast.success(reject ? "Purchase rejected" : "Purchase approved with RRA");
+      toast.success(reject ? "Purchase rejected." : "Purchase approved with RRA.");
       setSelected(null);
       await load();
     } catch (e: any) {
-      toast.error(e?.message ?? "Action failed");
+      toastError(e, "Could not complete this action");
     } finally {
       setRowBusy(null);
     }
@@ -345,24 +352,30 @@ export function RraPurchasesPage() {
                 </span>
               </div>
             </div>
-            <Button size="sm" onClick={syncPurchases} disabled={busy}>
+            <Button onClick={syncPurchases} disabled={busy}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Pull from RRA
             </Button>
           </div>
 
-          <div className="text-sm text-muted-foreground">
-            Showing <b className="text-foreground tabular-nums">{purchases.length}</b>
-            {purchaseStatusFilter === "PENDING"
-              ? " pending"
-              : purchaseStatusFilter === "CONFIRMED"
-                ? " approved"
-                : purchaseStatusFilter === "REJECTED"
-                  ? " rejected"
-                  : ""}{" "}
-            purchase(s)
-            {purchasePendingCount > 0 && purchaseStatusFilter !== "PENDING" ? (
-              <> · <b className="text-warning tabular-nums">{purchasePendingCount}</b> still pending</>
-            ) : null}
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="inline-flex items-baseline gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 py-1">
+              <b className="text-sm font-semibold tabular-nums">{purchases.length}</b>
+              <span className="opacity-80">
+                {purchaseStatusFilter === "PENDING"
+                  ? "pending"
+                  : purchaseStatusFilter === "CONFIRMED"
+                    ? "approved"
+                    : purchaseStatusFilter === "REJECTED"
+                      ? "rejected"
+                      : "shown"}
+              </span>
+            </span>
+            {purchasePendingCount > 0 && purchaseStatusFilter !== "PENDING" && (
+              <span className="inline-flex items-baseline gap-1.5 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-1 text-warning dark:text-amber-300">
+                <b className="text-sm font-semibold tabular-nums">{purchasePendingCount}</b>
+                <span className="opacity-80">awaiting action</span>
+              </span>
+            )}
           </div>
 
           <div className="overflow-x-auto rounded-lg border">
@@ -375,7 +388,7 @@ export function RraPurchasesPage() {
                   <TableHead className="text-right">Items</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead />
+                  <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -394,24 +407,26 @@ export function RraPurchasesPage() {
                 )}
                 {purchases.map((p) => (
                   <TableRow key={p.id} className="cursor-pointer" onClick={() => openDetail(p)}>
-                    <TableCell>{p.spplrNm ?? p.spplrTin}</TableCell>
+                    <TableCell className="font-medium">{p.spplrNm ?? p.spplrTin}</TableCell>
                     <TableCell className="font-mono text-xs">{String(p.spplrInvcNo)}</TableCell>
-                    <TableCell>{p.salesDt ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatSalesDt(p.salesDt)}</TableCell>
                     <TableCell className="text-right tabular-nums">{p.totItemCnt ?? p.items.length}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(Number(p.totAmt))}</TableCell>
                     <TableCell>
-                      <span className={
-                        p.status === "CONFIRMED"
-                          ? "text-success"
-                          : p.status === "REJECTED"
-                            ? "text-muted-foreground"
-                            : "text-warning"
-                      }>
-                        {p.status === "CONFIRMED" ? "APPROVED" : p.status}
-                      </span>
+                      {p.status === "CONFIRMED"
+                        ? <StatusBadge status="SUCCESS" label="Approved" />
+                        : p.status === "REJECTED"
+                          ? <StatusBadge status="DECLINED" label="Rejected" />
+                          : <StatusBadge status="PENDING" label="Pending" />}
                     </TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">
-                      {p.status === "PENDING" ? "Review" : "View"}
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant={p.status === "PENDING" ? "outline" : "ghost"}
+                        onClick={(e) => { e.stopPropagation(); openDetail(p); }}
+                      >
+                        {p.status === "PENDING" ? "Review" : "View"} <ChevronRight className="size-3.5" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -586,7 +601,7 @@ export function RraPurchasesPage() {
                       className="bg-background"
                     />
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => setRejecting(false)}>Back</Button>
+                      <Button variant="outline" size="sm" onClick={() => setRejecting(false)}>Back</Button>
                       <Button
                         variant="destructive"
                         size="sm"
@@ -599,7 +614,7 @@ export function RraPurchasesPage() {
                   </div>
                 ) : (
                   <div className="flex justify-between gap-2 border-t pt-3">
-                    <Button variant="ghost" onClick={() => setRejecting(true)} disabled={rowBusy === selected.id}>
+                    <Button variant="outline" className="text-danger hover:bg-danger/10 hover:text-danger" onClick={() => setRejecting(true)} disabled={rowBusy === selected.id}>
                       <X className="size-4" /> Reject
                     </Button>
                     <Button onClick={() => action(selected.id, false)} disabled={rowBusy === selected.id}>

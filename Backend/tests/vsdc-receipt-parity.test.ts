@@ -385,8 +385,8 @@ describe("every receipt type × 80mm / A4 / A5 prints exactly what VSDC holds (s
         const pdf = await generateEbmInvoicePdf(p, paper)
         expect({ paper, pages: pdf.toString("latin1").match(/\/MediaBox/g)?.length }).toEqual({ paper, pages: 1 })
       }
-      // Spec 17.1: a proforma has no payment or ITEMS NUMBER lines.
-      if (c.type === "PS") for (const fmt of ["80mm", "A4", "A5"]) expect(t[fmt]).not.toMatch(/ITEMS NUMBER|Items Number/)
+      // A proforma prints no payment lines but still shows the item count.
+      if (c.type === "PS") for (const fmt of ["80mm", "A4", "A5"]) expect(t[fmt]).toMatch(/ITEMS NUMBER|Items Number/)
       // QR only on NS/NR (spec 13.1/14.1).
       expect(!!p.verification.qrCodeImage && (c.type === "NS" || c.type === "NR")).toBe(c.type === "NS" || c.type === "NR")
     })

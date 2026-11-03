@@ -203,7 +203,7 @@ describe('ART4 audit — one rendered receipt per label (NS,NR,CS,CR,TS,TR,PS)',
       expect(html).toContain(refund ? '41/200 NR' : `40/200 ${label}`);
       expect(html).toContain('Goods Widget');                 // h. items
       expect(html).toContain('Consulting Service');           // h. service
-      expect(html).toContain(refund ? '-5360.00' : '5360.00'); // i. total, Art 7.5: 2dp, dot, no grouping (negative on refunds)
+      expect(html).toContain(refund ? '-5,360.00' : '5,360.00'); // i. total, Art 7.5: 2dp, dot, comma thousands (negative on refunds)
       expect(html).toContain('TOTAL TAX');                    // k. VAT amount block
       expect(html).toContain('Cash');                         // l. means of payment
       expect(html).toContain('SDC010000001');                 // m. SDC ID
@@ -222,7 +222,7 @@ describe('ART4 audit — one rendered receipt per label (NS,NR,CS,CR,TS,TR,PS)',
         // Implemented (PDF only): NR prints the original-receipt reference + negative amounts.
         const drawn = await capturePdfText(() => generateEbmInvoicePdf(payload, 'A4'));
         expect(drawn.join('\n')).toContain('9100');           // refund references original
-        expect(html).toContain('-5360.00');                  // negative amounts, no grouping (Art 7.5)
+        expect(html).toContain('-5,360.00');                  // negative amounts, comma thousands (Art 7.5)
       }
       // NOTE (spec gaps, asserted in the "known-gaps" block below, not here): - CR/TR render titles
       // COPY / TRAINING MODE (documentIndicator) and isRefundTransaction() only recognises NR, so

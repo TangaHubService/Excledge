@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { ArrowLeft, Copy, FileDown, Loader2, Printer, RefreshCw, ReceiptText, Share2 } from "lucide-react"
 import { toast } from "react-toastify"
+import { toastError } from "../../../lib/friendly-error";
 import { apiClient } from "../../../lib/api-client"
 import { getInvoiceFilename, unwrapInvoice } from "../../../lib/invoice"
 import {
@@ -117,7 +118,7 @@ export default function InvoicePage() {
       refresh()
     } catch (error) {
       console.error("Invoice print failed:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to print the invoice")
+      toastError(error, "Could not print the invoice")
     } finally {
       setIsPrinting(false)
     }
@@ -132,7 +133,7 @@ export default function InvoicePage() {
       refresh()
     } catch (error) {
       console.error("Receipt copy failed:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to print the receipt copy")
+      toastError(error, "Could not print the receipt copy")
     } finally {
       setIsPrintingCopy(false)
     }

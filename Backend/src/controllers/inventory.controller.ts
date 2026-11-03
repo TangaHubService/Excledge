@@ -13,11 +13,20 @@ import {
 import { syncProductToRraAsync } from "../services/product-sync.service"
 import { TaxService } from "../services/tax.service"
 import { allocateItemCd, allocateItemCdBlock, buildItemCd, deriveQtyUnitCd, isItemCdConflict } from "../services/item-code.service"
-import { success, error as apiError } from "../utils/apiResponse"
+import { success, error as apiError, publicMessage } from "../utils/apiResponse"
 import { getOrganizationSettings } from "../services/organization-settings.service"
 import { getOriginNationCode } from "../services/item-code.service"
 import { getOrderBy } from "../utils/sorting"
 import { getTaxationTypes, isCachedTaxCode, isCachedCountryCode } from "../services/rra-code.service"
+
+/** Non-VAT taxpayers only deal in tax code D items; list endpoints hide the rest. */
+async function nonVatProductFilter(organizationId: number): Promise<{ taxCode?: 'D' }> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { vatRegistered: true },
+  })
+  return org?.vatRegistered === false ? { taxCode: 'D' } : {}
+}
 
 export const getProducts = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -42,10 +51,17 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
       where.itemType = itemType
     }
 
-    const trainingMode = (await prisma.organization.findUnique({
+    const orgFlags = await prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { trainingMode: true },
-    }))?.trainingMode === true
+      select: { trainingMode: true, vatRegistered: true },
+    })
+    const trainingMode = orgFlags?.trainingMode === true
+
+    // Non-VAT taxpayers can only sell tax code D items, so hide everything else.
+    const nonVat = orgFlags?.vatRegistered === false
+    if (nonVat) {
+      where.taxCode = 'D'
+    }
 
     // SERVICE items carry no batch rows (not stock-tracked), so the branch scoping must not exclude
     // them — only PRODUCT rows need a matching batch.
@@ -167,6 +183,7 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
             AND p."isActive" = true
             AND p."deletedAt" IS NULL
             AND p."minStock" > 0
+            AND (${!nonVat} OR p."taxCode" = 'D')
             AND (
               SELECT COALESCE(SUM(b.quantity), 0)
               FROM batches b
@@ -182,12 +199,14 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
             AND p."isActive" = true
             AND p."deletedAt" IS NULL
             AND p."minStock" > 0
+            AND (${!nonVat} OR p."taxCode" = 'D')
             AND p.quantity <= p."minStock"
         `)[0]?.count || 0)
 
-    const branchScope = branchForLedger !== undefined
-      ? { batches: { some: { branchId: branchForLedger } } }
-      : {}
+    const branchScope = {
+      ...(branchForLedger !== undefined ? { batches: { some: { branchId: branchForLedger } } } : {}),
+      ...(nonVat ? { taxCode: 'D' as const } : {}),
+    }
 
     const expiredProducts = await prisma.product.count({
       where: {
@@ -1106,6 +1125,7 @@ export const getExpiringProducts = async (req: BranchAuthRequest, res: Response)
       organizationId,
       deletedAt: null,
       itemType: { in: [ItemType.PRODUCT, ItemType.RAW_MATERIAL] },
+      ...(await nonVatProductFilter(organizationId)),
       expiryDate: {
         not: null,
         gte: new Date(),
@@ -1166,6 +1186,7 @@ export const getExpiredProducts = async (req: BranchAuthRequest, res: Response) 
         organizationId,
         deletedAt: null,
         itemType: 'PRODUCT',
+        ...(await nonVatProductFilter(organizationId)),
         expiryDate: {
           not: null,
           lt: new Date(),
@@ -1239,6 +1260,7 @@ export const getLowStockProducts = async (req: BranchAuthRequest, res: Response)
       isActive: true,
       deletedAt: null,
       itemType: { in: [ItemType.PRODUCT, ItemType.RAW_MATERIAL] },
+      ...(await nonVatProductFilter(organizationId)),
       // When an org-wide fallback threshold is configured, also consider
       // products that haven't set their own minStock (0/unset).
       ...(overrideThreshold && overrideThreshold > 0 ? {} : { minStock: { gt: 0 } }),
@@ -1374,7 +1396,7 @@ export const adjustStock = async (req: BranchAuthRequest, res: Response) => {
     res.json(success(ledgerEntry));
   } catch (error: any) {
     console.error("[Adjust Stock Error]:", error);
-    res.status(500).json(apiError(error.message || "Failed to adjust stock"));
+    res.status(500).json(apiError(publicMessage(error, "Could not adjust the stock. Please try again.")));
   }
 };
 
@@ -1427,7 +1449,7 @@ export const markAsDamage = async (req: BranchAuthRequest, res: Response) => {
     res.json(success(ledgerEntry));
   } catch (error: any) {
     console.error("[Mark Damage Error]:", error);
-    res.status(500).json(apiError(error.message || "Failed to mark damage"));
+    res.status(500).json(apiError(publicMessage(error, "Could not record the damaged stock. Please try again.")));
   }
 };
 
@@ -1478,7 +1500,7 @@ export const processExpiredStock = async (req: BranchAuthRequest, res: Response)
     res.json(success(ledgerEntry));
   } catch (error: any) {
     console.error("[Process Expired Error]:", error);
-    res.status(500).json(apiError(error.message || "Failed to process expired stock"));
+    res.status(500).json(apiError(publicMessage(error, "Could not record the expired stock. Please try again.")));
   }
 };
 

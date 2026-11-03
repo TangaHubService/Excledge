@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, Package } from "lucide-react";
 import { apiClient } from "../../lib/api-client";
 import * as yup from "yup";
 import { toast } from "react-toastify";
+import { toastError } from "../../lib/friendly-error";
 
 const verificationSchema = yup.object().shape({
     code: yup.string().required("Verification code is required"),
@@ -41,7 +42,7 @@ export default function VerificationPage() {
                 navigate("/login");
             }, 2000);
         } catch (error: any) {
-            toast.error(error.message || "Verification failed. Please try again.");
+            toastError(error, "Could not verify your account");
         } finally {
             setIsLoading(false);
         }
@@ -66,7 +67,7 @@ export default function VerificationPage() {
             setShowEmailInput(false);
             if (!email) setEmail(emailToUse);
         } catch (error: any) {
-            toast.error(error.message || "Failed to resend verification code");
+            toastError(error, "Could not resend verification code");
         } finally {
             setIsResendLoading(false);
         }

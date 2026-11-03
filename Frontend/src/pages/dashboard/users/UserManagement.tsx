@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, ChevronsUpDown, Loader2, Plus, Search, Shield, 
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from "../../../components/ui/drawer";
 import { apiClient } from "../../../lib/api-client";
 import { toast } from "react-toastify";
+import { toastError } from "../../../lib/friendly-error";
 import { TableSkeleton } from "../../../components/ui/TableSkeleton";
 import { AppToggle } from "../../../components/ui/AppToggle";
 import { useTranslation } from "react-i18next";
@@ -192,8 +193,7 @@ export const UserManagement = () => {
       setEditingUserId(null);
     } catch (error: unknown) {
       console.error("Failed to create/update user:", error);
-      const errorMessage = error instanceof Error ? error.message : t('userManagement.failedToInvite');
-      toast.error(errorMessage);
+      toastError(error, t('userManagement.failedToInvite'));
     }
     setFormData({ email: "", role: "", branchId: "" });
   };
@@ -466,9 +466,9 @@ export const UserManagement = () => {
                               if (!user.id) return;
                               try {
                                 await apiClient.syncUserToRra(user.id);
-                                toast.success(`Synced ${user.name || user.email} to RRA`);
+                                toast.success(`${user.name || user.email} is now registered with RRA.`);
                               } catch (e: unknown) {
-                                toast.error(e instanceof Error ? e.message : 'RRA user sync failed');
+                                toastError(e, "Could not sync the user with RRA");
                               }
                             }}
                             className="px-3 py-1 text-sm rounded-lg transition-colors text-foreground hover:bg-muted"

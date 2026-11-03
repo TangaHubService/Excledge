@@ -2,7 +2,7 @@ import type { Response } from "express";
 import { prisma } from "../lib/prisma";
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware";
 import { addStock, removeStock } from "../services/inventory-ledger.service";
-import { success, error as apiError } from "../utils/apiResponse";
+import { success, error as apiError, publicMessage } from "../utils/apiResponse";
 
 // StockTransfer spans two branches (fromBranchId/toBranchId), so it can't use the generic
 // single-column BRANCH_AWARE_MODELS auto-injection — a transfer "belongs" to a branch if that
@@ -115,7 +115,7 @@ export const createStockTransfer = async (req: BranchAuthRequest, res: Response)
     res.status(201).json(success(transfer));
   } catch (e: any) {
     console.error("[createStockTransfer]", e);
-    res.status(500).json(apiError(e.message || "Failed to create stock transfer"));
+    res.status(500).json(apiError(publicMessage(e, "Could not create the stock transfer. Please try again.")));
   }
 };
 

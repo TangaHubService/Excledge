@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { Banknote, Plus, Users, CalendarDays, Wallet, Landmark, RefreshCw, CheckCircle2, XCircle } from 'lucide-react'
 import { toast } from 'react-toastify'
+import { friendlyMessage } from "../../../lib/friendly-error";
 import { apiClient } from '../../../lib/api-client'
 import { useAuth } from '../../../context/AuthContext'
 import { Button } from '../../../components/ui/button'
@@ -96,7 +97,7 @@ function periodLabel(run: Pick<PayrollRun, 'periodYear' | 'periodMonth'>) {
 }
 
 function errorMessage(e: unknown, fallback: string) {
-  return (e as Error)?.message || fallback
+  return friendlyMessage(e, fallback)
 }
 
 function Kpi({ icon: Icon, label, value, sub, color }: { icon: React.ElementType; label: string; value: string; sub?: string; color: string }) {
@@ -293,7 +294,7 @@ function RunDrawer({ runId, onClose, canApprove }: { runId: number | null; onClo
       qc.invalidateQueries({ queryKey: ['payroll-run', runId] })
       toast.success(res?.message || 'Payroll updated')
     },
-    onError: e => toast.error(errorMessage(e, 'Payroll action failed')),
+    onError: e => toast.error(errorMessage(e, 'Could not update the payroll')),
   })
 
   const slipColumns: ColumnDef<Payslip>[] = [

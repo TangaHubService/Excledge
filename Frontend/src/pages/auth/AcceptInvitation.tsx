@@ -1,5 +1,6 @@
 import React, { useEffect, useState, Suspense } from "react";
 import { toast } from "react-toastify";
+import { toastError } from "../../lib/friendly-error";
 import {
     Shield,
     XCircle,
@@ -67,7 +68,7 @@ const AcceptInvitationContent: React.FC<AcceptInvitationContentProps> = ({
             setInvitation(data);
         } catch (err: any) {
             setError(err.message || "Failed to load invitation details");
-            toast.error(err.message || "Failed to load invitation details");
+            toastError(err, "Could not load invitation details");
         } finally {
             setLoading(false);
         }
@@ -87,7 +88,7 @@ const AcceptInvitationContent: React.FC<AcceptInvitationContentProps> = ({
                 navigate("/login");
             }, 1500);
         } catch (err: any) {
-            toast.error(err.message || "Failed to accept invitation");
+            toastError(err, "Could not accept invitation");
         } finally {
             setProcessing(false);
         }

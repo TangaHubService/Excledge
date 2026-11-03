@@ -1,6 +1,6 @@
 import type { EbmInvoice } from "../../../lib/invoice"
 import { calculateInvoiceTotals } from "../../../lib/invoice"
-import { formatAmount } from "./format"
+import { formatAmount, formatInteger } from "./format"
 import { C } from "./theme"
 
 /** Lower totals block in the same order as the supplied invoice layout. */
@@ -24,7 +24,7 @@ export function InvoiceSummary({ data }: { data: EbmInvoice }) {
       return a.localeCompare(b)
     })
     .map(([code, total]) => ({ label: `TOTAL ${code}`, value: total }))
-  const rows = [
+  const rows: { label: string; value: number; count?: boolean }[] = [
     { label: "SUBTOTAL (VAT INCL.)", value: grandTotal },
     ...bandRows,
     { label: "DISCOUNT", value: Number(totals?.discount ?? 0) },
@@ -33,6 +33,8 @@ export function InvoiceSummary({ data }: { data: EbmInvoice }) {
     { label: "SHIPPING", value: Number(totals?.shipping ?? 0) },
     { label: "PAID", value: Number(totals?.paid ?? 0) },
     { label: "BALANCE", value: Number(totals?.balance ?? 0) },
+    // A count, not money: printed as "4", never "4.00".
+    { label: "ITEMS NUMBER", value: items.length, count: true },
   ]
 
   return (
@@ -48,7 +50,7 @@ export function InvoiceSummary({ data }: { data: EbmInvoice }) {
               <tr key={row.label}>
                 <td style={{ padding: "4px 14px", width: "68%", color: C.ink, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.1 }}>{row.label}</td>
                 <td style={{ width: 14, padding: "4px 0", color: C.muted, fontSize: 10.5, fontWeight: 700, textAlign: "center" }}>:</td>
-                <td style={{ padding: "4px 14px 4px 5px", color: C.ink, fontSize: 10.5, fontWeight: 600, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{formatAmount(row.value)}</td>
+                <td style={{ padding: "4px 14px 4px 5px", color: C.ink, fontSize: 10.5, fontWeight: 600, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{row.count ? formatInteger(row.value) : formatAmount(row.value)}</td>
               </tr>
             ))}
           </tbody>

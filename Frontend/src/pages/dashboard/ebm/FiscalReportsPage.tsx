@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { FileText, Download, Loader2, ScrollText, ChevronRight, CheckCircle2, AlertTriangle, RefreshCw, Database, Bell, Boxes, Truck, X, Ship, Shield, Eye } from "lucide-react";
+import { FileText, Download, Loader2, ScrollText, ChevronRight, CheckCircle2, AlertTriangle, RefreshCw, Database, Bell, Boxes, Truck, X, Ship, Shield, Eye, ExternalLink, Send, Check } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
 import { RraItemClassPicker } from "../../../components/inventory/RraItemClassPicker";
 import { SearchableSelect } from "../../../components/ui/SearchableSelect";
 import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
 import { toast } from "react-toastify";
+import { toastError, toastWarning } from "../../../lib/friendly-error";
 import { apiClient } from "../../../lib/api-client";
 import { useBranch } from "../../../context/BranchContext";
 import { Button } from "../../../components/ui/button";
+import { StatusBadge } from "../../../components/ui/status-badge";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import {
@@ -157,7 +159,7 @@ interface DailyReport {
   taxBands: Record<string, { taxableAmt: number; taxAmt: number; salesAmt: number }>;
   taxRates: Record<string, number>;
   paymentBreakdown: Record<string, number>;
-  vsdcConfirmation: { checked: boolean; rptDe?: string; error?: string } | null;
+  vsdcConfirmation: { checked: boolean; rptDe?: string; savedAt?: string; error?: string } | null;
 }
 
 interface EjEntry {
@@ -182,6 +184,7 @@ function DailyReportCard() {
   const [report, setReport] = useState<DailyReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [sendingZ, setSendingZ] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -189,7 +192,7 @@ function DailyReportCard() {
       const res = await apiClient.getDailyFiscalReport({ type, date, branchId: branchId || undefined });
       setReport((res?.data ?? res) as DailyReport);
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load the report");
+      toastError(e, "Could not load the report");
     } finally {
       setLoading(false);
     }
@@ -210,9 +213,26 @@ function DailyReportCard() {
         `${type}-report-${date}.pdf`,
       );
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to generate the PDF");
+      toastError(e, "Could not generate the PDF");
     } finally {
       setDownloading(false);
+    }
+  };
+
+  // The VSDC saves the Z report for "now", so it can only be sent for today, per device (branch).
+  const canSendZ = type === "Z" && !!branchId && date === todayIso();
+  const sendZ = async () => {
+    setSendingZ(true);
+    try {
+      const res = await apiClient.submitVsdcZReport({ branchId: Number(branchId) });
+      const out = (res as any)?.data ?? res;
+      if (out?.verified) toast.success(`Z report for ${out.rptDeDate ?? date} was sent to RRA and confirmed.`);
+      else toastWarning(`Z report for ${out?.rptDeDate ?? date} was sent, but RRA has not confirmed it yet. Check again in a few minutes.`, out?.verifyError);
+      await load();
+    } catch (e: any) {
+      toastError(e, "Could not send the Z report to RRA");
+    } finally {
+      setSendingZ(false);
     }
   };
 
@@ -264,12 +284,17 @@ function DailyReportCard() {
           <Button variant="outline" onClick={download} disabled={downloading}>
             {downloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF
           </Button>
+          {type === "Z" && (
+            <Button onClick={sendZ} disabled={!canSendZ || sendingZ}>
+              {sendingZ ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Send Z report to RRA
+            </Button>
+          )}
           {loading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
         </div>
 
         {type === "Z" && (
           <p className="text-xs text-muted-foreground">
-            The Z cross-check with the VSDC only runs when a single branch is selected (the device is registered per branch).
+            The VSDC cross-check and sending to RRA need a single branch (the device is registered per branch). Sending is only for today&apos;s Z report.
           </p>
         )}
 
@@ -285,7 +310,7 @@ function DailyReportCard() {
             <div className="space-y-1.5">
               <div className="text-overline uppercase tracking-wide text-muted-foreground">Sales</div>
               <Row label={`Normal sales (${report.summary.normalSalesCount})`} value={money(report.summary.grossSalesAmt)} />
-              <Row label={`Normal refunds (${report.summary.normalRefundsCount})`} value={`-${money(report.summary.grossRefundAmt)}`} />
+              <Row label={`Normal refunds (${report.summary.normalRefundsCount})`} value={report.summary.grossRefundAmt ? `-${money(report.summary.grossRefundAmt)}` : money(0)} />
               <Row label="Net sales" value={money(report.summary.netSalesAmt)} strong />
               <Row label="Total tax" value={money(report.summary.totalTaxAmt)} strong />
             </div>
@@ -312,6 +337,8 @@ function DailyReportCard() {
               <div className="md:col-span-2 flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs">
                 {report.vsdcConfirmation?.checked && !report.vsdcConfirmation.error ? (
                   <><CheckCircle2 className="size-4 text-success" /> VSDC confirmed the Z-report for {report.vsdcConfirmation.rptDe}.</>
+                ) : report.vsdcConfirmation?.savedAt ? (
+                  <><CheckCircle2 className="size-4 text-success" /> Z report saved at the VSDC at {new Date(report.vsdcConfirmation.savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. RRA could not confirm it: {report.vsdcConfirmation.error}</>
                 ) : (
                   <><AlertTriangle className="size-4 text-warning" /> {report.vsdcConfirmation?.error ?? "VSDC confirmation not available."}</>
                 )}
@@ -324,12 +351,48 @@ function DailyReportCard() {
   );
 }
 
-function Row({ label, value, strong }: { label: string; value: React.ReactNode; strong?: boolean }) {
+function Row({ label, value, strong }: { label: ReactNode; value: ReactNode; strong?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
       <span className="text-muted-foreground">{label}</span>
       <span className={strong ? "font-semibold tabular-nums" : "tabular-nums"}>{value}</span>
     </div>
+  );
+}
+
+type StatTone = "default" | "success" | "warning" | "danger";
+const STAT_TONE: Record<StatTone, string> = {
+  default: "border-border bg-muted/40 text-foreground",
+  success: "border-success/25 bg-success/10 text-success dark:text-emerald-300",
+  warning: "border-warning/30 bg-warning/10 text-warning dark:text-amber-300",
+  danger: "border-danger/25 bg-danger/10 text-danger dark:text-red-300",
+};
+
+/** Compact count pill used for the summary line above each table. */
+function Stat({ value, label, tone = "default", title }: { value: ReactNode; label: string; tone?: StatTone; title?: string }) {
+  return (
+    <span title={title} className={`inline-flex items-baseline gap-1.5 rounded-full border px-2.5 py-1 text-xs ${STAT_TONE[tone]}`}>
+      <b className="text-sm font-semibold tabular-nums">{value}</b>
+      <span className="opacity-80">{label}</span>
+    </span>
+  );
+}
+
+const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase().replace(/_/g, " ");
+
+/** RRA line status as a badge — an approved import/purchase is a finished state, so it shows green. */
+function RraStatusBadge({ status }: { status: string | null | undefined }) {
+  const key = (status ?? "").toUpperCase();
+  const tone = key === "APPROVED" || key === "CONFIRMED" ? "SUCCESS" : key === "REJECTED" ? "DECLINED" : key;
+  return <StatusBadge status={tone} label={titleCase(key || "unknown")} />;
+}
+
+/** Short code (receipt label, movement type) in a neutral monospace chip. */
+function CodeChip({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded border border-border bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-foreground">
+      {children}
+    </span>
   );
 }
 
@@ -355,7 +418,7 @@ function PluCard() {
       setRows((data?.items ?? []) as PluRow[]);
       setSummary(data?.summary ?? null);
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load the PLU report");
+      toastError(e, "Could not load the PLU report");
     } finally {
       setLoading(false);
     }
@@ -390,7 +453,7 @@ function PluCard() {
               try {
                 await openPdf(() => apiClient.getPluReportPdf({ startDate: start, endDate: end }), "PLU-report.pdf");
               } catch (e: any) {
-                toast.error(e?.message ?? "Failed to generate the PLU report");
+                toastError(e, "Could not generate the PLU report");
               } finally {
                 setBusy(false);
               }
@@ -404,11 +467,11 @@ function PluCard() {
         {rows && (
           <>
             {summary && (
-              <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-                <span><b className="text-foreground tabular-nums">{summary.uniqueItemCodes}</b> item codes</span>
-                <span><b className="text-foreground tabular-nums">{formatInt(summary.totalQuantity)}</b> units</span>
-                <span><b className="text-foreground tabular-nums">{money(summary.totalRevenue)}</b> revenue</span>
-                <span><b className="text-foreground tabular-nums">{money(summary.totalTax)}</b> tax</span>
+              <div className="flex flex-wrap gap-2">
+                <Stat value={summary.uniqueItemCodes} label="item codes" />
+                <Stat value={formatInt(summary.totalQuantity)} label="units" />
+                <Stat value={money(summary.totalRevenue)} label="revenue" />
+                <Stat value={money(summary.totalTax)} label="tax" />
               </div>
             )}
             <div className="overflow-x-auto rounded-lg border">
@@ -431,8 +494,8 @@ function PluCard() {
                   )}
                   {rows.map((r) => (
                     <TableRow key={r.itemCd}>
-                      <TableCell className="font-mono text-xs">{r.itemCd}</TableCell>
-                      <TableCell>{r.productName}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{r.itemCd}</TableCell>
+                      <TableCell className="font-medium">{r.productName}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(r.unitPrice ?? 0)}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.taxRate ?? 0}%</TableCell>
                       <TableCell className="text-right tabular-nums">{formatInt(r.quantity)} {r.unit}</TableCell>
@@ -466,7 +529,7 @@ function ElectronicJournalCard() {
       const data = res?.data ?? res;
       setEntries((data?.entries ?? []) as EjEntry[]);
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load the electronic journal");
+      toastError(e, "Could not load the electronic journal");
     } finally {
       setLoading(false);
     }
@@ -482,7 +545,7 @@ function ElectronicJournalCard() {
       const res = await apiClient.getElectronicJournalEntry(entry.saleId);
       setSelected({ entry, detail: res?.data ?? res });
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load the journal entry");
+      toastError(e, "Could not load the journal entry");
       setSelected(null);
     } finally {
       setDetailLoading(false);
@@ -507,8 +570,8 @@ function ElectronicJournalCard() {
             <Label htmlFor="ej-end">To</Label>
             <Input id="ej-end" type="date" value={end} max={todayIso()} onChange={(e) => setEnd(e.target.value)} className="w-40" />
           </div>
-          <Button onClick={load} disabled={loading}>
-            {loading ? <Loader2 className="size-4 animate-spin" /> : <ScrollText className="size-4" />} Refresh
+          <Button variant="outline" onClick={load} disabled={loading}>
+            {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Refresh
           </Button>
         </div>
 
@@ -520,8 +583,8 @@ function ElectronicJournalCard() {
                 <TableHead>Invoice</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead className="text-right">Receipt no.</TableHead>
-                <TableHead className="text-center">EJ sent</TableHead>
-                <TableHead />
+                <TableHead>EJ sent</TableHead>
+                <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -532,9 +595,9 @@ function ElectronicJournalCard() {
                 <TableRow key={e.id} className="cursor-pointer" onClick={() => openEntry(e)}>
                   <TableCell className="whitespace-nowrap">{e.sdcDateTime ? new Date(e.sdcDateTime).toLocaleString() : new Date(e.createdAt).toLocaleString()}</TableCell>
                   <TableCell className="font-mono text-xs">{e.invoiceNumber ?? e.ebmInvoiceNumber ?? "—"}</TableCell>
-                  <TableCell>{e.rcptLabel ?? "NS"}</TableCell>
+                  <TableCell><CodeChip>{e.rcptLabel ?? "NS"}</CodeChip></TableCell>
                   <TableCell className="text-right tabular-nums">{e.sdcRcptNo ?? "—"} / {e.totalRcptNo ?? "—"}</TableCell>
-                  <TableCell className="text-center">{e.ejSent ? <CheckCircle2 className="mx-auto size-4 text-success" /> : <AlertTriangle className="mx-auto size-4 text-warning" />}</TableCell>
+                  <TableCell>{e.ejSent ? <StatusBadge status="SUCCESS" label="Sent" /> : <StatusBadge status="PROCESSING" label="Not sent" />}</TableCell>
                   <TableCell className="text-right"><ChevronRight className="size-4 text-muted-foreground" /></TableCell>
                 </TableRow>
               ))}
@@ -614,7 +677,7 @@ function MasterDataCard() {
       setStatus(((s as any)?.data ?? s) as MasterDataStatus);
       setNotices((((n as any)?.data ?? n)?.notices ?? []) as RraNotice[]);
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load RRA master-data status");
+      toastError(e, "Could not load RRA master-data status");
     } finally {
       setLoading(false);
     }
@@ -625,11 +688,18 @@ function MasterDataCard() {
   const syncAll = async () => {
     setSyncing(true);
     try {
-      await apiClient.syncAllRraMasterData();
-      toast.success("Synced codes, classifications and notices from RRA");
+      const res = await apiClient.syncAllRraMasterData();
+      const outcomes = (((res as any)?.data ?? res)?.outcomes ?? []) as Array<{ resource: string; ok: boolean; upserted?: number; error?: string }>;
+      const failed = outcomes.filter((o) => !o.ok);
+      const names: Record<string, string> = { codes: "codes", itemClasses: "classifications", notices: "notices" };
+      if (failed.length === 0) {
+        toast.success(`Updated from RRA: ${outcomes.map((o) => `${o.upserted ?? 0} ${names[o.resource] ?? o.resource}`).join(", ")}.`);
+      } else {
+        toastWarning(`Some RRA data could not be updated (${failed.map((o) => names[o.resource] ?? o.resource).join(", ")}). Try again in a few minutes.`, failed.map((o) => `${o.resource}: ${o.error ?? "failed"}`).join("; "));
+      }
       await load();
     } catch (e: any) {
-      toast.error(e?.message ?? "RRA sync failed");
+      toastError(e, "Could not sync with RRA");
     } finally {
       setSyncing(false);
     }
@@ -645,9 +715,9 @@ function MasterDataCard() {
       const res = await apiClient.reconcileRraItems();
       const out = (res as any)?.data ?? res;
       setDiff(out?.details ?? null);
-      toast.success(`Pulled ${out?.pulled ?? 0} item(s) from RRA`);
+      toast.success(`Compared your items with RRA: ${out?.pulled ?? 0} item(s) received.`);
     } catch (e: any) {
-      toast.error(e?.message ?? "Item reconciliation failed");
+      toastError(e, "Could not compare your items with RRA");
     } finally {
       setReconciling(false);
     }
@@ -665,7 +735,7 @@ function MasterDataCard() {
         mismatched: d.mismatched.filter((x) => x.productId !== productId),
       }));
     } catch (e: any) {
-      toast.error(e?.message ?? "Product sync failed");
+      toastError(e, "Could not register the product with RRA");
     } finally {
       setRowBusy(null);
     }
@@ -692,7 +762,7 @@ function MasterDataCard() {
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <Button onClick={syncAll} disabled={syncing}>
-            {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Sync now
+            {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Sync master data
           </Button>
           <Button variant="outline" onClick={reconcile} disabled={reconciling}>
             {reconciling ? <Loader2 className="size-4 animate-spin" /> : <Database className="size-4" />} Reconcile items with RRA
@@ -705,10 +775,10 @@ function MasterDataCard() {
               try {
                 const res = await apiClient.syncRraBranches();
                 const out = (res as any)?.data ?? res;
-                toast.success(`Branches: ${out?.fetched ?? 0} from RRA, ${out?.matched ?? 0} matched locally`);
+                toast.success(`RRA has ${out?.fetched ?? 0} branch(es) for your TIN; ${out?.matched ?? 0} match your branches here.`);
                 await load();
               } catch (e: any) {
-                toast.error(e?.message ?? "Branch sync failed");
+                toastError(e, "Could not sync branches with RRA");
               } finally {
                 setSyncing(false);
               }
@@ -719,10 +789,15 @@ function MasterDataCard() {
           {loading ? (
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
           ) : c ? (
-            <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-              <span><b className="text-foreground tabular-nums">{c.codes}</b> codes</span>
-              <span><b className="text-foreground tabular-nums">{c.itemClasses}</b> classifications</span>
-              <span><b className="text-foreground tabular-nums">{c.notices}</b> notices ({c.unreadNotices} unread)</span>
+            <div className="flex flex-wrap gap-2 sm:ml-auto">
+              <Stat value={formatInt(c.codes)} label="codes" tone={c.codes > 0 ? "default" : "warning"} />
+              <Stat
+                value={formatInt(c.itemClasses)}
+                label="classifications"
+                tone={c.itemClasses > 0 ? "default" : "warning"}
+                title={c.itemClasses > 0 ? undefined : "Not pulled from RRA yet. Press Sync master data."}
+              />
+              <Stat value={c.notices} label={`notices · ${c.unreadNotices} unread`} tone={c.unreadNotices > 0 ? "warning" : "default"} />
             </div>
           ) : null}
         </div>
@@ -755,9 +830,9 @@ function MasterDataCard() {
                         <TableCell>{it.name}</TableCell>
                         <TableCell className="font-mono text-xs">{it.itemCd ?? "—"}</TableCell>
                         <TableCell>
-                          <span className={it.ebmSyncStatus === "FAILED" ? "text-danger" : "text-warning"}>
-                            {it.ebmSyncStatus === "FAILED" ? "Sync failed" : "Not at RRA"}
-                          </span>
+                          {it.ebmSyncStatus === "FAILED"
+                            ? <StatusBadge status="FAILED" label="Sync failed" />
+                            : <StatusBadge status="PROCESSING" label="Not at RRA" />}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button size="sm" variant="outline" disabled={rowBusy === it.id} onClick={() => pushProduct(it.id, it.name)}>
@@ -770,8 +845,13 @@ function MasterDataCard() {
                       <TableRow key={`m-${m.productId}-${m.field}-${i}`}>
                         <TableCell>{m.productName}</TableCell>
                         <TableCell className="font-mono text-xs">{m.itemCd}</TableCell>
-                        <TableCell className="text-warning">
-                          {m.field}: <span className="font-mono">{String(m.local ?? "—")}</span> → RRA <span className="font-mono">{String(m.rra ?? "—")}</span>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status="PROCESSING" label="Mismatch" />
+                            <span className="text-xs text-muted-foreground">
+                              {m.field}: <span className="font-mono text-foreground">{String(m.local ?? "—")}</span> → RRA <span className="font-mono text-foreground">{String(m.rra ?? "—")}</span>
+                            </span>
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
@@ -791,7 +871,12 @@ function MasterDataCard() {
                       <TableRow key={`r-${it.itemCd}`}>
                         <TableCell>{it.itemNm ?? "—"}</TableCell>
                         <TableCell className="font-mono text-xs">{it.itemCd}</TableCell>
-                        <TableCell className="text-muted-foreground">At RRA only — add it to the catalog manually</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status="DRAFT" label="At RRA only" />
+                            <span className="text-xs text-muted-foreground">Add it to the catalog manually</span>
+                          </div>
+                        </TableCell>
                         <TableCell />
                       </TableRow>
                     ))}
@@ -816,14 +901,18 @@ function MasterDataCard() {
                       <span className="font-medium">#{n.noticeNo} — {n.title ?? "(untitled)"}</span>
                     </div>
                     {n.cont && <p className="mt-0.5 line-clamp-2 text-muted-foreground">{n.cont}</p>}
-                    <p className="mt-0.5 text-xs text-muted-foreground">{n.regDt ?? ""}{n.regrNm ? ` · ${n.regrNm}` : ""}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{formatLastReqDt(n.regDt)}{n.regrNm ? ` · ${n.regrNm}` : ""}</p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-1.5">
                     {n.dtlUrl && (
-                      <a href={n.dtlUrl} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Open</a>
+                      <Button asChild size="sm" variant="outline">
+                        <a href={n.dtlUrl} target="_blank" rel="noreferrer"><ExternalLink className="size-3.5" /> Open</a>
+                      </Button>
                     )}
                     {!n.readAt && (
-                      <button type="button" onClick={() => markRead(n.noticeNo)} className="text-xs text-muted-foreground hover:text-foreground">Mark read</button>
+                      <Button size="sm" variant="ghost" onClick={() => markRead(n.noticeNo)}>
+                        <Check className="size-3.5" /> Mark read
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -908,7 +997,7 @@ function StockSyncCard() {
         pending: Array.isArray(stockData?.pending) ? stockData.pending : [],
       });
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load stock status");
+      toastError(e, "Could not load stock status");
     }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -919,12 +1008,13 @@ function StockSyncCard() {
       const res = await apiClient.syncRraStock();
       const out = (res as any)?.data ?? res;
       toast.success(
-        `Stock sync: ${out?.succeeded ?? 0} sent, ${out?.failed ?? 0} failed`
-          + (out?.deferred ? `, ${out.deferred} waiting for their sale invoice` : ""),
+        `Stock sent to RRA: ${out?.succeeded ?? 0} line(s) sent`
+          + (out?.failed ? `, ${out.failed} not sent (try again later)` : "")
+          + (out?.deferred ? `, ${out.deferred} waiting for their sale to be confirmed` : "") + ".",
       );
       await load();
     } catch (e: any) {
-      toast.error(e?.message ?? "Stock sync failed");
+      toastError(e, "Could not send stock to RRA");
     } finally { setBusy(null); }
   };
 
@@ -933,10 +1023,10 @@ function StockSyncCard() {
     try {
       const res = await apiClient.syncRraStockMoves();
       const out = (res as any)?.data ?? res;
-      toast.success(`Pulled ${out?.fetched ?? 0} stock movement(s) from RRA — ${out?.applied ?? 0} line(s) added to stock`);
+      toast.success(`Received ${out?.fetched ?? 0} stock movement(s) from RRA; ${out?.applied ?? 0} line(s) added to your stock.`);
       await load();
     } catch (e: any) {
-      toast.error(e?.message ?? "Stock-move pull failed");
+      toastError(e, "Could not get stock movements from RRA");
     } finally { setBusy(null); }
   };
 
@@ -959,12 +1049,10 @@ function StockSyncCard() {
           <Button variant="outline" onClick={syncStockMoves} disabled={busy === "moves"}>
             {busy === "moves" ? <Loader2 className="size-4 animate-spin" /> : <Truck className="size-4" />} Pull stock moves
           </Button>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            <span title="Inventory ledger rows waiting to be sent to VSDC">
-              <b className="text-warning tabular-nums">{sc.PENDING ?? 0}</b> pending sync
-            </span>
-            <span><b className="text-success tabular-nums">{sc.SYNCED ?? 0}</b> synced</span>
-            <span><b className="text-warning tabular-nums">{sc.FAILED ?? 0}</b> failed</span>
+          <div className="flex flex-wrap gap-2 sm:ml-auto">
+            <Stat value={formatInt(sc.PENDING ?? 0)} label="pending" tone={(sc.PENDING ?? 0) > 0 ? "warning" : "default"} title="Inventory ledger rows waiting to be sent to VSDC" />
+            <Stat value={formatInt(sc.SYNCED ?? 0)} label="synced" tone="success" />
+            <Stat value={formatInt(sc.FAILED ?? 0)} label="failed" tone={(sc.FAILED ?? 0) > 0 ? "danger" : "default"} />
           </div>
         </div>
 
@@ -994,7 +1082,7 @@ function StockSyncCard() {
                             <div className="font-mono text-[10px] text-muted-foreground">{row.product.itemCd}</div>
                           ) : null}
                         </TableCell>
-                        <TableCell>{row.movementType}</TableCell>
+                        <TableCell><CodeChip>{row.movementType}</CodeChip></TableCell>
                         <TableCell className="text-right tabular-nums">
                           {row.direction === "OUT" ? "−" : "+"}
                           {formatInt(Number(row.quantity))}
@@ -1092,7 +1180,7 @@ function ImportDetailRows({ line }: { line: RraImport }) {
     { label: "Exchange rate", value: line.invcFcurExcrt != null ? Number(line.invcFcurExcrt).toLocaleString() : "—" },
     { label: "Item code", value: <span className="font-mono text-xs">{line.itemCd ?? "—"}</span> },
     { label: "Item class", value: <span className="font-mono text-xs">{line.itemClsCd ?? "—"}</span> },
-    { label: "Status", value: line.status },
+    { label: "Status", value: <RraStatusBadge status={line.status} /> },
     { label: "Actioned at", value: line.actionedAt ? new Date(line.actionedAt).toLocaleString() : "—" },
     { label: "Remark", value: line.remark?.trim() || "—", wide: true },
   ];
@@ -1111,7 +1199,8 @@ function ImportDetailRows({ line }: { line: RraImport }) {
 function ImportDeclarationsCard() {
   const [imports, setImports] = useState<RraImport[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
-  const [statusFilter, setStatusFilter] = useState<RraImportStatusFilter>("PENDING");
+  // Default to every pulled line; "Pending" alone hid approved/rejected lines and looked like a short pull.
+  const [statusFilter, setStatusFilter] = useState<RraImportStatusFilter>("ALL");
   const [lastReq, setLastReq] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<RraImport | null>(null);
@@ -1133,7 +1222,7 @@ function ImportDeclarationsCard() {
       setPendingCount(Number(data?.pending ?? 0));
       setLastReq(data?.lastRequestDate ?? null);
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load import declarations");
+      toastError(e, "Could not load import declarations");
     }
   }, [statusFilter]);
   useEffect(() => { load(); }, [load]);
@@ -1144,11 +1233,26 @@ function ImportDeclarationsCard() {
       const res = await apiClient.syncRraImports();
       const out = (res as any)?.data ?? res;
       const pulled = Number(out?.cached ?? 0);
-      toast.success(`Pulled ${pulled} import line(s) from RRA`);
+      const failed = Number(out?.failed ?? 0);
+      if (failed > 0) {
+        // Backend keeps the last request date, so pulling again retries the failed lines.
+        toast.warning(`RRA sent ${Number(out?.fetched ?? 0)} import line(s): ${pulled} saved, ${failed} could not be saved. Pull again to retry.`);
+      } else if (pulled === 0) {
+        // RRA only returns lines declared since the last request, so a repeat pull is often 0.
+        toast.success("No new import declarations from RRA since the last check.");
+      } else {
+        // RRA re-sends lines it already delivered; say how many are actually new.
+        const created = Number(out?.created ?? pulled);
+        const known = pulled - created;
+        toast.success(
+          `RRA sent ${pulled} line(s): ${created} new`
+            + (known > 0 ? `, ${known} already in your list (status kept)` : ""),
+        );
+      }
       await load();
       if (out?.lastReqDt) setLastReq(String(out.lastReqDt));
     } catch (e: any) {
-      toast.error(e?.message ?? "Import pull failed");
+      toastError(e, "Could not get import declarations from RRA");
     } finally { setBusy(false); }
   };
 
@@ -1188,7 +1292,7 @@ function ImportDeclarationsCard() {
       return;
     }
     if (approve && !action.line.hsCd?.trim()) {
-      toast.error("This declaration has no HS code from RRA — it cannot be approved");
+      toast.error("RRA did not send a product code (HS code) for this declaration, so it cannot be approved. Ask RRA or your customs agent to correct it.");
       return;
     }
     setRowBusy(true);
@@ -1203,12 +1307,12 @@ function ImportDeclarationsCard() {
         expiryDate: approve && expiryDate ? expiryDate : undefined,
       });
       const out = (res as any)?.data ?? res;
-      if (out?.warning) toast.warn(String(out.warning));
-      else toast.success(action.kind === "approve" ? "Import line approved with RRA" : "Import line rejected");
+      if (out?.warning) toastWarning(String(out.warning));
+      else toast.success(action.kind === "approve" ? "Import declaration approved with RRA." : "Import declaration rejected.");
       setAction(null);
       await load();
     } catch (e: any) {
-      toast.error(e?.message ?? "Action failed");
+      toastError(e, "Could not complete this action");
     } finally { setRowBusy(false); }
   };
 
@@ -1239,33 +1343,30 @@ function ImportDeclarationsCard() {
               </SelectContent>
             </Select>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-md border border-sky-500/25 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-950">
-            <span className="text-xs font-semibold uppercase tracking-wide text-sky-700">Last request</span>
+          <div className="inline-flex items-center gap-2 rounded-md border border-sky-500/25 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-950 dark:text-sky-100">
+            <span className="text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">Last request</span>
             <span className="font-mono font-semibold tabular-nums">
               {lastReq ? formatLastReqDt(lastReq) : "—"}
             </span>
           </div>
-          <div className="text-sm text-muted-foreground">
-            Showing <b className="text-foreground tabular-nums">{imports.length}</b>
-            {statusFilter !== "ALL" ? ` ${statusFilter.toLowerCase()}` : ""} line(s)
-            {pendingCount > 0 && statusFilter !== "PENDING" ? (
-              <> · <b className="text-warning tabular-nums">{pendingCount}</b> pending overall</>
-            ) : null}
+          <div className="flex flex-wrap gap-2 sm:ml-auto">
+            <Stat value={imports.length} label={statusFilter === "ALL" ? "lines" : `${statusFilter.toLowerCase()} lines`} />
+            <Stat value={pendingCount} label="awaiting action" tone={pendingCount > 0 ? "warning" : "default"} />
           </div>
         </div>
 
         <TooltipProvider>
           <div className="overflow-x-auto rounded-lg border">
-            <Table className="table-fixed w-full min-w-[720px]">
+            <Table className="table-fixed w-full min-w-[880px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[9.5rem]">Declaration</TableHead>
-                  <TableHead className="w-[14rem]">Supplier</TableHead>
-                  <TableHead className="w-[14rem]">Item</TableHead>
-                  <TableHead className="w-[7rem] text-right">Qty</TableHead>
-                  <TableHead className="w-[8rem] text-right">Invoice</TableHead>
+                  <TableHead className="w-[10rem]">Declaration</TableHead>
+                  <TableHead>Supplier</TableHead>
+                  <TableHead>Item</TableHead>
+                  <TableHead className="w-[7.5rem] text-right">Qty</TableHead>
+                  <TableHead className="w-[8.5rem] text-right">Invoice</TableHead>
                   <TableHead className="w-[6.5rem]">Status</TableHead>
-                  <TableHead className="w-[13rem] text-right">Actions</TableHead>
+                  <TableHead className="w-[10.5rem] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1289,7 +1390,7 @@ function ImportDeclarationsCard() {
                         <TruncatedText value={im.spplrNm} max={50} />
                       </div>
                     </TableCell>
-                    <TableCell className="overflow-hidden">
+                    <TableCell className="overflow-hidden font-medium">
                       <div className="min-w-0 max-w-full">
                         <TruncatedText value={im.itemNm} max={50} />
                       </div>
@@ -1307,25 +1408,30 @@ function ImportDeclarationsCard() {
                       </span>
                     </TableCell>
                     <TableCell className="overflow-hidden">
-                      <span className={im.status === "APPROVED" ? "text-success" : im.status === "REJECTED" ? "text-muted-foreground" : "text-warning"}>
-                        {im.status}
-                      </span>
+                      <RraStatusBadge status={im.status} />
                     </TableCell>
                     <TableCell className="overflow-hidden text-right">
-                      <div className="flex flex-nowrap justify-end gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => setDetail(im)}>
-                          <Eye className="size-3.5" /> View details
-                        </Button>
+                      <div className="flex flex-nowrap items-center justify-end gap-1">
                         {im.status === "PENDING" && (
                           <>
-                            <Button size="sm" variant="outline" onClick={() => openAction(im, "approve")}>
-                              <CheckCircle2 className="size-3.5" /> Approve
+                            <Button size="sm" onClick={() => openAction(im, "approve")}>
+                              <Check className="size-3.5" /> Approve
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => openAction(im, "reject")}>
-                              <X className="size-3.5" />
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              className="text-danger hover:bg-danger/10 hover:text-danger"
+                              aria-label="Reject"
+                              title="Reject"
+                              onClick={() => openAction(im, "reject")}
+                            >
+                              <X className="size-4" />
                             </Button>
                           </>
                         )}
+                        <Button size="icon-sm" variant="ghost" aria-label="View details" title="View details" onClick={() => setDetail(im)}>
+                          <Eye className="size-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1346,7 +1452,7 @@ function ImportDeclarationsCard() {
               <ImportDetailRows line={detail} />
               {detail.status === "PENDING" && (
                 <div className="flex justify-end gap-2 border-t pt-3">
-                  <Button variant="ghost" onClick={() => { setDetail(null); openAction(detail, "reject"); }}>
+                  <Button variant="outline" className="text-danger hover:bg-danger/10 hover:text-danger" onClick={() => { setDetail(null); openAction(detail, "reject"); }}>
                     <X className="size-4" /> Reject
                   </Button>
                   <Button onClick={() => { setDetail(null); openAction(detail, "approve"); }}>
@@ -1450,8 +1556,8 @@ function ImportDeclarationsCard() {
                 <Input id="imp-remark" value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="Reason / note" />
               </div>
               <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => setAction(null)}>Cancel</Button>
-                <Button onClick={submitAction} disabled={rowBusy}>
+                <Button variant="outline" onClick={() => setAction(null)}>Cancel</Button>
+                <Button variant={action.kind === "approve" ? "default" : "destructive"} onClick={submitAction} disabled={rowBusy}>
                   {rowBusy ? <Loader2 className="size-4 animate-spin" /> : action.kind === "approve" ? <CheckCircle2 className="size-4" /> : <X className="size-4" />}
                   {action.kind === "approve" ? "Approve with RRA" : "Reject"}
                 </Button>
@@ -1476,7 +1582,7 @@ function PurchasesImportDetailReportCard() {
       const res = await apiClient.getPurchasesReport({ startDate: start, endDate: end });
       setData((res as any)?.data ?? res);
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load purchases / importation report");
+      toastError(e, "Could not load purchases / importation report");
     } finally {
       setBusy(false);
     }
@@ -1488,13 +1594,16 @@ function PurchasesImportDetailReportCard() {
   const importation = data?.importation;
   const orders = (data?.orders ?? []) as any[];
   const importItems = (importation?.items ?? []) as any[];
+  const rraPurchases = data?.rraPurchases;
+  const rraInvoices = (rraPurchases?.items ?? []) as any[];
+  const [section, setSection] = useState("rra");
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Truck className="size-4" /> Purchases &amp; importation</CardTitle>
         <CardDescription>
-          Detailed purchases and importation report (RRA checklist §25) — local purchase orders plus RRA import declaration lines.
+          Detailed purchases and importation report (RRA checklist §25) — local purchase orders, supplier invoices received from RRA, and import declaration lines.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -1507,28 +1616,40 @@ function PurchasesImportDetailReportCard() {
             <Label className="text-xs text-muted-foreground">To</Label>
             <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="w-40" />
           </div>
-          <Button onClick={load} disabled={busy}>
+          <Button variant="outline" onClick={load} disabled={busy}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Load report
           </Button>
         </div>
 
         {summary && (
-          <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-            <span><b className="text-foreground tabular-nums">{summary.orderCount ?? 0}</b> purchase orders</span>
-            <span><b className="text-foreground tabular-nums">{money(summary.totalPurchases)}</b> total</span>
-            <span><b className="text-foreground tabular-nums">{money(summary.totalTax)}</b> tax</span>
+          <div className="flex flex-wrap gap-2">
+            <Stat value={summary.orderCount ?? 0} label="purchase orders" />
+            <Stat value={money(summary.totalPurchases)} label="PO total" />
+            {rraPurchases?.summary && (
+              <>
+                <Stat value={rraPurchases.summary.invoices ?? 0} label="RRA invoices" />
+                <Stat value={money(rraPurchases.summary.totalAmt)} label="invoice total" />
+                <Stat value={rraPurchases.summary.PENDING ?? 0} label="to review" tone={(rraPurchases.summary.PENDING ?? 0) > 0 ? "warning" : "default"} />
+              </>
+            )}
+            <Stat value={money((summary.totalTax ?? 0) + (rraPurchases?.summary?.totalTax ?? 0))} label="tax" />
             {importation?.summary && (
               <>
-                <span><b className="text-foreground tabular-nums">{importation.summary.lines ?? 0}</b> import lines</span>
-                <span className="text-warning"><b className="tabular-nums">{importation.summary.PENDING ?? 0}</b> pending</span>
-                <span className="text-success"><b className="tabular-nums">{importation.summary.APPROVED ?? 0}</b> approved</span>
+                <Stat value={importation.summary.lines ?? 0} label="import lines" />
+                <Stat value={importation.summary.PENDING ?? 0} label="pending" tone={(importation.summary.PENDING ?? 0) > 0 ? "warning" : "default"} />
+                <Stat value={importation.summary.APPROVED ?? 0} label="approved" tone="success" />
               </>
             )}
           </div>
         )}
 
-        <div className="space-y-2">
-          <div className="text-overline uppercase tracking-wide text-muted-foreground">Purchase orders</div>
+        <Tabs value={section} onValueChange={setSection}>
+          <TabsList>
+            <TabsTrigger value="orders">Purchase orders ({orders.length})</TabsTrigger>
+            <TabsTrigger value="rra">RRA invoices ({rraInvoices.length})</TabsTrigger>
+            <TabsTrigger value="imports">Imports ({importItems.length})</TabsTrigger>
+          </TabsList>
+          <TabsContent value="orders" className="mt-3">
           <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
@@ -1549,8 +1670,8 @@ function PurchasesImportDetailReportCard() {
                   <TableRow key={o.id}>
                     <TableCell className="font-mono text-xs">{o.orderNumber}</TableCell>
                     <TableCell>{o.supplierName || "—"}</TableCell>
-                    <TableCell>{o.orderedAt}</TableCell>
-                    <TableCell>{o.status}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatDclDe(o.orderedAt)}</TableCell>
+                    <TableCell><StatusBadge status={String(o.status ?? "")} /></TableCell>
                     <TableCell className="text-right tabular-nums">{o.itemCount}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(o.totalAmount)}</TableCell>
                   </TableRow>
@@ -1558,10 +1679,46 @@ function PurchasesImportDetailReportCard() {
               </TableBody>
             </Table>
           </div>
-        </div>
+          </TabsContent>
 
-        <div className="space-y-2">
-          <div className="text-overline uppercase tracking-wide text-muted-foreground">Importation</div>
+          <TabsContent value="rra" className="mt-3">
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Invoice</TableHead>
+                  <TableHead>Supplier</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Items</TableHead>
+                  <TableHead className="text-right">Tax</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rraInvoices.length === 0 && (
+                  <TableRow><TableCell colSpan={7} className="py-6 text-center text-muted-foreground">No supplier invoices from RRA in this range.</TableCell></TableRow>
+                )}
+                {rraInvoices.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-mono text-xs">{p.spplrInvcNo}</TableCell>
+                    <TableCell>
+                      <div>{p.spplrNm || "—"}</div>
+                      <div className="font-mono text-xs text-muted-foreground">TIN {p.spplrTin}</div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{formatDclDe(p.salesDt)}</TableCell>
+                    <TableCell><RraStatusBadge status={p.status} /></TableCell>
+                    <TableCell className="text-right tabular-nums">{p.totItemCnt ?? "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(p.totTaxAmt)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(p.totAmt)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          </TabsContent>
+
+          <TabsContent value="imports" className="mt-3">
           <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
@@ -1580,20 +1737,22 @@ function PurchasesImportDetailReportCard() {
                 )}
                 {importItems.map((i, idx) => (
                   <TableRow key={`${i.taskCd}-${i.dclDe}-${i.itemSeq}-${idx}`}>
-                    <TableCell className="font-mono text-xs">{i.dclNo ?? i.taskCd}<span className="text-muted-foreground"> · {i.dclDe}</span></TableCell>
-                    <TableCell>{i.supplier || "—"}</TableCell>
-                    <TableCell>{i.itemNm ?? "—"}</TableCell>
-                    <TableCell className="font-mono text-xs">{i.hsCd ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{i.qty != null ? Number(i.qty) : "—"}</TableCell>
-                    <TableCell>
-                      <span className={i.status === "APPROVED" ? "text-success" : i.status === "REJECTED" ? "text-muted-foreground" : "text-warning"}>{i.status}</span>
+                    <TableCell className="font-mono text-xs">
+                      <div>{i.dclNo ?? i.taskCd}</div>
+                      <div className="text-muted-foreground">{formatDclDe(i.dclDe)}</div>
                     </TableCell>
+                    <TableCell>{i.supplier || "—"}</TableCell>
+                    <TableCell className="font-medium">{i.itemNm ?? "—"}</TableCell>
+                    <TableCell className="font-mono text-xs">{i.hsCd ?? "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{i.qty != null ? formatInt(Number(i.qty)) : "—"}</TableCell>
+                    <TableCell><RraStatusBadge status={i.status} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );
@@ -1610,7 +1769,7 @@ function AuditorOverviewCard() {
       const res = await apiClient.getRraAuditOverview(selectedBranchId ?? undefined);
       setData((res as any)?.data ?? res);
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load auditor overview");
+      toastError(e, "Could not load auditor overview");
     } finally {
       setLoading(false);
     }
@@ -1683,7 +1842,7 @@ function AuditorOverviewCard() {
             <div className="space-y-1.5 rounded-lg border p-3">
               <div className="text-overline uppercase tracking-wide text-muted-foreground">Outbox</div>
               {Object.entries(data.outboxByStatus ?? {}).map(([status, count]) => (
-                <Row key={status} label={status} value={String(count)} />
+                <Row key={status} label={<StatusBadge status={status} />} value={formatInt(Number(count))} />
               ))}
             </div>
             <div className="space-y-1.5 rounded-lg border p-3">
@@ -1716,10 +1875,22 @@ function AuditorOverviewCard() {
                   <TableBody>
                     {(data.syncCursors ?? []).map((c: any) => (
                       <TableRow key={c.resource}>
-                        <TableCell>{c.resource}</TableCell>
+                        <TableCell className="font-medium">{c.resource}</TableCell>
                         <TableCell className="font-mono text-xs">{formatLastReqDt(c.lastReqDt)}</TableCell>
                         <TableCell>{c.lastRunAt ? new Date(c.lastRunAt).toLocaleString() : "—"}</TableCell>
-                        <TableCell className="max-w-[240px] truncate">{c.lastResult ?? "—"}</TableCell>
+                        <TableCell className="max-w-[320px]">
+                          {c.lastResult ? (
+                            <div className="flex items-center gap-2">
+                              <StatusBadge
+                                status={/^(OK|REWOUND|VERIFIED)/.test(c.lastResult) ? "SUCCESS" : /^(PARTIAL|SAVED_UNVERIFIED)/.test(c.lastResult) ? "PROCESSING" : "FAILED"}
+                                label={c.lastResult.split(/[:\s]/)[0]}
+                              />
+                              <span className="truncate text-xs text-muted-foreground" title={c.lastResult}>
+                                {c.lastResult.replace(/^[A-Z_]+:?\s*/, "") || "—"}
+                              </span>
+                            </div>
+                          ) : "—"}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

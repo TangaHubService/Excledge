@@ -63,8 +63,8 @@ async function touchCursorResult(organizationId: number, result: string): Promis
 export async function syncRraImports(
   organizationId: number,
   opts: { branchId?: number | null; requestDate?: string } = {},
-): Promise<{ ok: boolean; fetched: number; cached: number; lastReqDt: string; error?: string }> {
-  if (!isEbmEnabled()) return { ok: false, fetched: 0, cached: 0, lastReqDt: '', error: 'EBM is not enabled' };
+): Promise<{ ok: boolean; fetched: number; cached: number; created?: number; failed: number; lastReqDt: string; error?: string }> {
+  if (!isEbmEnabled()) return { ok: false, fetched: 0, cached: 0, failed: 0, lastReqDt: '', error: 'EBM is not enabled' };
 
   const prevCursor = await getCursor(organizationId);
 
@@ -74,13 +74,14 @@ export async function syncRraImports(
   let lastReqDt: string;
   if (requestDate) {
     const digits = requestDate.replace(/\D/g, '');
-    if (digits.length < 8) return { ok: false, fetched: 0, cached: 0, lastReqDt: prevCursor, error: 'Request date must be yyyy-mm-dd' };
+    if (digits.length < 8) return { ok: false, fetched: 0, cached: 0, failed: 0, lastReqDt: prevCursor, error: 'Request date must be yyyy-mm-dd' };
     lastReqDt = `${digits.slice(0, 8)}000000`;
     if (lastReqDt <= prevCursor) {
       return {
         ok: false,
         fetched: 0,
         cached: 0,
+        failed: 0,
         lastReqDt: prevCursor,
         error: `Request date must be later than the previous request (${prevCursor})`,
       };
@@ -97,11 +98,16 @@ export async function syncRraImports(
   if (!res.success) {
     // Do not create/overwrite lastReqDt on failure — "Last request" stays as-is.
     await touchCursorResult(organizationId, `FAILED: ${res.resultMsg}`);
-    return { ok: false, fetched: 0, cached: 0, lastReqDt: prevCursor, error: `${res.resultCd}: ${res.resultMsg}` };
+    return { ok: false, fetched: 0, cached: 0, failed: 0, lastReqDt: prevCursor, error: `${res.resultCd}: ${res.resultMsg}` };
   }
 
   const list = res.data?.itemList ?? [];
+  logger.info(`[EBM] imports pull org=${organizationId} lastReqDt=${lastReqDt}: RRA returned ${list.length} line(s)`);
   let cached = 0;
+  // Lines new to us — RRA re-sends lines it already delivered, so `cached` alone overstates what's new.
+  let created = 0;
+  let failed = 0;
+  const seenKeys = new Set<string>();
   for (const it of list) {
     const stts = (it as { imptItemsttsCd?: string; imptItemSttsCd?: string }).imptItemSttsCd
       ?? (it as { imptItemsttsCd?: string }).imptItemsttsCd;
@@ -110,69 +116,95 @@ export async function syncRraImports(
     const dclDe = String(it.dclDe ?? '').trim();
     if (!taskCd || !dclDe || it.itemSeq == null) {
       logger.warn(`[EBM] imports pull: skipping malformed line taskCd=${it.taskCd} dclDe=${it.dclDe} itemSeq=${it.itemSeq}`);
+      failed += 1;
       continue;
     }
-    await prisma.rraImportItem.upsert({
-      where: {
-        organizationId_taskCd_dclDe_itemSeq: {
+    const key = `${taskCd}|${dclDe}|${it.itemSeq}`;
+    if (seenKeys.has(key)) {
+      logger.warn(`[EBM] imports pull: RRA sent line ${key} twice (dclNo=${it.dclNo}); the later copy overwrites the earlier`);
+    }
+    seenKeys.add(key);
+    // One bad line must not drop the rest of the batch.
+    try {
+      const uniqueKey = { organizationId, taskCd, dclDe, itemSeq: it.itemSeq };
+      const existing = await prisma.rraImportItem.findUnique({
+        where: { organizationId_taskCd_dclDe_itemSeq: uniqueKey },
+        select: { id: true },
+      });
+      await prisma.rraImportItem.upsert({
+        where: {
+          organizationId_taskCd_dclDe_itemSeq: {
+            organizationId,
+            taskCd,
+            dclDe,
+            itemSeq: it.itemSeq,
+          },
+        },
+        create: {
           organizationId,
           taskCd,
+          dclNo: it.dclNo ?? null,
           dclDe,
           itemSeq: it.itemSeq,
+          hsCd: it.hsCd ?? null,
+          itemNm: it.itemNm ?? null,
+          orgnNatCd: it.orgnNatCd ?? null,
+          exptNatCd: it.exptNatCd ?? null,
+          pkg: it.pkg ?? null,
+          pkgUnitCd: it.pkgUnitCd ?? null,
+          qty: it.qty ?? null,
+          qtyUnitCd: it.qtyUnitCd ?? null,
+          totWt: it.totWt ?? null,
+          netWt: it.netWt ?? null,
+          spplrNm: it.spplrNm ?? null,
+          agntNm: it.agntNm ?? null,
+          invcFcurAmt: it.invcFcurAmt ?? null,
+          invcFcurCd: it.invcFcurCd ?? null,
+          invcFcurExcrt: it.invcFcurExcrt ?? null,
+          itemCd: it.itemCd ?? null,
+          itemClsCd: it.itemClsCd ?? null,
+          status: mappedStatus,
+          rawResponse: it as unknown as Prisma.InputJsonValue,
         },
-      },
-      create: {
-        organizationId,
-        taskCd,
-        dclNo: it.dclNo ?? null,
-        dclDe,
-        itemSeq: it.itemSeq,
-        hsCd: it.hsCd ?? null,
-        itemNm: it.itemNm ?? null,
-        orgnNatCd: it.orgnNatCd ?? null,
-        exptNatCd: it.exptNatCd ?? null,
-        pkg: it.pkg ?? null,
-        pkgUnitCd: it.pkgUnitCd ?? null,
-        qty: it.qty ?? null,
-        qtyUnitCd: it.qtyUnitCd ?? null,
-        totWt: it.totWt ?? null,
-        netWt: it.netWt ?? null,
-        spplrNm: it.spplrNm ?? null,
-        agntNm: it.agntNm ?? null,
-        invcFcurAmt: it.invcFcurAmt ?? null,
-        invcFcurCd: it.invcFcurCd ?? null,
-        invcFcurExcrt: it.invcFcurExcrt ?? null,
-        itemCd: it.itemCd ?? null,
-        itemClsCd: it.itemClsCd ?? null,
-        status: mappedStatus,
-        rawResponse: it as unknown as Prisma.InputJsonValue,
-      },
-      update: {
-        rawResponse: it as unknown as Prisma.InputJsonValue,
-        // Keep display fields fresh on re-pull (UI shows supplier / item / invoice).
-        spplrNm: it.spplrNm ?? null,
-        agntNm: it.agntNm ?? null,
-        itemNm: it.itemNm ?? null,
-        hsCd: it.hsCd ?? null,
-        orgnNatCd: it.orgnNatCd ?? null,
-        invcFcurAmt: it.invcFcurAmt ?? null,
-        invcFcurCd: it.invcFcurCd ?? null,
-        // Mirror RRA's terminal states; never downgrade a locally actioned line
-        // back to PENDING when VSDC still echoes Waiting (2).
-        ...(mappedStatus !== 'PENDING' ? { status: mappedStatus } : {}),
-      },
-    });
-    cached += 1;
+        update: {
+          rawResponse: it as unknown as Prisma.InputJsonValue,
+          // Keep display fields fresh on re-pull (UI shows supplier / item / invoice).
+          spplrNm: it.spplrNm ?? null,
+          agntNm: it.agntNm ?? null,
+          itemNm: it.itemNm ?? null,
+          hsCd: it.hsCd ?? null,
+          orgnNatCd: it.orgnNatCd ?? null,
+          invcFcurAmt: it.invcFcurAmt ?? null,
+          invcFcurCd: it.invcFcurCd ?? null,
+          // Mirror RRA's terminal states; never downgrade a locally actioned line
+          // back to PENDING when VSDC still echoes Waiting (2).
+          ...(mappedStatus !== 'PENDING' ? { status: mappedStatus } : {}),
+        },
+      });
+      cached += 1;
+      if (!existing) created += 1;
+    } catch (e: unknown) {
+      failed += 1;
+      logger.error(`[EBM] imports pull: failed to save line ${key}`, e);
+    }
+  }
+
+  // Any line that failed to save: keep lastReqDt so the next pull asks RRA for the same window again
+  // (saved lines are upserted, so re-pulling them is harmless).
+  if (failed > 0) {
+    await touchCursorResult(organizationId, `PARTIAL: ${cached}/${list.length} import lines saved, ${failed} failed`);
+    return { ok: true, fetched: list.length, cached, created, failed, lastReqDt: prevCursor };
   }
 
   // Zero lines pulled → never advance (or invent) lastReqDt. Only note the run.
   if (cached === 0) {
     await touchCursorResult(organizationId, `OK: 0 import lines`);
-    return { ok: true, fetched: 0, cached: 0, lastReqDt: prevCursor };
+    return { ok: true, fetched: 0, cached: 0, failed: 0, lastReqDt: prevCursor };
   }
 
-  await saveCursor(organizationId, runAt, `OK: ${cached} import lines`);
-  return { ok: true, fetched: list.length, cached, lastReqDt: runAt };
+  logger.info(`[EBM] imports pull org=${organizationId}: ${created} new, ${cached - created} already stored`);
+  await saveCursor(organizationId, runAt, `OK: ${cached} import lines (${created} new)`);
+  return { ok: true, fetched: list.length, cached, created, failed: 0, lastReqDt: runAt };
 }
 
 // ── §68 helpers: convert import line → local product ─────────
@@ -200,10 +232,14 @@ async function createProductFromImportLine(
     ?? (await getOriginNationCode(organizationId))
     ?? (/^[A-Z]{2}(?=\d)/.exec(line.itemCd?.trim().toUpperCase() ?? '')?.[0] ?? null);
   const types = await getTaxationTypes(organizationId);
-  const taxCode = ((types.find((t) => t.rate === 18)?.code)
-    ?? (types.find((t) => t.code === 'B')?.code)
-    ?? types[0]?.code
-    ?? 'B') as 'A' | 'B' | 'C' | 'D';
+  const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { vatRegistered: true } });
+  // Non-VAT taxpayers only carry tax code D items.
+  const taxCode = (org?.vatRegistered === false
+    ? 'D'
+    : ((types.find((t) => t.rate === 18)?.code)
+      ?? (types.find((t) => t.code === 'B')?.code)
+      ?? types[0]?.code
+      ?? 'B')) as 'A' | 'B' | 'C' | 'D';
   const qty = line.qty != null ? Math.abs(line.qty.toNumber()) : 0;
   const invoiceAmt = line.invcFcurAmt != null ? Math.abs(line.invcFcurAmt.toNumber()) : 0;
   const unitCost = qty > 0 && invoiceAmt > 0 ? Math.round((invoiceAmt / qty) * 100) / 100 : 0;
@@ -411,18 +447,17 @@ export async function actionRraImport(
             });
             const stockRes = await submitStockLedgerEntryToEbm(ledger.id);
             if (!stockRes.success && !stockRes.deferred) {
-              warning = `Approved with RRA and local stock booked, but VSDC stock sync failed: ${stockRes.error ?? 'unknown'}. Use “Sync stock now” to retry.`;
-              logger.warn(`[EBM] import action #${importItemId}: ${warning}`);
+              warning = 'Approved with RRA and added to your stock, but the stock update could not be sent to RRA yet. Use “Sync stock now” to retry.';
+              logger.warn(`[EBM] import action #${importItemId}: VSDC stock sync failed: ${stockRes.error ?? 'unknown'}`);
             }
           }
         }
       } else if (action === 'approve' && receivingProductId && stockBranchId == null) {
-        warning = 'Approved with RRA, but no active branch was found so local stock was not booked';
+        warning = 'Approved with RRA, but it was not added to your stock because no active branch was found. Activate a branch, then add the stock manually.';
         logger.warn(`[EBM] import action #${importItemId}: no active branch — local stock not booked`);
       }
     } catch (stockErr: unknown) {
-      const stockMsg = stockErr instanceof Error ? stockErr.message : 'stock booking failed';
-      warning = `Approved with RRA (${nextStatus}), but local stock was not booked: ${stockMsg}`;
+      warning = 'Approved with RRA, but it could not be added to your stock. Check the product link and add the stock manually.';
       logger.error(`[EBM] import action #${importItemId}: status saved but stock failed`, stockErr);
     }
 

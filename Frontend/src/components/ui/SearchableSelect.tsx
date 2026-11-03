@@ -21,6 +21,10 @@ interface SearchableSelectProps {
   emptyText?: string
   disabled?: boolean
   className?: string
+  /** Called as the user types — for options fetched from the server. The caller then owns filtering. */
+  onSearchChange?: (query: string) => void
+  /** Shown under the list while server results are loading. */
+  loading?: boolean
 }
 
 /** Type-to-filter dropdown for long option lists (suppliers, products, ...) that a plain <Select> makes tedious to scroll through. */
@@ -33,12 +37,21 @@ export function SearchableSelect({
   emptyText = 'No results found.',
   disabled = false,
   className,
+  onSearchChange,
+  loading = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false)
   const selected = options.find((o) => o.value === value)
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        // The search box remounts empty, so reset the caller's query with it.
+        if (!next) onSearchChange?.('')
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -59,10 +72,12 @@ export function SearchableSelect({
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-card border border-border shadow-lg" align="start">
-        <Command className="bg-transparent">
-          <CommandInput placeholder={searchPlaceholder} className="bg-card" />
+        <Command className="bg-transparent" shouldFilter={!onSearchChange}>
+          <CommandInput placeholder={searchPlaceholder} className="bg-card" onValueChange={onSearchChange} />
           <CommandList className="max-h-60">
-            <CommandEmpty className="py-4 text-center text-sm text-muted-foreground">{emptyText}</CommandEmpty>
+            <CommandEmpty className="py-4 text-center text-sm text-muted-foreground">
+              {loading ? 'Searching...' : emptyText}
+            </CommandEmpty>
             <CommandGroup>
               {options.map((option) => (
                 <CommandItem
@@ -71,6 +86,7 @@ export function SearchableSelect({
                   onSelect={() => {
                     onChange(option.value)
                     setOpen(false)
+                    onSearchChange?.('')
                   }}
                   className="text-sm"
                 >

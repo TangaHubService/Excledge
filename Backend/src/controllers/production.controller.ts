@@ -6,7 +6,7 @@ import {
   getProductionRunById,
   reverseProductionRun,
 } from '../services/production.service';
-import { success, error as apiError } from '../utils/apiResponse';
+import { success, error as apiError, publicMessage } from '../utils/apiResponse';
 import { auditLogger } from '../utils/auditLogger';
 
 export const createProductionRun = async (req: Request, res: Response) => {
@@ -46,7 +46,7 @@ export const createProductionRun = async (req: Request, res: Response) => {
     res.status(201).json(success(result));
   } catch (err: any) {
     console.error('[Create Production Run Error]:', err);
-    res.status(400).json(apiError(err.message || 'Failed to run production'));
+    res.status(400).json(apiError(publicMessage(err, 'Could not record the production.')));
   }
 };
 
@@ -108,6 +108,6 @@ export const reverseProductionRunController = async (req: Request, res: Response
     res.json(success({ message: 'Production run reversed successfully' }));
   } catch (err: any) {
     console.error('[Reverse Production Run Error]:', err);
-    res.status(400).json(apiError(err.message || 'Failed to reverse production run'));
+    res.status(400).json(apiError(publicMessage(err, 'Could not reverse the production.')));
   }
 };

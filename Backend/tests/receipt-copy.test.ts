@@ -420,7 +420,7 @@ describe("POST /:org/:saleId/copy — CS from an existing NS", () => {
     expect(t).toContain("RECEIPT NUMBER: 45")
     expect(t).toContain("Widget")
     expect(t).toContain("Exempt Book")
-    expect(t).toContain("2860.00")
+    expect(t).toContain("2,860.00")
     expect(t).toContain("Client Ltd")
     expect(t).toContain("100000001")
   })
@@ -463,7 +463,7 @@ describe("POST /:org/:saleId/copy — CR from an existing NR", () => {
       expect(t).not.toContain("THIS IS NOT AN OFFICIAL RECEIPT")
       expect(t).toContain("RECEIPT NUMBER: 41/260 NR")
       expect(t).toContain("TEST-SIGN-0002-IIII-JJJJ")
-      expect(t).toContain("-2360.00")
+      expect(t).toContain("-2,360.00")
     }
     expect(sent).toEqual([])
   })
@@ -721,7 +721,7 @@ describe("80mm thermal layout", () => {
     const payload = await stressPayload("CS", 1)
     const huge = 1e33
     payload.payment.lines = [
-      { method: "CASH", label: "A very long tender description for split payment", amount: 123456789012345.67 },
+      { method: "CASH", label: "A very long tender description for split payment", amount: 1234567.89 },
       { method: "CARD", label: "Card tender with a long description", amount: huge },
     ]
     const cap = captureText()
@@ -731,7 +731,7 @@ describe("80mm thermal layout", () => {
 
     // Shares the line: the label column stops before the right-aligned value.
     const label1 = cap.calls.filter((c) => c.text === "A VERY LONG TENDER DESCRIPTION FOR SPLIT PAYMENT").pop()!
-    const value1 = cap.calls.filter((c) => c.text === "123456789012345.67").pop()!
+    const value1 = cap.calls.filter((c) => c.text === "1,234,567.89").pop()!
     expect(value1.y).toBe(label1.y)
     expect(label1.x! + label1.opts.width).toBeLessThanOrEqual(216.77 - measure.widthOfString(value1.text))
 
@@ -750,7 +750,7 @@ describe("80mm thermal layout", () => {
     try { await generateEbmInvoicePdf(payload, "A4") } finally { a4.restore() }
     const roll = captureText()
     try { await generateEbmReceiptPdf80mm(payload) } finally { roll.restore() }
-    for (const v of ["RECEIPT NUMBER: 41/260 NR", "TESTSDC010000001", "TEST-SIGN-0002-IIII-JJJJ", "Date: 02/10/2026 Time: 11:00:05", "RECEIPT NUMBER: 46", "-2360.00", "REF. NORMAL RECEIPT#: 45"]) {
+    for (const v of ["RECEIPT NUMBER: 41/260 NR", "TESTSDC010000001", "TEST-SIGN-0002-IIII-JJJJ", "Date: 02/10/2026 Time: 11:00:05", "RECEIPT NUMBER: 46", "-2,360.00", "REF. NORMAL RECEIPT#: 45"]) {
       expect(a4.joined()).toContain(v)
       expect(roll.joined()).toContain(v)
     }
@@ -808,5 +808,5 @@ describe("HTML preview + regression of the originals", () => {
 })
 
 function formatMoney(n: number): string {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false })
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })
 }

@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { ArrowLeft, Loader2, Printer, Download, Share2, Copy } from 'lucide-react';
 import { apiClient } from '../../../lib/api-client';
 import { toast } from 'react-toastify';
+import { toastError } from "../../../lib/friendly-error";
 import { saveAs } from 'file-saver';
 import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice';
 import {
@@ -103,7 +104,7 @@ export default function SaleDetailsPage() {
             setSale(saleFromApiResponse(saleData));
         } catch (error: any) {
             console.error('Failed to fetch sale details:', error);
-            toast.error(error.message || t('sales.fetchError') || 'Failed to load sale details');
+            toastError(error, t('sales.fetchError') || 'Failed to load sale details');
             navigate('/dashboard/sales');
         } finally {
             setIsLoading(false);
@@ -144,7 +145,7 @@ export default function SaleDetailsPage() {
             toast.success(`${label ?? 'Copy'} receipt ${mode === 'print' ? 'sent to the printer' : 'downloaded'}`);
         } catch (error) {
             console.error('Failed to produce receipt copy:', error);
-            toast.error(error instanceof Error ? error.message : 'Failed to produce the receipt copy');
+            toastError(error, "Could not produce the receipt copy");
         } finally {
             setIsCopying(null);
         }
@@ -217,7 +218,7 @@ export default function SaleDetailsPage() {
             }
         } catch (error) {
             console.error('Failed to queue POS print:', error);
-            toast.error(error instanceof Error ? error.message : 'Failed to send print job to POS');
+            toastError(error, "Could not send print job to POS");
         } finally {
             setIsSendingToPos(false);
         }

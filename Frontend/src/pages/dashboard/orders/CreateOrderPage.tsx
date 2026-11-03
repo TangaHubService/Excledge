@@ -27,6 +27,7 @@ import { parseInventoryGetProductsResponse } from '../../../lib/inventory-respon
 import { useTheme } from '../../../context/ThemeContext';
 import { Badge } from '../../../components/ui/badge';
 import { toast } from 'react-toastify';
+import { toastError } from "../../../lib/friendly-error";
 
 type Supplier = {
     id: string;
@@ -227,7 +228,7 @@ export const CreateOrderPage: React.FC = () => {
             navigate('/dashboard/orders');
         } catch (error: any) {
             console.error('Error creating order:', error);
-            toast.error(error.message || t('purchaseOrders.updateError'));
+            toastError(error, t('purchaseOrders.updateError'));
         } finally {
             setSubmitting(false);
         }

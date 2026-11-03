@@ -22,6 +22,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { toastError } from "../../../lib/friendly-error";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -118,7 +119,7 @@ export default function LedgerHistoryPage() {
     } catch (err: any) {
       console.error("Error fetching ledger entries:", err);
       setError(err.message || "Failed to load stock movements");
-      toast.error(err.message || "Failed to load stock movements");
+      toastError(err, "Could not load stock movements");
     } finally {
       setLoading(false);
     }

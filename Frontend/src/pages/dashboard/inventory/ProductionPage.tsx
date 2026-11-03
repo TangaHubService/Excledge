@@ -27,6 +27,7 @@ import { Loader2, CheckCircle, XCircle, History, Settings } from "lucide-react";
 import { apiClient } from "../../../lib/api-client";
 import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
 import { toast } from "react-toastify";
+import { toastError } from "../../../lib/friendly-error";
 import { useBranch } from "../../../context/BranchContext";
 import { BomManagement } from "./BomManagement";
 
@@ -144,12 +145,7 @@ export const ProductionPage = () => {
       setRequirements(response.data);
       setShowRequirements(true);
     } catch (error: any) {
-      const message =
-        error?.response?.data?.error ||
-        error?.response?.data?.message ||
-        error?.message ||
-        'Failed to check requirements';
-      toast.error(message);
+            toastError(error, 'Could not check the raw materials needed');
       setRequirements(null);
       setShowRequirements(false);
     } finally {
@@ -189,12 +185,7 @@ export const ProductionPage = () => {
       fetchFinishedProducts();
       fetchProductionRuns();
     } catch (error: any) {
-      const message =
-        error?.response?.data?.error ||
-        error?.response?.data?.message ||
-        error?.message ||
-        'Production failed';
-      toast.error(message);
+            toastError(error, 'Could not record the production');
     } finally {
       setProductionLoading(false);
     }

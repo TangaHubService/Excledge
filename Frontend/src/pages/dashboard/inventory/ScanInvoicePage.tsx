@@ -36,6 +36,7 @@ import { apiClient } from '../../../lib/api-client';
 import { useTheme } from '../../../context/ThemeContext';
 import { cn } from '../../../lib/utils';
 import { toast } from 'react-toastify';
+import { toastError } from "../../../lib/friendly-error";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -283,7 +284,7 @@ export const ScanInvoicePage: React.FC = () => {
 
       setStep('review');
     } catch (err: any) {
-      toast.error(err.message || t('invoiceScanner.uploadFailed'));
+      toastError(err, t('invoiceScanner.uploadFailed'));
       setStep('upload');
     }
   };
@@ -398,7 +399,7 @@ export const ScanInvoicePage: React.FC = () => {
       await loadExistingInvoice(invoiceId);
       goToStep('match');
     } catch (err: any) {
-      toast.error(err.message || t('invoiceScanner.saveFailed'));
+      toastError(err, t('invoiceScanner.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -428,7 +429,7 @@ export const ScanInvoicePage: React.FC = () => {
       });
       setItemActions(actions);
     } catch (err: any) {
-      toast.error(err.message || t('invoiceScanner.matchFailed'));
+      toastError(err, t('invoiceScanner.matchFailed'));
     } finally {
       setMatching(false);
     }
@@ -464,7 +465,7 @@ export const ScanInvoicePage: React.FC = () => {
       setStep('done');
       toast.success(`Import complete! ${(res?.data ?? res).importedItems} products added.`);
     } catch (err: any) {
-      toast.error(err.message || t('invoiceScanner.importFailed'));
+      toastError(err, t('invoiceScanner.importFailed'));
     } finally {
       setImporting(false);
     }

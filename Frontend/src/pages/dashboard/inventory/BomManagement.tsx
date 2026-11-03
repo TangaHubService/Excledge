@@ -33,6 +33,7 @@ import { Plus, Trash2, Calculator, Loader2 } from "lucide-react";
 import { apiClient } from "../../../lib/api-client";
 import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
 import { toast } from "react-toastify";
+import { toastError } from "../../../lib/friendly-error";
 
 interface BomComponent {
   id: number;
@@ -139,17 +140,17 @@ export const BomManagement = ({ productId, organizationId, branchId }: {
         });
       try {
         await apiClient.syncBomCompositionToRra(productId, newComponent.componentProductId);
-        toast.success('BOM component added and synced to RRA');
+        toast.success('Raw material added to the recipe and sent to RRA.');
       } catch (syncErr: any) {
         toast.success('BOM component added locally');
-        toast.error(syncErr?.message ?? 'RRA composition sync failed — retry from Fiscal reports if needed');
+        toastError(syncErr, "RRA composition sync failed — retry from Fiscal reports if needed");
       }
       setAddDialogOpen(false);
       setNewComponent({ componentProductId: '', quantity: '', unit: '' });
       fetchComponents();
       fetchCost();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to add component');
+      toastError(error, "Could not add component");
     } finally {
       setLoading(false);
     }
@@ -165,7 +166,7 @@ export const BomManagement = ({ productId, organizationId, branchId }: {
       fetchComponents();
       fetchCost();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to remove component');
+      toastError(error, "Could not remove component");
     } finally {
       setLoading(false);
     }

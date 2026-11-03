@@ -11,6 +11,7 @@ import {
 import { Badge } from '../ui/badge';
 import { cn } from '../../lib/utils';
 import { toast } from 'react-toastify';
+import { toastError } from "../../lib/friendly-error";
 import {
   Upload,
   CheckCircle2,
@@ -295,7 +296,7 @@ export function BulkImport({
       await onImport(finalRows);
       setStep('done');
     } catch (err: any) {
-      toast.error(err?.message || 'Import failed');
+      toastError(err, "Could not import the file");
     } finally {
       setImporting(false);
     }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "../ui/button";
 import { MapPin, Phone, Mail } from "lucide-react";
 import { toast } from "react-toastify";
+import { toastError } from "../../lib/friendly-error"
 
 interface ContactInfoCardProps {
   icon: React.ReactNode;
@@ -58,10 +59,10 @@ export const ContactSection = () => {
       }
 
       const result = await response.json()
-      toast.error(result.message)
+      toastError(result?.message, "Could not send your message")
     } catch (error) {
       setLoading(false)
-      toast.error("Failed to send message. Please try again later.")
+      toastError(error, "Could not send your message")
     }
   }
 

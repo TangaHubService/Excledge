@@ -14,6 +14,7 @@ import { apiClient } from '../../../lib/api-client';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from '../../../components/ui/drawer';
 import { Label } from '../../../components/ui/label';
 import { toast } from 'react-toastify';
+import { toastError } from "../../../lib/friendly-error";
 import { getInvoiceFilename, unwrapInvoice } from '../../../lib/invoice';
 import { canCopyReceipt, downloadInvoicePdf, downloadReceiptCopy, printReceiptCopy, type InvoicePdfFormat } from '../../../lib/invoice-pdf';
 import type { SaleEbmTransaction } from '../../../utils/invoiceFiscal';
@@ -349,8 +350,7 @@ export default function SalesPage() {
       await fetchSales();
       setIsRefundModalOpen(false);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : t('sales.refundError');
-      toast.error(msg);
+      toastError(error, t('sales.refundError'));
     } finally {
       setIsRefunding(false);
     }
@@ -372,8 +372,7 @@ export default function SalesPage() {
       await fetchSales();
       setIsCancelModalOpen(false);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : t('sales.cancelError');
-      toast.error(msg);
+      toastError(error, t('sales.cancelError'));
     } finally {
       setIsCancelling(false);
     }
@@ -407,7 +406,7 @@ export default function SalesPage() {
       toast.success(`${label ?? 'Copy'} receipt sent to the printer`);
     } catch (error) {
       console.error('Failed to print receipt copy:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to print the receipt copy');
+      toastError(error, "Could not print the receipt copy");
     } finally {
       setIsDownloadingInvoice(null);
     }
@@ -420,7 +419,7 @@ export default function SalesPage() {
       toast.success(`${label ?? 'Copy'} receipt downloaded`);
     } catch (error) {
       console.error('Failed to download receipt copy:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to download the receipt copy');
+      toastError(error, "Could not download the receipt copy");
     } finally {
       setIsDownloadingInvoice(null);
     }

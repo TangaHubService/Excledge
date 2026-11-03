@@ -31,6 +31,7 @@ import { apiClient } from '../../../lib/api-client';
 import type { Branch } from '../../../context/BranchContext';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import { toast } from 'react-toastify';
+import { toastError } from "../../../lib/friendly-error";
 
 type GroupedCounts = Record<EbmOutboxStatus, number>;
 
@@ -386,14 +387,14 @@ function EbmCredentialsCard() {
 
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" onClick={handleInitialize} disabled={initializing || loading || branchId === ''}>
-            {initializing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
+            {initializing ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
             Initialize with RRA
           </Button>
           <Button onClick={handleSave} disabled={saving || loading}>
             {saving ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="size-4" />
             )}
             Save Credentials
           </Button>
@@ -468,10 +469,10 @@ export function EbmOutboxDashboard() {
       await apiClient.request(`/organizations/${orgId}/ebm-outbox/${entry.id}/retry`, {
         method: 'POST',
       });
-      toast.success('Re-queued for fiscalization');
+      toast.success('Sent again to RRA. It will be confirmed in a moment.');
       await fetchOutbox();
     } catch (e: any) {
-      toast.error(e?.message || 'Failed to retry fiscalization');
+      toastError(e, "Could not send this again to RRA");
     } finally {
       setRetryingId(null);
     }
@@ -506,7 +507,7 @@ export function EbmOutboxDashboard() {
           </p>
         </div>
         <Button variant="outline" onClick={fetchOutbox} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
@@ -552,9 +553,9 @@ export function EbmOutboxDashboard() {
                   <TableRow>
                     <TableHead>Sale #</TableHead>
                     <TableHead>Invoice</TableHead>
-                    <TableHead>Amount</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Retries</TableHead>
+                    <TableHead className="text-right">Retries</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Error / Note</TableHead>
                     <TableHead className="text-right">Action</TableHead>
@@ -569,7 +570,7 @@ export function EbmOutboxDashboard() {
                       <TableCell className="font-mono text-xs">
                         {entry.sale?.invoiceNumber ?? '—'}
                       </TableCell>
-                      <TableCell className="font-mono text-xs">
+                      <TableCell className="text-right tabular-nums">
                         {entry.sale ? `${Number(entry.sale.totalAmount).toLocaleString()} RWF` : '—'}
                       </TableCell>
                       <TableCell>
@@ -578,10 +579,10 @@ export function EbmOutboxDashboard() {
                           {getStatusBadge(entry.status)}
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs">
+                      <TableCell className="text-right tabular-nums">
                         {entry.retryCount}
                       </TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                         {entry.createdAt ? new Date(entry.createdAt).toLocaleString() : '—'}
                       </TableCell>
                       <TableCell className="text-xs max-w-[240px]" title={entry.lastError ?? ''}>
@@ -611,9 +612,9 @@ export function EbmOutboxDashboard() {
                               disabled={checkingId === entry.id || retryingId === entry.id}
                             >
                               {checkingId === entry.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                <Loader2 className="size-3.5 animate-spin" />
                               ) : (
-                                <ExternalLink className="h-3 w-3 mr-1" />
+                                <ExternalLink className="size-3.5" />
                               )}
                               Check VSDC
                             </Button>
@@ -626,9 +627,9 @@ export function EbmOutboxDashboard() {
                               disabled={retryingId === entry.id || checkingId === entry.id}
                             >
                               {retryingId === entry.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                <Loader2 className="size-3.5 animate-spin" />
                               ) : (
-                                <RotateCcw className="h-3 w-3 mr-1" />
+                                <RotateCcw className="size-3.5" />
                               )}
                               Retry
                             </Button>
@@ -700,7 +701,7 @@ export function EbmOutboxDashboard() {
         onClose={() => setReversalEntry(null)}
         onConfirm={() => {
           if (reversalEntry) {
-            toast.info(`Compensation flow requested for sale #${reversalEntry.saleId}: reverse inventory & customer balance`);
+            toast.info(`Reversal requested for sale #${reversalEntry.saleId}. The stock and customer balance will be put back.`);
           }
           setReversalEntry(null);
         }}

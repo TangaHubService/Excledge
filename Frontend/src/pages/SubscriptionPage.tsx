@@ -9,6 +9,7 @@ import type { DurationValue } from "../components/subscription/DurationSelector"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "../components/ui/drawer";
 import { io, Socket } from "socket.io-client";
 import { toast } from "react-toastify";
+import { toastError } from "../lib/friendly-error";
 
 type SubscriptionPageProps = {
     /** When false, only the plan grid is shown (e.g. landing page already has a title). */
@@ -224,12 +225,7 @@ const SubscriptionPage = ({ showPlanHeader = true, preselectedPlanId = null, ren
         } catch (error: any) {
             console.error("Payment error:", error);
 
-            const message =
-                error.response?.data?.message ||
-                error.message ||
-                "Payment failed. Please try again.";
-
-            toast.error(message);
+            toastError(error, "Payment could not be completed");
             setPaymentStatus("error");
         }
 

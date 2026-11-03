@@ -43,6 +43,7 @@ import {
 } from "../../components/ui/drawer";
 
 import { toast } from "react-toastify";
+import { toastError } from "../../lib/friendly-error";
 import { apiClient } from "../../lib/api-client";
 import { parseInventoryGetProductsResponse } from "../../lib/inventory-response";
 import { useDebounce } from "use-debounce";
@@ -187,7 +188,7 @@ export const InventoryManagement = () => {
         limit: itemsPerPage,
       });
     } catch (error: any) {
-      toast.error(`${t("messages.deleteError")}: ${error.message}`);
+      toastError(error, t("messages.deleteError"));
     } finally {
       setLoading(false);
       setDeleteDialogOpen(false);
@@ -364,7 +365,7 @@ export const InventoryManagement = () => {
             });
             toast.success(`Successfully imported ${processedProducts.length} product(s)`);
           } catch (error: any) {
-            toast.error(error?.response?.data?.message || "Import failed");
+            toastError(error, "Could not import the file");
           }
         }
       }

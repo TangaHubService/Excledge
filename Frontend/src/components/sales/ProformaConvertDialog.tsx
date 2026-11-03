@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { toastError } from "../../lib/friendly-error";
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter,
 } from '../ui/drawer';
@@ -174,7 +175,7 @@ export default function ProformaConvertDialog({
       toast.success('Proforma updated');
       setDirty(false);
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || e?.message || 'Failed to update proforma');
+      toastError(e, "Could not update proforma");
     } finally {
       setSavingQuote(false);
     }
@@ -202,7 +203,7 @@ export default function ProformaConvertDialog({
       onConverted(newSale);
       onClose();
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || e?.message || 'Failed to convert proforma');
+      toastError(e, "Could not convert proforma");
     } finally {
       setConverting(false);
     }

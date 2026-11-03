@@ -15,6 +15,7 @@ vi.mock("../src/lib/prisma", () => ({
       updateMany: vi.fn(async (a: any) => { cursorUpserts.push({ touch: a }); return { count: 1 } }),
     },
     rraImportItem: {
+      findUnique: vi.fn(async () => null),
       upsert: vi.fn(async (a: any) => { importUpserts.push(a); return a.create }),
       findFirst: vi.fn(async () => ({
         id: 1, organizationId: 1, taskCd: "TASK1", dclNo: "DCL9", dclDe: "20260815", itemSeq: 1,
@@ -38,7 +39,10 @@ vi.mock("../src/lib/prisma", () => ({
       update: vi.fn(async () => ({})),
     },
     user: { findUnique: vi.fn(async () => ({ id: 2, name: "Importer" })) },
-    organization: { update: vi.fn(async () => ({})) },
+    organization: {
+      update: vi.fn(async () => ({})),
+      findUnique: vi.fn(async () => ({ vatRegistered: true })),
+    },
     inventoryLedger: { update: vi.fn(async () => ({})) },
   },
 }))

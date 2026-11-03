@@ -325,7 +325,7 @@ describe("valid VSDC response", () => {
       expect(text, format).toContain("RECEIPT NUMBER: 8")
       expect(text, format).not.toContain("NOT FISCALISED")
     }
-    expect(await printed(payload, "80mm")).toContain("1180.00x 1.00")
+    expect(await printed(payload, "80mm")).toContain("1,180.00x 1.00")
     expect(await printed(payload, "A4")).toMatch(/\n1\.00\nB\n/)
   })
 

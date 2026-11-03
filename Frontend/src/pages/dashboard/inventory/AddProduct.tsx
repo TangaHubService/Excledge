@@ -22,6 +22,7 @@ import {
     PopoverTrigger,
 } from '../../../components/ui/popover'
 import { toast } from 'react-toastify'
+import { toastError } from "../../../lib/friendly-error";
 import { apiClient } from '../../../lib/api-client'
 import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response'
 import { useBranch } from '../../../context/BranchContext'
@@ -29,6 +30,7 @@ import { useOrganization } from '../../../context/OrganizationContext'
 import { BranchRequiredNotice } from '../../../components/BranchRequiredNotice'
 import { MEASUREMENT_UNIT_OPTIONS, PACKAGING_UNIT_OPTIONS, QUANTITY_UNIT_OPTIONS } from '../../../types/ebm'
 import { RraItemClassPicker } from '../../../components/inventory/RraItemClassPicker'
+import { SearchableSelect } from '../../../components/ui/SearchableSelect'
 import { useRraCodeCatalog } from '../../../lib/useRraCodeCatalog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table'
 import type { Product } from '../../../types'
@@ -135,15 +137,6 @@ const addProductSchema = yup.object({
         l5SalePrice: priceTierSchema,
     })
 
-// RRA ItemSaveReq grpPrcL1..grpPrcL5 — five optional group/tier prices.
-const PRICE_TIER_FIELDS = [
-    { field: 'l1SalePrice', label: 'Tier 1' },
-    { field: 'l2SalePrice', label: 'Tier 2' },
-    { field: 'l3SalePrice', label: 'Tier 3' },
-    { field: 'l4SalePrice', label: 'Tier 4' },
-    { field: 'l5SalePrice', label: 'Tier 5' },
-] as const
-
 interface TaxCodeOption {
     code: string
     label: string
@@ -232,6 +225,22 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
         return { ...rest, ref: composeRefs(ref, field), onKeyDown: advanceOnEnter(nextField) }
     }
 
+    // Unit and origin fields are searchable dropdowns with no preset: the user must pick one.
+    const unitSelect = (
+        field: 'measurementUnit' | 'pkgUnitCd' | 'qtyUnitCd' | 'origin',
+        options: { value: string; label: string }[],
+        placeholder: string,
+    ) => (
+        <SearchableSelect
+            options={options}
+            value={watch(field) || ''}
+            onChange={(v) => setValue(field, v, { shouldValidate: true, shouldDirty: true })}
+            placeholder={placeholder}
+            searchPlaceholder={field === 'origin' ? 'Search countries...' : 'Search units...'}
+            className={`h-auto px-3.5 py-2.5 rounded-xl dark:text-white ${errors[field] ? 'border-red-400' : 'border-border'}`}
+        />
+    )
+
     const {
         register,
         handleSubmit,
@@ -253,10 +262,10 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
             batchNumber: '',
             expiryDate: null,
             minStock: undefined as number | undefined,
-            measurementUnit: 'PCS',
+            measurementUnit: '',
             barcode: '',
-            pkgUnitCd: 'CT',
-            qtyUnitCd: 'U',
+            pkgUnitCd: '',
+            qtyUnitCd: '',
             packagingQty: undefined as number | undefined,
             itemClsCd: '',
             itemStandardName: '',
@@ -274,6 +283,15 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
     const watchItemType = watch('itemType')
     const watchUnitPrice = watch('unitPrice')
     const watchTaxCode = watch('taxCode')
+
+    // The unit/origin/tax dropdowns are controlled via setValue, so register them for validation.
+    useEffect(() => {
+        register('measurementUnit')
+        register('pkgUnitCd')
+        register('qtyUnitCd')
+        register('origin')
+        register('taxCode')
+    }, [register])
 
     /**
      * Allowed tax-code options for the dropdown. Non-VAT registered org → only D is valid (RRA
@@ -318,15 +336,9 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                 resetField(field, { defaultValue: field === 'expiryDate' ? null : '' })
             }
             setValue('minStock', 0, { shouldDirty: false, shouldTouch: false, shouldValidate: false })
-            // Services still need RRA packaging/qty units for itemCd + saveItems.
+            // Services have no measurement unit field; the user picks packaging/qty units themselves.
             if (!watch('measurementUnit')) {
                 setValue('measurementUnit', 'OTHER', { shouldDirty: false })
-            }
-            if (!watch('pkgUnitCd')) {
-                setValue('pkgUnitCd', 'CT', { shouldDirty: false })
-            }
-            if (!watch('qtyUnitCd')) {
-                setValue('qtyUnitCd', 'U', { shouldDirty: false })
             }
         }
     }, [watchItemType, resetField, setValue])
@@ -526,7 +538,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
         } else if (currentStep === 'details') {
             const valid = await trigger(['itemClsCd'] as any)
             if (!valid) {
-                toast.error('RRA item classification is required')
+                toast.error('Choose an RRA item classification for this product before saving.')
                 return
             }
             goToStep(itemType === 'PRODUCT' && !product ? 'bom' : 'review')
@@ -567,7 +579,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                 category: data.category,
                 description: data.description || '',
                 unitPrice: data.unitPrice,
-                taxCode: data.taxCode,
+                taxCode: isNonVat ? 'D' : data.taxCode,
                 itemType: data.itemType,
                 branchId: selectedBranchId,
                 imageUrl: imageUrl || undefined,
@@ -619,7 +631,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
             if (onSuccess) onSuccess()
             else navigate('/dashboard/inventory-all')
         } catch (error: any) {
-            toast.error(error.message || 'Failed to save product')
+            toastError(error, "Could not save product")
         } finally {
             setIsSubmitting(false)
         }
@@ -960,95 +972,21 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                 </div>
                             </div>
 
-                            {itemType !== 'SERVICE' && (
-                                <div>
-                                    <label className="text-sm font-medium text-foreground mb-1.5 block">
-                                        Additional Price Tiers
-                                    </label>
-                                    <p className="text-xs text-muted-foreground mb-2">
-                                        Optional RRA group prices (e.g. wholesale/retail tiers) — leave blank if not used.
-                                    </p>
-                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                                        {PRICE_TIER_FIELDS.map(({ field, label }, index) => (
-                                            <div key={field} className="space-y-1">
-                                                <label className="text-xs font-medium text-muted-foreground">{label}</label>
-                                                <input
-                                                    {...bindField(field, PRICE_TIER_FIELDS[index + 1]?.field ?? 'taxCode')}
-                                                    type="number"
-                                                    inputMode="decimal"
-                                                    step="0.01"
-                                                    min="0"
-                                                    placeholder="0.00"
-                                                    className={`w-full px-3 py-2 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
-                                                        (errors as any)[field] ? 'border-red-400' : 'border-border'
-                                                    }`}
-                                                />
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* ── Non-VAT compliance banner ── */}
-                            {isNonVat && (
-                                <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 dark:border-amber-500/40 dark:bg-warning/20 px-4 py-3">
-                                    <span className="mt-0.5 shrink-0 text-amber-500" aria-hidden>
-                                        ⚠
-                                    </span>
-                                    <div className="text-sm">
-                                        <p className="font-semibold text-warning dark:text-amber-300">
-                                            Non-VAT Registered Business
-                                        </p>
-                                        <p className="text-warning dark:text-amber-400 mt-0.5">
-                                            Your organisation is <strong>not registered for VAT</strong>. Per RRA CIS
-                                            regulations, all items must carry{' '}
-                                            <strong>Tax Category D – Taxpayer Not Registered for VAT</strong>.
-                                            This field is locked to prevent mixing VAT-rated products with non-VAT
-                                            inventory, which would cause EBM submission errors.
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div className="space-y-1.5">
                                     <label className="text-sm font-medium text-foreground">
                                         Tax Category <span className="text-danger">*</span>
-                                        {isNonVat && (
-                                            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-warning/15 dark:bg-warning/40 px-2 py-0.5 text-xs font-medium text-warning dark:text-amber-300">
-                                                🔒 Locked to D
-                                            </span>
-                                        )}
                                     </label>
-                                    <select
-                                        {...bindField('taxCode', 'batchNumber')}
-                                        disabled={isNonVat || taxCodeLocked}
-                                        aria-describedby={isNonVat ? 'tax-code-nonvat-note' : undefined}
-                                        className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
-                                            errors.taxCode
-                                                ? 'border-red-400'
-                                                : isNonVat
-                                                ? 'border-warning/30 bg-warning/60 dark:border-amber-600/50 dark:bg-warning/30 cursor-not-allowed opacity-80'
-                                                : 'border-border'
-                                        }`}
-                                    >
-                                        {isNonVat ? (
-                                            <option value="D">D – Taxpayer Not Registered for VAT</option>
-                                        ) : (
-                                            <>
-                                                <option value="">Select tax category (A, B or C)</option>
-                                                {taxOptions.map(tc => (
-                                                    <option key={tc.code} value={tc.code}>{tc.label}</option>
-                                                ))}
-                                            </>
-                                        )}
-                                    </select>
-                                    {isNonVat && (
-                                        <p id="tax-code-nonvat-note" className="text-xs text-warning dark:text-amber-400 mt-1">
-                                            Tax code is fixed to <strong>D</strong> for all items. Register for VAT in
-                                            your Organisation Settings to unlock other categories.
-                                        </p>
-                                    )}
+                                    {/* Non-VAT orgs: pre-selected to D (the only option). */}
+                                    <SearchableSelect
+                                        options={taxOptions.map(tc => ({ value: tc.code, label: tc.label }))}
+                                        value={watch('taxCode') || ''}
+                                        onChange={(v) => setValue('taxCode', v, { shouldValidate: true, shouldDirty: true })}
+                                        disabled={taxCodeLocked}
+                                        placeholder="Select tax category (A, B or C)"
+                                        searchPlaceholder="Search tax categories..."
+                                        className={`h-auto px-3.5 py-2.5 rounded-xl dark:text-white ${errors.taxCode ? 'border-red-400' : 'border-border'}`}
+                                    />
                                     {taxReviewPending && (
                                         <p className="text-xs text-warning dark:text-amber-400 mt-1">
                                             This item was set to <strong>B</strong> when your organisation registered
@@ -1060,6 +998,11 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                         <p className="text-xs text-muted-foreground mt-1">
                                             🔒 Tax category was already updated once after VAT registration and can no
                                             longer be changed.
+                                        </p>
+                                    )}
+                                    {isNonVat && (
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            Your business is not VAT registered, so every item uses tax category D.
                                         </p>
                                     )}
                                     {errors.taxCode && <p className="text-xs text-danger mt-1">{errors.taxCode.message}</p>}
@@ -1105,7 +1048,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                 Min Stock <span className="text-danger">*</span>
                                             </label>
                                             <input
-                                                {...bindField('minStock', 'measurementUnit')}
+                                                {...bindField('minStock', 'packagingQty')}
                                                 type="number"
                                                 inputMode="numeric"
                                                 min="0"
@@ -1120,49 +1063,21 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                             <label className="text-sm font-medium text-foreground">
                                                 Measurement Unit <span className="text-danger">*</span>
                                             </label>
-                                            <select
-                                                {...bindField('measurementUnit', 'pkgUnitCd')}
-                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
-                                                    errors.measurementUnit ? 'border-red-400' : 'border-border'
-                                                }`}
-                                            >
-                                                <option value="">Select Unit</option>
-                                                {MEASUREMENT_UNIT_OPTIONS.map(u => (
-                                                    <option key={u.value} value={u.value}>{u.label}</option>
-                                                ))}
-                                            </select>
+                                            {unitSelect('measurementUnit', MEASUREMENT_UNIT_OPTIONS, 'Select unit')}
                                             {errors.measurementUnit && <p className="text-xs text-danger mt-1">{errors.measurementUnit.message}</p>}
                                         </div>
                                         <div className="space-y-1.5">
                                              <label className="text-sm font-medium text-foreground">
                                                  Packaging Unit <span className="text-danger">*</span>
                                              </label>
-                                             <select
-                                                 {...bindField('pkgUnitCd', 'qtyUnitCd')}
-                                                 className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
-                                                     errors.pkgUnitCd ? 'border-red-400' : 'border-border'
-                                                 }`}
-                                             >
-                                                 <option value="">Select packaging (e.g. Box, Carton)</option>
-                                                 {pkgOptions.map(u => (
-                                                     <option key={u.value} value={u.value}>{u.label}</option>
-                                                 ))}
-                                             </select>
+                                             {unitSelect('pkgUnitCd', pkgOptions, 'Select packaging (e.g. Box, Carton)')}
                                              {errors.pkgUnitCd && <p className="text-xs text-danger mt-1">{errors.pkgUnitCd.message}</p>}
                                          </div>
                                          <div className="space-y-1.5">
                                              <label className="text-sm font-medium text-foreground">
                                                  RRA Quantity Unit
                                              </label>
-                                             <select
-                                                 {...bindField('qtyUnitCd', 'packagingQty')}
-                                                 className="w-full px-3.5 py-2.5 rounded-xl border border-border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white"
-                                             >
-                                                 <option value="">Auto-detect from measurement unit</option>
-                                                 {qtyOptions.map(u => (
-                                                     <option key={u.value} value={u.value}>{u.label}</option>
-                                                 ))}
-                                             </select>
+                                             {unitSelect('qtyUnitCd', qtyOptions, 'Auto-detect from measurement unit')}
                                              <p className="text-xs text-muted-foreground">Override the automatically derived RRA quantity unit code if needed.</p>
                                          </div>
                                          <div className="space-y-1.5">
@@ -1170,7 +1085,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                                 Qty per Package
                                             </label>
                                             <input
-                                                {...bindField('packagingQty', 'origin')}
+                                                {...bindField('packagingQty', 'barcode')}
                                                 type="number"
                                                 inputMode="numeric"
                                                 min="1"
@@ -1185,17 +1100,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                             <label className="text-sm font-medium text-foreground">
                                                 Origin <span className="text-danger">*</span>
                                             </label>
-                                            <select
-                                                {...bindField('origin', 'barcode')}
-                                                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
-                                                    errors.origin ? 'border-red-400' : 'border-border'
-                                                }`}
-                                            >
-                                                <option value="">{countryOptions.length ? 'Select origin country' : 'Sync RRA codes to load countries'}</option>
-                                                {countryOptions.map(c => (
-                                                    <option key={c.value} value={c.value}>{c.label}</option>
-                                                ))}
-                                            </select>
+                                            {unitSelect('origin', countryOptions, countryOptions.length ? 'Select origin country' : 'Sync RRA codes to load countries')}
                                             {errors.origin && <p className="text-xs text-danger mt-1">{errors.origin.message}</p>}
                                         </div>
                                     </div>
@@ -1208,51 +1113,21 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                         <label className="text-sm font-medium text-foreground">
                                             Packaging Unit <span className="text-danger">*</span>
                                         </label>
-                                        <select
-                                            {...bindField('pkgUnitCd', 'qtyUnitCd')}
-                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
-                                                errors.pkgUnitCd ? 'border-red-400' : 'border-border'
-                                            }`}
-                                        >
-                                            <option value="">Select packaging</option>
-                                            {pkgOptions.map(u => (
-                                                <option key={u.value} value={u.value}>{u.label}</option>
-                                            ))}
-                                        </select>
+                                        {unitSelect('pkgUnitCd', pkgOptions, 'Select packaging (e.g. Box, Carton)')}
                                         {errors.pkgUnitCd && <p className="text-xs text-danger mt-1">{errors.pkgUnitCd.message}</p>}
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-medium text-foreground">
                                             RRA Quantity Unit <span className="text-danger">*</span>
                                         </label>
-                                        <select
-                                            {...bindField('qtyUnitCd', 'origin')}
-                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
-                                                errors.qtyUnitCd ? 'border-red-400' : 'border-border'
-                                            }`}
-                                        >
-                                            <option value="">Select quantity unit</option>
-                                            {qtyOptions.map(u => (
-                                                <option key={u.value} value={u.value}>{u.label}</option>
-                                            ))}
-                                        </select>
+                                        {unitSelect('qtyUnitCd', qtyOptions, 'Select quantity unit')}
                                         {errors.qtyUnitCd && <p className="text-xs text-danger mt-1">{errors.qtyUnitCd.message}</p>}
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-medium text-foreground">
                                             Origin <span className="text-danger">*</span>
                                         </label>
-                                        <select
-                                            {...bindField('origin', 'itemClsCd')}
-                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50 dark:text-white ${
-                                                errors.origin ? 'border-red-400' : 'border-border'
-                                            }`}
-                                        >
-                                            <option value="">{countryOptions.length ? 'Select origin country' : 'Sync RRA codes to load countries'}</option>
-                                            {countryOptions.map(c => (
-                                                <option key={c.value} value={c.value}>{c.label}</option>
-                                            ))}
-                                        </select>
+                                        {unitSelect('origin', countryOptions, countryOptions.length ? 'Select origin country' : 'Sync RRA codes to load countries')}
                                         {errors.origin && <p className="text-xs text-danger mt-1">{errors.origin.message}</p>}
                                     </div>
                                     {itemCdPreview && (
@@ -1357,14 +1232,8 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                         {watch('purchasePrice') !== undefined && watch('purchasePrice') !== null && (
                                             <ReviewRow label="Purchase Price" value={`RWF ${Number(watch('purchasePrice')).toLocaleString()}`} />
                                         )}
-                                        {PRICE_TIER_FIELDS.map(({ field, label }) => {
-                                            const value = watch(field)
-                                            return value !== undefined && value !== null
-                                                ? <ReviewRow key={field} label={label} value={`RWF ${Number(value).toLocaleString()}`} />
-                                                : null
-                                        })}
                                         <ReviewRow label="Tax Category" value={watch('taxCode') ? taxCodes.find(t => t.code === watch('taxCode'))?.label || watch('taxCode') : '-'} />
-                                        {watch('unitPrice') && watch('taxCode') && (
+                                        {!isNonVat && watch('unitPrice') && watch('taxCode') && (
                                             <>
                                                 <ReviewRow label="Taxable Amount" value={`RWF ${taxPreview.taxable.toFixed(2)}`} />
                                                 <ReviewRow label="VAT" value={`RWF ${taxPreview.vat.toFixed(2)}`} />
@@ -1382,7 +1251,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                             {watch('batchNumber') && <ReviewRow label="Batch Number" value={watch('batchNumber')} />}
                                             {watch('expiryDate') && <ReviewRow label="Expiry Date" value={new Date(watch('expiryDate')!).toLocaleDateString()} />}
                                             <ReviewRow label="Min Stock" value={String(watch('minStock') ?? 0)} />
-                                            <ReviewRow label="Measurement Unit" value={watch('measurementUnit') || 'PCS'} />
+                                            <ReviewRow label="Measurement Unit" value={watch('measurementUnit') || '-'} />
                                             {watch('pkgUnitCd') && (
                                                 <ReviewRow
                                                     label="Packaging"
@@ -1463,20 +1332,23 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                 Add the raw materials needed to produce one unit of this product. They will be saved with the product.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-2">
-                                <select
-                                    aria-label="Select raw material"
-                                    value={selectedRawMaterialId}
-                                    onChange={(event) => setSelectedRawMaterialId(event.target.value)}
-                                    disabled={rawMaterialsLoading}
-                                    className="flex-1 min-w-0 rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground"
-                                >
-                                    <option value="">{rawMaterialsLoading ? 'Loading raw materials...' : 'Select a raw material'}</option>
-                                    {rawMaterials.filter((material) => !bomComponents.some((component) => component.componentProductId === material.id)).map((material) => (
-                                        <option key={material.id} value={material.id}>
-                                            {material.name} — Stock: {material.quantity} {material.measurementUnit || 'PCS'}
-                                        </option>
-                                    ))}
-                                </select>
+                                <div className="flex-1 min-w-0">
+                                    <SearchableSelect
+                                        options={rawMaterials
+                                            .filter((material) => !bomComponents.some((component) => component.componentProductId === material.id))
+                                            .map((material) => ({
+                                                value: String(material.id),
+                                                label: material.name,
+                                                sublabel: `Stock: ${material.quantity} ${material.measurementUnit || 'PCS'}`,
+                                            }))}
+                                        value={selectedRawMaterialId}
+                                        onChange={setSelectedRawMaterialId}
+                                        disabled={rawMaterialsLoading}
+                                        placeholder={rawMaterialsLoading ? 'Loading raw materials...' : 'Select a raw material'}
+                                        searchPlaceholder="Search raw materials..."
+                                        className="h-auto px-3 py-2.5 rounded-xl"
+                                    />
+                                </div>
                                 <button
                                     type="button"
                                     onClick={addBomMaterial}

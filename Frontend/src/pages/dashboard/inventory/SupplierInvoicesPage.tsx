@@ -40,6 +40,7 @@ import { apiClient } from '../../../lib/api-client';
 import { useTheme } from '../../../context/ThemeContext';
 import { cn } from '../../../lib/utils';
 import { toast } from 'react-toastify';
+import { toastError } from "../../../lib/friendly-error";
 import { format } from 'date-fns';
 import { PageHeader } from "../../../components/common/PageHeader";
 
@@ -139,7 +140,7 @@ export const SupplierInvoicesPage: React.FC = () => {
       setConfirmDeleteId(null);
       fetchInvoices();
     } catch (err: any) {
-      toast.error(err.message || t('invoiceScanner.deleteFailed'));
+      toastError(err, t('invoiceScanner.deleteFailed'));
     } finally {
       setDeletingId(null);
     }

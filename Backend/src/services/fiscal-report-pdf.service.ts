@@ -81,7 +81,7 @@ export interface DailyReportData {
   refundPaymentBreakdown: Record<string, number>
   /** R10: totals per main group (product category), sales vs refunds. */
   groupTotals: Record<string, { salesAmt: number; refundAmt: number; itemCount: number }>
-  vsdcConfirmation: { checked: boolean; rptDe?: string; error?: string } | null
+  vsdcConfirmation: { checked: boolean; rptDe?: string; savedAt?: string; error?: string } | null
 }
 
 export interface PluReportData {
@@ -301,6 +301,9 @@ function drawDailyReport(doc: PDFKit.PDFDocument, data: DailyReportData, logo: B
     y = centered(doc, "VSDC Z CONFIRMATION", y, true)
     if (!data.vsdcConfirmation) {
       y = line(doc, "Not checked (EBM disabled)", y)
+    } else if (data.vsdcConfirmation.error && data.vsdcConfirmation.savedAt) {
+      y = line(doc, `Saved at VSDC ${safe(new Date(data.vsdcConfirmation.savedAt).toLocaleString('en-GB'))}`, y)
+      y = line(doc, "RRA confirmation unavailable", y, 5.6)
     } else if (data.vsdcConfirmation.error) {
       y = line(doc, safe(data.vsdcConfirmation.error), y, 5.6)
     } else {

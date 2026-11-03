@@ -476,7 +476,7 @@ describe('NR receipt content (Test 10) — real 80mm + A4 renderers', () => {
     expect(text).toContain('REF. NORMAL RECEIPT#: 8');
     expect(text).not.toContain('REFUND REASON');
     expect(text).not.toContain('REFUND TO');
-    expect(text).toContain('-15000.00'); // negative amounts, no grouping
+    expect(text).toContain('-15,000.00'); // negative amounts, thousands grouped
     expect(text).toContain('41/200 NR'); // VSDC A/B counter for the NR itself
     expect(text).toContain('SDC INFORMATION');
     expect(text).toContain('SDC010000005');
@@ -519,7 +519,7 @@ describe('NR receipt content (Test 10) — real 80mm + A4 renderers', () => {
     expect(html).toContain('REF. NORMAL RECEIPT#: 8');
     expect(html).not.toContain('REFUND REASON:');
     expect(html).not.toContain('REFUND TO:');
-    expect(html).toContain('-15000.00');
+    expect(html).toContain('-15,000.00');
     expect(html).toContain('41/200 NR');
     expect(html).toContain('SIGN-1234-DATA-5678');
   });

@@ -31,6 +31,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerDescription } from '../../../components/ui/drawer';
 import { Badge } from '../../../components/ui/badge';
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '../../../components/ui/alert-dialog';
 import { Switch } from '../../../components/ui/switch';
 import { AppToggle } from '../../../components/ui/AppToggle';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../../../components/ui/select';
@@ -38,6 +42,7 @@ import PhoneInputWithCountryCode from '../../../components/PhoneInputWithCountry
 import { apiClient } from '../../../lib/api-client';
 import { cn } from '../../../lib/utils';
 import { toast } from 'react-toastify';
+import { toastError } from "../../../lib/friendly-error";
 import { useAuth } from '../../../context/AuthContext';
 import { useOrganization } from '../../../context/OrganizationContext';
 import { useOrganizationSettings } from '../../../context/OrganizationSettingsContext';
@@ -132,6 +137,7 @@ export function OrganizationConfig() {
     const [branches, setBranches] = useState<Branch[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSavingOrg, setIsSavingOrg] = useState(false);
+    const [vatSwitchConfirmOpen, setVatSwitchConfirmOpen] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [previewAvatar, setPreviewAvatar] = useState<string | null>(null);
     const [settings, setSettings] = useState<IOrganizationSettings | null>(null);
@@ -177,7 +183,7 @@ export function OrganizationConfig() {
                 }
             }
         } catch (error: any) {
-            toast.error(error.message || 'Failed to fetch settings');
+            toastError(error, "Could not fetch settings");
         } finally {
             setLoading(false);
         }
@@ -196,13 +202,15 @@ export function OrganizationConfig() {
         }
 
         if (savedVatRegistered === false && organization.vatRegistered === true) {
-            const ok = window.confirm(
-                'Registering for VAT moves every item with tax type D to B (18%). ' +
-                'Each item can then have its tax type changed only once. Continue?'
-            );
-            if (!ok) return;
+            setVatSwitchConfirmOpen(true);
+            return;
         }
 
+        await saveOrganization();
+    };
+
+    const saveOrganization = async () => {
+        if (!organization) return;
         setIsSavingOrg(true);
         try {
             const response = await apiClient.updateOrganization(organization);
@@ -210,7 +218,7 @@ export function OrganizationConfig() {
             updateGlobalOrg(organization as any);
             toast.success(response.message || t('companySettings.updateSuccess'));
         } catch (error: any) {
-            toast.error(mrcErrorMessage(error) || error.message || t('companySettings.updateError'));
+            mrcErrorMessage(error) ? toast.error(mrcErrorMessage(error)) : toastError(error, t('companySettings.updateError'));
         } finally {
             setIsSavingOrg(false);
         }
@@ -248,7 +256,7 @@ export function OrganizationConfig() {
             toast.success(t('companySettings.avatarSuccess') || 'Logo updated successfully');
             fetchData();
         } catch (error: any) {
-            toast.error(error.message || t('companySettings.avatarError') || 'Failed to upload logo');
+            toastError(error, t('companySettings.avatarError') || 'Failed to upload logo');
         } finally {
             setIsUploading(false);
         }
@@ -291,12 +299,7 @@ export function OrganizationConfig() {
             fetchData();
             refreshBranches();
         } catch (error: any) {
-            toast.error(
-              error?.response?.data?.error ||
-                error?.response?.data?.message ||
-                error.message ||
-                'Failed to save branch',
-            );
+            toastError(error, 'Could not save branch');
         }
     };
 
@@ -309,12 +312,7 @@ export function OrganizationConfig() {
             await fetchData();
             refreshBranches();
         } catch (error: any) {
-            toast.error(
-              error?.response?.data?.error ||
-                error?.response?.data?.message ||
-                error.message ||
-                'Failed to update branch status',
-            );
+            toastError(error, 'Could not update branch status');
         } finally {
             setTogglingBranchId(null);
         }
@@ -327,7 +325,7 @@ export function OrganizationConfig() {
             fetchData();
             refreshBranches();
         } catch (error: any) {
-            toast.error(error.message || 'Failed to set default branch');
+            toastError(error, "Could not set default branch");
         }
     };
 
@@ -369,7 +367,7 @@ export function OrganizationConfig() {
             await refreshSettings();
             toast.success('Organization settings updated');
         } catch (error: any) {
-            toast.error(mrcErrorMessage(error) || error.message || 'Failed to update organization settings');
+            mrcErrorMessage(error) ? toast.error(mrcErrorMessage(error)) : toastError(error, 'Could not update organization settings');
         } finally {
             setIsSavingSettings(false);
         }
@@ -1140,6 +1138,29 @@ export function OrganizationConfig() {
                     </DrawerFooter>
                 </DrawerContent>
             </Drawer>
+
+            <AlertDialog open={vatSwitchConfirmOpen} onOpenChange={setVatSwitchConfirmOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Register for VAT?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Every item with tax type <strong>D</strong> will be moved to <strong>B</strong> (18% VAT).
+                            After that, each item's tax type can be changed only once.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => {
+                                setVatSwitchConfirmOpen(false);
+                                void saveOrganization();
+                            }}
+                        >
+                            Register for VAT
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

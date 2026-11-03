@@ -73,12 +73,14 @@ describe("proforma / training slip fiscal block", () => {
     expect(blob).toMatch(/Date: 02\/09\/2026/)
   })
 
-  it("a proforma prints no payment lines (A4, 80mm, HTML); a normal sale still does", async () => {
+  it("a proforma prints no payment lines but shows the item count (A4, 80mm, HTML); a normal sale prints both", async () => {
     const { renderSalesInvoiceHtml } = await import("../src/services/invoice-render.service")
     const a4 = (await captureText(() => generateEbmInvoicePdf(proformaFixture(), "A4"))).join("\n")
     const roll = (await captureText(() => generateEbmReceiptPdf80mm(proformaFixture()))).join("\n")
-    expect(a4).not.toMatch(/^CASH$|Items Number/m)
-    expect(roll).not.toMatch(/^CASH$|ITEMS NUMBER/m)
+    expect(a4).not.toMatch(/^CASH$/m)
+    expect(roll).not.toMatch(/^CASH$/m)
+    expect(a4).toMatch(/Items Number/)
+    expect(roll).toMatch(/ITEMS NUMBER/)
     expect(renderSalesInvoiceHtml(proformaFixture())).not.toMatch(/Payment Method/)
 
     const sale = proformaFixture()

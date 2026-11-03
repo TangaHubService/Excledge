@@ -3,6 +3,7 @@ import type { BranchAuthRequest } from '../middleware/branchAuth.middleware';
 import { prisma } from '../lib/prisma';
 import { isEbmEnabled } from '../services/rra-ebm.service';
 import { buildVsdcEnvelope, saveAndVerifyZReport, checkZReport } from '../services/vsdc-api.service';
+import { recordZReportOutcome } from '../services/z-report-record.service';
 import { initializeVsdcDevice } from '../services/vsdc-init.service';
 import { retryEbmOutboxEntry } from '../services/ebm-outbox.service';
 import { success, error as apiError } from '../utils/apiResponse';
@@ -195,6 +196,8 @@ export async function submitZReport(req: BranchAuthRequest, res: Response) {
 
     const envelope = await buildVsdcEnvelope(organizationId, branchId);
     const z = await saveAndVerifyZReport(envelope);
+    await recordZReportOutcome(organizationId, branchId, 'manual send', z).catch((e) =>
+      console.warn('[EbmZReport] could not record the Z-close outcome:', e));
 
     if (!z.saved) {
       return res.status(502).json(apiError(z.saveError ?? 'Z-report submission failed'));

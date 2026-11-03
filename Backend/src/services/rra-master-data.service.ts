@@ -130,30 +130,29 @@ export async function syncRraItemClasses(organizationId: number, branchId?: numb
     return { resource, ok: false, fetched: 0, upserted: 0, error: `${res.resultCd}: ${res.resultMsg}`, lastReqDt: since };
   }
 
-  const list = res.data?.itemClsList ?? [];
+  const list = (res.data?.itemClsList ?? []).filter((cls) => cls?.itemClsCd);
+  // A first pull is the whole UNSPSC tree (thousands of rows) — write it in chunks, not one round-trip per row.
+  const CHUNK = 500;
   let upserted = 0;
-  for (const cls of list) {
-    await prisma.rraItemClass.upsert({
-      where: { organizationId_itemClsCd: { organizationId, itemClsCd: cls.itemClsCd } },
-      create: {
-        organizationId,
-        itemClsCd: cls.itemClsCd,
-        itemClsNm: cls.itemClsNm ?? null,
-        itemClsLvl: cls.itemClsLvl ?? null,
-        taxTyCd: cls.taxTyCd ?? null,
-        mjrTgYn: cls.mjrTgYn ?? null,
-        useYn: cls.useYn ?? 'Y',
-      },
-      update: {
-        itemClsNm: cls.itemClsNm ?? null,
-        itemClsLvl: cls.itemClsLvl ?? null,
-        taxTyCd: cls.taxTyCd ?? null,
-        mjrTgYn: cls.mjrTgYn ?? null,
-        useYn: cls.useYn ?? 'Y',
-        lastSyncedAt: new Date(),
-      },
-    });
-    upserted += 1;
+  for (let i = 0; i < list.length; i += CHUNK) {
+    const chunk = list.slice(i, i + CHUNK);
+    await prisma.$transaction(
+      chunk.map((cls) => {
+        const fields = {
+          itemClsNm: cls.itemClsNm ?? null,
+          itemClsLvl: cls.itemClsLvl ?? null,
+          taxTyCd: cls.taxTyCd ?? null,
+          mjrTgYn: cls.mjrTgYn ?? null,
+          useYn: cls.useYn ?? 'Y',
+        };
+        return prisma.rraItemClass.upsert({
+          where: { organizationId_itemClsCd: { organizationId, itemClsCd: cls.itemClsCd } },
+          create: { organizationId, itemClsCd: cls.itemClsCd, ...fields },
+          update: { ...fields, lastSyncedAt: new Date() },
+        });
+      }),
+    );
+    upserted += chunk.length;
   }
 
   await saveCursor(organizationId, resource, runAt, `OK: ${upserted} classes`);

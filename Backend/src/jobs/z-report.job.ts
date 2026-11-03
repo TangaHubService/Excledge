@@ -1,12 +1,7 @@
 import cron from 'node-cron';
-import { prisma } from '../lib/prisma';
 import { isEbmEnabled } from '../services/rra-ebm.service';
 import { buildVsdcEnvelope, saveAndVerifyZReport, listActiveVsdcDevices } from '../services/vsdc-api.service';
-
-/** One rra_sync_cursor row per VSDC device holds the last Z-close outcome. */
-function zReportResource(branchId: number | null): string {
-  return branchId != null ? `zReport:${branchId}` : 'zReport';
-}
+import { recordZReportOutcome } from '../services/z-report-record.service';
 
 /**
  * Automated daily Z (closing) report — RRA CIS/VSDC spec §6/§18/§19 requires the device's daily
@@ -28,49 +23,11 @@ export const zReportJob = cron.schedule('55 23 * * *', async () => {
         const envelope = await buildVsdcEnvelope(dev.organizationId, dev.branchId);
         const z = await saveAndVerifyZReport(envelope);
 
-        const state = z.verified ? 'VERIFIED' : z.saved ? 'SAVED_UNVERIFIED' : 'FAILED';
+        const state = await recordZReportOutcome(dev.organizationId, dev.branchId, dev.label, z);
         if (z.verified) verified += 1;
         else if (z.saved) savedUnverified += 1;
         else failed += 1;
 
-        const detail = [
-          state,
-          dev.label,
-          `(${z.rptDeDate})`,
-          z.saveError ? `save:${z.saveError}` : '',
-          z.verifyError ? `check:${z.verifyError}` : '',
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .slice(0, 480);
-
-        await prisma.rraSyncCursor.upsert({
-          where: {
-            organizationId_resource: {
-              organizationId: dev.organizationId,
-              resource: zReportResource(dev.branchId),
-            },
-          },
-          create: {
-            organizationId: dev.organizationId,
-            resource: zReportResource(dev.branchId),
-            lastReqDt: z.rptDeTimestamp,
-            lastRunAt: new Date(),
-            lastResult: detail,
-          },
-          update: {
-            lastReqDt: z.rptDeTimestamp,
-            lastRunAt: new Date(),
-            lastResult: detail,
-          },
-        });
-
-        if (z.saved) {
-          await prisma.organization.update({
-            where: { id: dev.organizationId },
-            data: { lastSuccessfulVdsContact: new Date() },
-          });
-        }
         if (!z.verified) {
           console.warn(`[Z-report] ${dev.label}: ${state} — save:${z.saveError ?? 'ok'} check:${z.verifyError ?? 'ok'}`);
         }

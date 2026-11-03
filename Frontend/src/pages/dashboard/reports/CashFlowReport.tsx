@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { TableSkeleton } from '../../../components/ui/TableSkeleton';
 import { apiClient } from '../../../lib/api-client';
 import { toast } from 'react-toastify';
+import { toastError } from "../../../lib/friendly-error";
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
@@ -201,7 +202,7 @@ export const CashFlowReport = () => {
                 reference: ''
             });
         } catch (error: any) {
-            toast.error(error.message || t('expenses.error'));
+            toastError(error, t('expenses.error'));
         } finally {
             setIsSubmitting(false);
         }
@@ -228,7 +229,7 @@ export const CashFlowReport = () => {
                 notes: ''
             });
         } catch (error: any) {
-            toast.error(error.message || t('supplierPayments.error'));
+            toastError(error, t('supplierPayments.error'));
         } finally {
             setIsSubmitting(false);
         }

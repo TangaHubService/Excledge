@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
+import { friendlyMessage } from "../../../lib/friendly-error";
 import {
   Plus, Clock, Banknote, TrendingUp, Smartphone, Wallet, Search, X,
   CheckCircle2, Lock, AlertTriangle, RotateCcw, XCircle, Eye, Receipt,
@@ -307,7 +308,7 @@ export function ShiftSummaryPage() {
       setSummary(result.summary ?? null)
       loadDaily()
     } catch (requestError: any) {
-      const message = requestError?.response?.data?.error ?? requestError?.message ?? 'Failed to open shift.'
+      const message = friendlyMessage(requestError, 'Could not open shift')
       setError(message)
       toast.error(message)
     } finally {
@@ -324,7 +325,7 @@ export function ShiftSummaryPage() {
       toast.success('Closing started. Enter the counted cash.')
       await loadActiveShift()
     } catch (requestError: any) {
-      const message = requestError?.response?.data?.error ?? requestError?.message ?? 'Failed to start closing.'
+      const message = friendlyMessage(requestError, 'Could not start closing')
       setError(message)
       toast.error(message)
     } finally {
@@ -363,7 +364,7 @@ export function ShiftSummaryPage() {
       await loadHistory()
       await loadDaily()
     } catch (requestError: any) {
-      const message = requestError?.response?.data?.error ?? requestError?.message ?? 'Failed to close shift.'
+      const message = friendlyMessage(requestError, 'Could not close shift')
       setError(message)
       toast.error(message)
     } finally {
@@ -393,7 +394,7 @@ export function ShiftSummaryPage() {
       setMovementReason('')
       await loadActiveShift()
     } catch (requestError: any) {
-      const message = requestError?.response?.data?.error ?? requestError?.message ?? 'Failed to record movement.'
+      const message = friendlyMessage(requestError, 'Could not record movement')
       setError(message)
       toast.error(message)
     } finally {
@@ -426,7 +427,7 @@ export function ShiftSummaryPage() {
       setExpenseForm({ category: 'OTHER', amount: '', paymentMethod: 'CASH', description: '' })
       await loadActiveShift()
     } catch (requestError: any) {
-      const message = requestError?.response?.data?.error ?? requestError?.message ?? 'Failed to record expense.'
+      const message = friendlyMessage(requestError, 'Could not record expense')
       setError(message)
       toast.error(message)
     } finally {
@@ -458,7 +459,7 @@ export function ShiftSummaryPage() {
       await loadHistory()
       await loadDaily()
     } catch (requestError: any) {
-      const message = requestError?.response?.data?.error ?? requestError?.message ?? 'Failed to review shift.'
+      const message = friendlyMessage(requestError, 'Could not review shift')
       setError(message)
       toast.error(message)
     } finally {
@@ -491,7 +492,7 @@ export function ShiftSummaryPage() {
         await loadHistory()
       }
     } catch (requestError: any) {
-      const message = requestError?.response?.data?.error ?? requestError?.message ?? `Failed to ${type === 'REOPEN' ? 'reopen' : 'cancel'} shift.`
+      const message = friendlyMessage(requestError, `Could not ${type === 'REOPEN' ? 'reopen' : 'cancel'} the shift`)
       toast.error(message)
     } finally {
       setBusy(false)
@@ -504,7 +505,7 @@ export function ShiftSummaryPage() {
     try {
       setDetails(await apiClient.getShiftDetails(shift.id))
     } catch (requestError: any) {
-      const message = requestError?.response?.data?.error ?? requestError?.message ?? 'Failed to load shift details.'
+      const message = friendlyMessage(requestError, 'Could not load shift details')
       toast.error(message)
     } finally {
       setBusy(false)

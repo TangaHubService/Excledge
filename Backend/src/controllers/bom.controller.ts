@@ -10,7 +10,7 @@ import {
   checkProductionRequirements,
   BomComponentInput,
 } from '../services/bom.service';
-import { success, error as apiError } from '../utils/apiResponse';
+import { success, error as apiError, publicMessage } from '../utils/apiResponse';
 import { auditLogger } from '../utils/auditLogger';
 
 export const addBomComponent = async (req: Request, res: Response) => {
@@ -48,7 +48,7 @@ export const addBomComponent = async (req: Request, res: Response) => {
     res.status(201).json(success(component));
   } catch (err: any) {
     console.error('[Add BOM Component Error]:', err);
-    res.status(400).json(apiError(err.message || 'Failed to add BOM component'));
+    res.status(400).json(apiError(publicMessage(err, 'Could not add the raw material to the recipe.')));
   }
 };
 
@@ -114,7 +114,7 @@ export const updateBomComponentController = async (req: Request, res: Response) 
     res.json(success(component));
   } catch (err: any) {
     console.error('[Update BOM Component Error]:', err);
-    res.status(400).json(apiError(err.message || 'Failed to update BOM component'));
+    res.status(400).json(apiError(publicMessage(err, 'Could not update the recipe.')));
   }
 };
 
@@ -137,7 +137,7 @@ export const removeBomComponent = async (req: Request, res: Response) => {
     res.json(success({ message: 'BOM component removed successfully' }));
   } catch (err: any) {
     console.error('[Remove BOM Component Error]:', err);
-    res.status(400).json(apiError(err.message || 'Failed to remove BOM component'));
+    res.status(400).json(apiError(publicMessage(err, 'Could not remove the raw material from the recipe.')));
   }
 };
 
@@ -174,6 +174,6 @@ export const checkProductionRequirementsController = async (req: Request, res: R
     res.json(success(requirements));
   } catch (err: any) {
     console.error('[Check Production Requirements Error]:', err);
-    res.status(400).json(apiError(err.message || 'Failed to check production requirements'));
+    res.status(400).json(apiError(publicMessage(err, 'Could not check the raw materials needed.')));
   }
 };

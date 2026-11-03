@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
+import { toastError } from "../../../lib/friendly-error";
 import {
   ArrowRight,
   ArrowRightLeft,
@@ -92,7 +93,7 @@ export default function StockTransfersPage() {
       const list = (res as { data?: TransferRow[] })?.data ?? (res as TransferRow[]);
       setTransfers(Array.isArray(list) ? list : []);
     } catch (e: any) {
-      toast.error(e.message || "Failed to load transfers");
+      toastError(e, "Could not load transfers");
       setTransfers([]);
     } finally {
       setLoading(false);
@@ -148,7 +149,7 @@ export default function StockTransfersPage() {
       toast.success("Transfer approved");
       load();
     } catch (e: any) {
-      toast.error(e.message || "Approve failed");
+      toastError(e, "Could not approve the transfer");
     }
   };
 
@@ -159,7 +160,7 @@ export default function StockTransfersPage() {
       toast.success("Transfer rejected");
       load();
     } catch (e: any) {
-      toast.error(e.message || "Reject failed");
+      toastError(e, "Could not reject the transfer");
     }
   };
 
@@ -170,7 +171,7 @@ export default function StockTransfersPage() {
       toast.success("Transfer completed");
       load();
     } catch (e: any) {
-      toast.error(e.message || "Complete failed");
+      toastError(e, "Could not complete the transfer");
     }
   };
 
@@ -218,7 +219,7 @@ export default function StockTransfersPage() {
       setShowForm(false);
       load();
     } catch (err: any) {
-      toast.error(err.message || "Create failed");
+      toastError(err, "Could not create the transfer");
     } finally {
       setSubmitting(false);
     }

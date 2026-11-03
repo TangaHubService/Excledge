@@ -23,6 +23,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { useOrganizationSettings } from "../../../context/OrganizationSettingsContext";
 import { apiClient } from "../../../lib/api-client";
 import { toast } from "react-toastify";
+import { toastError } from "../../../lib/friendly-error";
 import { cn } from "../../../lib/utils";
 import {
   Loader2,
@@ -190,7 +191,7 @@ export default function StockAdjustmentDialog({
       onOpenChange(false);
       onSuccess?.();
     } catch (error: any) {
-      toast.error(error?.message || 'Adjustment failed. Please try again.');
+      toastError(error, "Could not adjust the stock");
     } finally {
       setLoading(false);
     }

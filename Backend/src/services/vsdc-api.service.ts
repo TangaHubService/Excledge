@@ -624,6 +624,7 @@ async function postLookup<T = unknown>(
   path: string,
   envelope: VsdcEnvelope,
   body: Record<string, unknown>,
+  timeoutMs: number = config.ebm.requestTimeoutMs,
 ): Promise<VsdcLookupResult<T>> {
   const base = (envelope.vsdcUrl ?? config.ebm.apiUrl ?? '').replace(/\/$/, '')
   if (!base) {
@@ -633,7 +634,7 @@ async function postLookup<T = unknown>(
   const reqTin = typeof body.tin === 'string' ? body.tin : ''
   logger.info(`[RRA][REQ] tin=${reqTin || '—'} POST ${url}`)
   const controller = new AbortController()
-  const t = setTimeout(() => controller.abort(), config.ebm.requestTimeoutMs)
+  const t = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' }
     const auth = authHeader()
@@ -727,6 +728,12 @@ export function selectCodes(envelope: VsdcEnvelope, lastReqDt: string) {
   return postLookup<{ clsList: RraCodeClass[] }>('/code/selectCodes', envelope, { tin: envelope.tin, bhfId: envelope.bhfId, lastReqDt })
 }
 
+/**
+ * Bulk pulls (full UNSPSC list, import declarations) can be slow: the VSDC relays them to RRA. Aborting
+ * mid-response loses data RRA already counts as delivered, so give these lookups more time than the default.
+ */
+const BULK_PULL_TIMEOUT_MS = Math.max(config.ebm.requestTimeoutMs, 120_000)
+
 /** POST /itemClass/selectItemsClass — item classification / UNSPSC list (§61). */
 export function selectItemsClass(envelope: VsdcEnvelope, lastReqDt: string) {
   if (config.ebm.useMock) {
@@ -735,7 +742,12 @@ export function selectItemsClass(envelope: VsdcEnvelope, lastReqDt: string) {
       data: { itemClsList: [{ itemClsCd: '5059690800', itemClsNm: 'Generic goods', itemClsLvl: 5, taxTyCd: 'B', useYn: 'Y' }] },
     })
   }
-  return postLookup<{ itemClsList: RraItemClassLVO[] }>('/itemClass/selectItemsClass', envelope, { tin: envelope.tin, bhfId: envelope.bhfId, lastReqDt })
+  return postLookup<{ itemClsList: RraItemClassLVO[] }>(
+    '/itemClass/selectItemsClass',
+    envelope,
+    { tin: envelope.tin, bhfId: envelope.bhfId, lastReqDt },
+    BULK_PULL_TIMEOUT_MS,
+  )
 }
 
 /** POST /customers/selectCustomer — verify a customer TIN against RRA (§62). */
@@ -1062,6 +1074,7 @@ export function selectImportItems(envelope: VsdcEnvelope, lastReqDt: string) {
     '/imports/selectImportItems',
     envelope,
     { tin: envelope.tin, bhfId: envelope.bhfId, lastReqDt },
+    BULK_PULL_TIMEOUT_MS,
   );
 }
 
@@ -1119,6 +1132,31 @@ export function toRptDeTimestampValue(rptDe: string): string {
   return rptDe;
 }
 
+const RPT_DE_8_DIGITS = /length must be between 8 and 8/i;
+const RPT_DE_14_DIGITS = /yyyyMMddHH24MISS/i;
+
+/**
+ * RRA's Z-report endpoints take the 8-digit report day (yyyyMMdd), and the VSDC's own Z logic reads
+ * its daily file by that name. Sandbox WAR 3.0.2 nonetheless validates rptDe as a 14-digit timestamp
+ * (the local copy is patched to accept 8 digits), so send 8 digits first and fall back to the 14-digit
+ * timestamp only when the VSDC's validator demands it.
+ */
+async function withRptDeLengthFallback(
+  rptDe: string,
+  send: (value: string) => Promise<VsdcApiResult>,
+): Promise<VsdcApiResult> {
+  const day = (rptDe ?? '').replace(/\D/g, '').slice(0, 8);
+  const first = await send(day);
+  if (first.success || !RPT_DE_14_DIGITS.test(first.error ?? '')) return first;
+  const second = await send(toRptDeTimestampValue(rptDe));
+  if (second.success || !RPT_DE_8_DIGITS.test(second.error ?? '')) return second;
+  // The WAR rejects 8 digits and RRA rejects 14: no rptDe can pass this VSDC build.
+  return {
+    ...second,
+    error: 'VSDC date format mismatch: the local VSDC only accepts a 14-digit rptDe and RRA only accepts 8 digits. Run the patched VSDC (rraVsdcSandbox3.0.2.war) or get a fixed build from RRA',
+  };
+}
+
 /** POST /reports/saveZReports — daily Z (closing) report. */
 export async function saveZReport(
   envelope: VsdcEnvelope,
@@ -1127,7 +1165,17 @@ export async function saveZReport(
   if (config.ebm.useMock) {
     return mockResult('ZREPORT', envelope.sdcId);
   }
-  return postToEndpoint('/reports/saveZReports', { tin: envelope.tin, bhfId: envelope.bhfId, rptDe: toRptDeTimestampValue(rptDe) }, envelope.vsdcUrl);
+  const result = await withRptDeLengthFallback(rptDe, (value) =>
+    postToEndpoint('/reports/saveZReports', { tin: envelope.tin, bhfId: envelope.bhfId, rptDe: value }, envelope.vsdcUrl));
+  // Sandbox WAR 3.0.2 parses the (validator-mandated) 14-digit rptDe with Integer.valueOf, which
+  // overflows and surfaces as a generic 899 before anything is sent to RRA.
+  if (!result.success && /VSDC error 899\b/.test(result.error ?? '')) {
+    return {
+      ...result,
+      error: 'VSDC error 899: this VSDC build cannot save Z reports (it requires a 14-digit rptDe but crashes reading it). Nothing was sent to RRA; a fixed VSDC build from RRA is needed',
+    };
+  }
+  return result;
 }
 
 /** POST /reports/checkZReport — look up a previously saved Z report. */
@@ -1138,7 +1186,8 @@ export async function checkZReport(
   if (config.ebm.useMock) {
     return mockResult('ZREPORT-CHECK', envelope.sdcId);
   }
-  return postToEndpoint('/reports/checkZReport', { tin: envelope.tin, bhfId: envelope.bhfId, rptDe: toRptDeTimestampValue(rptDe) }, envelope.vsdcUrl);
+  return withRptDeLengthFallback(rptDe, (value) =>
+    postToEndpoint('/reports/checkZReport', { tin: envelope.tin, bhfId: envelope.bhfId, rptDe: value }, envelope.vsdcUrl));
 }
 
 export interface ZReportOutcome {
@@ -1167,17 +1216,14 @@ export async function saveAndVerifyZReport(
   const ymd = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}`;
   const rptDeTimestamp = `${ymd}${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
 
+  // Both calls retry with the 8-digit day when RRA rejects the 14-digit timestamp.
   const save = await saveZReport(envelope, rptDeTimestamp);
-  // The local VSDC WAR validates a 14-digit timestamp. The RRA server behind some sandbox builds
-  // requires an 8-digit day.
-  let check = await checkZReport(envelope, rptDeTimestamp);
-  if (!check.success && /length must be between 8 and 8/i.test(check.error ?? '')) {
-    check = await checkZReport(envelope, ymd);
-  }
+  const check = await checkZReport(envelope, rptDeTimestamp);
 
   return {
     saved: save.success,
-    verified: check.success,
+    // A successful lookup only proves the day is closed when the save itself went through.
+    verified: save.success && check.success,
     rptDeTimestamp,
     rptDeDate: ymd,
     saveError: save.success ? undefined : save.error,
