@@ -5,6 +5,8 @@ export interface Supplier {
   phone?: string;
   contactPerson?: string;
   address?: string;
+  /** RRA TIN — set on suppliers picked up from RRA purchases. */
+  TIN?: string | null;
 }
 
 export interface FormData {

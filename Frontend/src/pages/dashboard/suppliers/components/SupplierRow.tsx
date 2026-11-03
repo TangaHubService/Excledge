@@ -6,8 +6,16 @@ export const SupplierRow: React.FC<SupplierRowProps> = ({ supplier, onEdit, onDe
   return (
     <tr className="border-b hover:bg-muted dark:text-white transition-colors">
       <td className="py-3 px-4 font-mono text-xs text-muted-foreground">#{supplier.id}</td>
-      <td className="py-3 px-4 font-medium">{supplier.name}</td>
-      <td className="py-3 px-4 text-sm">{supplier.email}</td>
+      <td className="py-3 px-4 font-medium">
+        <div>{supplier.name}</div>
+        {supplier.TIN && (
+          <div className="mt-0.5 flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+            <span className="font-mono">TIN {supplier.TIN}</span>
+            <span className="rounded bg-teal-600/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-teal-700 dark:text-teal-300">RRA</span>
+          </div>
+        )}
+      </td>
+      <td className="py-3 px-4 text-sm">{supplier.email || "-"}</td>
       <td className="py-3 px-4 text-sm font-mono">{supplier.phone || "-"}</td>
       <td className="py-3 px-4 text-sm">{supplier.contactPerson || "-"}</td>
       <td className="py-3 px-4 text-sm">{supplier.address || "-"}</td>

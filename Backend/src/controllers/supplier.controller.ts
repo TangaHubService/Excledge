@@ -6,11 +6,51 @@ import { validateSupplierRow, validateEmail } from "../services/import-validatio
 import { createPreviewSession, getPreviewSession, deletePreviewSession } from "../services/preview-session.service"
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 
+/**
+ * Adds a supplier row for every seller TIN seen on an RRA purchase (pulled from VSDC)
+ * that the organization does not have yet, matched by TIN. Archived suppliers still
+ * match, so archiving one is not undone. Email is left empty for the user to fill in.
+ */
+export const syncSuppliersFromRraPurchases = async (organizationId: number) => {
+    const purchases = await prisma.rraPurchase.findMany({
+        where: { organizationId, spplrTin: { not: "" } },
+        select: { spplrTin: true, spplrNm: true },
+        orderBy: { pulledAt: "desc" },
+        distinct: ["spplrTin"],
+    })
+    if (purchases.length === 0) return
+
+    const existing = await prisma.supplier.findMany({
+        where: { organizationId, TIN: { not: null } },
+        select: { TIN: true },
+    })
+    const known = new Set(existing.map((s) => s.TIN!.trim()))
+
+    const missing = purchases.filter((p) => !known.has(p.spplrTin.trim()))
+    if (missing.length === 0) return
+
+    await prisma.supplier.createMany({
+        data: missing.map((p) => ({
+            organizationId,
+            TIN: p.spplrTin.trim(),
+            name: p.spplrNm?.trim() || `RRA supplier ${p.spplrTin.trim()}`,
+            email: "",
+        })),
+    })
+}
+
 // Get all suppliers for an organization
 export const getSuppliers = async (req: BranchAuthRequest, res: Response) => {
     try {
         const organizationId = parseInt(req.params.organizationId)
         const { showInactive } = req.query
+
+        try {
+            await syncSuppliersFromRraPurchases(organizationId)
+        } catch (syncError) {
+            // Never block the supplier list on the RRA sync.
+            console.error("Error syncing suppliers from RRA purchases:", syncError)
+        }
 
         // Suppliers are organization-wide records (the Supplier model has no branchId column) —
         // they are not owned by a single branch, so no branch filter is applied here.

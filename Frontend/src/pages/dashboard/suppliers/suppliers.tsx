@@ -142,7 +142,8 @@ const SuppliersPage = ({ apiClient, organizationId }: SuppliersPageProps) => {
         supplier.email.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
         (supplier.phone && supplier.phone.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
         (supplier.contactPerson && supplier.contactPerson.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
-        (supplier.address && supplier.address.toLowerCase().includes(debouncedSearchTerm.toLowerCase()))
+        (supplier.address && supplier.address.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
+        (supplier.TIN && supplier.TIN.toLowerCase().includes(debouncedSearchTerm.toLowerCase()))
     );
 
     return (
