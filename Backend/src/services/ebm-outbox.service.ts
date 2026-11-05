@@ -357,7 +357,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
 
     const orgRow = await prisma.organization.findUnique({
       where: { id: row.organizationId },
-      select: { TIN: true, name: true, address: true, phone: true },
+      select: { TIN: true, name: true, address: true, phone: true, email: true },
     });
     const org = orgRow ? await withBranchSellerAddress(orgRow, sale.branchId) : null;
 

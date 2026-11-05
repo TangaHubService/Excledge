@@ -230,7 +230,7 @@ export async function submitSalesToOsdc(params: {
 
   const orgRow = await prisma.organization.findUnique({
     where: { id: params.organizationId },
-    select: { TIN: true, name: true, address: true, phone: true },
+    select: { TIN: true, name: true, address: true, phone: true, email: true },
   });
   if (!orgRow) {
     return { success: false, error: 'Organization not found' };

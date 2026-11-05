@@ -434,6 +434,15 @@ export async function syncImports(req: BranchAuthRequest, res: Response) {
 
 const RRA_IMPORT_STATUSES = new Set(['PENDING', 'APPROVED', 'REJECTED']);
 
+/** How a line relates to the latest pull: `NEW`, `RESENT` (already stored), or null if not in it. */
+export function importPullState(
+  row: { pulledAt: Date; lastPulledAt: Date | null; copyNo: number },
+  latestPullAt: Date | null,
+): 'NEW' | 'RESENT' | null {
+  if (!latestPullAt || row.lastPulledAt?.getTime() !== latestPullAt.getTime()) return null;
+  return row.copyNo === 0 && row.pulledAt.getTime() === latestPullAt.getTime() ? 'NEW' : 'RESENT';
+}
+
 export async function listRraImports(req: BranchAuthRequest, res: Response) {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -442,17 +451,28 @@ export async function listRraImports(req: BranchAuthRequest, res: Response) {
     if (status && !RRA_IMPORT_STATUSES.has(status)) {
       return res.status(400).json(apiError(`Invalid status filter — use PENDING, APPROVED, or REJECTED`));
     }
-    const [rows, pending, cursor] = await Promise.all([
+    const [rows, pending, cursor, pullAgg] = await Promise.all([
       prisma.rraImportItem.findMany({
         where: { organizationId, ...(status ? { status: status as 'PENDING' | 'APPROVED' | 'REJECTED' } : {}) },
-        orderBy: [{ dclDe: 'desc' }, { itemSeq: 'asc' }],
+        // Most recently delivered lines first, so everything RRA just sent is together at the top.
+        orderBy: [{ lastPulledAt: { sort: 'desc', nulls: 'last' } }, { dclDe: 'desc' }, { itemSeq: 'asc' }],
         take: 300,
       }),
       prisma.rraImportItem.count({ where: { organizationId, status: 'PENDING' } }),
       prisma.rraSyncCursor.findUnique({ where: { organizationId_resource: { organizationId, resource: 'imports' } } }),
+      prisma.rraImportItem.aggregate({ where: { organizationId }, _max: { lastPulledAt: true } }),
     ]);
+    // The latest pull that delivered lines; a later empty pull leaves these markers in place.
+    const latestPullAt = pullAgg._max.lastPulledAt;
+    const [latestPullLines, latestPullNew] = latestPullAt
+      ? await Promise.all([
+          prisma.rraImportItem.count({ where: { organizationId, lastPulledAt: latestPullAt } }),
+          prisma.rraImportItem.count({ where: { organizationId, lastPulledAt: latestPullAt, pulledAt: latestPullAt, copyNo: 0 } }),
+        ])
+      : [0, 0];
     res.json(success({
-      imports: rows,
+      imports: rows.map((row) => ({ ...row, pullState: importPullState(row, latestPullAt) })),
+      latestPull: latestPullAt ? { at: latestPullAt, lines: latestPullLines, created: latestPullNew } : null,
       pending,
       lastRequestDate: cursor?.lastReqDt ?? null,
       lastRunAt: cursor?.lastRunAt ?? null,

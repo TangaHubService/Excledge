@@ -120,12 +120,12 @@ vi.mock("../src/services/vsdc-api.service", async () => {
     validateVsdcEnvelope: vi.fn(() => null),
     saveStockItems: vi.fn(async (_e: any, p: any) => { stockItemsPayload = p; return { success: true, data: { rcptNo: "1" }, rawStatus: 200, rawBody: {} } }),
     saveStockMaster: vi.fn(async (_e: any, itemCd: string, rsdQty: number, reg: any) => { stockMasterArgs = { itemCd, rsdQty, reg }; return { success: true, rawStatus: 200, rawBody: {} } }),
-    savePurchase: vi.fn(async (_e: any, p: any) => { savePurchasePayload = p; return { success: true, rawStatus: 200, rawBody: {} } }),
+    savePurchase: vi.fn(async (_e: any, p: any) => { savePurchasePayload = p; return { success: true, rawStatus: 200, rawBody: { resultCd: "000", resultMsg: "It is succeeded", resultDt: "20261105130517" } } }),
   }
 })
 
 import { sarTyCdFor, stockMovementNeedsEbm, submitStockLedgerEntryToEbm } from "../src/services/stock-movement-sync.service"
-import { confirmRraPurchase } from "../src/services/purchase-sync.service"
+import { confirmRraPurchase, readRraPurchaseAnswer } from "../src/services/purchase-sync.service"
 
 beforeEach(() => {
   stockItemsPayload = null
@@ -281,5 +281,20 @@ describe("confirmRraPurchase (§71)", () => {
     expect(r.success).toBe(true)
     expect(sellingPriceCalls).toEqual([[1, 5, undefined, 3]])
     expect(savePurchasePayload.itemList[0].itemExprDt).toBeNull()
+  })
+})
+
+describe("RRA's answer to a saved purchase", () => {
+  it("keeps the code, message and RRA time when RRA answers 000", () => {
+    expect(readRraPurchaseAnswer({ resultCd: "000", resultMsg: "It is succeeded", resultDt: "20261105130517" })).toEqual({
+      ok: true,
+      rraResultCd: "000",
+      rraResultMsg: "It is succeeded",
+      rraResultDt: "20261105130517",
+    })
+  })
+
+  it.each([[{}], [null], [{ resultCd: "910" }], [{ resultMsg: "no code" }]])("does not count %j as accepted", (body) => {
+    expect(readRraPurchaseAnswer(body).ok).toBe(false)
   })
 })

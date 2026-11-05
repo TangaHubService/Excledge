@@ -432,6 +432,31 @@ export function sanitizeVsdcText(value: unknown): string {
 }
 
 /**
+ * Seller header for `receipt.topMsg`: one detail per line, in the order name, address, phone, email,
+ * TIN, skipping whatever the organization has not filled in. Each line has its own cap so the total
+ * stays within the WAR's 300-character limit without ever truncating the TIN off the end.
+ */
+export function buildVsdcTopMsg(org: {
+  TIN: string | null;
+  name: string;
+  address: string | null;
+  phone?: string | null;
+  email?: string | null;
+}): string {
+  const labelled = (label: string, value: unknown) => {
+    const text = sanitizeVsdcText(value);
+    return text ? `${label}: ${text}` : '';
+  };
+  return [
+    clampField(sanitizeVsdcText(org.name), 80),
+    clampField(sanitizeVsdcText(org.address), 80),
+    clampField(labelled('TEL', org.phone), 30),
+    clampField(labelled('EMAIL', org.email), 80),
+    clampField(labelled('TIN', org.TIN), 20),
+  ].filter(Boolean).join('\n');
+}
+
+/**
  * Seller identity for `adrs`/`topMsg`: the branch address wins over the organization address,
  * matching the printed invoice header.
  */
@@ -531,7 +556,7 @@ export const TAX_RATE_BY_SLOT: [number, number, number, number] = [0, 18, 0, 0];
  */
 export function buildRraSendReceiptPayload(
   sale: SaleWithRelations,
-  org: { TIN: string | null; name: string; address: string | null; phone?: string | null },
+  org: { TIN: string | null; name: string; address: string | null; phone?: string | null; email?: string | null },
   rraPaymentCode: string,
   opts: {
     orgInvcNo?: number;
@@ -777,9 +802,9 @@ export function buildRraSendReceiptPayload(
       // ("length must be between 0 and 20") — clamp the trade name.
       trdeNm: clampField(org.name, 20),
       adrs: clampField(org.address, 200),
-      // VSDC API v1.0.5 §3.3.6.1 sizes topMsg and btmMsg at CHAR 20. The full
-      // seller header (TIN, address, phone) is printed by the CIS itself.
-      topMsg: clampField(sanitizeVsdcText(org.name), 20),
+      // Full seller header, one detail per line. The WAR allows 300 characters;
+      // VSDC API v1.0.5 §3.3.6.1 lists CHAR 20, so watch for a 910 from RRA.
+      topMsg: buildVsdcTopMsg(org),
       btmMsg: clampField('THANK YOU', 20),
       prchrAcptcYn: 'N',
     },

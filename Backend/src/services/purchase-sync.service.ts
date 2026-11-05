@@ -4,6 +4,7 @@ import { isEbmEnabled, fix2, toRraDate, toRraDateTime } from './rra-ebm.service'
 import { emitToBranch, emitToOrganization } from '../utils/socket';
 import {
   buildVsdcEnvelope,
+  normalizeVsdcResultCd,
   selectPurchases,
   savePurchase,
   saveStockMaster,
@@ -374,6 +375,26 @@ type PurchaseRow = {
   }>;
 };
 
+/**
+ * Only resultCd 000 counts as RRA accepting a purchase. parseVsdcStatusCode lets a body with no
+ * resultCd through, which must not mark a purchase Approved.
+ */
+export function readRraPurchaseAnswer(rawBody: unknown):
+  | { ok: true; rraResultCd: string; rraResultMsg: string | null; rraResultDt: string | null }
+  | { ok: false; error: string } {
+  const body = (rawBody && typeof rawBody === 'object' ? rawBody : {}) as Record<string, unknown>;
+  const code = normalizeVsdcResultCd(body.resultCd);
+  if (code !== '000') {
+    return { ok: false, error: `RRA did not confirm this purchase (result ${code})` };
+  }
+  return {
+    ok: true,
+    rraResultCd: code,
+    rraResultMsg: typeof body.resultMsg === 'string' ? body.resultMsg : null,
+    rraResultDt: typeof body.resultDt === 'string' ? body.resultDt : null,
+  };
+}
+
 /** Map sales rcptTyCd (S/R) from selectTrnsPurchaseSales → purchase rcptTyCd (P/R). */
 function purchaseRcptTyCd(salesRcptTyCd: string | null): string {
   const PURCHASE_RCPT_TY_CD_BY_SALES_RCPT_TY_CD: Record<string, string> = { S: 'P', R: 'R' };
@@ -562,9 +583,18 @@ async function rejectRraPurchaseAtVsdc(
     if (!res.success) {
       return { success: false, error: res.error ?? 'savePurchases (reject) failed' };
     }
+    const answer = readRraPurchaseAnswer(res.rawBody);
+    if (!answer.ok) return { success: false, error: answer.error };
+    logger.info(`[EBM] RRA answered reject of purchase #${rp.id}: ${JSON.stringify(res.rawBody)}`);
     await prisma.rraPurchase.update({
       where: { id: rp.id },
-      data: { status: 'REJECTED', remark: opts.remark?.trim() || rp.remark },
+      data: {
+        status: 'REJECTED',
+        remark: opts.remark?.trim() || rp.remark,
+        rraResultCd: answer.rraResultCd,
+        rraResultMsg: answer.rraResultMsg,
+        rraResultDt: answer.rraResultDt,
+      },
     });
     await prisma.organization.update({
       where: { id: organizationId },
@@ -735,10 +765,19 @@ export async function confirmRraPurchase(
     if (!res.success) {
       return { success: false, error: res.error ?? 'savePurchases failed' };
     }
+    const answer = readRraPurchaseAnswer(res.rawBody);
+    if (!answer.ok) return { success: false, error: answer.error };
+    logger.info(`[EBM] RRA answered purchase #${rraPurchaseId}: ${JSON.stringify(res.rawBody)}`);
 
     await prisma.rraPurchase.update({
       where: { id: rraPurchaseId },
-      data: { status: 'CONFIRMED', confirmedAt: new Date() },
+      data: {
+        status: 'CONFIRMED',
+        confirmedAt: new Date(),
+        rraResultCd: answer.rraResultCd,
+        rraResultMsg: answer.rraResultMsg,
+        rraResultDt: answer.rraResultDt,
+      },
     });
 
     // §74: a confirmed purchase affects local stock in real time. Stock IO (sarTyCd 02) and stock

@@ -1153,6 +1153,14 @@ interface RraImport {
   remark: string | null;
   actionedAt: string | null;
   linkedProductId: number | null;
+  pullState?: "NEW" | "RESENT" | null;
+  copyNo?: number;
+}
+
+interface RraImportLatestPull {
+  at: string;
+  lines: number;
+  created: number;
 }
 
 function ImportDetailRows({ line }: { line: RraImport }) {
@@ -1202,6 +1210,7 @@ function ImportDeclarationsCard() {
   // Default to every pulled line; "Pending" alone hid approved/rejected lines and looked like a short pull.
   const [statusFilter, setStatusFilter] = useState<RraImportStatusFilter>("ALL");
   const [lastReq, setLastReq] = useState<string | null>(null);
+  const [latestPull, setLatestPull] = useState<RraImportLatestPull | null>(null);
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<RraImport | null>(null);
   const [action, setAction] = useState<null | { line: RraImport; kind: "approve" | "reject" }>(null);
@@ -1221,6 +1230,7 @@ function ImportDeclarationsCard() {
       setImports((data?.imports ?? []) as RraImport[]);
       setPendingCount(Number(data?.pending ?? 0));
       setLastReq(data?.lastRequestDate ?? null);
+      setLatestPull((data?.latestPull ?? null) as RraImportLatestPull | null);
     } catch (e: any) {
       toastError(e, "Could not load import declarations");
     }
@@ -1243,10 +1253,12 @@ function ImportDeclarationsCard() {
       } else {
         // RRA re-sends lines it already delivered; say how many are actually new.
         const created = Number(out?.created ?? pulled);
-        const known = pulled - created;
+        const reopened = Number(out?.reopened ?? 0);
+        const known = pulled - created - reopened;
         toast.success(
           `RRA sent ${pulled} line(s): ${created} new`
-            + (known > 0 ? `, ${known} already in your list (status kept)` : ""),
+            + (reopened > 0 ? `, ${reopened} waiting at RRA and pending again` : "")
+            + (known > 0 ? `, ${known} already in your list` : ""),
         );
       }
       await load();
@@ -1355,6 +1367,13 @@ function ImportDeclarationsCard() {
           </div>
         </div>
 
+        {latestPull && (
+          <p className="text-sm text-muted-foreground">
+            Latest pull with lines ({new Date(latestPull.at).toLocaleString()}): RRA sent {latestPull.lines},
+            {" "}{latestPull.created} new and {latestPull.lines - latestPull.created} sent again.
+          </p>
+        )}
+
         <TooltipProvider>
           <div className="overflow-x-auto rounded-lg border">
             <Table className="table-fixed w-full min-w-[880px]">
@@ -1408,7 +1427,11 @@ function ImportDeclarationsCard() {
                       </span>
                     </TableCell>
                     <TableCell className="overflow-hidden">
-                      <RraStatusBadge status={im.status} />
+                      <div className="flex flex-col items-start gap-1">
+                        <RraStatusBadge status={im.status} />
+                        {im.pullState === "NEW" && <StatusBadge status="SHIPPED" label="New" />}
+                        {im.pullState === "RESENT" && <StatusBadge status="DRAFT" label="Sent again" />}
+                      </div>
                     </TableCell>
                     <TableCell className="overflow-hidden text-right">
                       <div className="flex flex-nowrap items-center justify-end gap-1">
@@ -1476,6 +1499,12 @@ function ImportDeclarationsCard() {
                 {action.kind === "approve" ? "Approve" : "Reject"}{" "}
                 <span className="font-medium text-foreground">{action.line.itemNm?.trim() || "this line"}</span>
                 {" "}({action.line.dclNo ?? action.line.taskCd}, line {action.line.itemSeq}).
+                {(action.line.copyNo ?? 0) > 0 && action.kind === "approve" && (
+                  <span className="mt-2 block text-warning">
+                    You already actioned this line, but RRA still shows it as waiting. Approving adds its
+                    {" "}full quantity to stock again.
+                  </span>
+                )}
               </p>
               {action.kind === "approve" && (
                 <>

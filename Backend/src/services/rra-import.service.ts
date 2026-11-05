@@ -63,7 +63,7 @@ async function touchCursorResult(organizationId: number, result: string): Promis
 export async function syncRraImports(
   organizationId: number,
   opts: { branchId?: number | null; requestDate?: string } = {},
-): Promise<{ ok: boolean; fetched: number; cached: number; created?: number; failed: number; lastReqDt: string; error?: string }> {
+): Promise<{ ok: boolean; fetched: number; cached: number; created?: number; reopened?: number; failed: number; lastReqDt: string; error?: string }> {
   if (!isEbmEnabled()) return { ok: false, fetched: 0, cached: 0, failed: 0, lastReqDt: '', error: 'EBM is not enabled' };
 
   const prevCursor = await getCursor(organizationId);
@@ -106,7 +106,11 @@ export async function syncRraImports(
   let cached = 0;
   // Lines new to us — RRA re-sends lines it already delivered, so `cached` alone overstates what's new.
   let created = 0;
+  // Lines RRA still shows as waiting after we approved/rejected them: back to pending as a new copy.
+  let reopened = 0;
   let failed = 0;
+  // Stamped on every line in this response, so the list can show exactly what this pull delivered.
+  const pullAt = new Date();
   const seenKeys = new Set<string>();
   for (const it of list) {
     const stts = (it as { imptItemsttsCd?: string; imptItemSttsCd?: string }).imptItemSttsCd
@@ -126,22 +130,28 @@ export async function syncRraImports(
     seenKeys.add(key);
     // One bad line must not drop the rest of the batch.
     try {
-      const uniqueKey = { organizationId, taskCd, dclDe, itemSeq: it.itemSeq };
-      const existing = await prisma.rraImportItem.findUnique({
-        where: { organizationId_taskCd_dclDe_itemSeq: uniqueKey },
-        select: { id: true },
+      const existing = await prisma.rraImportItem.findFirst({
+        where: { organizationId, taskCd, dclDe, itemSeq: it.itemSeq },
+        orderBy: { copyNo: 'desc' },
+        select: { copyNo: true, status: true },
       });
+      // RRA is the source of truth for "waiting": the actioned copy stays as history (with its stock
+      // link) and a new pending copy lets the user receive the line again, e.g. onto another product.
+      const reopen = !!existing && existing.status !== 'PENDING' && mappedStatus === 'PENDING';
+      const copyNo = !existing ? 0 : reopen ? existing.copyNo + 1 : existing.copyNo;
       await prisma.rraImportItem.upsert({
         where: {
-          organizationId_taskCd_dclDe_itemSeq: {
+          organizationId_taskCd_dclDe_itemSeq_copyNo: {
             organizationId,
             taskCd,
             dclDe,
             itemSeq: it.itemSeq,
+            copyNo,
           },
         },
         create: {
           organizationId,
+          copyNo,
           taskCd,
           dclNo: it.dclNo ?? null,
           dclDe,
@@ -165,9 +175,12 @@ export async function syncRraImports(
           itemClsCd: it.itemClsCd ?? null,
           status: mappedStatus,
           rawResponse: it as unknown as Prisma.InputJsonValue,
+          pulledAt: pullAt,
+          lastPulledAt: pullAt,
         },
         update: {
           rawResponse: it as unknown as Prisma.InputJsonValue,
+          lastPulledAt: pullAt,
           // Keep display fields fresh on re-pull (UI shows supplier / item / invoice).
           spplrNm: it.spplrNm ?? null,
           agntNm: it.agntNm ?? null,
@@ -176,13 +189,14 @@ export async function syncRraImports(
           orgnNatCd: it.orgnNatCd ?? null,
           invcFcurAmt: it.invcFcurAmt ?? null,
           invcFcurCd: it.invcFcurCd ?? null,
-          // Mirror RRA's terminal states; never downgrade a locally actioned line
-          // back to PENDING when VSDC still echoes Waiting (2).
+          // Mirror RRA's terminal states.
           ...(mappedStatus !== 'PENDING' ? { status: mappedStatus } : {}),
         },
       });
       cached += 1;
       if (!existing) created += 1;
+      if (reopen) reopened += 1;
+      logger.info(`[EBM] imports pull org=${organizationId}: line ${key} dclNo=${it.dclNo ?? '-'} ${!existing ? 'new' : reopen ? `reopened as pending (copy ${copyNo})` : 'sent again'}`);
     } catch (e: unknown) {
       failed += 1;
       logger.error(`[EBM] imports pull: failed to save line ${key}`, e);
@@ -193,7 +207,7 @@ export async function syncRraImports(
   // (saved lines are upserted, so re-pulling them is harmless).
   if (failed > 0) {
     await touchCursorResult(organizationId, `PARTIAL: ${cached}/${list.length} import lines saved, ${failed} failed`);
-    return { ok: true, fetched: list.length, cached, created, failed, lastReqDt: prevCursor };
+    return { ok: true, fetched: list.length, cached, created, reopened, failed, lastReqDt: prevCursor };
   }
 
   // Zero lines pulled → never advance (or invent) lastReqDt. Only note the run.
@@ -202,9 +216,9 @@ export async function syncRraImports(
     return { ok: true, fetched: 0, cached: 0, failed: 0, lastReqDt: prevCursor };
   }
 
-  logger.info(`[EBM] imports pull org=${organizationId}: ${created} new, ${cached - created} already stored`);
-  await saveCursor(organizationId, runAt, `OK: ${cached} import lines (${created} new)`);
-  return { ok: true, fetched: list.length, cached, created, failed: 0, lastReqDt: runAt };
+  logger.info(`[EBM] imports pull org=${organizationId}: ${created} new, ${reopened} reopened, ${cached - created - reopened} already stored`);
+  await saveCursor(organizationId, runAt, `OK: ${cached} import lines (${created} new, ${reopened} reopened)`);
+  return { ok: true, fetched: list.length, cached, created, reopened, failed: 0, lastReqDt: runAt };
 }
 
 // ── §68 helpers: convert import line → local product ─────────
