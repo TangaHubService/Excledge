@@ -1,4 +1,4 @@
-import { prisma } from '../lib/prisma';
+import { branchStorage, prisma } from '../lib/prisma';
 import { config } from '../config';
 import {
   type SaleWithRelations,
@@ -264,7 +264,17 @@ export async function payDebtWithTransaction(
  * Process pending EBM outbox entries in batch. 1. Orphan recovery: a stale PROCESSING entry is
  * resent as the SAME document (same invcNo).
  */
-export async function processEbmOutboxBatch(limit = 25): Promise<{
+export function processEbmOutboxBatch(limit = 25): Promise<{
+  processed: number;
+  succeeded: number;
+  failed: number;
+}> {
+  // Sales and refunds start this from inside their request. The queue holds every branch's
+  // documents, so it must not inherit that request's branch filter.
+  return branchStorage.exit(() => runEbmOutboxBatch(limit));
+}
+
+async function runEbmOutboxBatch(limit: number): Promise<{
   processed: number;
   succeeded: number;
   failed: number;
@@ -357,7 +367,7 @@ export async function processEbmOutboxBatch(limit = 25): Promise<{
 
     const orgRow = await prisma.organization.findUnique({
       where: { id: row.organizationId },
-      select: { TIN: true, name: true, address: true, phone: true },
+      select: { TIN: true, name: true, address: true, phone: true, email: true },
     });
     const org = orgRow ? await withBranchSellerAddress(orgRow, sale.branchId) : null;
 

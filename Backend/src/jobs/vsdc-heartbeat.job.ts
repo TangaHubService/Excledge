@@ -3,10 +3,9 @@ import { prisma } from '../lib/prisma';
 import { isEbmEnabled } from '../services/rra-ebm.service';
 import { buildVsdcEnvelope, vsdcHeartbeat, listActiveVsdcDevices } from '../services/vsdc-api.service';
 
-// Must run well inside the offline-block window (default 2h, see vsdc-offline-guard.middleware.ts)
-// or a real overnight sales lull trips the guard even though the VSDC is actually still reachable.
-const VSDC_OFFLINE_BLOCK_MS = Number(process.env.VSDC_OFFLINE_BLOCK_MS ?? 2 * 60 * 60 * 1000);
-const HEARTBEAT_MINUTES = Math.max(5, Math.min(360, Math.floor(VSDC_OFFLINE_BLOCK_MS / 3 / 60_000)));
+// Keeps "last VSDC contact" fresh while no sales are happening. Sales check the VSDC live, so this
+// job does not decide whether a sale is allowed.
+const HEARTBEAT_MINUTES = 30;
 
 /**
  * VSDC heartbeat — issues a state-check handshake to every configured VSDC device (per branch, with

@@ -29,6 +29,7 @@ export const createProductSchema = z.object({
     l3SalePrice: z.coerce.number().nonnegative('Price tier 3 cannot be negative').optional(),
     l4SalePrice: z.coerce.number().nonnegative('Price tier 4 cannot be negative').optional(),
     l5SalePrice: z.coerce.number().nonnegative('Price tier 5 cannot be negative').optional(),
+    discountPercent: z.coerce.number().min(0, 'Discount cannot be negative').max(99.99, 'Discount must be below 100%').optional(),
     bomComponents: z.array(z.object({
       componentProductId: z.coerce.number().int().positive(),
       quantity: z.coerce.number().positive().max(999999999999.999).refine(
@@ -78,6 +79,7 @@ export const updateProductSchema = z.object({
     l3SalePrice: z.coerce.number().nonnegative('Price tier 3 cannot be negative').optional().nullable(),
     l4SalePrice: z.coerce.number().nonnegative('Price tier 4 cannot be negative').optional().nullable(),
     l5SalePrice: z.coerce.number().nonnegative('Price tier 5 cannot be negative').optional().nullable(),
+    discountPercent: z.coerce.number().min(0, 'Discount cannot be negative').max(99.99, 'Discount must be below 100%').optional(),
   }).refine((data) => {
     // Never clear a required RRA classification once set.
     if (data.itemClsCd === null || data.itemClsCd === '') return false;

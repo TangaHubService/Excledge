@@ -18,7 +18,7 @@ vi.mock("../src/lib/prisma", () => ({
       findUnique: vi.fn(async () => null),
       upsert: vi.fn(async (a: any) => { importUpserts.push(a); return a.create }),
       findFirst: vi.fn(async () => ({
-        id: 1, organizationId: 1, taskCd: "TASK1", dclNo: "DCL9", dclDe: "20260815", itemSeq: 1,
+        id: 1, copyNo: 0, organizationId: 1, taskCd: "TASK1", dclNo: "DCL9", dclDe: "20260815", itemSeq: 1,
         hsCd: "1234.56", itemNm: "Imported widget", itemCd: null, itemClsCd: null,
         orgnNatCd: "CN", pkgUnitCd: "CT", qtyUnitCd: "U",
         invcFcurAmt: { toNumber: () => 2000 },
@@ -106,6 +106,7 @@ vi.mock("../src/services/product-sync.service", () => ({
 }))
 
 import { syncRraImports, actionRraImport } from "../src/services/rra-import.service"
+import { importPullState } from "../src/controllers/ebm-master-data.controller"
 import { selectImportItems } from "../src/services/vsdc-api.service"
 
 beforeEach(() => {
@@ -138,8 +139,8 @@ describe("syncRraImports — request-date validation (§67)", () => {
     const r = await syncRraImports(1, { requestDate: "2026-08-01" })
     expect(r.ok).toBe(true)
     expect(r.cached).toBe(1)
-    expect(importUpserts[0].where.organizationId_taskCd_dclDe_itemSeq).toEqual({
-      organizationId: 1, taskCd: "TASK1", dclDe: "20260815", itemSeq: 1,
+    expect(importUpserts[0].where.organizationId_taskCd_dclDe_itemSeq_copyNo).toEqual({
+      organizationId: 1, taskCd: "TASK1", dclDe: "20260815", itemSeq: 1, copyNo: 0,
     })
     // Supplier name must be persisted for the imports table column.
     expect(importUpserts[0].create.spplrNm).toBe("OVERSEAS CO")
@@ -176,6 +177,75 @@ describe("syncRraImports — request-date validation (§67)", () => {
     expect(cursorUpserts.at(-1).touch?.data?.lastResult).toMatch(/OK: 0/)
     expect(cursorUpserts.at(-1).touch?.data?.lastReqDt).toBeUndefined()
     expect(cursorUpserts.some((c) => c.create?.lastReqDt)).toBe(false)
+  })
+})
+
+describe("syncRraImports — marking what each pull delivered", () => {
+  it("stamps new lines and re-sent lines with the same pull time, keeping the first pulledAt", async () => {
+    importUpserts.length = 0
+    const r = await syncRraImports(1)
+    expect(r.ok).toBe(true)
+    expect(importUpserts.length).toBeGreaterThan(0)
+    const at = importUpserts[0].create.lastPulledAt
+    expect(at).toBeInstanceOf(Date)
+    for (const u of importUpserts) {
+      expect(u.create.lastPulledAt).toBe(at)
+      expect(u.create.pulledAt).toBe(at)
+      expect(u.update.lastPulledAt).toBe(at)
+      expect(u.update).not.toHaveProperty("pulledAt")
+    }
+  })
+})
+
+describe("syncRraImports — lines RRA still shows as waiting", () => {
+  const latestCopy = async (status: string, copyNo = 0) => {
+    const { prisma } = await import("../src/lib/prisma")
+    vi.mocked(prisma.rraImportItem.findFirst).mockResolvedValueOnce({ status, copyNo } as any)
+  }
+
+  it.each(["APPROVED", "REJECTED"])("adds a new pending copy when a %s line comes back waiting", async (status) => {
+    importUpserts.length = 0
+    await latestCopy(status)
+    const r = await syncRraImports(1)
+    expect(r.reopened).toBe(1)
+    expect(r.created).toBe(0)
+    const u = importUpserts[0]
+    expect(u.where.organizationId_taskCd_dclDe_itemSeq_copyNo.copyNo).toBe(1)
+    expect(u.create.copyNo).toBe(1)
+    expect(u.create.status).toBe("PENDING")
+  })
+
+  it("numbers each reopened copy after the latest one", async () => {
+    importUpserts.length = 0
+    await latestCopy("APPROVED", 2)
+    await syncRraImports(1)
+    expect(importUpserts[0].create.copyNo).toBe(3)
+  })
+
+  it("does not add another copy while one is still pending", async () => {
+    importUpserts.length = 0
+    await latestCopy("PENDING", 1)
+    const r = await syncRraImports(1)
+    expect(r.reopened).toBe(0)
+    expect(importUpserts[0].where.organizationId_taskCd_dclDe_itemSeq_copyNo.copyNo).toBe(1)
+  })
+})
+
+describe("importPullState", () => {
+  const latest = new Date("2026-11-05T08:29:15.000Z")
+  const earlier = new Date("2026-11-02T14:31:03.000Z")
+
+  it("marks a line first created by the latest pull as NEW", () => {
+    expect(importPullState({ pulledAt: latest, lastPulledAt: new Date(latest), copyNo: 0 }, latest)).toBe("NEW")
+  })
+  it("marks an older line delivered again by the latest pull as RESENT", () => {
+    expect(importPullState({ pulledAt: earlier, lastPulledAt: latest, copyNo: 0 }, latest)).toBe("RESENT")
+    expect(importPullState({ pulledAt: latest, lastPulledAt: latest, copyNo: 1 }, latest)).toBe("RESENT")
+  })
+  it("leaves lines from older pulls, or never stamped, unmarked", () => {
+    expect(importPullState({ pulledAt: earlier, lastPulledAt: earlier, copyNo: 0 }, latest)).toBeNull()
+    expect(importPullState({ pulledAt: earlier, lastPulledAt: null, copyNo: 0 }, latest)).toBeNull()
+    expect(importPullState({ pulledAt: earlier, lastPulledAt: null, copyNo: 0 }, null)).toBeNull()
   })
 })
 

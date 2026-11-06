@@ -1,4 +1,5 @@
 import type { Request, Response } from "express"
+import { canManageItemDiscounts } from "../services/discount.service"
 import { prisma } from "../lib/prisma"
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 import { buildBranchFilter, getBranchIdForOperation } from "../middleware/branchAuth.middleware"
@@ -20,6 +21,28 @@ import { getOrderBy } from "../utils/sorting"
 import { getTaxationTypes, isCachedTaxCode, isCachedCountryCode } from "../services/rra-code.service"
 
 /** Non-VAT taxpayers only deal in tax code D items; list endpoints hide the rest. */
+/**
+ * Items among these that have a real sale. Training receipts, proformas and cancelled sales don't
+ * count, because they never reached RRA as a sale of the item.
+ */
+async function findSoldProductIds(organizationId: number, productIds: number[]): Promise<Set<number>> {
+  if (productIds.length === 0) return new Set()
+  const lines = await prisma.saleItem.findMany({
+    where: {
+      productId: { in: productIds },
+      sale: {
+        organizationId,
+        isProforma: false,
+        status: { not: 'CANCELLED' },
+        OR: [{ rcptLabel: null }, { rcptLabel: { notIn: ['TS', 'TR', 'PS'] } }],
+      },
+    },
+    select: { productId: true },
+    distinct: ['productId'],
+  })
+  return new Set(lines.flatMap((line) => (line.productId == null ? [] : [line.productId])))
+}
+
 async function nonVatProductFilter(organizationId: number): Promise<{ taxCode?: 'D' }> {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
@@ -232,8 +255,13 @@ export const getProducts = async (req: BranchAuthRequest, res: Response) => {
       },
     })
 
+    const soldPendingIds = await findSoldProductIds(
+      organizationId,
+      productsWithStock.filter((p: any) => p.taxCodeReviewPending).map((p: any) => p.id),
+    )
+
     res.json(success({
-      data: productsWithStock,
+      data: productsWithStock.map((p: any) => ({ ...p, hasFiscalSales: soldPendingIds.has(p.id) })),
       lowStockProducts,
       expiredProducts,
       expiringProducts,
@@ -263,7 +291,8 @@ export const getProductById = async (req: BranchAuthRequest, res: Response) => {
       return res.status(404).json(apiError("Product not found"))
     }
 
-    res.json(success(product))
+    const sold = product.taxCodeReviewPending ? await findSoldProductIds(organizationId, [product.id]) : new Set<number>()
+    res.json(success({ ...product, hasFiscalSales: sold.has(product.id) }))
   } catch (error: any) {
     console.error("[Get Product Error]:", error)
     res.status(500).json(apiError("Failed to get product"))
@@ -273,10 +302,14 @@ export const getProductById = async (req: BranchAuthRequest, res: Response) => {
 export const createProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId)
-    const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode, itemType, pkgUnitCd, qtyUnitCd, packagingQty, itemClsCd, itemStandardName, origin, useInsurance, additionalInfo, l1SalePrice, l2SalePrice, l3SalePrice, l4SalePrice, l5SalePrice, bomComponents } = req.body
+    const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, taxCategory, taxCode, measurementUnit, barcode, itemType, pkgUnitCd, qtyUnitCd, packagingQty, itemClsCd, itemStandardName, origin, useInsurance, additionalInfo, l1SalePrice, l2SalePrice, l3SalePrice, l4SalePrice, l5SalePrice, discountPercent, bomComponents } = req.body
     const userId = parseInt((req as any).user?.userId as string)
     const branchId = getBranchIdForOperation(req)
     const isService = itemType === 'SERVICE'
+
+    if (Number(discountPercent ?? 0) > 0 && !canManageItemDiscounts((req as any).organizationRole ?? (req as any).user?.role)) {
+      return res.status(403).json(apiError('Only an admin or branch manager can set a discount on an item'))
+    }
 
     const bomInputs: Array<{ componentProductId: number; quantity: number; unit: string }> = []
     if (bomComponents !== undefined) {
@@ -442,6 +475,7 @@ export const createProduct = async (req: BranchAuthRequest, res: Response) => {
           l3SalePrice: l3SalePrice != null && l3SalePrice !== '' ? l3SalePrice : null,
           l4SalePrice: l4SalePrice != null && l4SalePrice !== '' ? l4SalePrice : null,
           l5SalePrice: l5SalePrice != null && l5SalePrice !== '' ? l5SalePrice : null,
+          discountPercent: discountPercent ?? 0,
         },
       })
 
@@ -807,7 +841,7 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
-    const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, barcode, taxCode, measurementUnit, itemType, pkgUnitCd, qtyUnitCd, packagingQty, itemClsCd, itemStandardName, origin, useInsurance, additionalInfo, l1SalePrice, l2SalePrice, l3SalePrice, l4SalePrice, l5SalePrice } = req.body
+    const { name, batchNumber, quantity, unitPrice, purchasePrice, imageUrl, expiryDate, category, description, minStock, sku, barcode, taxCode, measurementUnit, itemType, pkgUnitCd, qtyUnitCd, packagingQty, itemClsCd, itemStandardName, origin, useInsurance, additionalInfo, l1SalePrice, l2SalePrice, l3SalePrice, l4SalePrice, l5SalePrice, discountPercent } = req.body
     const userId = parseInt((req as any).user?.userId as string)
 
     const existingProduct = await prisma.product.findFirst({
@@ -816,6 +850,14 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
 
     if (!existingProduct) {
       return res.status(404).json(apiError("Product not found"))
+    }
+
+    if (
+      discountPercent !== undefined &&
+      Number(discountPercent) !== Number(existingProduct.discountPercent) &&
+      !canManageItemDiscounts((req as any).organizationRole ?? (req as any).user?.role)
+    ) {
+      return res.status(403).json(apiError('Only an admin or branch manager can change the discount on an item'))
     }
 
     if (expiryDate && new Date(expiryDate) < new Date()) {
@@ -878,6 +920,13 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
           ));
         }
         if (existingProduct.taxCodeReviewPending) {
+          // RRA already holds sales of this item under its current tax type.
+          const sold = await findSoldProductIds(organizationId, [existingProduct.id]);
+          if (sold.size > 0) {
+            return res.status(422).json(apiError(
+              'This item has already been sold since it was moved to VAT, so its tax category can no longer be changed.'
+            ));
+          }
           data.taxCodeReviewPending = false;
           data.taxCodeReviewedAt = new Date();
         }
@@ -922,6 +971,7 @@ export const updateProduct = async (req: BranchAuthRequest, res: Response) => {
     if (l3SalePrice !== undefined) data.l3SalePrice = l3SalePrice === '' ? null : l3SalePrice
     if (l4SalePrice !== undefined) data.l4SalePrice = l4SalePrice === '' ? null : l4SalePrice
     if (l5SalePrice !== undefined) data.l5SalePrice = l5SalePrice === '' ? null : l5SalePrice
+    if (discountPercent !== undefined) data.discountPercent = discountPercent
 
     // Auto-propagate edits back to RRA. syncProductToRra() skips an item whose ebmSyncStatus is
     // already SYNCED, so a rename (or any other field that appears in the /items/saveItems payload)

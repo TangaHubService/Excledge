@@ -30,6 +30,7 @@ import { issueInvoicePdfBlob } from '../../../lib/invoice-pdf'
 import { useVsdcOnlineStatus } from '../../../hooks/useVsdcOnlineStatus'
 import { useBranch } from '../../../context/BranchContext'
 import { useOrganizationSettings } from '../../../context/OrganizationSettingsContext'
+import { useAuth } from '../../../context/AuthContext'
 import { cn } from '../../../lib/utils'
 import { PACKAGING_UNIT_LABELS } from '../../../types/ebm'
 import { useRraCodeCatalog } from '../../../lib/useRraCodeCatalog'
@@ -43,6 +44,7 @@ interface Product {
   stock: number
   quantity: number
   unitPrice?: number
+  discountPercent?: number
   batchNumber: string
   expiryDate: string
   imageUrl?: string
@@ -72,6 +74,25 @@ export interface CartItem {
   unitPrice: number
 }
 
+const DISCOUNT_LIMIT_EXEMPT_ROLES = ['SYSTEM_OWNER', 'ADMIN', 'BRANCH_MANAGER']
+
+function listUnitPrice(item: CartItem): number {
+  return Number(item.product.unitPrice ?? item.product.price ?? item.unitPrice)
+}
+
+/** The price a product starts at in the cart: its list price less any saved item discount. */
+function discountedPrice(product: Product): number {
+  return round2(Number(product.unitPrice ?? product.price ?? 0) * (1 - Number(product.discountPercent ?? 0) / 100))
+}
+
+/** The line's discount as RRA reports it (dcRt): the gap between list and charged price. */
+function lineDiscountPercent(item: CartItem): number {
+  const list = listUnitPrice(item)
+  const charged = Number(item.unitPrice)
+  if (!(list > 0) || !(charged < list)) return 0
+  return Math.round(((list - charged) / list) * 10000) / 100
+}
+
 function productsFromInventoryResponse(res: unknown): Product[] {
   // Backend Decimal(15,3) quantities serialize as strings — normalize to
   // numbers once here so every comparison and cart computation below is safe.
@@ -83,6 +104,7 @@ function productsFromInventoryResponse(res: unknown): Product[] {
       stock: Number(p.stock ?? p.quantity ?? 0),
       quantity: Number(p.quantity ?? 0),
       unitPrice: p.unitPrice != null ? Number(p.unitPrice) : undefined,
+      discountPercent: Number(p.discountPercent ?? 0),
     } as Product
   })
 }
@@ -187,8 +209,13 @@ const ProductCard = memo(({
           </p>
         )}
         <p className="num text-sm font-semibold text-foreground">
-          {(product.unitPrice ?? product.price ?? 0).toLocaleString()} <span className="text-[11px] font-normal text-muted-foreground">RWF</span>
+          {discountedPrice(product).toLocaleString()} <span className="text-[11px] font-normal text-muted-foreground">RWF</span>
         </p>
+        {Number(product.discountPercent) > 0 && (
+          <p className="num text-[11px] text-muted-foreground">
+            <s>{(product.unitPrice ?? product.price ?? 0).toLocaleString()}</s> -{Number(product.discountPercent)}%
+          </p>
+        )}
       </button>
     </div>
   )
@@ -197,12 +224,13 @@ const ProductCard = memo(({
 // ── CartItemRow ───────────────────────────────────────────────────────────────
 
 const CartItemRow = memo(({
-  item, onRemove, onUpdateQuantity, onUpdatePrice, priceEditable = true, vatRegistered = true,
+  item, onRemove, onUpdateQuantity, onUpdatePrice, onUpdateDiscount, priceEditable = true, vatRegistered = true,
 }: {
   item: CartItem
   onRemove: (id: string) => void
   onUpdateQuantity: (id: string, qty: number) => void
   onUpdatePrice: (id: string, price: number | string) => void
+  onUpdateDiscount: (id: string, percent: number) => void
   priceEditable?: boolean
   vatRegistered?: boolean
 }) => {
@@ -218,6 +246,16 @@ const CartItemRow = memo(({
   }
 
   const lineTotal = (item.unitPrice * item.quantity).toLocaleString()
+  const listPrice = listUnitPrice(item)
+  const discountPercent = lineDiscountPercent(item)
+  const [discountDraft, setDiscountDraft] = useState<string | null>(null)
+
+  const commitDiscount = () => {
+    if (discountDraft === null) return
+    const n = discountDraft.trim() === '' ? 0 : Number(discountDraft)
+    if (Number.isFinite(n) && n >= 0 && n < 100) onUpdateDiscount(item.product.id, n)
+    setDiscountDraft(null)
+  }
   const effectiveTaxCode = vatRegistered ? (item.product.taxCode || '—') : 'D'
 
   return (
@@ -248,6 +286,31 @@ const CartItemRow = memo(({
           </span>
           <span className="num text-xs text-muted-foreground">{item.unitPrice.toLocaleString()} each</span>
         </div>
+        {priceEditable && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <label className="flex items-center gap-1 whitespace-nowrap text-[11px] text-muted-foreground">
+              <input
+                type="number"
+                min={0}
+                max={99.99}
+                step="any"
+                value={discountDraft ?? (discountPercent > 0 ? discountPercent : '')}
+                onChange={e => setDiscountDraft(e.target.value)}
+                onBlur={commitDiscount}
+                onKeyDown={e => e.key === 'Enter' && commitDiscount()}
+                placeholder="0"
+                aria-label={`Discount percent for ${item.product.name}`}
+                className="num w-14 rounded-md border border-input bg-background px-1 py-0.5 text-right text-[11px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
+              />
+              % off
+            </label>
+            {discountPercent > 0 && (
+              <span className="num whitespace-nowrap text-[11px] text-muted-foreground">
+                was <s>{listPrice.toLocaleString()}</s>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Qty Controls */}
@@ -470,6 +533,8 @@ export default function SalesForm() {
   const navigate = useNavigate()
   const { selectedBranchId } = useBranch()
   const { settings: orgSettings } = useOrganizationSettings()
+  const { user } = useAuth()
+  const [cartDiscountInput, setCartDiscountInput] = useState('')
   const { catalog } = useRraCodeCatalog()
   const { trainingMode } = useVsdcOnlineStatus()
 
@@ -686,7 +751,7 @@ export default function SalesForm() {
         if (!allowNegativeStock && nq > product.quantity) { toast.error(t('pos.lowStockWarning', { count: product.quantity })); return prev }
         return prev.map(i => i.product.id === product.id ? { ...i, quantity: nq } : i)
       }
-      return [...prev, { product, quantity: 1, unitPrice: product.unitPrice ?? product.price ?? 0 }]
+      return [...prev, { product, quantity: 1, unitPrice: discountedPrice(product) }]
     })
     toast.success(t('messages.productAdded'))
   }, [t, orgSettings.featureFlags.allowNegativeStock, trainingMode])
@@ -712,6 +777,24 @@ export default function SalesForm() {
     setCart(prev => prev.map(i => i.product.id === id ? { ...i, unitPrice: price as number } : i))
   }, [orgSettings.featureFlags.allowManualDiscounts])
 
+  const updateDiscount = useCallback((id: string, percent: number) => {
+    if (!orgSettings.featureFlags.allowManualDiscounts) return
+    setCart(prev => prev.map(i => i.product.id === id
+      ? { ...i, unitPrice: round2(listUnitPrice(i) * (1 - percent / 100)) }
+      : i))
+  }, [orgSettings.featureFlags.allowManualDiscounts])
+
+  // RRA only takes discounts per item, so a cart-wide discount is the same rate on every line.
+  const applyCartDiscount = useCallback(() => {
+    const percent = cartDiscountInput.trim() === '' ? 0 : Number(cartDiscountInput)
+    if (!Number.isFinite(percent) || percent < 0 || percent >= 100) {
+      toast.error('Enter a discount from 0 to 99.99%')
+      return
+    }
+    setCart(prev => prev.map(i => ({ ...i, unitPrice: round2(listUnitPrice(i) * (1 - percent / 100)) })))
+    setCartDiscountInput('')
+  }, [cartDiscountInput])
+
   const handleCustomerAdded = useCallback((c: Customer) => {
     setCustomers(prev => [...prev, c])
     setSelectedCustomer(c.id)
@@ -727,6 +810,17 @@ export default function SalesForm() {
   }, [])
 
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0), [cart])
+  const totalDiscount = useMemo(() => round2(cart.reduce(
+    (s, i) => s + Math.max(0, listUnitPrice(i) - Number(i.unitPrice)) * i.quantity,
+    0,
+  )), [cart])
+  // The server enforces this too; checking here tells the seller before they take payment.
+  const discountLimitError = useMemo(() => {
+    const limit = orgSettings.preferences.maxDiscountPercent
+    if (limit == null || DISCOUNT_LIMIT_EXEMPT_ROLES.includes(user?.role ?? '')) return null
+    const over = cart.find(i => lineDiscountPercent(i) > Math.max(limit, Number(i.product.discountPercent ?? 0)) + 0.01)
+    return over ? `The discount on "${over.product.name}" is above your ${limit}% limit. Ask a manager to complete this sale.` : null
+  }, [cart, orgSettings.preferences.maxDiscountPercent, user?.role])
   // The business's VAT registration decides the treatment: when the taxpayer is not VAT registered
   // every line is tax code D (0%).
   const vatRegistered = orgSettings.vatRegistered
@@ -818,6 +912,7 @@ export default function SalesForm() {
   const handleProcessPayment = useCallback(async (
     entries: Array<{ id: string; method: string; amount: number; reference?: string }>,
   ) => {
+    if (discountLimitError) { toast.error(discountLimitError); return }
     try {
       setIsSubmitting(true)
       const totalPaid = entries.reduce((s, p) => s + p.amount, 0)
@@ -933,7 +1028,7 @@ export default function SalesForm() {
     } finally {
       setIsSubmitting(false)
     }
-  }, [cart, selectedCustomer, total, t, isOnline, selectedBranchId, pollFiscalization, trainingMode])
+  }, [cart, selectedCustomer, total, t, isOnline, selectedBranchId, pollFiscalization, trainingMode, discountLimitError])
 
   // A proforma is a quote, not a sale: no payment is collected, no stock moves, and no customer
   // debt is booked (see createSale on the backend — isProforma skips stock deduction and debt
@@ -941,6 +1036,7 @@ export default function SalesForm() {
   const handleCreateProforma = useCallback(async () => {
     if (cart.length === 0) { toast.error(t('pos.noItemsInCart')); return }
     if (!selectedCustomer) { toast.error(t('pos.selectCustomer')); return }
+    if (discountLimitError) { toast.error(discountLimitError); return }
 
     try {
       setIsSubmitting(true)
@@ -999,7 +1095,7 @@ export default function SalesForm() {
     } finally {
       setIsSubmitting(false)
     }
-  }, [cart, selectedCustomer, selectedCustomerObj, total, t, selectedBranchId])
+  }, [cart, selectedCustomer, selectedCustomerObj, total, t, selectedBranchId, discountLimitError])
 
   // ── Success modal actions ──────────────────────────────────────────────────
 
@@ -1414,6 +1510,7 @@ export default function SalesForm() {
                 onRemove={removeFromCart}
                 onUpdateQuantity={updateQuantity}
                 onUpdatePrice={updatePrice}
+                onUpdateDiscount={updateDiscount}
                 priceEditable={orgSettings.featureFlags.allowManualDiscounts}
                 vatRegistered={vatRegistered}
               />
@@ -1427,6 +1524,43 @@ export default function SalesForm() {
               <span>Subtotal</span>
               <span className="num font-medium text-foreground">{subtotal.toLocaleString()} RWF</span>
             </div>
+
+            {/* Discount */}
+            {totalDiscount > 0 && (
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Discount included</span>
+                <span className="num font-medium text-foreground">-{totalDiscount.toLocaleString()} RWF</span>
+              </div>
+            )}
+            {cart.length > 0 && orgSettings.featureFlags.allowManualDiscounts && (
+              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <label htmlFor="pos-cart-discount">Discount all items</label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    id="pos-cart-discount"
+                    type="number"
+                    min={0}
+                    max={99.99}
+                    step="any"
+                    value={cartDiscountInput}
+                    onChange={e => setCartDiscountInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && applyCartDiscount()}
+                    placeholder="%"
+                    className="num w-14 rounded-md border border-input bg-background px-1.5 py-0.5 text-right text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
+                  />
+                  <button
+                    type="button"
+                    onClick={applyCartDiscount}
+                    className="rounded-md border border-border px-2 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            )}
+            {discountLimitError && (
+              <p className="text-xs text-danger">{discountLimitError}</p>
+            )}
 
             {/* Tax */}
             <div className="flex items-center justify-between text-xs text-muted-foreground">

@@ -104,7 +104,7 @@ const FEATURE_FLAG_LABELS: Record<keyof IFeatureFlags, { label: string; descript
     },
     allowManualDiscounts: {
         label: 'Allow Manual Discounts',
-        description: 'Let sellers apply ad-hoc discounts at checkout without manager override.',
+        description: 'Let staff give per-item discounts at checkout. Discounts are shown on the receipt and sent to RRA.',
     },
     stockTransfersEnabled: {
         label: 'Stock Transfers',
@@ -1063,6 +1063,28 @@ export function OrganizationConfig() {
                                                 placeholder="Use per-product thresholds"
                                                 className="rounded-xl"
                                             />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Maximum Seller Discount (%)</Label>
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                max={100}
+                                                step="0.01"
+                                                value={settings.preferences.maxDiscountPercent ?? ''}
+                                                onChange={(e) =>
+                                                    updatePreference(
+                                                        'maxDiscountPercent',
+                                                        e.target.value === '' ? null : Number(e.target.value)
+                                                    )
+                                                }
+                                                disabled={!isAuthorized || isSavingSettings}
+                                                placeholder="No limit"
+                                                className="rounded-xl"
+                                            />
+                                            <p className="text-xs text-muted-foreground">
+                                                Applies per item. Admins and branch managers can go above it.
+                                            </p>
                                         </div>
                                     </div>
 

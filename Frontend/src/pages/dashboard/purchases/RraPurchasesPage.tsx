@@ -65,6 +65,11 @@ interface RraPurchase {
   status: "PENDING" | "CONFIRMED" | "REJECTED";
   prcOrdCd?: string | null;
   remark?: string | null;
+  confirmedAt?: string | null;
+  rraResultCd?: string | null;
+  rraResultMsg?: string | null;
+  rraResultDt?: string | null;
+  rawResponse?: { cfmDt?: string | null } | null;
   items: RraPurchaseItem[];
 }
 
@@ -116,6 +121,20 @@ const formatLastReqDt = (raw: string | null | undefined): string => {
     return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
   }
   return raw;
+};
+
+/** When the supplier issued the invoice, to the second; only the date if RRA gave no time. */
+const formatIssuedAt = (p: RraPurchase): string => {
+  const formatted = formatLastReqDt(p.rawResponse?.cfmDt);
+  return formatted || formatSalesDt(p.salesDt);
+};
+
+const formatApprovedAt = (raw: string | null | undefined): string => {
+  if (!raw) return "—";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 };
 
 function unwrapApiData(res: unknown): any {
@@ -409,7 +428,7 @@ export function RraPurchasesPage() {
                   <TableRow key={p.id} className="cursor-pointer" onClick={() => openDetail(p)}>
                     <TableCell className="font-medium">{p.spplrNm ?? p.spplrTin}</TableCell>
                     <TableCell className="font-mono text-xs">{String(p.spplrInvcNo)}</TableCell>
-                    <TableCell className="text-muted-foreground">{formatSalesDt(p.salesDt)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{formatIssuedAt(p)}</TableCell>
                     <TableCell className="text-right tabular-nums">{p.totItemCnt ?? p.items.length}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(Number(p.totAmt))}</TableCell>
                     <TableCell>
@@ -418,6 +437,9 @@ export function RraPurchasesPage() {
                         : p.status === "REJECTED"
                           ? <StatusBadge status="DECLINED" label="Rejected" />
                           : <StatusBadge status="PENDING" label="Pending" />}
+                      {p.status === "CONFIRMED" && p.confirmedAt && (
+                        <div className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{formatApprovedAt(p.confirmedAt)}</div>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -447,9 +469,25 @@ export function RraPurchasesPage() {
                 <div><span className="text-muted-foreground">Supplier</span><div>{selected.spplrNm ?? "—"}</div></div>
                 <div><span className="text-muted-foreground">Supplier TIN</span><div className="font-mono">{selected.spplrTin}</div></div>
                 <div><span className="text-muted-foreground">Invoice no.</span><div className="font-mono">{String(selected.spplrInvcNo)}</div></div>
-                <div><span className="text-muted-foreground">Date</span><div>{selected.salesDt ?? "—"}</div></div>
+                <div><span className="text-muted-foreground">Issued by supplier</span><div>{formatIssuedAt(selected)}</div></div>
                 <div><span className="text-muted-foreground">Payment</span><div>{PMT_LABEL[selected.pmtTyCd ?? ""] ?? selected.pmtTyCd ?? "—"}</div></div>
                 <div><span className="text-muted-foreground">Status</span><div>{selected.status}</div></div>
+                {selected.status === "CONFIRMED" && (
+                  <div><span className="text-muted-foreground">Approved at</span><div>{formatApprovedAt(selected.confirmedAt)}</div></div>
+                )}
+                {selected.status !== "PENDING" && (
+                  <div>
+                    <span className="text-muted-foreground">RRA&apos;s answer</span>
+                    <div>
+                      {selected.rraResultCd
+                        ? `${selected.rraResultCd} ${selected.rraResultMsg ?? ""}`.trim()
+                        : "Not recorded"}
+                    </div>
+                    {selected.rraResultDt && (
+                      <div className="text-xs text-muted-foreground">RRA time: {formatLastReqDt(selected.rraResultDt)}</div>
+                    )}
+                  </div>
+                )}
                 <div><span className="text-muted-foreground">Purchase code</span><div className="font-mono">{selected.prcOrdCd?.trim() || "—"}</div></div>
                 {selected.remark && (
                   <div className="col-span-2">

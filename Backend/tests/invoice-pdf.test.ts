@@ -242,3 +242,35 @@ describe("no center stamp (designation lives in the header title only)", () => {
     expect(drawn.filter((t) => t === NOT_FISCALIZED_TITLE)).toHaveLength(1)
   })
 })
+
+describe("discounted line in the Total Price column (RRA A4 sample)", () => {
+  function discountedFixture(sign = 1): RenderInvoicePayload {
+    const invoice = normalOriginalFixture()
+    Object.assign(invoice.items[0], {
+      quantity: 2 * sign,
+      unitPrice: 2000,
+      discountPct: 10,
+      discountAmt: 400 * sign,
+      subtotal: 4000 * sign,
+      net: 3600 * sign,
+      total: 3600 * sign,
+    })
+    return invoice
+  }
+
+  it.each(["A4", "A5"] as const)("%s prints the value before discount, then the amount after it", async (format) => {
+    const drawn = await captureDrawnText(() => generateEbmInvoicePdf(discountedFixture(), format))
+    expect(drawn).toContain("4,000.00\n3,600.00")
+  })
+
+  it("a refund shows both amounts negative", async () => {
+    const drawn = await captureDrawnText(() => generateEbmInvoicePdf(discountedFixture(-1), "A4"))
+    expect(drawn).toContain("-4,000.00\n-3,600.00")
+  })
+
+  it("a line without a discount still prints one amount", async () => {
+    const invoice = normalOriginalFixture()
+    const drawn = await captureDrawnText(() => generateEbmInvoicePdf(invoice, "A4"))
+    expect(drawn.some((text) => text.includes("\n") && /^[\d,.-]+\n[\d,.-]+$/.test(text))).toBe(false)
+  })
+})

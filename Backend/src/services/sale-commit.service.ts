@@ -18,6 +18,7 @@ import { selectBatchesForSale, updateBatchQuantity } from "./batch.service"
 import { getAverageCost } from "./cost-price.service"
 import { TaxService } from "./tax.service"
 import { getOrganizationSettings } from "./organization-settings.service"
+import { findDiscountPolicyViolation, resolveLineDiscount } from "./discount.service"
 import {
   type ReceiptMode,
   ReceiptModeMismatchError,
@@ -180,7 +181,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
   const catalogTypes = catalogIds.length > 0
     ? await prisma.product.findMany({
         where: { id: { in: catalogIds }, organizationId },
-        select: { id: true, itemType: true, itemCd: true, itemClsCd: true, name: true },
+        select: { id: true, itemType: true, itemCd: true, itemClsCd: true, name: true, unitPrice: true, discountPercent: true },
       })
     : []
   const catalogTypeMap = new Map(catalogTypes.map((p) => [p.id, p.itemType]))
@@ -247,20 +248,29 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
 
   const productMap = new Map(products.map((p) => [p.id, p]))
 
-  // When the org disallows manual discounts, sellers may not submit a unit price
-  // below the catalog price.
-  if (!orgSettings.featureFlags.allowManualDiscounts) {
-    for (const item of productItems) {
-      const product = productMap.get(parseInt(String(item.productId)))
-      if (!product) continue
-      const catalogPrice = Number(product.unitPrice)
-      if (Number(item.unitPrice) < catalogPrice - 0.01) {
-        throw new CommitSaleError(
-          400,
-          `Manual price overrides are disabled for this organization. "${product.name}" must be sold at ${catalogPrice}.`,
-        )
-      }
+  // The server decides each line's discount from the catalog price, then applies the org's rules.
+  const lineDiscounts = items.map((item) => {
+    const meta = catalogMetaMap.get(parseInt(String(item.productId)))
+    return {
+      ...resolveLineDiscount({
+        quantity: Number(item.quantity),
+        chargedUnit: Number(item.unitPrice),
+        claimedDiscount: item.discount,
+        catalogUnit: meta ? Number(meta.unitPrice) : null,
+      }),
+      name: meta?.name ?? item.serviceName ?? "Item",
+      approvedRate: meta ? Number(meta.discountPercent) : 0,
     }
+  })
+  const discountViolation = findDiscountPolicyViolation({
+    lines: lineDiscounts,
+    chargedUnits: items.map((item) => Number(item.unitPrice)),
+    allowManualDiscounts: orgSettings.featureFlags.allowManualDiscounts,
+    maxDiscountPercent: orgSettings.preferences.maxDiscountPercent,
+    role: req?.organizationRole ?? req?.user?.role,
+  })
+  if (discountViolation) {
+    throw new CommitSaleError(400, discountViolation)
   }
 
   // Automatically determine paymentType if multiple payment methods are used
@@ -409,9 +419,7 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         const isService = item.itemType === "SERVICE"
         const quantity = item.quantity
         const chargedUnit = Number(item.unitPrice)
-        const dcAmt = Math.max(0, Number(item.discount ?? 0))
-        const unitPrice = quantity > 0 ? chargedUnit + dcAmt / quantity : chargedUnit
-        const dcRate = unitPrice > 0 && quantity > 0 ? Math.round(((dcAmt / quantity) / unitPrice) * 10000) / 100 : 0
+        const { listUnit: unitPrice, dcAmt, dcRate } = lineDiscounts[i]
         const lineTotal = chargedUnit * quantity
         const itemTax = taxSummary.items[i]
 
@@ -715,6 +723,31 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
       ...(proformaSourceId != null ? { convertedFromProformaId: proformaSourceId } : {}),
     },
   })
+
+  const discountedLines = lineDiscounts.filter((line) => line.dcAmt > 0)
+  if (discountedLines.length > 0) {
+    try {
+      await auditLogger.sales(req, {
+        type: "DISCOUNT_APPLIED",
+        description: `Discount of ${round2(discountedLines.reduce((sum, line) => sum + line.dcAmt, 0))} given on invoice #${sale.invoiceNumber || saleNumber}`,
+        entityType: "Sale",
+        entityId: sale.id,
+        metadata: {
+          rcptLabel: (sale as any).rcptLabel ?? null,
+          invoiceNumber: sale.invoiceNumber,
+          lines: discountedLines.map((line) => ({
+            item: line.name,
+            listUnit: line.listUnit,
+            dcRate: line.dcRate,
+            dcAmt: line.dcAmt,
+          })),
+        },
+      })
+    } catch (error) {
+      // The sale is already committed and fiscalized; a failed audit entry must not fail it.
+      console.error("Failed to log applied discount:", error)
+    }
+  }
 
   // Thin Accounting integration — enqueue only; Accounting owns journal posting.
   // Training and proforma sales are never posted to the books.

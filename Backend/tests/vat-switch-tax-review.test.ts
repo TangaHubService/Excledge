@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Items moved D → B by the VAT switch may change their tax type only once.
 
-const existing = vi.hoisted(() => ({ product: null as any }))
+const existing = vi.hoisted(() => ({ product: null as any, soldLines: [] as Array<{ productId: number }> }))
 const productUpdate = vi.fn(async (args: any) => ({ ...existing.product, ...args.data }))
 
 vi.mock("../src/lib/prisma", () => ({
@@ -12,6 +12,7 @@ vi.mock("../src/lib/prisma", () => ({
       update: (...a: any[]) => (productUpdate as any)(...a),
     },
     organization: { findUnique: vi.fn(async () => ({ vatRegistered: true })) },
+    saleItem: { findMany: vi.fn(async () => existing.soldLines) },
   },
 }))
 vi.mock("../src/services/rra-code.service", () => ({
@@ -47,6 +48,15 @@ describe("tax type review after VAT registration", () => {
     expect(data.taxCode).toBe("A")
     expect(data.taxCodeReviewPending).toBe(false)
     expect(data.taxCodeReviewedAt).toBeInstanceOf(Date)
+  })
+
+  it("refuses the change once a converted item has been sold", async () => {
+    existing.product = { ...base, taxCode: "B", taxCodeReviewPending: true, taxCodeReviewedAt: null }
+    existing.soldLines = [{ productId: existing.product.id ?? 1 }]
+    const res = await run({ taxCode: "A" })
+    existing.soldLines = []
+    expect(res.statusCode).toBe(422)
+    expect(productUpdate).not.toHaveBeenCalled()
   })
 
   it("does not spend the change when the same code is resent", async () => {

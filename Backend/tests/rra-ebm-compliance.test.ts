@@ -673,13 +673,13 @@ describe('buildRraSendReceiptPayload — submission guards', () => {
     expect(payload.receipt.adrs.length).toBeLessThanOrEqual(200);
   });
 
-  it('sends the seller name as the receipt topMsg, both messages within CHAR 20', () => {
+  it('sends the full seller header as the receipt topMsg, btmMsg within CHAR 20', () => {
     const full = buildRraSendReceiptPayload(
       makeSale(),
       { TIN: '100000000', name: 'Seller', address: 'Kigali', phone: '+250788000000' },
       '01',
     ) as any;
-    expect(full.receipt.topMsg).toBe('Seller');
+    expect(full.receipt.topMsg).toBe('Seller\nKigali\nTEL: +250788000000\nTIN: 100000000');
     expect(full.receipt.btmMsg).toBe('THANK YOU');
     expect(full.receipt.btmMsg.length).toBeLessThanOrEqual(20);
     const bare = buildRraSendReceiptPayload(
@@ -807,19 +807,39 @@ describe('VSDC buyer identity mapping — official receipt structure', () => {
     expect(toVsdcCustTinMobile(null)).toBeNull();
   });
 
-  it('topMsg is the seller name clamped to CHAR 20', () => {
+  it('topMsg puts name, address, phone, email and TIN on separate lines', () => {
     const payload = buildRraSendReceiptPayload(
       makeBuyerSale({ TIN: '100000001', phone: '', customerType: 'INDIVIDUAL' }),
-      { TIN: '999945560', name: 'Exceledge demo pharmacy', address: 'KN 100 ST', phone: '0788888888' },
+      {
+        TIN: '999945560',
+        name: 'Exceledge Demo Pharmacy',
+        address: 'KK 100 ST',
+        phone: '+250788000000',
+        email: 'info@example.com',
+      },
       '01',
     ) as any;
-    expect(receiptOf(payload).topMsg).toBe('Exceledge demo pharm');
-    const long = buildRraSendReceiptPayload(
+    expect(receiptOf(payload).topMsg).toBe(
+      'Exceledge Demo Pharmacy\nKK 100 ST\nTEL: +250788000000\nEMAIL: info@example.com\nTIN: 999945560',
+    );
+  });
+
+  it('topMsg strips line breaks inside a field and keeps the TIN within the 300 limit', () => {
+    const payload = buildRraSendReceiptPayload(
       makeBuyerSale({ TIN: '100000001', phone: '', customerType: 'INDIVIDUAL' }),
-      { TIN: '999945560', name: 'N'.repeat(400), address: null },
+      {
+        TIN: '999945560',
+        name: 'N'.repeat(400),
+        address: 'A\nB'.repeat(200),
+        phone: '7'.repeat(400),
+        email: 'e'.repeat(400),
+      },
       '01',
     ) as any;
-    expect((receiptOf(long).topMsg as string).length).toBe(20);
+    const topMsg = receiptOf(payload).topMsg as string;
+    expect(topMsg.length).toBeLessThanOrEqual(300);
+    expect(topMsg.split('\n')).toHaveLength(5);
+    expect(topMsg.endsWith('\nTIN: 999945560')).toBe(true);
   });
 
   it('3. customer with both TIN and phone → TIN wins on top, both receipt slots filled, never swapped', () => {

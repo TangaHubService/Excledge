@@ -86,6 +86,7 @@ type Sale = {
     quantity: number;
     unitPrice: string;
     totalPrice: string;
+    dcRate?: string | number;
     taxAmount?: string;
     taxCode?: string;
     costPrice?: string;
@@ -307,7 +308,9 @@ export default function SalesPage() {
 
   const refundPreviewTotal = (refundDetail?.lines ?? []).reduce((s: number, l: any) => {
     const q = Number(refundLineQty[String(l.saleItemId)] ?? 0);
-    return s + (Number.isFinite(q) && q > 0 ? q * Number(l.unitPrice || 0) : 0);
+    // unitPrice is the list price: the customer gets back what they paid per unit after discount.
+    const paidUnit = Number(l.quantity) > 0 ? Number(l.totalPrice || 0) / Number(l.quantity) : Number(l.unitPrice || 0);
+    return s + (Number.isFinite(q) && q > 0 ? q * paidUnit : 0);
   }, 0);
 
   const handleRefundSubmit = async () => {
@@ -1009,7 +1012,12 @@ export default function SalesPage() {
                         <tr key={item.id} className="text-foreground">
                           <td className="px-4 py-3 font-medium">{item.serviceName || item.product?.name || 'Item'}</td>
                           <td className="num px-3 py-3 text-center">{item.quantity}</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{fmtCurrency(item.unitPrice)}</td>
+                          <td className="px-3 py-3 text-right tabular-nums">
+                            {fmtCurrency(item.unitPrice)}
+                            {Number(item.dcRate || 0) > 0 && (
+                              <span className="block text-xs text-muted-foreground">discount -{Number(item.dcRate)}%</span>
+                            )}
+                          </td>
                           <td className="px-3 py-3 text-right tabular-nums">{Number(item.taxAmount || 0) > 0 ? fmtCurrency(item.taxAmount || 0) : '—'}</td>
                           <td className="px-4 py-3 text-right font-semibold tabular-nums">{fmtCurrency(item.totalPrice)}</td>
                         </tr>

@@ -60,6 +60,8 @@ export interface IPreferences {
   dateFormat: string;
   defaultLandingPage: string;
   lowStockThresholdOverride: number | null;
+  /** Largest line discount (percent) a seller may give; null means no limit. Managers are exempt. */
+  maxDiscountPercent: number | null;
   /** Default country of origin for new products (ISO 3166-1 alpha-2, RRA-supported) */
   originCountryCode: string | null;
   /** Payment method codes the organization accepts at the point of sale. */
@@ -148,6 +150,7 @@ export const DEFAULT_SETTINGS: IOrganizationSettings = {
     dateFormat: "DD/MM/YYYY",
     defaultLandingPage: "dashboard",
     lowStockThresholdOverride: null,
+    maxDiscountPercent: null,
     originCountryCode: null,
     enabledPaymentMethods: ["CASH", "MOBILE_MONEY", "CARD", "BANK_TRANSFER", "DEBT"],
     shiftConfig: {

@@ -1097,6 +1097,58 @@ export async function selectImportInvc(
 }
 
 /** POST to a configurable status/sync endpoint for heartbeat checks. */
+const VSDC_PROBE_TIMEOUT_MS = 3_000;
+
+export interface VsdcProbeResult {
+  reachable: boolean;
+  /** VSDC's own result code when it answered. */
+  resultCd?: string;
+  error?: string;
+}
+
+/**
+ * Quick "is the VSDC answering?" check, made before a sale. Asks only for codes newer than now, so
+ * the reply is tiny. Any proper VSDC reply counts as reachable, even an error code: a VSDC that has
+ * lost its RRA connection can still issue receipts for 24 hours, and that decision is its own.
+ */
+export async function probeVsdc(
+  envelope: VsdcEnvelope,
+  timeoutMs: number = VSDC_PROBE_TIMEOUT_MS,
+): Promise<VsdcProbeResult> {
+  if (config.ebm.useMock) return { reachable: true, resultCd: '000' };
+
+  const base = (envelope.vsdcUrl ?? config.ebm.apiUrl ?? '').replace(/\/$/, '');
+  if (!base) return { reachable: false, error: 'EBM_API_URL is not configured' };
+
+  const statusPath = config.ebm.statusCheckPath || '/code/selectCodes';
+  const url = `${base}${statusPath.startsWith('/') ? statusPath : `/${statusPath}`}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    const auth = authHeader();
+    if (auth) headers.Authorization = auth;
+    if (RRA_SECURITY_KEY) headers['security_key'] = RRA_SECURITY_KEY;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ tin: envelope.tin, bhfId: envelope.bhfId, lastReqDt: toRraReqDt(new Date()) }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return { reachable: false, error: `HTTP ${res.status}` };
+
+    const json: unknown = JSON.parse(await res.text());
+    const resultCd = (json as { resultCd?: unknown } | null)?.resultCd;
+    if (typeof resultCd !== 'string') return { reachable: false, error: 'Reply was not from a VSDC' };
+    return { reachable: true, resultCd };
+  } catch (e: unknown) {
+    return { reachable: false, error: e instanceof Error ? e.message : 'VSDC probe failed' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function vsdcHeartbeat(
   envelope: VsdcEnvelope,
 ): Promise<VsdcApiResult> {

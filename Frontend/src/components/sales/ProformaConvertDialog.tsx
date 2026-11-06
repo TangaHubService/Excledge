@@ -21,6 +21,8 @@ type ProformaSale = {
     product?: { name?: string } | null;
     quantity: number;
     unitPrice: string | number;
+    /** Stored unitPrice is the list price; the quote's price is net of this. */
+    dcAmt?: string | number | null;
     itemType?: string | null;
     serviceName?: string | null;
   }>;
@@ -41,6 +43,7 @@ type PickerProduct = {
   name: string;
   unitPrice?: number;
   price?: number;
+  discountPercent?: number | string;
   quantity?: number;
   itemType?: 'PRODUCT' | 'SERVICE';
 };
@@ -80,7 +83,7 @@ export default function ProformaConvertDialog({
         productId: si.productId ?? undefined,
         name: si.serviceName || si.product?.name || 'Item',
         quantity: Number(si.quantity) || 1,
-        unitPrice: Number(si.unitPrice) || 0,
+        unitPrice: Math.max(0, (Number(si.unitPrice) || 0) - Math.abs(Number(si.dcAmt) || 0) / (Number(si.quantity) || 1)),
         itemType: (si.itemType as 'PRODUCT' | 'SERVICE') || 'PRODUCT',
         serviceName: si.serviceName || undefined,
       })),
@@ -136,7 +139,7 @@ export default function ProformaConvertDialog({
           productId: pid,
           name: p.name,
           quantity: 1,
-          unitPrice: Number(p.unitPrice ?? p.price ?? 0),
+          unitPrice: Math.round(Number(p.unitPrice ?? p.price ?? 0) * (100 - Number(p.discountPercent || 0))) / 100,
           itemType: (p.itemType as 'PRODUCT' | 'SERVICE') || 'PRODUCT',
         },
       ];

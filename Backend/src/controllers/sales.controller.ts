@@ -22,6 +22,7 @@ import { configuredMrc, resolveReportMrc } from "../utils/mrc"
 import { TaxService } from "../services/tax.service"
 import { round2 } from "../services/money.service"
 import { getOrganizationSettings } from "../services/organization-settings.service"
+import { chargedUnitFromSaleLine, findDiscountPolicyViolation, resolveLineDiscount } from "../services/discount.service"
 import { renderSalesInvoiceHtml, type RenderInvoicePayload } from "../services/invoice-render.service"
 import { kigaliWallParts } from "../services/invoice-format.service"
 import { generateEbmInvoicePdf, getEbmInvoiceFilename, type InvoicePdfFormat, bandTaxAmounts } from "../services/invoice-pdf.service"
@@ -165,6 +166,37 @@ customerId?: number
       select: { vatRegistered: true, isTaxExempt: true },
     })
 
+    // A proforma's discount lines follow the same rules as a sale's, and print on the quote.
+    const productIds = items.map((i) => Number(i.productId)).filter((id) => Number.isSafeInteger(id) && id > 0)
+    const [catalog, orgSettings] = await Promise.all([
+      prisma.product.findMany({
+        where: { id: { in: productIds }, organizationId },
+        select: { id: true, unitPrice: true, name: true, discountPercent: true },
+      }),
+      getOrganizationSettings(organizationId),
+    ])
+    const catalogById = new Map(catalog.map((p) => [p.id, p]))
+    const lineDiscounts = items.map((i) => {
+      const product = catalogById.get(Number(i.productId))
+      return {
+        ...resolveLineDiscount({
+          quantity: Number(i.quantity),
+          chargedUnit: Number(i.unitPrice),
+          catalogUnit: product ? Number(product.unitPrice) : null,
+        }),
+        name: product?.name ?? i.serviceName ?? 'Item',
+        approvedRate: product ? Number(product.discountPercent) : 0,
+      }
+    })
+    const discountViolation = findDiscountPolicyViolation({
+      lines: lineDiscounts,
+      chargedUnits: items.map((i) => Number(i.unitPrice)),
+      allowManualDiscounts: orgSettings.featureFlags.allowManualDiscounts,
+      maxDiscountPercent: orgSettings.preferences.maxDiscountPercent,
+      role: (req as any).organizationRole ?? req.user?.role,
+    })
+    if (discountViolation) return res.status(400).json(apiError(discountViolation))
+
     const itemsForTax = items.map((i) => ({
       productId: i.productId ? Number(i.productId) : undefined,
       quantity: Number(i.quantity),
@@ -186,11 +218,13 @@ customerId?: number
       const t = taxSummary.items[idx]
       const isService = (i.itemType || 'PRODUCT') === 'SERVICE'
       const quantity = Number(i.quantity)
-      const unitPrice = Number(i.unitPrice)
+      const { listUnit, dcAmt, dcRate } = lineDiscounts[idx]
       return {
         quantity,
-        unitPrice,
-        totalPrice: quantity * unitPrice,
+        unitPrice: listUnit,
+        totalPrice: quantity * Number(i.unitPrice),
+        dcRate,
+        dcAmt,
         costPrice: 0,
         profit: 0,
         taxRate: t?.taxRate ?? 0,
@@ -276,7 +310,8 @@ export const convertProforma = async (req: BranchAuthRequest, res: Response) => 
       : proforma.saleItems.map((si) => ({
           productId: si.productId ?? undefined,
           quantity: si.quantity,
-          unitPrice: Number(si.unitPrice),
+          // Stored unitPrice is the list price; the customer owes the quoted, discounted price.
+          unitPrice: chargedUnitFromSaleLine({ quantity: Number(si.quantity), unitPrice: si.unitPrice, dcAmt: si.dcAmt }),
           itemType: si.itemType,
           serviceName: si.serviceName ?? undefined,
           serviceDescription: si.serviceDescription ?? undefined,

@@ -615,6 +615,7 @@ model Product {
   l3SalePrice          Decimal?              @db.Decimal(15, 2) // RRA ItemSaveReq grpPrcL3 — price tier 3
   l4SalePrice          Decimal?              @db.Decimal(15, 2) // RRA ItemSaveReq grpPrcL4 — price tier 4
   l5SalePrice          Decimal?              @db.Decimal(15, 2) // RRA ItemSaveReq grpPrcL5 — price tier 5
+  discountPercent      Decimal               @default(0) @db.Decimal(5, 2) // Saved discount applied at the POS; reported per sale as dcRt/dcAmt, never synced to /items/saveItems
   batches              Batch[]
   inventoryLedgers     InventoryLedger[]
   organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1425,6 +1426,10 @@ model RraPurchase {
   rawResponse     Json?
   pulledAt        DateTime          @default(now())
   cisInvcNo       Int?
+  /// RRA's answer to /trnsPurchase/savePurchases (resultCd, resultMsg, resultDt in RRA's clock).
+  rraResultCd     String?
+  rraResultMsg    String?
+  rraResultDt     String?
   items           RraPurchaseItem[]
   organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -1497,9 +1502,13 @@ model RraImportItem {
   linkedProductId Int?
   rawResponse     Json?
   pulledAt        DateTime        @default(now())
+  /// Time of the pull that last delivered this line; equals pulledAt when that pull first created it.
+  lastPulledAt    DateTime?
+  /// 0 for the first delivery; each time RRA re-sends an already actioned line as waiting, a new pending copy gets the next number.
+  copyNo          Int             @default(0)
   organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@unique([organizationId, taskCd, dclDe, itemSeq])
+  @@unique([organizationId, taskCd, dclDe, itemSeq, copyNo])
   @@index([organizationId, status])
   @@map("rra_import_items")
 }

@@ -7,8 +7,7 @@ import { recordZReportOutcome } from '../services/z-report-record.service';
 import { initializeVsdcDevice } from '../services/vsdc-init.service';
 import { retryEbmOutboxEntry } from '../services/ebm-outbox.service';
 import { success, error as apiError } from '../utils/apiResponse';
-
-const OFFLINE_BLOCK_MS = Number(process.env.VSDC_OFFLINE_BLOCK_MS ?? 2 * 60 * 60 * 1000);
+import { checkVsdcConnection } from '../middleware/vsdc-offline-guard.middleware';
 
 export async function getEbmOutbox(req: BranchAuthRequest, res: Response) {
   try {
@@ -51,16 +50,16 @@ export async function getEbmStatus(req: BranchAuthRequest, res: Response) {
     }
 
     const lastContact = org.lastSuccessfulVdsContact;
-    const elapsedMs = lastContact ? Date.now() - lastContact.getTime() : null;
     const enabled = isEbmEnabled();
-    const online = enabled && elapsedMs !== null && elapsedMs < OFFLINE_BLOCK_MS;
+    const connection = enabled ? await checkVsdcConnection(organizationId, req.selectedBranchId) : null;
+    const online = !!connection?.configured && connection.online;
 
     res.json(success({
       enabled,
+      configured: !!connection?.configured,
       online,
       trainingMode: !!org.trainingMode,
       lastContact: lastContact ? lastContact.toISOString() : null,
-      offlineLimitMs: OFFLINE_BLOCK_MS,
     }));
   } catch (error) {
     console.error('[EbmStatus] Failed to read VSDC status:', error);

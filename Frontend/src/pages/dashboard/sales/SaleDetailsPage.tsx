@@ -56,6 +56,7 @@ type Sale = {
         quantity: number;
         unitPrice: string;
         totalPrice: string;
+        dcRate?: string | number;
         taxAmount?: string;
         taxCode?: string;
         costPrice?: string;
@@ -646,6 +647,9 @@ export default function SaleDetailsPage() {
                                         </TableCell>
                                         <TableCell className={`text-right ${theme === 'dark' ? 'text-muted-foreground/60' : 'text-foreground'}`}>
                                             {formatCurrency(item.unitPrice)}
+                                            {Number(item.dcRate || 0) > 0 && (
+                                                <span className="block text-xs text-muted-foreground">discount -{Number(item.dcRate)}%</span>
+                                            )}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             {parseFloat(item.taxAmount ?? '0') > 0

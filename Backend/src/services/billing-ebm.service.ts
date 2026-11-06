@@ -50,7 +50,7 @@ export async function buildPaymentSaleLikeObject(params: {
 
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { TIN: true, name: true, address: true, phone: true },
+    select: { TIN: true, name: true, address: true, phone: true, email: true },
   });
   if (!org) {
     throw new Error('Organization not found');
@@ -203,7 +203,7 @@ export async function fiscalizeSubscriptionPayment(params: {
 
   const org = await prisma.organization.findUnique({
     where: { id: params.organizationId },
-    select: { TIN: true, name: true, address: true, phone: true },
+    select: { TIN: true, name: true, address: true, phone: true, email: true },
   });
   if (!org) {
     await markPaymentFailed(params.paymentId, 'Organization not found');

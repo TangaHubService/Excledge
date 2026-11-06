@@ -141,6 +141,18 @@ describe('NS-2: mixed items (A-EX + B + discounted + service)', () => {
       ],
     });
   }
+  it('sends dcRt 0 with the exact dcAmt when a two-decimal rate cannot reproduce the amount', () => {
+    const sale = nsSale({
+      totalAmount: new Decimal(6000),
+      saleItems: [
+        nsItem({ unitPrice: new Decimal(7000), totalPrice: new Decimal(6000), taxRate: new Decimal(18), taxAmount: new Decimal(915.25), taxCode: 'B', dcRate: new Decimal(14.29), dcAmt: new Decimal(1000) }),
+      ],
+    });
+    const p = buildRraSendReceiptPayload(sale, ORG, '01') as any;
+    expect(p.itemList[0]).toMatchObject({ prc: 7000, splyAmt: 7000, dcRt: 0, dcAmt: 1000, taxblAmt: 6000, totAmt: 6000 });
+    expect(p.totAmt).toBe(6000);
+  });
+
   it('discounted leg enters bands net of discount; service line accepted without product', () => {
     const p = buildRraSendReceiptPayload(mixedSale(), ORG, '01') as any;
     expect(p.totItemCnt).toBe(4);

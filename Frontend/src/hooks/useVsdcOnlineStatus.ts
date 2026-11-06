@@ -12,10 +12,10 @@ interface VsdcStatusResult {
 
 interface EbmStatusPayload {
   enabled: boolean;
+  configured: boolean;
   online: boolean;
   trainingMode?: boolean;
   lastContact: string | null;
-  offlineLimitMs: number;
 }
 
 const POLL_INTERVAL_MS = 30_000;
@@ -54,17 +54,13 @@ export function useVsdcOnlineStatus(): VsdcStatusResult {
   const hoursSinceSync = lastContact
     ? Math.floor((Date.now() - lastContact.getTime()) / (60 * 60 * 1000))
     : 0;
-  const limitHours = Math.round(payload.offlineLimitMs / (60 * 60 * 1000));
 
-  if (!payload.online) {
-    // last successful VSDC contact exceeded the block window
+  if (payload.configured && !payload.online) {
     return {
       status: 'blocked',
       hoursSinceSync,
       trainingMode: !!payload.trainingMode,
-      message:
-        `CRITICAL: EBM System Locked. No successful VSDC contact for ${hoursSinceSync}h (limit ${limitHours}h). ` +
-        `Receipt generation is blocked until the gateway acknowledges a transaction. Contact administration.`,
+      message: 'Cannot connect to VSDC. New sales are blocked until it is running and connected again.',
     };
   }
 

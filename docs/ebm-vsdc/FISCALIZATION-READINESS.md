@@ -30,7 +30,9 @@ Fix sections **2** and **3**, run section **6**, and then submit.
 
 > **Update 2026-11-02:** B1 (env value), B2, B3 and B5 are **fixed**. Backend suite: 554 passed, only the known unrelated `login-redirection` failure remains; both `tsc` runs are clean. Still open: B1's "never-contacted device" case (left as is so it can't block sales), the production `VSDC_OFFLINE_BLOCK_MS` value on Dokploy, the `taxRtF` value check, and the B4 decision.
 
-### B1. Offline guard is effectively disabled (§22, Art. 7.8, 7.9, 10) — ✅ local `.env` fixed
+### B1. Offline guard is effectively disabled (§22, Art. 7.8, 7.9, 10) — ✅ replaced by a live check
+
+> **Update 2026-11-06:** `VSDC_OFFLINE_BLOCK_MS` is gone. New sales, proforma conversions, refunds, sale corrections and regenerated invoices now ask VSDC directly (`vsdc-offline-guard.middleware.ts`) and are refused with a 503 if it does not answer within 3 seconds. A device that has never made contact is checked the same way. VSDC itself decides whether it may still issue receipts during its 24-hour limit without internet. The notes below are the original finding.
 
 `Backend/.env` → `VSDC_OFFLINE_BLOCK_MS=864000000000`, which is about **27 years**. With that value, `vsdc-offline-guard.middleware.ts` never blocks sales.
 
@@ -158,7 +160,7 @@ Legend: ✅ in code · ⚠️ in code, needs a fix or a decision · 🔲 not cod
 | 36 | Date with hh:mm:ss | ✅ | Kigali wall time (`kigaliWallParts`) |
 | 37 | Purchase code from sales | ✅ | `prcOrdCd` on `saveSales` (API v1.0.5); codes 881–884 handled |
 | 38 | Purchase code from purchases | ✅ | `prcOrdCd` on purchase confirm |
-| 39 | Discounts | ✅ | `dcRt`/`dcAmt` per line |
+| 39 | Discounts | ✅ | `dcRt`/`dcAmt` per line, derived from the catalog price (`discount.service.ts`). `dcRt` is sent as 0 when a two-decimal rate can't reproduce `dcAmt` within the VSDC's 0.1 tolerance |
 | 40 | COPY content same as original + COPY sign | ✅ | |
 | 41 | TRAINING sign | ✅ | |
 | 42 | Training activated by a separate function | ✅ 🧪 | Show it in the demo |

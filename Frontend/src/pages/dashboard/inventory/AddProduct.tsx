@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useAuth } from '../../../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { yupResolver } from '@hookform/resolvers/yup'
@@ -87,6 +88,13 @@ const addProductSchema = yup.object({
             .min(0, 'Cannot be negative')
             .transform((v) => (isNaN(v) ? undefined : v))
             .nullable(),
+        discountPercent: yup
+            .number()
+            .typeError('Must be a number')
+            .min(0, 'Cannot be negative')
+            .max(99.99, 'Must be below 100%')
+            .transform((v) => (isNaN(v) ? undefined : v))
+            .nullable(),
         taxCode: yup
             .string()
             .required('Tax category is required')
@@ -167,9 +175,12 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
     const { organization } = useOrganization()
     /** RRA rule: when vatRegistered is explicitly false the org is NOT registered for VAT. */
     const isNonVat = organization?.vatRegistered === false
+    const { user } = useAuth()
+    const canSetItemDiscount = ['SYSTEM_OWNER', 'ADMIN', 'BRANCH_MANAGER'].includes(user?.role ?? '')
     // Items moved to B by the VAT switch can change their tax type only once.
-    const taxReviewPending = !isNonVat && product?.taxCodeReviewPending === true
-    const taxCodeLocked = !isNonVat && !!product?.taxCodeReviewedAt
+    const taxLockedBySales = !isNonVat && product?.taxCodeReviewPending === true && product?.hasFiscalSales === true
+    const taxReviewPending = !isNonVat && product?.taxCodeReviewPending === true && !taxLockedBySales
+    const taxCodeLocked = !isNonVat && (!!product?.taxCodeReviewedAt || taxLockedBySales)
     const isTaxExemptOrg = organization?.isTaxExempt === true
     const { catalog } = useRraCodeCatalog()
     const countryOptions = catalog.countries.length
@@ -258,6 +269,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
             description: '',
             unitPrice: undefined as number | undefined,
             purchasePrice: undefined as number | undefined,
+            discountPercent: undefined as number | undefined,
             taxCode: '',
             batchNumber: '',
             expiryDate: null,
@@ -310,7 +322,10 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
         const code = watchTaxCode
         const rateInfo = taxCodes.find((t) => t.code === code)
         const ratePct = rateInfo?.rate ?? 0
-        const { taxable, vat } = computeInclusiveVat(price, ratePct)
+        // VAT is charged on what the customer pays, so a saved item discount lowers it.
+        const discountPercent = Number(watch('discountPercent')) || 0
+        const chargedPrice = Math.round(price * (100 - discountPercent)) / 100
+        const { taxable, vat } = computeInclusiveVat(chargedPrice, ratePct)
         return { price: toRwf(price), taxable, vat, ratePct, label: rateInfo?.label ?? '' }
     })()
 
@@ -416,6 +431,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
             setValue('description', product.description || '')
             setValue('unitPrice', product.unitPrice)
             setValue('purchasePrice', product.purchasePrice ?? undefined)
+            setValue('discountPercent', Number(product.discountPercent) > 0 ? Number(product.discountPercent) : undefined)
             setValue('taxCode', product.taxCode || '')
             setValue('itemType', (product.itemType as 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE') || 'PRODUCT')
             setValue('barcode', product.barcode || '')
@@ -579,6 +595,7 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                 category: data.category,
                 description: data.description || '',
                 unitPrice: data.unitPrice,
+                ...(canSetItemDiscount ? { discountPercent: data.discountPercent ?? 0 } : {}),
                 taxCode: isNonVat ? 'D' : data.taxCode,
                 itemType: data.itemType,
                 branchId: selectedBranchId,
@@ -969,6 +986,30 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                             {errors.purchasePrice && <p className="text-xs text-danger mt-1">{errors.purchasePrice.message}</p>}
                                         </div>
                                     )}
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-medium text-foreground">
+                                            Discount (%)
+                                        </label>
+                                        <input
+                                            {...bindField('discountPercent', 'taxCode')}
+                                            type="number"
+                                            inputMode="decimal"
+                                            step="0.01"
+                                            min="0"
+                                            max="99.99"
+                                            placeholder="0"
+                                            disabled={!canSetItemDiscount}
+                                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40 bg-background text-foreground disabled:opacity-60 ${
+                                                errors.discountPercent ? 'border-red-400' : 'border-border'
+                                            }`}
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                            {canSetItemDiscount
+                                                ? 'Applied automatically at the POS, shown on the receipt and sent to RRA.'
+                                                : 'Only an admin or branch manager can change this.'}
+                                        </p>
+                                        {errors.discountPercent && <p className="text-xs text-danger mt-1">{errors.discountPercent.message}</p>}
+                                    </div>
                                 </div>
                             </div>
 
@@ -994,7 +1035,13 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                             it is locked.
                                         </p>
                                     )}
-                                    {taxCodeLocked && (
+                                    {taxLockedBySales && (
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            🔒 This item has already been sold since it was moved to VAT, so its tax
+                                            category can no longer be changed.
+                                        </p>
+                                    )}
+                                    {taxCodeLocked && !taxLockedBySales && (
                                         <p className="text-xs text-muted-foreground mt-1">
                                             🔒 Tax category was already updated once after VAT registration and can no
                                             longer be changed.
@@ -1229,6 +1276,9 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
                                     </div>
                                     <div className="px-4 py-3 space-y-2.5">
                                         <ReviewRow label="Sales Price" value={watch('unitPrice') ? `RWF ${Number(watch('unitPrice')).toLocaleString()}` : '-'} />
+                                        {Number(watch('discountPercent')) > 0 && (
+                                            <ReviewRow label="Discount" value={`${Number(watch('discountPercent'))}%`} />
+                                        )}
                                         {watch('purchasePrice') !== undefined && watch('purchasePrice') !== null && (
                                             <ReviewRow label="Purchase Price" value={`RWF ${Number(watch('purchasePrice')).toLocaleString()}`} />
                                         )}

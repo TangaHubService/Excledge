@@ -27,7 +27,7 @@ import { authenticate, authorize } from "../middleware/auth.middleware";
 import { branchAuth } from "../middleware/branchAuth.middleware";
 import { requireOrganizationAccess } from "../middleware/organizationAccess.middleware";
 import { requireActiveSubscription } from '../middleware/feature-access.middleware';
-import { vsdcOnlineGuard } from "../middleware/vsdc-offline-guard.middleware";
+import { vsdcOnlineGuard, vsdcOnlineGuardForSale } from "../middleware/vsdc-offline-guard.middleware";
 import { validate } from "../middleware/validate.middleware";
 import { createSaleSchema, cancelSaleSchema, correctSaleSchema, refundSaleSchema, updateProformaSchema, convertProformaSchema } from "../validations/sales.validation";
 import {
@@ -69,7 +69,7 @@ router.post(
   cancelMobileMoneyPayment
 );
 
-// Create a new sale (vsdcOnlineGuard blocks if VSDC unreachable > 24h, per RRA requirement)
+// Create a new sale (vsdcOnlineGuard refuses it unless VSDC answers right now, per RRA requirement)
 router.post(
   "/:organizationId",
   authenticate,
@@ -151,6 +151,7 @@ router.post(
   orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  vsdcOnlineGuardForSale("id"),
   validate(refundSaleSchema),
   refundSale
 );
@@ -184,6 +185,7 @@ router.post(
   orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "SELLER", "ACCOUNTANT", "BRANCH_MANAGER"),
+  vsdcOnlineGuardForSale("saleId"),
   validate(correctSaleSchema),
   correctSale
 );
@@ -246,6 +248,7 @@ router.post(
   orgAccess, requireActiveSubscription(),
   branchAuth,
   authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"),
+  vsdcOnlineGuardForSale("saleId"),
   regenerateInvoice
 );
 
