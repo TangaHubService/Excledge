@@ -615,6 +615,7 @@ model Product {
   l3SalePrice          Decimal?              @db.Decimal(15, 2) // RRA ItemSaveReq grpPrcL3 — price tier 3
   l4SalePrice          Decimal?              @db.Decimal(15, 2) // RRA ItemSaveReq grpPrcL4 — price tier 4
   l5SalePrice          Decimal?              @db.Decimal(15, 2) // RRA ItemSaveReq grpPrcL5 — price tier 5
+  discountPercent      Decimal               @default(0) @db.Decimal(5, 2) // Saved discount applied at the POS; reported per sale as dcRt/dcAmt, never synced to /items/saveItems
   batches              Batch[]
   inventoryLedgers     InventoryLedger[]
   organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)

@@ -279,14 +279,21 @@ function itemDescription(item: RenderInvoiceLineItem): string {
   return item.discountPct > 0 ? `${name}\ndiscount -${formatInvoiceQuantity(item.discountPct)}%` : name
 }
 
+/** On a discounted line: the value before discount, then the amount after it (RRA A4 sample). */
+function totalPriceCell(item: RenderInvoiceLineItem): string {
+  const total = formatInvoiceAmount(item.total)
+  return Number(item.discountAmt) !== 0 ? `${formatInvoiceAmount(item.subtotal)}\n${total}` : total
+}
+
 function measureLines(doc: PDFKit.PDFDocument, items: RenderInvoiceLineItem[]): MeasuredLine[] {
   doc.font(FONT).fontSize(6.2)
   return items.map((item) => {
     const codeHeight = doc.heightOfString(safe(item.code, "-"), { width: COLUMN_WIDTHS[1] - 7 })
     const descriptionHeight = doc.heightOfString(itemDescription(item), { width: COLUMN_WIDTHS[2] - 7 })
+    const totalHeight = doc.heightOfString(totalPriceCell(item), { width: COLUMN_WIDTHS[6] - 7 })
     return {
       item,
-      height: Math.min(120, Math.max(18, Math.ceil(Math.max(codeHeight, descriptionHeight)) + 7)),
+      height: Math.min(120, Math.max(18, Math.ceil(Math.max(codeHeight, descriptionHeight, totalHeight)) + 7)),
     }
   })
 }
@@ -360,7 +367,7 @@ function drawTable(
       formatReceiptQuantity(Math.abs(item.quantity)),
       tax,
       formatInvoiceAmount(item.unitPrice),
-      formatInvoiceAmount(item.total),
+      totalPriceCell(item),
     ]
     values.forEach((value, index) => {
       doc.text(value, positions[index] + 3, y + 5, {

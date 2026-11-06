@@ -49,6 +49,7 @@ export interface IPreferences {
     dateFormat: string;
     defaultLandingPage: string;
     lowStockThresholdOverride: number | null;
+    maxDiscountPercent: number | null;
     enabledPaymentMethods: string[];
     shiftConfig?: {
         approvalRequired: boolean;
@@ -173,6 +174,7 @@ export const DEFAULT_ORGANIZATION_SETTINGS: IOrganizationSettings = {
         dateFormat: 'DD/MM/YYYY',
         defaultLandingPage: 'dashboard',
         lowStockThresholdOverride: null,
+        maxDiscountPercent: null,
         enabledPaymentMethods: ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK_TRANSFER', 'DEBT'],
     },
     // Defaults to true: matches the existing behavior where VAT-registered products charge 18%, so

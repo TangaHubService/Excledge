@@ -29,6 +29,10 @@ export interface Product {
     /** Moved D → B by the VAT switch; one tax-type change left. */
     taxCodeReviewPending?: boolean;
     taxCodeReviewedAt?: string | null;
+    /** Set while taxCodeReviewPending: the item has real sales, so its tax type is locked. */
+    hasFiscalSales?: boolean;
+    /** Saved discount applied at the POS; 0 means none. */
+    discountPercent?: number | string;
     taxCategory?: string;
     itemType?: 'PRODUCT' | 'RAW_MATERIAL' | 'SERVICE';
     measurementUnit?: string;

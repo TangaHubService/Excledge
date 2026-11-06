@@ -55,7 +55,7 @@ export interface FiscalTotalsResult {
   totalTax: number;
 }
 
-function toDecimal(value: MoneyInput | undefined | null, fallback = 0): Decimal {
+export function toDecimal(value: MoneyInput | undefined | null, fallback = 0): Decimal {
   if (value === undefined || value === null) return new Decimal(fallback);
   if (value instanceof Decimal) return value;
   // Through the shortest string form so binary-float inputs (0.2, 10.03) enter the arithmetic

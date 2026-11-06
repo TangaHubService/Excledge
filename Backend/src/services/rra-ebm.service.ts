@@ -6,6 +6,7 @@ import { isValidPurchaseCode, generateValidPurchaseCodes } from './purchase-code
 import { deriveQtyUnitCd } from './item-code.service';
 import { getRraPaymentCode, requiresPurchaseCode, resolvePkgUnitCd, resolveQtyUnitCd, LAST_RESORT_TOURISM_TAX_RATE, getTourismTaxRate } from './rra-code.service';
 import { diff2, bandTaxFromNet } from './money.service';
+import { vsdcDiscountRate } from './discount.service';
 import { kigaliWallParts } from './invoice-format.service';
 import { vsdcSalesTyCdForLabel } from './training-mode.service';
 
@@ -668,8 +669,8 @@ export function buildRraSendReceiptPayload(
       qtyUnitCd,
       prc,
       splyAmt:    fix2(splyAmt),
-      dcRt:       fix2(Math.abs(si.dcRate.toNumber())),
-      dcAmt:      fix2(Math.abs(si.dcAmt.toNumber())),
+      dcRt:       vsdcDiscountRate(splyAmt, dcAmtAbs, si.dcRate.toNumber()),
+      dcAmt:      dcAmtAbs,
       // Insurance line fields — populated only for registered pharmacy insurers.
       ...((): {
         isrccCd: string | null;

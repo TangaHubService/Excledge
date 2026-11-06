@@ -115,6 +115,9 @@ export default function ViewProductDialog({
                   {t('inventory.unitPrice')}
                 </p>
                 <p className="mt-1">{viewProduct.unitPrice} Frw</p>
+                {Number(viewProduct.discountPercent) > 0 && (
+                  <p className="text-xs text-muted-foreground">{Number(viewProduct.discountPercent)}% discount applied at the POS</p>
+                )}
               </div>
               {viewProduct.purchasePrice != null && (
                 <div>

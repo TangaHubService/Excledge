@@ -16,6 +16,7 @@ import {
 } from "../services/organization-settings.service";
 import type { OrganizationSettingsPatch } from "../types/organization-settings.types";
 import { checkMrc, MrcFormatError } from "../utils/mrc";
+import { maxDiscountPercentError } from "../services/discount.service";
 
 import { Prisma, RraTaxCode } from "@prisma/client";
 import type { Request, Response } from "express";
@@ -524,6 +525,11 @@ export const updateOrgSettings = async (req: Request, res: Response) => {
       } else {
         (patch as Record<string, unknown>)[key] = value;
       }
+    }
+
+    const discountLimitError = maxDiscountPercentError(patch.preferences?.maxDiscountPercent);
+    if (discountLimitError) {
+      return res.status(400).json({ error: discountLimitError });
     }
 
     const settings = await upsertOrganizationSettings(organizationId, patch);

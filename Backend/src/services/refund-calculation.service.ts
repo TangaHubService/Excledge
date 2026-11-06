@@ -326,11 +326,21 @@ export function planRefundLines(
       taxAmount: -round2(line.taxAmount * ratio),
       taxCode: line.taxCode,
       dcRate: line.dcRate,
-      dcAmt: -round2(line.dcAmt * ratio),
+      dcAmt: -refundedDiscount(line, qty, ratio),
       measurementUnit: line.measurementUnit,
       itemType: line.itemType,
     };
   });
+}
+
+/**
+ * Scales the discount to the refunded share. Rounding it separately from the total can leave
+ * gross - discount a cent off the refunded total, so that cent is taken back from the discount.
+ */
+function refundedDiscount(line: OriginalRefundLine, qty: number, ratio: number): number {
+  const scaled = round2(line.dcAmt * ratio);
+  const exact = round2(round2(qty * line.unitPrice) - round2(line.totalPrice * ratio));
+  return Math.abs(exact - scaled) <= 0.01 ? exact : scaled;
 }
 
 /** Positive-magnitude totals + per-rate bands for planned (negated) legs. */
