@@ -63,6 +63,7 @@ import {
 import { ebmOutboxJob } from "./jobs/ebm-outbox.job";
 import { accountingOutboxJob } from "./jobs/accounting-outbox.job";
 import { vsdcHeartbeatJob } from "./jobs/vsdc-heartbeat.job";
+import { runVsdcStartupChecks } from "./services/vsdc-startup-check.service";
 import { zReportJob } from "./jobs/z-report.job";
 import { rraMasterDataJob } from "./jobs/rra-master-data.job";
 import { stockSyncJob } from "./jobs/stock-sync.job";
@@ -230,6 +231,7 @@ httpServer.listen(PORT, () => {
   console.log(`API docs:     http://localhost:${PORT}/api/docs`);
   console.log(`Full Swagger: http://localhost:${PORT}/api/docs/full`);
   console.log(`RRA Swagger:  http://localhost:${PORT}/api/docs/rra`);
+  runVsdcStartupChecks().catch((err) => console.error("VSDC startup checks failed:", err));
 });
 
 // Handle graceful shutdown

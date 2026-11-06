@@ -487,9 +487,6 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
-          },
-          "offlineLimitMs": {
-            "type": "integer"
           }
         }
       },

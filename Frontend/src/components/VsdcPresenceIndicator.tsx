@@ -8,7 +8,6 @@ interface EbmStatusPayload {
   online: boolean;
   trainingMode?: boolean;
   lastContact: string | null;
-  offlineLimitMs: number;
 }
 
 const POLL_INTERVAL_MS = 30_000;

@@ -110,6 +110,7 @@ const models: Record<string, any> = {
 }
 
 vi.mock("../src/lib/prisma", () => ({
+  branchStorage: { exit: (fn: () => unknown) => fn() },
   prisma: new Proxy({}, {
     get(_t, model: string) {
       if (model in models) return models[model]

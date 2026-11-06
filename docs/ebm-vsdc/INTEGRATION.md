@@ -29,7 +29,6 @@ during certification (`cis_sdc_certification@rra.gov.rw`).
 | `EBM_MAX_QUEUE_RETRIES` | Outbox retry ceiling before DEAD_LETTER (default 10). |
 | `EBM_PROTOCOL` | `vsdc` (default, this document) or `osdc` (EBM 2.1 via the OSDC WAR). |
 | `OSDC_API_URL` / `OSDC_AUTH_TOKEN` | Only for the OSDC path. |
-| `VSDC_OFFLINE_BLOCK_MS` | Block new sales after this long without a successful VSDC contact (default 2 h). |
 
 ## Endpoints used
 
@@ -161,4 +160,4 @@ Local-only receipt types (proforma) draw a separate non-fiscal counter pair.
 | `stockSyncJob` | every 5 min | drain queued stock movements |
 | `rraMasterDataJob` | 04:20 daily | pull codes / classes / notices / purchases / imports |
 | `zReportJob` | 23:55 daily | submit the daily Z report per device |
-| `vsdcHeartbeatJob` | periodic | probe `/code/selectCodes` to update `lastSuccessfulVdsContact` |
+| `vsdcHeartbeatJob` | every 30 min | probe `/code/selectCodes` to update `lastSuccessfulVdsContact`; sales use a separate live check |
