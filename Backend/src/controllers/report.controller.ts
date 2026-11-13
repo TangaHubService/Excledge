@@ -18,6 +18,10 @@ import {
   type FiscalReportHeader,
   type PluReportData,
 } from "../services/fiscal-report-pdf.service"
+import { renderDailyReportA4, renderPluReportA4 } from "../services/a4-report-pdf.service"
+
+/** Reports print on A4 by default; `?paper=roll` keeps the 80 mm thermal layout. */
+const wantsRoll = (req: BranchAuthRequest) => String(req.query.paper ?? '').toLowerCase() === 'roll';
 
 /** On-hand quantity per product as of a cut-off, summed IN − OUT over the ledger. */
 async function stockOnHandAt(
@@ -371,8 +375,8 @@ export const getPluReport = async (req: BranchAuthRequest, res: Response) => {
 }
 
 /**
- * Printable (80 mm thermal) PLU report — RRA Article 21. GET
- * /reports/plu/:organizationId/pdf?startDate=&endDate=&sortBy=
+ * Printable PLU report (A4; `paper=roll` for 80 mm) — RRA Article 21. GET
+ * /reports/plu/:organizationId/pdf?startDate=&endDate=&sortBy=&paper=
  */
 export const getPluReportPdf = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -399,7 +403,7 @@ export const getPluReportPdf = async (req: BranchAuthRequest, res: Response) => 
       address: org?.address ?? null,
     };
 
-    const pdf = await renderPluReportPdf({
+    const pluData: PluReportData = {
       header,
       periodLabel,
       periodStart,
@@ -407,9 +411,10 @@ export const getPluReportPdf = async (req: BranchAuthRequest, res: Response) => 
       reportLabel: PLU_REPORT_LABEL,
       cisDesignation: CIS_DESIGNATION,
       generatedAt: new Date().toISOString(),
-      rows: rows.slice(0, 500),
+      rows: wantsRoll(req) ? rows.slice(0, 500) : rows,
       summary,
-    });
+    };
+    const pdf = wantsRoll(req) ? await renderPluReportPdf(pluData) : await renderPluReportA4(pluData);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', String(pdf.length));
@@ -1870,8 +1875,8 @@ export const getDailyReport = async (req: BranchAuthRequest, res: Response) => {
 };
 
 /**
- * Printable (80 mm thermal) X/Z daily report — RRA Articles 7, 18, 19. GET
- * /reports/daily/:organizationId/pdf?type=X|Z&date=&branchId=
+ * Printable X/Z daily report (A4; `paper=roll` for 80 mm) — RRA Articles 7, 18, 19. GET
+ * /reports/daily/:organizationId/pdf?type=X|Z&date=&branchId=&paper=
  */
 export const getDailyReportPdf = async (req: BranchAuthRequest, res: Response) => {
   try {
@@ -1881,7 +1886,7 @@ export const getDailyReportPdf = async (req: BranchAuthRequest, res: Response) =
 
     const reportDate = req.query.date ? new Date(req.query.date as string) : new Date();
     const report = await buildDailyReport(req, organizationId, reportType, reportDate, req.query.branchId as string);
-    const pdf = await renderDailyReportPdf(report);
+    const pdf = wantsRoll(req) ? await renderDailyReportPdf(report) : await renderDailyReportA4(report);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', String(pdf.length));

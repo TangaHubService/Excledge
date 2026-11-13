@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { FileText, Download, Loader2, ScrollText, ChevronRight, CheckCircle2, AlertTriangle, RefreshCw, Database, Bell, Boxes, Truck, X, Ship, Shield, Eye, ExternalLink, Send, Check } from "lucide-react";
+import { FileText, Download, Loader2, ScrollText, ChevronRight, CheckCircle2, AlertTriangle, RefreshCw, Database, Bell, Boxes, Truck, X, Ship, Shield, Eye, ExternalLink, Send, Check, Printer } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
 import { RraItemClassPicker } from "../../../components/inventory/RraItemClassPicker";
 import { SearchableSelect } from "../../../components/ui/SearchableSelect";
@@ -205,12 +205,12 @@ function DailyReportCard() {
     return () => clearTimeout(t);
   }, [load]);
 
-  const download = async () => {
+  const download = async (paper: "a4" | "roll" = "a4") => {
     setDownloading(true);
     try {
       await openPdf(
-        () => apiClient.getDailyFiscalReportPdf({ type, date, branchId: branchId || undefined }),
-        `${type}-report-${date}.pdf`,
+        () => apiClient.getDailyFiscalReportPdf({ type, date, branchId: branchId || undefined, paper }),
+        `${type}-report-${date}${paper === "roll" ? "-80mm" : ""}.pdf`,
       );
     } catch (e: any) {
       toastError(e, "Could not generate the PDF");
@@ -281,8 +281,11 @@ function DailyReportCard() {
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" onClick={download} disabled={downloading}>
-            {downloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF
+          <Button variant="outline" onClick={() => download("a4")} disabled={downloading}>
+            {downloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF (A4)
+          </Button>
+          <Button variant="ghost" onClick={() => download("roll")} disabled={downloading} title="80 mm thermal roll">
+            <Printer className="size-4" /> 80mm
           </Button>
           {type === "Z" && (
             <Button onClick={sendZ} disabled={!canSendZ || sendingZ}>
@@ -459,7 +462,7 @@ function PluCard() {
               }
             }}
           >
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF (A4)
           </Button>
           {loading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
         </div>
@@ -573,6 +576,7 @@ function ElectronicJournalCard() {
           <Button variant="outline" onClick={load} disabled={loading}>
             {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Refresh
           </Button>
+          <A4PdfButton kind="electronic-journal" params={{ startDate: start, endDate: end }} filename={`electronic-journal-${start}-${end}.pdf`} />
         </div>
 
         <div className="overflow-x-auto rounded-lg border">
@@ -1648,6 +1652,7 @@ function PurchasesImportDetailReportCard() {
           <Button variant="outline" onClick={load} disabled={busy}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Load report
           </Button>
+          <A4PdfButton kind="purchases" params={{ startDate: start, endDate: end }} filename={`purchases-report-${start}-${end}.pdf`} />
         </div>
 
         {summary && (
@@ -1933,7 +1938,171 @@ function AuditorOverviewCard() {
   );
 }
 
+type A4ReportKind = Parameters<typeof apiClient.getA4ReportPdf>[0];
+
+function A4PdfButton({
+  kind,
+  params,
+  filename,
+  label = "Download PDF (A4)",
+  variant = "outline",
+}: {
+  kind: A4ReportKind;
+  params: { startDate?: string; endDate?: string; asOf?: string };
+  filename: string;
+  label?: string;
+  variant?: "outline" | "default";
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      variant={variant}
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await openPdf(() => apiClient.getA4ReportPdf(kind, params), filename);
+        } catch (e: any) {
+          toastError(e, "Could not generate the PDF");
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} {label}
+    </Button>
+  );
+}
+
+/**
+ * Every report the RRA CIS-for-VSDC certification asks for, printable on A4: X/Z daily
+ * (Art. 18/19), PLU (Art. 21), detailed sales / purchases / stock / items / importation
+ * (checklist §25), closing stock at a date (Art. 7.31) and the electronic journal (§44).
+ */
+function A4ReportsCard() {
+  const { selectedBranchId } = useBranch();
+  const [start, setStart] = useState(daysAgoIso(30));
+  const [end, setEnd] = useState(todayIso());
+  const [day, setDay] = useState(todayIso());
+  const [asOf, setAsOf] = useState(todayIso());
+  const [dailyBusy, setDailyBusy] = useState<"X" | "Z" | null>(null);
+  const [pluBusy, setPluBusy] = useState(false);
+
+  const daily = async (type: "X" | "Z") => {
+    setDailyBusy(type);
+    try {
+      await openPdf(
+        () => apiClient.getDailyFiscalReportPdf({ type, date: day, branchId: selectedBranchId ?? undefined }),
+        `${type}-report-${day}.pdf`,
+      );
+    } catch (e: any) {
+      toastError(e, "Could not generate the PDF");
+    } finally {
+      setDailyBusy(null);
+    }
+  };
+
+  const range = { startDate: start, endDate: end };
+  const rows: Array<{ title: string; ref: string; body: ReactNode }> = [
+    {
+      title: "Daily X report",
+      ref: "Art. 18 — sales since the last Z report",
+      body: (
+        <Button variant="outline" disabled={!!dailyBusy} onClick={() => daily("X")}>
+          {dailyBusy === "X" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF (A4)
+        </Button>
+      ),
+    },
+    {
+      title: "Daily Z report",
+      ref: "Art. 19 — end-of-day closing",
+      body: (
+        <Button variant="outline" disabled={!!dailyBusy} onClick={() => daily("Z")}>
+          {dailyBusy === "Z" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF (A4)
+        </Button>
+      ),
+    },
+    {
+      title: "PLU report",
+      ref: "Art. 21 — per item, for the date range",
+      body: (
+        <Button
+          variant="outline"
+          disabled={pluBusy}
+          onClick={async () => {
+            setPluBusy(true);
+            try {
+              await openPdf(() => apiClient.getPluReportPdf(range), `PLU-report-${start}-${end}.pdf`);
+            } catch (e: any) {
+              toastError(e, "Could not generate the PDF");
+            } finally {
+              setPluBusy(false);
+            }
+          }}
+        >
+          {pluBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF (A4)
+        </Button>
+      ),
+    },
+    { title: "Sales report", ref: "§25 — every receipt line in the date range", body: <A4PdfButton kind="sales" params={range} filename={`sales-report-${start}-${end}.pdf`} /> },
+    { title: "Purchases report", ref: "§25 — purchase orders, RRA supplier invoices, imports", body: <A4PdfButton kind="purchases" params={range} filename={`purchases-report-${start}-${end}.pdf`} /> },
+    { title: "Stock report", ref: "Art. 7.11 — opening, in, out and closing stock", body: <A4PdfButton kind="stock" params={range} filename={`stock-report-${end}.pdf`} /> },
+    {
+      title: "Closing stock",
+      ref: "Art. 7.31 — stock on hand at a chosen date",
+      body: <A4PdfButton kind="stock" params={{ asOf }} filename={`closing-stock-${asOf}.pdf`} />,
+    },
+    { title: "Items report", ref: "§25 — registered items, classification, tax, stock", body: <A4PdfButton kind="items" params={{}} filename={`items-report-${todayIso()}.pdf`} /> },
+    { title: "Importation report", ref: "§25 — import declaration items", body: <A4PdfButton kind="imports" params={range} filename={`importation-report-${start}-${end}.pdf`} /> },
+    { title: "Electronic journal", ref: "§44 — journal records issued with each receipt", body: <A4PdfButton kind="electronic-journal" params={range} filename={`electronic-journal-${start}-${end}.pdf`} /> },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Printer className="size-4" /> Reports on A4</CardTitle>
+        <CardDescription>
+          Every report RRA asks for, as an A4 PDF with your TIN, MRC and SDC ID. Reports follow the branch selected at the top of the app.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="a4-day">Day (X / Z)</Label>
+            <Input id="a4-day" type="date" value={day} max={todayIso()} onChange={(e) => setDay(e.target.value)} className="w-40" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="a4-start">From</Label>
+            <Input id="a4-start" type="date" value={start} max={end} onChange={(e) => setStart(e.target.value)} className="w-40" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="a4-end">To</Label>
+            <Input id="a4-end" type="date" value={end} max={todayIso()} onChange={(e) => setEnd(e.target.value)} className="w-40" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="a4-asof">Closing stock at</Label>
+            <Input id="a4-asof" type="date" value={asOf} max={todayIso()} onChange={(e) => setAsOf(e.target.value)} className="w-40" />
+          </div>
+        </div>
+
+        <div className="divide-y rounded-lg border">
+          {rows.map((r) => (
+            <div key={r.title} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <div className="font-medium text-foreground">{r.title}</div>
+                <div className="text-xs text-muted-foreground">{r.ref}</div>
+              </div>
+              {r.body}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 const TABS = [
+  { value: "a4", label: "A4 reports", icon: Printer },
   { value: "daily", label: "Daily X / Z", icon: FileText },
   { value: "plu", label: "PLU", icon: FileText },
   { value: "journal", label: "Journal", icon: ScrollText },
@@ -2007,6 +2176,7 @@ export function FiscalReportsPage() {
           </TabsList>
         </div>
 
+        <TabsContent value="a4" className="mt-4"><A4ReportsCard /></TabsContent>
         <TabsContent value="daily" className="mt-4"><DailyReportCard /></TabsContent>
         <TabsContent value="plu" className="mt-4"><PluCard /></TabsContent>
         <TabsContent value="journal" className="mt-4"><ElectronicJournalCard /></TabsContent>

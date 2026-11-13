@@ -1082,21 +1082,38 @@ class ApiClient {
     return this.request(`/reports/daily/${this.getOrganizationId()}?${q.toString()}`);
   }
 
-  /** Printable (80mm) X/Z daily fiscal report PDF. */
-  async getDailyFiscalReportPdf(params: { type: "X" | "Z"; date?: string; branchId?: number | string }) {
+  /** Printable X/Z daily fiscal report PDF — A4 by default, `paper: "roll"` for the 80mm thermal layout. */
+  async getDailyFiscalReportPdf(params: { type: "X" | "Z"; date?: string; branchId?: number | string; paper?: "a4" | "roll" }) {
     const q = new URLSearchParams({ type: params.type });
     if (params.date) q.set("date", params.date);
     if (params.branchId != null && params.branchId !== "") q.set("branchId", String(params.branchId));
+    if (params.paper === "roll") q.set("paper", "roll");
     return this.requestFile(`/reports/daily/${this.getOrganizationId()}/pdf?${q.toString()}`, {
       method: "GET",
       headers: { Accept: "application/pdf" },
     });
   }
 
-  /** Printable (80mm) PLU report PDF. */
-  async getPluReportPdf(params: { startDate?: string; endDate?: string; sortBy?: string } = {}) {
+  /** Printable PLU report PDF — A4 by default, `paper: "roll"` for the 80mm thermal layout. */
+  async getPluReportPdf(params: { startDate?: string; endDate?: string; sortBy?: string; paper?: "a4" | "roll" } = {}) {
     const q = new URLSearchParams(params as Record<string, string>);
     return this.requestFile(`/reports/plu/${this.getOrganizationId()}/pdf?${q.toString()}`, {
+      method: "GET",
+      headers: { Accept: "application/pdf" },
+    });
+  }
+
+  /**
+   * A4 PDF of a detailed RRA report: sales, purchases, stock (opening/in/out/closing, or closing
+   * stock as at `asOf`), items, importation, or the electronic journal.
+   */
+  async getA4ReportPdf(
+    kind: "sales" | "purchases" | "stock" | "items" | "imports" | "electronic-journal",
+    params: { startDate?: string; endDate?: string; asOf?: string } = {},
+  ) {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
+    return this.requestFile(`/reports/${kind}/${this.getOrganizationId()}/pdf?${q.toString()}`, {
       method: "GET",
       headers: { Accept: "application/pdf" },
     });
