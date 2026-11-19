@@ -18,7 +18,18 @@ import {
   type FiscalReportHeader,
   type PluReportData,
 } from "../services/fiscal-report-pdf.service"
-import { renderDailyReportA4, renderPluReportA4 } from "../services/a4-report-pdf.service"
+import { renderDailyReportA4, renderDailyReportXlsx, renderPluReportA4, renderPluReportXlsx } from "../services/a4-report-pdf.service"
+
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+/** `/xlsx` routes set this flag so the same handler serves the Excel workbook. */
+const wantsXlsx = (req: BranchAuthRequest) => (req as any).reportFormat === 'xlsx' || String(req.query.format ?? '').toLowerCase() === 'xlsx';
+const sendXlsx = (res: Response, buf: Buffer, filename: string) => {
+  res.setHeader('Content-Type', XLSX_MIME);
+  res.setHeader('Content-Length', String(buf.length));
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  return res.status(200).send(buf);
+};
 
 /** Reports print on A4 by default; `?paper=roll` keeps the 80 mm thermal layout. */
 const wantsRoll = (req: BranchAuthRequest) => String(req.query.paper ?? '').toLowerCase() === 'roll';
@@ -414,11 +425,13 @@ export const getPluReportPdf = async (req: BranchAuthRequest, res: Response) => 
       rows: wantsRoll(req) ? rows.slice(0, 500) : rows,
       summary,
     };
+    const fileBase = `PLU-report-${periodStart ?? 'all'}-${periodEnd ?? 'all'}`;
+    if (wantsXlsx(req)) return sendXlsx(res, renderPluReportXlsx(pluData), `${fileBase}.xlsx`);
     const pdf = wantsRoll(req) ? await renderPluReportPdf(pluData) : await renderPluReportA4(pluData);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', String(pdf.length));
-    res.setHeader('Content-Disposition', `inline; filename="PLU-report.pdf"`);
+    res.setHeader('Content-Disposition', `inline; filename="${fileBase}.pdf"`);
     res.setHeader('Cache-Control', 'private, no-store');
     return res.status(200).send(pdf);
   } catch (error: any) {
@@ -1785,6 +1798,21 @@ async function buildDailyReport(
     if (tx?.totalRcptNo != null) lastTotalRcptNo = tx.totalRcptNo;
   }
 
+  // Per means of payment: VAT of NS sales and NR refunds (RRA's X/Z "Tax Amounts" grid).
+  const paymentTaxBreakdown: Record<string, { ns: number; nr: number }> = {};
+  const saleTax = (sale: any) => Math.abs((sale.saleItems ?? []).reduce((t: number, it: any) => t + Number(it.taxAmount ?? 0), 0));
+  for (const sale of normalSales as any[]) {
+    const e = (paymentTaxBreakdown[sale.paymentType] ??= { ns: 0, nr: 0 });
+    e.ns = fix2(e.ns + saleTax(sale));
+  }
+  for (const sale of normalRefunds as any[]) {
+    const e = (paymentTaxBreakdown[sale.paymentType] ??= { ns: 0, nr: 0 });
+    e.nr = fix2(e.nr + saleTax(sale));
+  }
+  const isRefundLabel = (s: any) => s.rcptLabel === 'NR' || s.rcptLabel === 'CR' || s.rcptLabel === 'TR' || (s.status === 'REFUNDED' && s.rcptLabel !== 'NS' && s.rcptLabel !== 'TS');
+  const copySplit = { cs: copiedSales.filter((s: any) => !isRefundLabel(s)).length, cr: copiedSales.filter((s: any) => isRefundLabel(s)).length };
+  const trainingSplit = { ts: trainingSales.filter((s: any) => s.rcptLabel !== 'TR').length, tr: trainingSales.filter((s: any) => s.rcptLabel === 'TR').length };
+
   // Z report only: cross-check against VSDC's own record of the day's close.
   let vsdcConfirmation: DailyReportData['vsdcConfirmation'] = null;
   if (reportType === 'Z' && isEbmEnabled()) {
@@ -1848,6 +1876,9 @@ async function buildDailyReport(
     paymentBreakdown: paymentTotals,
     refundPaymentBreakdown: refundPaymentTotals,
     groupTotals,
+    paymentTaxBreakdown,
+    copySplit,
+    trainingSplit,
   };
 }
 
@@ -1886,6 +1917,7 @@ export const getDailyReportPdf = async (req: BranchAuthRequest, res: Response) =
 
     const reportDate = req.query.date ? new Date(req.query.date as string) : new Date();
     const report = await buildDailyReport(req, organizationId, reportType, reportDate, req.query.branchId as string);
+    if (wantsXlsx(req)) return sendXlsx(res, renderDailyReportXlsx(report), `${reportType}-report-${report.reportDate}.xlsx`);
     const pdf = wantsRoll(req) ? await renderDailyReportPdf(report) : await renderDailyReportA4(report);
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -1897,6 +1929,16 @@ export const getDailyReportPdf = async (req: BranchAuthRequest, res: Response) =
     console.error('[Daily Report PDF Error]:', error);
     res.status(500).json(apiError('Failed to generate daily report PDF'));
   }
+};
+
+/** Same handlers, Excel output. */
+export const getDailyReportXlsx = (req: BranchAuthRequest, res: Response) => {
+  (req as any).reportFormat = 'xlsx';
+  return getDailyReportPdf(req, res);
+};
+export const getPluReportXlsx = (req: BranchAuthRequest, res: Response) => {
+  (req as any).reportFormat = 'xlsx';
+  return getPluReportPdf(req, res);
 };
 
 // CIS Electronic Journal (RRA CIS/VSDC spec §5 / checklist §44) The EJ text is built at the same
@@ -2033,134 +2075,94 @@ export const getElectronicJournalEntry = async (req: BranchAuthRequest, res: Res
   }
 };
 
-// Detailed purchases report (RRA checklist §25) Includes local purchase orders plus an
-// `importation` block from rra_import_items (checklist §66–68).
+// Purchases and importation reports (RRA checklist §25), built from what the VSDC delivered:
+// supplier invoices from /trnsPurchase/selectTrnsPurchaseSales (§70) and import declaration lines
+// from /imports/selectImportItems (§66). "Request date" is when this CIS requested (pulled) the
+// record from the VSDC, as on RRA's own Purchases / Imports reports, and the date range filters on
+// it. `?refresh=1` pulls anything new from the VSDC before reporting.
+
+const reportDayRange = (startDate: unknown, endDate: unknown): { gte: Date; lte: Date } | null => {
+  const ok = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v);
+  if (!ok(startDate) && !ok(endDate)) return null;
+  const s = ok(startDate) ? String(startDate).slice(0, 10) : '2000-01-01';
+  const e = ok(endDate) ? String(endDate).slice(0, 10) : '2999-12-31';
+  return { gte: new Date(`${s}T00:00:00`), lte: new Date(`${e}T23:59:59.999`) };
+};
+
+const wantsRefresh = (req: BranchAuthRequest) => ['1', 'true', 'yes'].includes(String(req.query.refresh ?? '').toLowerCase());
+
+type VsdcPullOutcome = { attempted: boolean; ok: boolean; fetched: number; error?: string };
+
+export async function pullFromVsdc(kind: 'purchases' | 'imports', req: BranchAuthRequest, organizationId: number): Promise<VsdcPullOutcome> {
+  if (!wantsRefresh(req)) return { attempted: false, ok: true, fetched: 0 };
+  try {
+    const branchId = req.selectedBranchId != null && req.selectedBranchId > 0 ? req.selectedBranchId : null;
+    const r = kind === 'purchases'
+      ? await (await import('../services/purchase-sync.service')).syncRraPurchases(organizationId, { branchId })
+      : await (await import('../services/rra-import.service')).syncRraImports(organizationId, { branchId });
+    return { attempted: true, ok: r.ok, fetched: r.fetched ?? 0, error: r.ok ? undefined : r.error };
+  } catch (e: any) {
+    console.error(`[${kind} report] VSDC pull failed:`, e);
+    return { attempted: true, ok: false, fetched: 0, error: e?.message ?? 'VSDC unreachable' };
+  }
+}
+
+const ymdDash = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const num = (v: any) => (v == null ? null : Number(v));
+
+export async function loadRraPurchasesReport(req: BranchAuthRequest, organizationId: number) {
+  const range = reportDayRange(req.query.startDate, req.query.endDate);
+  const invoices = await prisma.rraPurchase.findMany({
+    where: { organizationId, ...(range ? { pulledAt: range } : {}) },
+    include: { items: { orderBy: { itemSeq: 'asc' } } },
+    orderBy: [{ pulledAt: 'asc' }, { id: 'asc' }],
+    take: 5000,
+  });
+  const byStatus = { PENDING: 0, CONFIRMED: 0, REJECTED: 0 };
+  for (const i of invoices) byStatus[i.status] += 1;
+  const fix = (n: number) => Math.round(n * 100) / 100;
+  return {
+    summary: {
+      invoices: invoices.length,
+      ...byStatus,
+      totalAmt: fix(invoices.reduce((s, i) => s + Number(i.totAmt ?? 0), 0)),
+      totalTax: fix(invoices.reduce((s, i) => s + Number(i.totTaxAmt ?? 0), 0)),
+      totalTaxable: fix(invoices.reduce((s, i) => s + Number(i.totTaxblAmt ?? 0), 0)),
+    },
+    items: invoices.map((i) => ({
+      id: i.id,
+      spplrTin: i.spplrTin,
+      spplrNm: i.spplrNm,
+      spplrBhfId: i.spplrBhfId,
+      spplrInvcNo: String(i.spplrInvcNo),
+      requestDate: ymdDash(i.pulledAt),
+      requestedAt: i.pulledAt.toISOString(),
+      salesDt: i.salesDt,
+      totItemCnt: i.totItemCnt ?? i.items.length,
+      totTaxblAmt: Number(i.totTaxblAmt ?? 0),
+      totTaxAmt: Number(i.totTaxAmt ?? 0),
+      totAmt: Number(i.totAmt ?? 0),
+      status: i.status,
+      lines: i.items.map((it) => ({
+        itemSeq: it.itemSeq,
+        itemCd: it.itemCd,
+        itemNm: it.itemNm,
+        qty: Number(it.qty),
+        qtyUnitCd: it.qtyUnitCd,
+        prc: Number(it.prc),
+        totAmt: num(it.totAmt),
+        taxTyCd: it.taxTyCd,
+      })),
+    })),
+  };
+}
 
 export const getPurchasesReport = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
-    const { startDate, endDate } = req.query;
-
-    const where: any = { organizationId, ...buildBranchFilter(req) };
-    if (startDate && endDate && startDate !== 'undefined' && endDate !== 'undefined') {
-      const start = new Date(startDate as string);
-      const end = new Date(endDate as string);
-      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-        end.setHours(23, 59, 59, 999);
-        where.orderedAt = { gte: start, lte: end };
-      }
-    }
-
-    const orders = await prisma.purchaseOrder.findMany({
-      where,
-      include: {
-        supplier: { select: { name: true, phone: true, email: true } },
-        items: true,
-        branch: { select: { name: true, code: true } },
-      },
-      orderBy: { orderedAt: 'desc' },
-      take: 1000,
-    });
-
-    const rows = orders.map((po) => {
-      const taxTotal = po.items.reduce((s, it) => {
-        const rate = Number(it.taxRate ?? 0);
-        const line = it.totalPrice.toNumber();
-        return s + (rate > 0 ? line - line / (1 + rate / 100) : 0);
-      }, 0);
-      return {
-        id: po.id,
-        orderNumber: po.orderNumber,
-        status: po.status,
-        supplierName: po.supplier?.name ?? '',
-        branch: po.branch?.name ?? null,
-        orderedAt: po.orderedAt.toISOString().split('T')[0],
-        receivedAt: po.receivedAt ? po.receivedAt.toISOString().split('T')[0] : null,
-        itemCount: po.items.length,
-        totalAmount: po.totalAmount.toNumber(),
-        taxTotal: Math.round(taxTotal * 100) / 100,
-        items: po.items.map((it) => ({
-          productName: it.productName,
-          quantity: it.quantity,
-          quantityReceived: it.quantityReceived,
-          unitPrice: it.unitPrice.toNumber(),
-          totalPrice: it.totalPrice.toNumber(),
-          taxCode: it.taxCode,
-          taxRate: Number(it.taxRate ?? 0),
-        })),
-      };
-    });
-
-    res.json(success({
-      summary: {
-        orderCount: rows.length,
-        receivedCount: rows.filter((r) => r.status === 'COMPLETED' || r.receivedAt).length,
-        totalPurchases: Math.round(rows.reduce((s, r) => s + r.totalAmount, 0) * 100) / 100,
-        totalTax: Math.round(rows.reduce((s, r) => s + r.taxTotal, 0) * 100) / 100,
-      },
-      importation: await (async () => {
-        const importWhere: any = { organizationId };
-        if (where.orderedAt) {
-          // RraImportItem.dclDe is yyyyMMdd text; range-filter on the string.
-          const d = (v: any) => new Date(v).toISOString().slice(0, 10).replace(/-/g, '');
-          importWhere.dclDe = { gte: d(where.orderedAt.gte), lte: d(where.orderedAt.lte) };
-        }
-        const imports = await prisma.rraImportItem.findMany({ where: importWhere, orderBy: [{ dclDe: 'desc' }, { itemSeq: 'asc' }], take: 500 });
-        const byStatus = { PENDING: 0, APPROVED: 0, REJECTED: 0 };
-        for (const i of imports) byStatus[i.status] += 1;
-        return {
-          available: true,
-          summary: { lines: imports.length, ...byStatus },
-          items: imports.map((i) => ({
-            taskCd: i.taskCd,
-            dclNo: i.dclNo,
-            dclDe: i.dclDe,
-            itemSeq: i.itemSeq,
-            hsCd: i.hsCd,
-            itemNm: i.itemNm,
-            orgnNatCd: i.orgnNatCd,
-            supplier: i.spplrNm,
-            qty: i.qty ? i.qty.toNumber() : null,
-            invcFcurAmt: i.invcFcurAmt ? i.invcFcurAmt.toNumber() : null,
-            invcFcurCd: i.invcFcurCd,
-            status: i.status,
-          })),
-        };
-      })(),
-      // Supplier invoices received from RRA (selectTrnsPurchaseSales) — purchases made without a local PO.
-      rraPurchases: await (async () => {
-        const pWhere: any = { organizationId };
-        if (where.orderedAt) {
-          // RraPurchase.salesDt is yyyyMMdd text; range-filter on the string.
-          const d = (v: any) => new Date(v).toISOString().slice(0, 10).replace(/-/g, '');
-          pWhere.salesDt = { gte: d(where.orderedAt.gte), lte: d(where.orderedAt.lte) };
-        }
-        const invoices = await prisma.rraPurchase.findMany({ where: pWhere, orderBy: [{ salesDt: 'desc' }, { id: 'desc' }], take: 500 });
-        const byStatus = { PENDING: 0, CONFIRMED: 0, REJECTED: 0 };
-        for (const i of invoices) byStatus[i.status] += 1;
-        const fix = (n: number) => Math.round(n * 100) / 100;
-        return {
-          summary: {
-            invoices: invoices.length,
-            ...byStatus,
-            totalAmt: fix(invoices.reduce((s, i) => s + Number(i.totAmt ?? 0), 0)),
-            totalTax: fix(invoices.reduce((s, i) => s + Number(i.totTaxAmt ?? 0), 0)),
-          },
-          items: invoices.map((i) => ({
-            id: i.id,
-            spplrTin: i.spplrTin,
-            spplrNm: i.spplrNm,
-            spplrInvcNo: String(i.spplrInvcNo),
-            salesDt: i.salesDt,
-            totItemCnt: i.totItemCnt,
-            totTaxAmt: Number(i.totTaxAmt ?? 0),
-            totAmt: Number(i.totAmt ?? 0),
-            status: i.status,
-          })),
-        };
-      })(),
-      orders: rows,
-    }));
+    const vsdc = await pullFromVsdc('purchases', req, organizationId);
+    const data = await loadRraPurchasesReport(req, organizationId);
+    res.json(success({ ...data, vsdc }));
   } catch (error: any) {
     console.error('[Purchases Report Error]:', error);
     res.status(500).json(apiError('Failed to generate purchases report'));
@@ -2170,34 +2172,50 @@ export const getPurchasesReport = async (req: BranchAuthRequest, res: Response) 
 /** Detailed items report (RRA checklist §25). Same stock catalog as inventory, under its own route. */
 export const getItemsReport = getInventoryReport;
 
-/** Importation report (RRA checklist §25), separate from local purchase orders. */
+export async function loadRraImportsReport(req: BranchAuthRequest, organizationId: number) {
+  const range = reportDayRange(req.query.startDate, req.query.endDate);
+  const imports = await prisma.rraImportItem.findMany({
+    where: { organizationId, ...(range ? { pulledAt: range } : {}) },
+    orderBy: [{ pulledAt: 'asc' }, { dclDe: 'asc' }, { itemSeq: 'asc' }],
+    take: 5000,
+  });
+  const byStatus = { PENDING: 0, APPROVED: 0, REJECTED: 0 };
+  for (const i of imports) byStatus[i.status] += 1;
+  return {
+    summary: { lines: imports.length, ...byStatus },
+    items: imports.map((i) => ({
+      id: i.id,
+      taskCd: i.taskCd,
+      requestDate: ymdDash(i.pulledAt),
+      requestedAt: i.pulledAt.toISOString(),
+      dclNo: i.dclNo,
+      dclDe: i.dclDe,
+      itemSeq: i.itemSeq,
+      hsCd: i.hsCd,
+      itemNm: i.itemNm,
+      orgnNatCd: i.orgnNatCd,
+      exptNatCd: i.exptNatCd,
+      supplier: i.spplrNm,
+      agent: i.agntNm,
+      qty: num(i.qty),
+      qtyUnitCd: i.qtyUnitCd,
+      pkg: num(i.pkg),
+      pkgUnitCd: i.pkgUnitCd,
+      invcFcurAmt: num(i.invcFcurAmt),
+      invcFcurCd: i.invcFcurCd,
+      invcFcurExcrt: num(i.invcFcurExcrt),
+      status: i.status,
+    })),
+  };
+}
+
+/** Importation report (RRA checklist §25): import declaration lines received from the VSDC. */
 export const getImportationReport = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
-    const imports = await prisma.rraImportItem.findMany({
-      where: { organizationId },
-      orderBy: [{ dclDe: 'desc' }, { itemSeq: 'asc' }],
-      take: 500,
-    });
-    const byStatus = { PENDING: 0, APPROVED: 0, REJECTED: 0 };
-    for (const i of imports) byStatus[i.status] += 1;
-    res.json(success({
-      summary: { lines: imports.length, ...byStatus },
-      items: imports.map((i) => ({
-        taskCd: i.taskCd,
-        dclNo: i.dclNo,
-        dclDe: i.dclDe,
-        itemSeq: i.itemSeq,
-        hsCd: i.hsCd,
-        itemNm: i.itemNm,
-        orgnNatCd: i.orgnNatCd,
-        supplier: i.spplrNm,
-        qty: i.qty ? i.qty.toNumber() : null,
-        invcFcurAmt: i.invcFcurAmt ? i.invcFcurAmt.toNumber() : null,
-        invcFcurCd: i.invcFcurCd,
-        status: i.status,
-      })),
-    }));
+    const vsdc = await pullFromVsdc('imports', req, organizationId);
+    const data = await loadRraImportsReport(req, organizationId);
+    res.json(success({ ...data, vsdc }));
   } catch (error: any) {
     console.error('[Importation Report Error]:', error);
     res.status(500).json(apiError('Failed to generate importation report'));

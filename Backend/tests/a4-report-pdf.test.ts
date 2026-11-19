@@ -2,12 +2,15 @@ import { describe, expect, it, vi } from "vitest"
 import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import PDFDocument from "pdfkit"
+import * as XLSX from "xlsx"
 import {
-  buildDailyReportA4,
-  renderA4Report,
+  buildDailyReportSummary,
   renderDailyReportA4,
+  renderDailyReportXlsx,
   renderPluReportA4,
+  renderPluReportXlsx,
 } from "../src/services/a4-report-pdf.service"
+import { renderRraTablePdf, renderRraTableXlsx, fmtMoney } from "../src/services/rra-report-layout.service"
 import type { DailyReportData, PluReportData } from "../src/services/fiscal-report-pdf.service"
 
 const header = {
@@ -61,6 +64,9 @@ function daily(reportType: "X" | "Z"): DailyReportData {
     refundPaymentBreakdown: { CASH: -118_000 },
     groupTotals: { Dairy: { salesAmt: 4_382_440, refundAmt: -118_000, itemCount: 37 } },
     vsdcConfirmation: reportType === "Z" ? { checked: true, rptDe: "20260830" } : null,
+    paymentTaxBreakdown: { CASH: { ns: 594_915.25, nr: 18_000 }, MOBILE_MONEY: { ns: 73_525.42, nr: 0 } },
+    copySplit: { cs: 2, cr: 1 },
+    trainingSplit: { ts: 1, tr: 0 },
   }
 }
 
@@ -114,78 +120,126 @@ async function drawnText(render: () => Promise<Buffer>): Promise<string> {
   return drawn.join("\n")
 }
 
-describe("A4 report PDFs", () => {
-  it("renders the X daily report on A4 with every Art. 18 section", async () => {
+describe("RRA-layout report PDFs", () => {
+  it("renders the X report like RRA's portal: banner, identity block, All Transactions", async () => {
     const pdf = await renderDailyReportA4(daily("X"))
     maybeWrite("x-report.pdf", pdf)
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-")
     expect(pdf.toString("latin1")).toMatch(A4_PORTRAIT)
     const text = await drawnText(() => renderDailyReportA4(daily("X")))
     for (const needle of [
-      "X DAILY REPORT",
-      "TIN: 100000000",
-      "RECEIPT COUNTERS",
-      "Normal sales",
-      "Normal refunds",
-      "TAXABLE AMOUNTS AND TAX PER RATE",
-      "MEANS OF PAYMENT",
-      "SALES PER MAIN GROUP",
+      "X Report",
+      "Trade Name: ",
+      "Configured Taxpayer Ltd",
+      "MRC: ",
+      "All Transactions",
+      "Description",
+      "Amount (RWF)",
+      "Total Sales Amount (NS)",
+      "4,500,000 RWF",
+      "Total Sales Amount by Main Groups",
+      "Number of Sales Receipts (NS)",
+      "Total Refund Amount (NR)",
+      "118,000 RWF",
+      "Number of Refund Receipts (NR)",
+      "Taxable Amounts",
       "Opening deposit",
-      "Receipt copies",
-      "Training mode receipts",
-      "Advance (proforma) receipts",
+      "Number of items sold",
+      "Tax Amounts",
+      "594,915.25 RWF",
+      "CS : 2 | CR : 1",
+      "Number of Receipt Copies (CS/CR)",
+      "Number of Receipts in Training Mode (TS/TR)",
+      "Number of Advance Receipts in Proforma Mode (PS)",
+      "Total Sales divided according to means of payment for sales (NS) and refund (NR) receipts",
+      "MOBILE MONEY",
       "All discounts",
-      "Incomplete sales",
-      "Page 1 of 1",
+      "Number of incomplete sales",
+      "Other registrations that have reduced the day sales and their amount",
+      "All Rights Reserved.",
     ]) {
       expect(text).toContain(needle)
     }
     expect(text).not.toContain("VSDC confirmation")
-  })
-
-  it("renders the Z daily report with the VSDC confirmation", async () => {
-    const pdf = await renderDailyReportA4(daily("Z"))
-    maybeWrite("z-report.pdf", pdf)
-    const text = await drawnText(() => renderDailyReportA4(daily("Z")))
-    expect(text).toContain("Z DAILY REPORT")
-    expect(text).toContain("VSDC confirmation")
-    expect(text).toContain("Confirmed by VSDC for 30/08/2026")
     expect(pageCount(pdf)).toBe(1)
   })
 
-  it("prints band B always and 0% bands only when used (Art. 7.22/7.23)", () => {
-    const spec = buildDailyReportA4(daily("X"))
-    const bands = spec.blocks.find((b) => b.kind === "table" && b.heading === "Taxable amounts and tax per rate")
-    expect(bands && bands.kind === "table" && bands.rows.map((r) => r[0])).toEqual(["A", "B"])
+  it("renders the Z report with the VSDC confirmation", async () => {
+    const pdf = await renderDailyReportA4(daily("Z"))
+    maybeWrite("z-report.pdf", pdf)
+    const text = await drawnText(() => renderDailyReportA4(daily("Z")))
+    expect(text).toContain("Z Report")
+    expect(text).not.toContain("VSDC confirmation")
+    expect(pageCount(pdf)).toBe(1)
   })
 
-  it("renders the PLU report on A4 and paginates long item lists", async () => {
+  it("has exactly the 16 rows of RRA's X/Z report, with payment grids", () => {
+    const spec = buildDailyReportSummary({ ...daily("Z"), copySplit: { cs: 2, cr: 1 }, trainingSplit: { ts: 1, tr: 0 }, paymentTaxBreakdown: { CASH: { ns: 594_915.25, nr: 18_000 } } })
+    expect(spec.rows).toHaveLength(16)
+    expect(spec.rows.map((r) => r.label).at(-1)).toBe("Other registrations that have reduced the day sales and their amount")
+    const tax = spec.rows.find((r) => r.label === "Tax Amounts")
+    expect(tax?.grid?.head).toEqual(["Payment", "Amount(NS)", "Amount(NR)"])
+    expect(tax?.grid?.rows).toContainEqual(["CASH", "594,915.25 RWF", "18,000.00 RWF"])
+    expect(spec.rows.find((r) => r.label.startsWith("Number of Receipt Copies"))?.value).toBe("CS : 2 | CR : 1")
+    expect(spec.extraHeader ?? []).toEqual([])
+  })
+
+  it("exports the X report to Excel with the same rows", () => {
+    const wb = XLSX.read(renderDailyReportXlsx(daily("X")), { type: "buffer" })
+    const rows = XLSX.utils.sheet_to_json<string[]>(wb.Sheets[wb.SheetNames[0]], { header: 1 })
+    expect(rows[0][0]).toBe("X Report")
+    expect(rows.some((r) => r[0] === "Total Sales Amount (NS)" && r[1] === "4,500,000 RWF")).toBe(true)
+  })
+
+  it("renders the PLU report in RRA's landscape table layout and paginates", async () => {
     const short = await renderPluReportA4(plu(2))
-    maybeWrite("plu-report.pdf", await renderPluReportA4(plu(90)))
-    expect(short.toString("latin1")).toMatch(A4_PORTRAIT)
+    maybeWrite("plu-report.pdf", short)
+    expect(short.toString("latin1")).toMatch(A4_LANDSCAPE)
     expect(pageCount(short)).toBe(1)
+    const text = await drawnText(() => renderPluReportA4(plu(2)))
+    for (const needle of ["PLU REPORT", "Configured Taxpayer Ltd", "TIN: 100000000", "Date: 2026-08-01 - 2026-08-30", "Item Name", "Remain Quantity", "Generated on: "]) {
+      expect(text).toContain(needle)
+    }
     const long = await renderPluReportA4(plu(90))
     expect(pageCount(long)).toBeGreaterThan(1)
-    const text = await drawnText(() => renderPluReportA4(plu(90)))
-    expect(text).toMatch(/Page 2 of \d/)
-    // The table header repeats on every page.
-    expect((text.match(/Remaining stock/g) ?? []).length).toBe(pageCount(long))
+    const longText = await drawnText(() => renderPluReportA4(plu(90)))
+    expect(longText).toMatch(/Page 2 of \d/)
+    expect((longText.match(/Remain Quantity/g) ?? []).length).toBe(pageCount(long))
   })
 
-  it("renders landscape table reports and journal text blocks", async () => {
-    const pdf = await renderA4Report({
-      title: "ELECTRONIC JOURNAL",
-      header,
-      landscape: true,
-      meta: [["From", "2026-08-01"]],
-      subject: "test",
-      blocks: [
-        { kind: "table", heading: "Index", columns: [{ label: "A", width: 1 }, { label: "B", width: 1, align: "right" }], rows: [["x", "1"]] },
-        { kind: "text", heading: "Journal records", caption: "NS 1/1", lines: Array.from({ length: 120 }, (_, i) => `LINE ${i}`) },
+  it("exports the PLU report to Excel with numeric cells", () => {
+    const wb = XLSX.read(renderPluReportXlsx(plu(3)), { type: "buffer" })
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1 })
+    const head = rows.findIndex((r) => r[0] === "No")
+    expect(rows[head]).toEqual(["No", "Item Name", "Item Code", "Unit Price", "Tax Rate", "Sold Quantity", "Remain Quantity"])
+    expect(rows[head + 1][3]).toBe(1180)
+  })
+
+  it("renders a totals row and journal appendix", async () => {
+    const report = {
+      title: "SALES REPORT",
+      orgName: header.orgName,
+      tin: header.tin,
+      period: "2026-08-01 - 2026-08-30",
+      columns: [
+        { label: "#", width: 0.5 },
+        { label: "Items", width: 3 },
+        { label: "Total Amount", width: 1.5, format: fmtMoney, numFmt: "#,##0.00" },
       ],
-    })
-    maybeWrite("journal-sample.pdf", pdf)
+      rows: [[1, "GYM (Session) x 1\nSwim x 2", 4000]],
+      totals: { label: "Total Sales", span: 2, values: [4000] },
+      appendix: { title: "Journal Records", records: [{ caption: "NS 1/1", lines: Array.from({ length: 120 }, (_, i) => `LINE ${i}`) }] },
+      subject: "test",
+    }
+    const pdf = await renderRraTablePdf(report)
+    maybeWrite("sales-sample.pdf", pdf)
     expect(pdf.toString("latin1")).toMatch(A4_LANDSCAPE)
     expect(pageCount(pdf)).toBeGreaterThan(1)
+    const text = await drawnText(() => renderRraTablePdf(report))
+    expect(text).toContain("Total Sales")
+    expect(text).toContain("4,000.00")
+    const wb = XLSX.read(renderRraTableXlsx(report), { type: "buffer" })
+    expect(wb.SheetNames).toHaveLength(2)
   })
 })

@@ -82,6 +82,12 @@ export interface DailyReportData {
   /** R10: totals per main group (product category), sales vs refunds. */
   groupTotals: Record<string, { salesAmt: number; refundAmt: number; itemCount: number }>
   vsdcConfirmation: { checked: boolean; rptDe?: string; savedAt?: string; error?: string } | null
+  /** Tax (VAT) per means of payment, sales vs refunds (absolute amounts), as on RRA's X/Z report. */
+  paymentTaxBreakdown?: Record<string, { ns: number; nr: number }>
+  /** Copies split into CS (copy of a sale) and CR (copy of a refund). */
+  copySplit?: { cs: number; cr: number }
+  /** Training receipts split into TS and TR. */
+  trainingSplit?: { ts: number; tr: number }
 }
 
 export interface PluReportData {

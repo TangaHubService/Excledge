@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { FileText, Download, Loader2, ScrollText, ChevronRight, CheckCircle2, AlertTriangle, RefreshCw, Database, Bell, Boxes, Truck, X, Ship, Shield, Eye, ExternalLink, Send, Check, Printer } from "lucide-react";
+import { FileText, Download, Loader2, ScrollText, ChevronRight, CheckCircle2, AlertTriangle, RefreshCw, Database, Bell, Boxes, Truck, X, Ship, Shield, Eye, ExternalLink, Send, Check, Printer, FileSpreadsheet, Receipt, Package, ClipboardList } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
 import { RraItemClassPicker } from "../../../components/inventory/RraItemClassPicker";
 import { SearchableSelect } from "../../../components/ui/SearchableSelect";
 import { parseInventoryGetProductsResponse } from "../../../lib/inventory-response";
 import { toast } from "react-toastify";
 import { toastError, toastWarning } from "../../../lib/friendly-error";
-import { apiClient } from "../../../lib/api-client";
+import { apiClient, type RraReportKind } from "../../../lib/api-client";
 import { useBranch } from "../../../context/BranchContext";
 import { Button } from "../../../components/ui/button";
 import { StatusBadge } from "../../../components/ui/status-badge";
@@ -145,6 +145,288 @@ async function openPdf(fetcher: () => Promise<Response>, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
+/** File name from Content-Disposition, falling back to `fallback`. */
+function fileNameFrom(res: Response, fallback: string): string {
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+  return m ? decodeURIComponent(m[1]) : fallback;
+}
+
+async function saveFile(res: Response, fallback: string) {
+  if (!res.ok) {
+    let msg = "Report generation failed";
+    try {
+      const j = await res.json();
+      msg = j?.error ?? j?.message ?? msg;
+    } catch {
+      /* not json */
+    }
+    throw new Error(msg);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileNameFrom(res, fallback);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+type ReportParams = Record<string, string | number | undefined | null>;
+
+/**
+ * PDF + Excel buttons for one report. The PDF opens in a new tab (RRA's report layout); the Excel
+ * workbook downloads with the same rows.
+ */
+function ReportDownloads({ kind, params, name, excel = true }: { kind: RraReportKind; params: ReportParams; name: string; excel?: boolean }) {
+  const [busy, setBusy] = useState<"pdf" | "xlsx" | null>(null);
+  const run = async (format: "pdf" | "xlsx") => {
+    setBusy(format);
+    try {
+      if (format === "pdf") await openPdf(() => apiClient.downloadRraReport(kind, "pdf", params), `${name}.pdf`);
+      else await saveFile(await apiClient.downloadRraReport(kind, "xlsx", params), `${name}.xlsx`);
+    } catch (e: any) {
+      toastError(e, format === "pdf" ? "Could not generate the PDF" : "Could not generate the Excel file");
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button variant="outline" onClick={() => run("pdf")} disabled={busy !== null}>
+        {busy === "pdf" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} PDF
+      </Button>
+      {excel && (
+        <Button variant="outline" onClick={() => run("xlsx")} disabled={busy !== null}>
+          {busy === "xlsx" ? <Loader2 className="size-4 animate-spin" /> : <FileSpreadsheet className="size-4" />} Excel
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** From / To date inputs used by every range report. */
+function DateRangeFilter({
+  id,
+  start,
+  end,
+  onStart,
+  onEnd,
+}: {
+  id: string;
+  start: string;
+  end: string;
+  onStart: (v: string) => void;
+  onEnd: (v: string) => void;
+}) {
+  return (
+    <>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={`${id}-start`}>From</Label>
+        <Input id={`${id}-start`} type="date" value={start} max={end || todayIso()} onChange={(e) => onStart(e.target.value)} className="w-40" />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={`${id}-end`}>To</Label>
+        <Input id={`${id}-end`} type="date" value={end} min={start} max={todayIso()} onChange={(e) => onEnd(e.target.value)} className="w-40" />
+      </div>
+    </>
+  );
+}
+
+interface RraTableData {
+  title: string;
+  orgName: string;
+  tin: string | null;
+  period: string;
+  extraHeader: Array<[string, string]>;
+  columns: Array<{ label: string; align: "left" | "center" | "right" }>;
+  rows: string[][];
+  totals: { label: string; span: number; values: string[] } | null;
+  emptyText: string | null;
+  notes: string[];
+  vsdc: { attempted: boolean; ok: boolean; fetched: number; error?: string } | null;
+}
+
+const RRA_HEAD = "bg-primary text-primary-foreground";
+const alignClass = (a: string) => (a === "left" ? "text-left" : a === "right" ? "text-right" : "text-center");
+
+/** The report as it will print: title, taxpayer block and the RRA-style table. */
+function RraTablePreview({ data }: { data: RraTableData }) {
+  return (
+    <div className="space-y-3 rounded-lg border bg-card p-4">
+      <div className="text-center text-base font-bold text-foreground">{data.title}</div>
+      <div className="space-y-0.5 text-sm font-semibold text-foreground">
+        <div>{data.orgName || "—"}</div>
+        <div>TIN: {data.tin || "—"}</div>
+        {data.extraHeader.map(([k, v]) => (
+          <div key={k}>{k}: {v}</div>
+        ))}
+        <div>Date: {data.period}</div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse text-xs">
+          <thead>
+            <tr>
+              {data.columns.map((c, i) => (
+                <th key={i} className={`border border-foreground/60 px-2 py-2 font-semibold ${RRA_HEAD} text-center ${c.label.length <= 14 ? "whitespace-nowrap" : ""}`}>{c.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.length === 0 && (
+              <tr>
+                <td colSpan={data.columns.length} className="border border-foreground/60 px-2 py-4 text-center text-muted-foreground">
+                  {data.emptyText ?? "No records for this period."}
+                </td>
+              </tr>
+            )}
+            {data.rows.map((row, ri) => (
+              <tr key={ri}>
+                {row.map((cell, ci) => (
+                  <td key={ci} className={`${/\s/.test(cell) ? "whitespace-pre-line" : "whitespace-nowrap"} border border-foreground/60 px-2 py-1.5 align-middle tabular-nums ${alignClass(data.columns[ci]?.align ?? "center")}`}>
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            {data.totals && data.rows.length > 0 && (
+              <tr className="bg-primary/5 font-semibold">
+                <td colSpan={data.totals.span} className="border border-foreground/60 px-2 py-1.5 text-center">{data.totals.label}</td>
+                {data.totals.values.map((v, i) => (
+                  <td key={i} className={`border border-foreground/60 px-2 py-1.5 tabular-nums ${alignClass(data.columns[data.totals!.span + i]?.align ?? "center")}`}>{v}</td>
+                ))}
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {data.notes.map((n) => (
+        <p key={n} className="text-center text-xs text-muted-foreground">{n}</p>
+      ))}
+    </div>
+  );
+}
+
+type TableKind = "sales" | "purchases" | "imports" | "stock" | "items";
+
+/**
+ * One report screen: date filter, PDF + Excel downloads and a preview identical to the PDF.
+ * `fromVsdc` reports (purchases, imports) pull anything new from the RRA VSDC on first load and on
+ * "Get latest from RRA".
+ */
+function TableReportCard({
+  kind,
+  title,
+  description,
+  icon: Icon,
+  fileName,
+  dateMode = "range",
+  defaultDays = 30,
+  fromVsdc = false,
+  closingToggle = false,
+}: {
+  kind: TableKind;
+  title: string;
+  description: ReactNode;
+  icon: typeof FileText;
+  fileName: string;
+  dateMode?: "range" | "asOf";
+  defaultDays?: number;
+  fromVsdc?: boolean;
+  closingToggle?: boolean;
+}) {
+  const { selectedBranchId } = useBranch();
+  const [start, setStart] = useState(daysAgoIso(defaultDays));
+  const [end, setEnd] = useState(todayIso());
+  const [closingOnly, setClosingOnly] = useState(false);
+  const [data, setData] = useState<RraTableData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [pulledOnce, setPulledOnce] = useState(!fromVsdc);
+
+  const params: ReportParams = useMemo(() => {
+    if (dateMode === "asOf") return { asOf: end };
+    if (closingOnly) return { asOf: end };
+    return { startDate: start, endDate: end };
+  }, [dateMode, closingOnly, start, end]);
+
+  const load = useCallback(
+    async (refresh: boolean) => {
+      if (refresh) setPulling(true);
+      else setLoading(true);
+      try {
+        const res = await apiClient.getRraReportTable(kind, { ...params, refresh });
+        const d = ((res as any)?.data ?? res) as RraTableData;
+        setData(d);
+        if (refresh && d.vsdc?.attempted) {
+          if (!d.vsdc.ok) toastWarning("Could not reach RRA VSDC; showing the records already received.", d.vsdc.error);
+          else if (d.vsdc.fetched > 0) toast.success(`RRA VSDC sent ${d.vsdc.fetched} record(s).`);
+        }
+      } catch (e: any) {
+        toastError(e, `Could not load the ${title.toLowerCase()}`);
+      } finally {
+        setLoading(false);
+        setPulling(false);
+      }
+    },
+    [kind, params, title],
+  );
+
+  // First load of a VSDC report asks RRA for anything new; later filter changes only re-query.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      load(!pulledOnce);
+      setPulledOnce(true);
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, selectedBranchId]);
+
+  const name = `${fileName} [${dateMode === "asOf" || closingOnly ? end : start === end ? start : `${start} - ${end}`}]`;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Icon className="size-4" /> {title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-end gap-3">
+          {dateMode === "asOf" || closingOnly ? (
+            <div className="flex flex-col gap-1">
+              <Label htmlFor={`${kind}-asof`}>{closingOnly ? "Closing stock at" : "Stock as at"}</Label>
+              <Input id={`${kind}-asof`} type="date" value={end} max={todayIso()} onChange={(e) => setEnd(e.target.value)} className="w-40" />
+            </div>
+          ) : (
+            <DateRangeFilter id={kind} start={start} end={end} onStart={setStart} onEnd={setEnd} />
+          )}
+          {closingToggle && (
+            <label className="flex h-9 items-center gap-2 text-sm">
+              <input type="checkbox" className="size-4" checked={closingOnly} onChange={(e) => setClosingOnly(e.target.checked)} />
+              Closing stock only
+            </label>
+          )}
+          {fromVsdc && (
+            <Button variant="outline" onClick={() => load(true)} disabled={pulling || loading}>
+              {pulling ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Get latest from RRA
+            </Button>
+          )}
+          <ReportDownloads kind={kind} params={params} name={name} />
+          {(loading || pulling) && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+        </div>
+        {fromVsdc && data?.vsdc?.attempted && !data.vsdc.ok && (
+          <p className="flex items-center gap-2 rounded-md bg-warning/10 px-3 py-2 text-xs text-warning">
+            <AlertTriangle className="size-4" /> RRA VSDC did not answer ({data.vsdc.error ?? "offline"}). The report shows the records received so far.
+          </p>
+        )}
+        {data && <RraTablePreview data={data} />}
+      </CardContent>
+    </Card>
+  );
+}
+
 interface DailyReport {
   reportType: "X" | "Z";
   reportDate: string;
@@ -205,12 +487,12 @@ function DailyReportCard() {
     return () => clearTimeout(t);
   }, [load]);
 
-  const download = async (paper: "a4" | "roll" = "a4") => {
+  const downloadRoll = async () => {
     setDownloading(true);
     try {
       await openPdf(
-        () => apiClient.getDailyFiscalReportPdf({ type, date, branchId: branchId || undefined, paper }),
-        `${type}-report-${date}${paper === "roll" ? "-80mm" : ""}.pdf`,
+        () => apiClient.getDailyFiscalReportPdf({ type, date, branchId: branchId || undefined, paper: "roll" }),
+        `${type}-report-${date}-80mm.pdf`,
       );
     } catch (e: any) {
       toastError(e, "Could not generate the PDF");
@@ -281,11 +563,13 @@ function DailyReportCard() {
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" onClick={() => download("a4")} disabled={downloading}>
-            {downloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF (A4)
-          </Button>
-          <Button variant="ghost" onClick={() => download("roll")} disabled={downloading} title="80 mm thermal roll">
-            <Printer className="size-4" /> 80mm
+          <ReportDownloads
+            kind="daily"
+            params={{ type, date, branchId: branchId || undefined }}
+            name={type === "Z" ? `Z_Report_${date}` : `X_Report_[${date}]`}
+          />
+          <Button variant="ghost" onClick={downloadRoll} disabled={downloading} title="80 mm thermal roll">
+            {downloading ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />} 80mm
           </Button>
           {type === "Z" && (
             <Button onClick={sendZ} disabled={!canSendZ || sendingZ}>
@@ -408,7 +692,6 @@ interface PluRow {
 function PluCard() {
   const [start, setStart] = useState(daysAgoIso(30));
   const [end, setEnd] = useState(todayIso());
-  const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<PluRow[] | null>(null);
   const [summary, setSummary] = useState<{ uniqueItemCodes: number; totalQuantity: number; totalRevenue: number; totalTax: number } | null>(null);
@@ -440,30 +723,8 @@ function PluCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="plu-start">From</Label>
-            <Input id="plu-start" type="date" value={start} max={end} onChange={(e) => setStart(e.target.value)} className="w-40" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="plu-end">To</Label>
-            <Input id="plu-end" type="date" value={end} max={todayIso()} onChange={(e) => setEnd(e.target.value)} className="w-40" />
-          </div>
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await openPdf(() => apiClient.getPluReportPdf({ startDate: start, endDate: end }), "PLU-report.pdf");
-              } catch (e: any) {
-                toastError(e, "Could not generate the PLU report");
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF (A4)
-          </Button>
+          <DateRangeFilter id="plu" start={start} end={end} onStart={setStart} onEnd={setEnd} />
+          <ReportDownloads kind="plu" params={{ startDate: start, endDate: end }} name={`PLU [${start} - ${end}]`} />
           {loading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
         </div>
 
@@ -565,18 +826,11 @@ function ElectronicJournalCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="ej-start">From</Label>
-            <Input id="ej-start" type="date" value={start} max={end} onChange={(e) => setStart(e.target.value)} className="w-40" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="ej-end">To</Label>
-            <Input id="ej-end" type="date" value={end} max={todayIso()} onChange={(e) => setEnd(e.target.value)} className="w-40" />
-          </div>
+          <DateRangeFilter id="ej" start={start} end={end} onStart={setStart} onEnd={setEnd} />
           <Button variant="outline" onClick={load} disabled={loading}>
             {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Refresh
           </Button>
-          <A4PdfButton kind="electronic-journal" params={{ startDate: start, endDate: end }} filename={`electronic-journal-${start}-${end}.pdf`} />
+          <ReportDownloads kind="electronic-journal" params={{ startDate: start, endDate: end }} name={`Electronic Journal [${start} - ${end}]`} />
         </div>
 
         <div className="overflow-x-auto rounded-lg border">
@@ -1603,195 +1857,6 @@ function ImportDeclarationsCard() {
   );
 }
 
-function PurchasesImportDetailReportCard() {
-  const [start, setStart] = useState(daysAgoIso(30));
-  const [end, setEnd] = useState(todayIso());
-  const [busy, setBusy] = useState(false);
-  const [data, setData] = useState<any>(null);
-
-  const load = async () => {
-    setBusy(true);
-    try {
-      const res = await apiClient.getPurchasesReport({ startDate: start, endDate: end });
-      setData((res as any)?.data ?? res);
-    } catch (e: any) {
-      toastError(e, "Could not load purchases / importation report");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const summary = data?.summary;
-  const importation = data?.importation;
-  const orders = (data?.orders ?? []) as any[];
-  const importItems = (importation?.items ?? []) as any[];
-  const rraPurchases = data?.rraPurchases;
-  const rraInvoices = (rraPurchases?.items ?? []) as any[];
-  const [section, setSection] = useState("rra");
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Truck className="size-4" /> Purchases &amp; importation</CardTitle>
-        <CardDescription>
-          Detailed purchases and importation report (RRA checklist §25) — local purchase orders, supplier invoices received from RRA, and import declaration lines.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">From</Label>
-            <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="w-40" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">To</Label>
-            <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="w-40" />
-          </div>
-          <Button variant="outline" onClick={load} disabled={busy}>
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Load report
-          </Button>
-          <A4PdfButton kind="purchases" params={{ startDate: start, endDate: end }} filename={`purchases-report-${start}-${end}.pdf`} />
-        </div>
-
-        {summary && (
-          <div className="flex flex-wrap gap-2">
-            <Stat value={summary.orderCount ?? 0} label="purchase orders" />
-            <Stat value={money(summary.totalPurchases)} label="PO total" />
-            {rraPurchases?.summary && (
-              <>
-                <Stat value={rraPurchases.summary.invoices ?? 0} label="RRA invoices" />
-                <Stat value={money(rraPurchases.summary.totalAmt)} label="invoice total" />
-                <Stat value={rraPurchases.summary.PENDING ?? 0} label="to review" tone={(rraPurchases.summary.PENDING ?? 0) > 0 ? "warning" : "default"} />
-              </>
-            )}
-            <Stat value={money((summary.totalTax ?? 0) + (rraPurchases?.summary?.totalTax ?? 0))} label="tax" />
-            {importation?.summary && (
-              <>
-                <Stat value={importation.summary.lines ?? 0} label="import lines" />
-                <Stat value={importation.summary.PENDING ?? 0} label="pending" tone={(importation.summary.PENDING ?? 0) > 0 ? "warning" : "default"} />
-                <Stat value={importation.summary.APPROVED ?? 0} label="approved" tone="success" />
-              </>
-            )}
-          </div>
-        )}
-
-        <Tabs value={section} onValueChange={setSection}>
-          <TabsList>
-            <TabsTrigger value="orders">Purchase orders ({orders.length})</TabsTrigger>
-            <TabsTrigger value="rra">RRA invoices ({rraInvoices.length})</TabsTrigger>
-            <TabsTrigger value="imports">Imports ({importItems.length})</TabsTrigger>
-          </TabsList>
-          <TabsContent value="orders" className="mt-3">
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Order</TableHead>
-                  <TableHead>Supplier</TableHead>
-                  <TableHead>Ordered</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Items</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.length === 0 && (
-                  <TableRow><TableCell colSpan={6} className="py-6 text-center text-muted-foreground">No purchase orders in this range.</TableCell></TableRow>
-                )}
-                {orders.map((o) => (
-                  <TableRow key={o.id}>
-                    <TableCell className="font-mono text-xs">{o.orderNumber}</TableCell>
-                    <TableCell>{o.supplierName || "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{formatDclDe(o.orderedAt)}</TableCell>
-                    <TableCell><StatusBadge status={String(o.status ?? "")} /></TableCell>
-                    <TableCell className="text-right tabular-nums">{o.itemCount}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(o.totalAmount)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          </TabsContent>
-
-          <TabsContent value="rra" className="mt-3">
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Invoice</TableHead>
-                  <TableHead>Supplier</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Items</TableHead>
-                  <TableHead className="text-right">Tax</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rraInvoices.length === 0 && (
-                  <TableRow><TableCell colSpan={7} className="py-6 text-center text-muted-foreground">No supplier invoices from RRA in this range.</TableCell></TableRow>
-                )}
-                {rraInvoices.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="font-mono text-xs">{p.spplrInvcNo}</TableCell>
-                    <TableCell>
-                      <div>{p.spplrNm || "—"}</div>
-                      <div className="font-mono text-xs text-muted-foreground">TIN {p.spplrTin}</div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{formatDclDe(p.salesDt)}</TableCell>
-                    <TableCell><RraStatusBadge status={p.status} /></TableCell>
-                    <TableCell className="text-right tabular-nums">{p.totItemCnt ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(p.totTaxAmt)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(p.totAmt)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          </TabsContent>
-
-          <TabsContent value="imports" className="mt-3">
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Declaration</TableHead>
-                  <TableHead>Supplier</TableHead>
-                  <TableHead>Item</TableHead>
-                  <TableHead>HS</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {importItems.length === 0 && (
-                  <TableRow><TableCell colSpan={6} className="py-6 text-center text-muted-foreground">No import declaration lines in this range.</TableCell></TableRow>
-                )}
-                {importItems.map((i, idx) => (
-                  <TableRow key={`${i.taskCd}-${i.dclDe}-${i.itemSeq}-${idx}`}>
-                    <TableCell className="font-mono text-xs">
-                      <div>{i.dclNo ?? i.taskCd}</div>
-                      <div className="text-muted-foreground">{formatDclDe(i.dclDe)}</div>
-                    </TableCell>
-                    <TableCell>{i.supplier || "—"}</TableCell>
-                    <TableCell className="font-medium">{i.itemNm ?? "—"}</TableCell>
-                    <TableCell className="font-mono text-xs">{i.hsCd ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{i.qty != null ? formatInt(Number(i.qty)) : "—"}</TableCell>
-                    <TableCell><RraStatusBadge status={i.status} /></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
-  );
-}
-
 function AuditorOverviewCard() {
   const { selectedBranchId } = useBranch();
   const [data, setData] = useState<any>(null);
@@ -1938,178 +2003,18 @@ function AuditorOverviewCard() {
   );
 }
 
-type A4ReportKind = Parameters<typeof apiClient.getA4ReportPdf>[0];
-
-function A4PdfButton({
-  kind,
-  params,
-  filename,
-  label = "Download PDF (A4)",
-  variant = "outline",
-}: {
-  kind: A4ReportKind;
-  params: { startDate?: string; endDate?: string; asOf?: string };
-  filename: string;
-  label?: string;
-  variant?: "outline" | "default";
-}) {
-  const [busy, setBusy] = useState(false);
-  return (
-    <Button
-      variant={variant}
-      disabled={busy}
-      onClick={async () => {
-        setBusy(true);
-        try {
-          await openPdf(() => apiClient.getA4ReportPdf(kind, params), filename);
-        } catch (e: any) {
-          toastError(e, "Could not generate the PDF");
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} {label}
-    </Button>
-  );
-}
-
-/**
- * Every report the RRA CIS-for-VSDC certification asks for, printable on A4: X/Z daily
- * (Art. 18/19), PLU (Art. 21), detailed sales / purchases / stock / items / importation
- * (checklist §25), closing stock at a date (Art. 7.31) and the electronic journal (§44).
- */
-function A4ReportsCard() {
-  const { selectedBranchId } = useBranch();
-  const [start, setStart] = useState(daysAgoIso(30));
-  const [end, setEnd] = useState(todayIso());
-  const [day, setDay] = useState(todayIso());
-  const [asOf, setAsOf] = useState(todayIso());
-  const [dailyBusy, setDailyBusy] = useState<"X" | "Z" | null>(null);
-  const [pluBusy, setPluBusy] = useState(false);
-
-  const daily = async (type: "X" | "Z") => {
-    setDailyBusy(type);
-    try {
-      await openPdf(
-        () => apiClient.getDailyFiscalReportPdf({ type, date: day, branchId: selectedBranchId ?? undefined }),
-        `${type}-report-${day}.pdf`,
-      );
-    } catch (e: any) {
-      toastError(e, "Could not generate the PDF");
-    } finally {
-      setDailyBusy(null);
-    }
-  };
-
-  const range = { startDate: start, endDate: end };
-  const rows: Array<{ title: string; ref: string; body: ReactNode }> = [
-    {
-      title: "Daily X report",
-      ref: "Art. 18 — sales since the last Z report",
-      body: (
-        <Button variant="outline" disabled={!!dailyBusy} onClick={() => daily("X")}>
-          {dailyBusy === "X" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF (A4)
-        </Button>
-      ),
-    },
-    {
-      title: "Daily Z report",
-      ref: "Art. 19 — end-of-day closing",
-      body: (
-        <Button variant="outline" disabled={!!dailyBusy} onClick={() => daily("Z")}>
-          {dailyBusy === "Z" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF (A4)
-        </Button>
-      ),
-    },
-    {
-      title: "PLU report",
-      ref: "Art. 21 — per item, for the date range",
-      body: (
-        <Button
-          variant="outline"
-          disabled={pluBusy}
-          onClick={async () => {
-            setPluBusy(true);
-            try {
-              await openPdf(() => apiClient.getPluReportPdf(range), `PLU-report-${start}-${end}.pdf`);
-            } catch (e: any) {
-              toastError(e, "Could not generate the PDF");
-            } finally {
-              setPluBusy(false);
-            }
-          }}
-        >
-          {pluBusy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF (A4)
-        </Button>
-      ),
-    },
-    { title: "Sales report", ref: "§25 — every receipt line in the date range", body: <A4PdfButton kind="sales" params={range} filename={`sales-report-${start}-${end}.pdf`} /> },
-    { title: "Purchases report", ref: "§25 — purchase orders, RRA supplier invoices, imports", body: <A4PdfButton kind="purchases" params={range} filename={`purchases-report-${start}-${end}.pdf`} /> },
-    { title: "Stock report", ref: "Art. 7.11 — opening, in, out and closing stock", body: <A4PdfButton kind="stock" params={range} filename={`stock-report-${end}.pdf`} /> },
-    {
-      title: "Closing stock",
-      ref: "Art. 7.31 — stock on hand at a chosen date",
-      body: <A4PdfButton kind="stock" params={{ asOf }} filename={`closing-stock-${asOf}.pdf`} />,
-    },
-    { title: "Items report", ref: "§25 — registered items, classification, tax, stock", body: <A4PdfButton kind="items" params={{}} filename={`items-report-${todayIso()}.pdf`} /> },
-    { title: "Importation report", ref: "§25 — import declaration items", body: <A4PdfButton kind="imports" params={range} filename={`importation-report-${start}-${end}.pdf`} /> },
-    { title: "Electronic journal", ref: "§44 — journal records issued with each receipt", body: <A4PdfButton kind="electronic-journal" params={range} filename={`electronic-journal-${start}-${end}.pdf`} /> },
-  ];
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Printer className="size-4" /> Reports on A4</CardTitle>
-        <CardDescription>
-          Every report RRA asks for, as an A4 PDF with your TIN, MRC and SDC ID. Reports follow the branch selected at the top of the app.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="a4-day">Day (X / Z)</Label>
-            <Input id="a4-day" type="date" value={day} max={todayIso()} onChange={(e) => setDay(e.target.value)} className="w-40" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="a4-start">From</Label>
-            <Input id="a4-start" type="date" value={start} max={end} onChange={(e) => setStart(e.target.value)} className="w-40" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="a4-end">To</Label>
-            <Input id="a4-end" type="date" value={end} max={todayIso()} onChange={(e) => setEnd(e.target.value)} className="w-40" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="a4-asof">Closing stock at</Label>
-            <Input id="a4-asof" type="date" value={asOf} max={todayIso()} onChange={(e) => setAsOf(e.target.value)} className="w-40" />
-          </div>
-        </div>
-
-        <div className="divide-y rounded-lg border">
-          {rows.map((r) => (
-            <div key={r.title} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <div className="font-medium text-foreground">{r.title}</div>
-                <div className="text-xs text-muted-foreground">{r.ref}</div>
-              </div>
-              {r.body}
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 const TABS = [
-  { value: "a4", label: "A4 reports", icon: Printer },
   { value: "daily", label: "Daily X / Z", icon: FileText },
   { value: "plu", label: "PLU", icon: FileText },
+  { value: "sales", label: "Sales", icon: Receipt },
+  { value: "detail", label: "Purchases", icon: Truck },
+  { value: "importsReport", label: "Imports", icon: Ship },
+  { value: "stockReport", label: "Stock", icon: Package },
+  { value: "items", label: "Items", icon: ClipboardList },
   { value: "journal", label: "Journal", icon: ScrollText },
-  { value: "masterdata", label: "Master data", icon: Database },
+  { value: "imports", label: "Import declarations", icon: Ship },
   { value: "stock", label: "Stock sync", icon: Boxes },
-  { value: "imports", label: "Imports", icon: Ship },
-  { value: "detail", label: "Purchases report", icon: Truck },
+  { value: "masterdata", label: "Master data", icon: Database },
   { value: "audit", label: "Auditor", icon: Shield },
 ] as const;
 
@@ -2159,7 +2064,7 @@ export function FiscalReportsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Fiscal reports</h1>
         <p className="text-body-sm text-muted-foreground">
-          RRA CIS/VSDC daily X/Z reports, the PLU report, the electronic journal, RRA master data, stock sync, and import declarations. B2B purchases live under Purchases in the sidebar.
+          RRA CIS/VSDC reports — daily X/Z, PLU, sales, purchases, imports, stock, items and the electronic journal — each with a date filter and PDF / Excel downloads in RRA's report layout. RRA master data, stock sync and import declarations are managed here too.
         </p>
       </div>
 
@@ -2176,14 +2081,61 @@ export function FiscalReportsPage() {
           </TabsList>
         </div>
 
-        <TabsContent value="a4" className="mt-4"><A4ReportsCard /></TabsContent>
         <TabsContent value="daily" className="mt-4"><DailyReportCard /></TabsContent>
         <TabsContent value="plu" className="mt-4"><PluCard /></TabsContent>
+        <TabsContent value="sales" className="mt-4">
+          <TableReportCard
+            kind="sales"
+            title="Sales report"
+            icon={Receipt}
+            fileName="Sales"
+            description="Every normal sale (NS) and refund (NR) receipt in the date range, with buyer, items, VAT and means of payment (RRA checklist §25)."
+          />
+        </TabsContent>
+        <TabsContent value="detail" className="mt-4">
+          <TableReportCard
+            kind="purchases"
+            title="Purchases report"
+            icon={Truck}
+            fileName="Purchases"
+            fromVsdc
+            description="Supplier invoices received from the RRA VSDC (selectTrnsPurchaseSales). The date range filters on the request date, when the invoice was received from RRA."
+          />
+        </TabsContent>
+        <TabsContent value="importsReport" className="mt-4">
+          <TableReportCard
+            kind="imports"
+            title="Imports report"
+            icon={Ship}
+            fileName="Imports"
+            fromVsdc
+            description="Import declaration items received from the RRA VSDC (selectImportItems). The date range filters on the request date, when the item was received from RRA."
+          />
+        </TabsContent>
+        <TabsContent value="stockReport" className="mt-4">
+          <TableReportCard
+            kind="stock"
+            title="Stock report"
+            icon={Package}
+            fileName="Stock"
+            closingToggle
+            description="Opening stock, stock in, stock out and closing stock per item (CIS spec Art. 7.11); tick “Closing stock only” for the stock on hand at a date (Art. 7.31)."
+          />
+        </TabsContent>
+        <TabsContent value="items" className="mt-4">
+          <TableReportCard
+            kind="items"
+            title="Items report"
+            icon={ClipboardList}
+            fileName="Items"
+            dateMode="asOf"
+            description="Registered items with item code, RRA classification, tax type, prices and the quantity in stock at the chosen date (RRA checklist §25)."
+          />
+        </TabsContent>
         <TabsContent value="journal" className="mt-4"><ElectronicJournalCard /></TabsContent>
-        <TabsContent value="masterdata" className="mt-4"><MasterDataCard /></TabsContent>
-        <TabsContent value="stock" className="mt-4"><StockSyncCard /></TabsContent>
         <TabsContent value="imports" className="mt-4"><ImportDeclarationsCard /></TabsContent>
-        <TabsContent value="detail" className="mt-4"><PurchasesImportDetailReportCard /></TabsContent>
+        <TabsContent value="stock" className="mt-4"><StockSyncCard /></TabsContent>
+        <TabsContent value="masterdata" className="mt-4"><MasterDataCard /></TabsContent>
         <TabsContent value="audit" className="mt-4"><AuditorOverviewCard /></TabsContent>
       </Tabs>
     </div>

@@ -1104,19 +1104,32 @@ class ApiClient {
   }
 
   /**
-   * A4 PDF of a detailed RRA report: sales, purchases, stock (opening/in/out/closing, or closing
-   * stock as at `asOf`), items, importation, or the electronic journal.
+   * Download an RRA report in the layout of RRA's own VSDC reports, as PDF or Excel.
+   * `daily` needs `type` (X/Z) and `date`; the others take a date range (`asOf` for closing stock).
    */
-  async getA4ReportPdf(
-    kind: "sales" | "purchases" | "stock" | "items" | "imports" | "electronic-journal",
-    params: { startDate?: string; endDate?: string; asOf?: string } = {},
+  async downloadRraReport(
+    kind: RraReportKind,
+    format: "pdf" | "xlsx",
+    params: Record<string, string | number | undefined | null> = {},
   ) {
     const q = new URLSearchParams();
-    for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
-    return this.requestFile(`/reports/${kind}/${this.getOrganizationId()}/pdf?${q.toString()}`, {
+    for (const [k, v] of Object.entries(params)) if (v != null && v !== "") q.set(k, String(v));
+    return this.requestFile(`/reports/${kind}/${this.getOrganizationId()}/${format}?${q.toString()}`, {
       method: "GET",
-      headers: { Accept: "application/pdf" },
+      headers: {
+        Accept: format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
     });
+  }
+
+  /** On-screen preview of a table report: same columns and formatted cells as the PDF. */
+  async getRraReportTable(
+    kind: "sales" | "purchases" | "imports" | "stock" | "items",
+    params: Record<string, string | number | boolean | undefined | null> = {},
+  ) {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v != null && v !== "" && v !== false) q.set(k, v === true ? "1" : String(v));
+    return this.request(`/reports/${kind}/${this.getOrganizationId()}/table?${q.toString()}`);
   }
 
   /** PLU report as structured JSON (paginated). */
@@ -2392,3 +2405,5 @@ export interface OverviewDashboardData {
 }
 
 export const apiClient = new ApiClient();
+
+export type RraReportKind = "daily" | "plu" | "sales" | "purchases" | "imports" | "stock" | "items" | "electronic-journal";

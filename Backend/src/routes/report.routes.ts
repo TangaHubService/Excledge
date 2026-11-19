@@ -13,6 +13,8 @@ import {
     getDailyReportPdf,
     getPluReport,
     getPluReportPdf,
+    getDailyReportXlsx,
+    getPluReportXlsx,
     getElectronicJournal,
     getElectronicJournalEntry,
     getPurchasesReport,
@@ -26,6 +28,17 @@ import {
   getPurchasesReportPdf,
   getImportationReportPdf,
   getElectronicJournalPdf,
+  getSalesReportXlsx,
+  getStockReportXlsx,
+  getItemsReportXlsx,
+  getPurchasesReportXlsx,
+  getImportationReportXlsx,
+  getElectronicJournalXlsx,
+  getSalesReportTable,
+  getStockReportTable,
+  getItemsReportTable,
+  getPurchasesReportTable,
+  getImportationReportTable,
 } from "../controllers/report-pdf.controller"
 import { authenticate, authorize } from "../middleware/auth.middleware"
 import { branchAuth } from "../middleware/branchAuth.middleware"
@@ -37,12 +50,16 @@ const router = Router()
 const orgAccess = requireOrganizationAccess()
 
 router.get("/sales/:organizationId/pdf", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getSalesReportPdf)
+router.get("/sales/:organizationId/xlsx", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getSalesReportXlsx)
+router.get("/sales/:organizationId/table", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getSalesReportTable)
 router.get("/sales/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getSalesReport)
 router.get("/inventory/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getInventoryReport)
 router.get("/debtors/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getDebtorsReport)
 router.get("/debt-payments/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getDebtPaymentsReport)
 router.get("/cash-flow/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getCashFlowReport)
 router.get("/stock/:organizationId/pdf", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getStockReportPdf)
+router.get("/stock/:organizationId/xlsx", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getStockReportXlsx)
+router.get("/stock/:organizationId/table", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getStockReportTable)
 router.get("/stock/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getStockReport)
 router.get("/stock-history/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getStockHistory)
 router.get("/profit/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getProfitReportController)
@@ -50,19 +67,28 @@ router.get("/export/:reportType/:organizationId", authenticate, orgAccess, requi
 // C9: X/Z daily fiscal reports (RRA CIS/VSDC spec §6 / Articles 7, 18, 19)
 router.get("/daily/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getDailyReport)
 router.get("/daily/:organizationId/pdf", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getDailyReportPdf)
+router.get("/daily/:organizationId/xlsx", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getDailyReportXlsx)
 // C10: PLU (Price Look-Up) report (RRA CIS/VSDC spec §21)
 router.get("/plu/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getPluReport)
 router.get("/plu/:organizationId/pdf", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getPluReportPdf)
+router.get("/plu/:organizationId/xlsx", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getPluReportXlsx)
 // CIS Electronic Journal (RRA CIS/VSDC spec §5 / checklist §44)
 router.get("/electronic-journal/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getElectronicJournal)
 router.get("/electronic-journal/:organizationId/pdf", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getElectronicJournalPdf)
+router.get("/electronic-journal/:organizationId/xlsx", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getElectronicJournalXlsx)
 router.get("/electronic-journal/:organizationId/:saleId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getElectronicJournalEntry)
 // Detailed purchases report (RRA checklist §25)
 router.get("/purchases/:organizationId/pdf", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getPurchasesReportPdf)
+router.get("/purchases/:organizationId/xlsx", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getPurchasesReportXlsx)
+router.get("/purchases/:organizationId/table", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getPurchasesReportTable)
 router.get("/purchases/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getPurchasesReport)
 router.get("/items/:organizationId/pdf", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getItemsReportPdf)
+router.get("/items/:organizationId/xlsx", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getItemsReportXlsx)
+router.get("/items/:organizationId/table", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getItemsReportTable)
 router.get("/items/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "SELLER", "BRANCH_MANAGER"), getItemsReport)
 router.get("/imports/:organizationId/pdf", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getImportationReportPdf)
+router.get("/imports/:organizationId/xlsx", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getImportationReportXlsx)
+router.get("/imports/:organizationId/table", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getImportationReportTable)
 router.get("/imports/:organizationId", authenticate, orgAccess, requireActiveSubscription(), branchAuth, authorize("ADMIN", "ACCOUNTANT", "BRANCH_MANAGER"), getImportationReport)
 
 export default router
