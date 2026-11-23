@@ -9,6 +9,7 @@ import {
   bulkInviteUsers,
   acceptInvitation,
   getOrganizationUsers,
+  getOrganizationInvitations,
   removeUserFromOrganization,
   getInvitationDetails,
   cancelInvitation,
@@ -47,6 +48,7 @@ router.get("/get-invitation/:token", getInvitationDetails);
 router.put("/cancel-invitation/:id", cancelInvitation);
 router.put("/decline-invitation/:token", declineInvitation);
 router.get("/:organizationId/users", authenticate, orgAccess, getOrganizationUsers);
+router.get("/:organizationId/invitations", authenticate, orgAccess, getOrganizationInvitations);
 router.delete(
   "/:organizationId/users/:userId",
   authenticate,

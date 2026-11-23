@@ -588,6 +588,8 @@ export const inviteUser = async (req: Request, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
     const { email, role, branchId } = req.body;
+    // Invitations sent from Excel Edge Accounting link to its accept page and never email a password.
+    const app: "accounting" | undefined = req.body.app === "accounting" ? "accounting" : undefined;
     //@ts-ignore
     const userId = parseInt(req.user?.userId as string);
 
@@ -674,12 +676,14 @@ export const inviteUser = async (req: Request, res: Response) => {
         },
       });
 
+      const inviter = await prisma.user.findUnique({ where: { id: userId! }, select: { name: true } });
       await emailService.sendInvitationEmail(
         email,
         organization.name,
         role,
         token,
-        null // No password needed for existing users
+        null, // No password needed for existing users
+        { app, inviterName: inviter?.name ?? null }
       );
 
       await auditLogger.users(req, {
@@ -726,12 +730,14 @@ export const inviteUser = async (req: Request, res: Response) => {
       },
     });
 
+    const inviter = await prisma.user.findUnique({ where: { id: userId! }, select: { name: true } });
     await emailService.sendInvitationEmail(
       email,
       invitation.organization.name,
       role,
       token,
-      plainPassword
+      app ? null : plainPassword,
+      { app, inviterName: inviter?.name ?? null }
     );
 
     await auditLogger.users(req, {
@@ -929,9 +935,17 @@ export const getInvitationDetails = async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
 
+    // Public (anyone holding the link): never return the token, the password hash or internal ids.
     const invitation = await prisma.organizationInvitation.findUnique({
       where: { token },
-      include: {
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        expiresAt: true,
+        createdAt: true,
+        organizationId: true,
         organization: {
           select: {
             name: true,
@@ -946,6 +960,7 @@ export const getInvitationDetails = async (req: Request, res: Response) => {
             code: true,
           },
         },
+        inviter: { select: { name: true } },
       },
     });
 
@@ -953,7 +968,18 @@ export const getInvitationDetails = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Invitation not found" });
     }
 
-    res.json(invitation);
+    const existing = await prisma.user.findUnique({
+      where: { email: invitation.email },
+      select: { id: true, deletedAt: true },
+    });
+    const expired = invitation.status === "PENDING" && invitation.expiresAt < new Date();
+
+    res.json({
+      ...invitation,
+      status: expired ? "EXPIRED" : invitation.status,
+      inviterName: invitation.inviter?.name ?? null,
+      hasAccount: Boolean(existing && !existing.deletedAt),
+    });
   } catch (error) {
     console.error("Error getting invitation details:", error);
     res.status(500).json({ error: "Failed to get invitation details" });
@@ -1015,8 +1041,12 @@ export const acceptInvitation = async (req: Request, res: Response) => {
   try {
     const { name } = req.body;
     const { token } = req.params;
+    // Accounting accept page (QuickBooks model): new people choose their own password, people who
+    // already have an account prove it with their current password. The older ERP page sends only
+    // a name and keeps the emailed-password flow below.
+    const password: string | undefined = typeof req.body.password === "string" ? req.body.password : undefined;
 
-    if (!token || !name) {
+    if (!token || (!name && password === undefined)) {
       return res.status(400).json({ error: "Token and name are required" });
     }
 
@@ -1051,6 +1081,41 @@ export const acceptInvitation = async (req: Request, res: Response) => {
     let user = await prisma.user.findUnique({
       where: { email: invitation.email },
     });
+
+    if (password !== undefined) {
+      if (user && !user.deletedAt) {
+        if (!user.isActive) {
+          return res.status(403).json({ error: "Your Excel Edge account is switched off. Ask the company admin to reactivate it." });
+        }
+        const ok = await bcrypt.compare(password, user.password);
+        if (!ok) {
+          return res.status(401).json({ error: "That password is incorrect." });
+        }
+      } else {
+        const trimmedName = typeof name === "string" ? name.trim() : "";
+        if (trimmedName.length < 2) {
+          return res.status(400).json({ error: "Enter your full name." });
+        }
+        if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+          return res.status(400).json({ error: "Use at least 8 characters with a letter and a number." });
+        }
+        if (user && user.deletedAt) {
+          return res.status(409).json({ error: "This email belonged to a closed Excel Edge account. Contact support to restore it." });
+        }
+        const hashed = await bcrypt.hash(password, 10);
+        user = await prisma.user.create({
+          data: {
+            email: invitation.email,
+            name: trimmedName,
+            role: invitation.role,
+            password: hashed,
+            requirePasswordChange: false,
+            isEmailVerified: true,
+            isActive: true,
+          },
+        });
+      }
+    }
 
     if (!user) {
       user = await prisma.user.create({
@@ -1135,7 +1200,7 @@ export const acceptInvitation = async (req: Request, res: Response) => {
     res.json({
       message: "Invitation accepted successfully",
       organization: invitation.organization,
-      requirePasswordChange: true,
+      requirePasswordChange: password !== undefined ? Boolean(user.requirePasswordChange) : true,
     });
   } catch (error) {
     console.error("Error accepting invitation:", error);
@@ -1186,6 +1251,49 @@ export const getOrganizationUsers = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error fetching organization users:", error);
     res.status(500).json({ error: "Failed to fetch users" });
+  }
+};
+
+/**
+ * Pending invitations for an organization (Manage users "Invited" rows). Admins and branch
+ * managers only; never returns the token or the generated password.
+ */
+export const getOrganizationInvitations = async (req: Request, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    //@ts-ignore
+    const userId = parseInt(req.user?.userId as string);
+    //@ts-ignore
+    const isSystemOwner = req.user?.role === "SYSTEM_OWNER";
+
+    if (!isSystemOwner) {
+      const membership = await prisma.userOrganization.findFirst({
+        where: { userId, organizationId, role: { in: ["ADMIN", "BRANCH_MANAGER"] } },
+      });
+      if (!membership) {
+        return res.status(403).json({ error: "Only admins can view invitations" });
+      }
+    }
+
+    const invitations = await prisma.organizationInvitation.findMany({
+      where: { organizationId, status: "PENDING" },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        expiresAt: true,
+        createdAt: true,
+        branchId: true,
+        inviter: { select: { id: true, name: true } },
+      },
+    });
+
+    res.json({ invitations });
+  } catch (error) {
+    console.error("Error fetching organization invitations:", error);
+    res.status(500).json({ error: "Failed to fetch invitations" });
   }
 };
 
