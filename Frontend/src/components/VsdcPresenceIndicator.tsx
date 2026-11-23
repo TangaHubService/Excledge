@@ -5,6 +5,8 @@ type PresenceState = 'checking' | 'online' | 'offline' | 'disabled' | 'training'
 
 interface EbmStatusPayload {
   enabled: boolean;
+  /** False when this business has no VSDC to talk to (no device, or "RRA EBM Integration" off). */
+  configured?: boolean;
   online: boolean;
   trainingMode?: boolean;
   lastContact: string | null;
@@ -65,7 +67,7 @@ export function VsdcPresenceIndicator() {
         const res = (await apiClient.getEbmStatus()) as { data?: EbmStatusPayload };
         const payload = res?.data;
         if (cancelled) return;
-        if (!payload?.enabled) {
+        if (!payload?.enabled || payload.configured === false) {
           setState(payload?.trainingMode ? 'training' : 'disabled');
           setLastContact(null);
           return;

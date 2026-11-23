@@ -23,6 +23,11 @@ vi.mock("../src/lib/prisma", () => ({
   },
 }))
 
+let ebmIntegrationEnabled = true
+vi.mock("../src/services/organization-settings.service", () => ({
+  getOrganizationSettings: vi.fn(async () => ({ featureFlags: { ebmIntegrationEnabled } })),
+}))
+
 import { config } from "../src/config"
 import {
   checkVsdcConnection,
@@ -48,6 +53,7 @@ const device = (extra: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   orgRow = null
   saleRow = null
+  ebmIntegrationEnabled = true
   branchRow = { name: "HQ", bhfId: "00", ebmDeviceId: "SDC1", ebmInitializedAt: new Date() }
   findManyResult.length = 0
   orgUpdate.mockClear()
@@ -63,6 +69,15 @@ afterEach(() => {
 })
 
 describe("verifyVsdcOnlineStatus: live VSDC check", () => {
+  it("allows the sale without calling VSDC when the organization turned EBM integration off", async () => {
+    orgRow = device()
+    ebmIntegrationEnabled = false
+    fetchMock.mockRejectedValue(new Error("connect ECONNREFUSED"))
+    await expect(verifyVsdcOnlineStatus(2, 3)).resolves.toBe(true)
+    expect(fetchMock).not.toHaveBeenCalled()
+    await expect(checkVsdcConnection(2, 3)).resolves.toMatchObject({ configured: false })
+  })
+
   it("blocks when VSDC cannot be reached, even if it answered recently", async () => {
     orgRow = device({ lastSuccessfulVdsContact: new Date() })
     fetchMock.mockRejectedValue(new Error("connect ECONNREFUSED"))

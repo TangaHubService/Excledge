@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { error as apiError } from '../utils/apiResponse';
 import { isEbmEnabled } from '../services/rra-ebm.service';
 import { buildVsdcEnvelope, probeVsdc, type VsdcProbeResult } from '../services/vsdc-api.service';
+import { getOrganizationSettings } from '../services/organization-settings.service';
 import type { BranchAuthRequest } from './branchAuth.middleware';
 
 // A recent answer is reused so a busy till doesn't call VSDC for every sale. A failure is kept for
@@ -84,6 +85,13 @@ export async function checkVsdcConnection(
 
   if (!org) {
     throw Object.assign(new Error('Organization not found'), { statusCode: 404 });
+  }
+
+  // An organization that has turned off "RRA EBM Integration" sends nothing to VSDC, so it must not
+  // be blocked when VSDC is down. The setting is forced on once a VSDC device is set up.
+  const settings = await getOrganizationSettings(organizationId);
+  if (!settings.featureFlags.ebmIntegrationEnabled) {
+    return { configured: false, online: false, registered: false };
   }
 
   // Training receipts (TS/TR) go through the VSDC like every other type
