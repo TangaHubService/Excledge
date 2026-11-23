@@ -181,7 +181,6 @@ export default function AddProduct({ onSuccess, product, initialItemType = 'PROD
     const taxLockedBySales = !isNonVat && product?.taxCodeReviewPending === true && product?.hasFiscalSales === true
     const taxReviewPending = !isNonVat && product?.taxCodeReviewPending === true && !taxLockedBySales
     const taxCodeLocked = !isNonVat && (!!product?.taxCodeReviewedAt || taxLockedBySales)
-    const isTaxExemptOrg = organization?.isTaxExempt === true
     const { catalog } = useRraCodeCatalog()
     const countryOptions = catalog.countries.length
         ? catalog.countries.map((c) => ({ value: c.code, label: `${c.label} (${c.code})` }))
