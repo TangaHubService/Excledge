@@ -1204,6 +1204,7 @@
         "unitPrice": "Prix unitaire",
         "status": "Statut",
         "seller": "Vendeur",
+        "includeTrainingProforma": "Inclure les factures d'entraînement/proforma",
         "noTransactions": "Aucune transaction trouvée pour la période sélectionnée.",
         "completed": "Terminé",
         "refunded": "Remboursé",

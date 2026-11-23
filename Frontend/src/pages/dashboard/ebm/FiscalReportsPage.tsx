@@ -2089,7 +2089,7 @@ export function FiscalReportsPage() {
             title="Sales report"
             icon={Receipt}
             fileName="Sales"
-            description="Every normal sale (NS) and refund (NR) receipt in the date range, with buyer, items, VAT and means of payment (RRA checklist §25)."
+            description="Every receipt in the date range — sales and refunds, plus training and proforma receipts — with buyer, items, VAT and means of payment (RRA checklist §25). Only sales and refunds count towards Total Sales; training and proforma totals are shown separately."
           />
         </TabsContent>
         <TabsContent value="detail" className="mt-4">

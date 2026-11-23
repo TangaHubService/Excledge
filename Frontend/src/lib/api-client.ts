@@ -1001,6 +1001,7 @@ class ApiClient {
     page?: number;
     limit?: number;
     branchId?: number | null;
+    includeTrainingProforma?: boolean;
   }) {
     const params = new URLSearchParams({
       startDate: filters.startDate,
@@ -1027,6 +1028,10 @@ class ApiClient {
     }
     if (filters.branchId !== undefined) {
       params.append('branchId', filters.branchId === null ? 'null' : filters.branchId.toString());
+    }
+    // When false (default), exclude TS/TR/PS receipts per RRA CIS spec §18.1.15/§19.1.15
+    if (filters.includeTrainingProforma) {
+      params.append('includeTrainingProforma', 'true');
     }
 
     return this.request(

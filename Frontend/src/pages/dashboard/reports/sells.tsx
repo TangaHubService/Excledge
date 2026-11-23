@@ -25,11 +25,22 @@ interface SalesTransaction {
     unitPrice: number;
     total: number;
     status: 'COMPLETED' | 'REFUNDED' | 'CANCELLED' | 'PARTIALLY_REFUNDED';
+    /** CIS receipt type: NS, NR, TS, TR or PS (proforma). */
+    receiptType?: 'NS' | 'NR' | 'TS' | 'TR' | 'PS';
     seller?: string; // Added seller name
     sellerEmail?: string;
 }
 
 
+
+const RECEIPT_TYPE_LABELS: Record<string, string> = {
+    NS: 'Sale',
+    NR: 'Refund',
+    TS: 'Training Sale',
+    TR: 'Training Refund',
+    PS: 'Proforma',
+};
+const receiptTypeLabel = (type?: string) => (type ? RECEIPT_TYPE_LABELS[type] ?? type : '');
 
 export const SalesReport = () => {
     const { t } = useTranslation();
@@ -47,6 +58,7 @@ export const SalesReport = () => {
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [selectedSeller, setSelectedSeller] = useState<number | 'all'>('all');
     const [productSearch, setProductSearch] = useState('');
+    const [includeTrainingProforma, setIncludeTrainingProforma] = useState(false);
     const debouncedSearch = useDebounce(productSearch, 500);
 
     // Pagination state
@@ -62,8 +74,9 @@ export const SalesReport = () => {
         product: debouncedSearch,
         page: currentPage,
         limit: itemsPerPage,
-        branchId: selectedBranchId
-    }), [startDate, endDate, selectedCategory, selectedSeller, debouncedSearch, currentPage, itemsPerPage, selectedBranchId]);
+        branchId: selectedBranchId,
+        includeTrainingProforma: includeTrainingProforma ? 'true' : undefined
+    }), [startDate, endDate, selectedCategory, selectedSeller, debouncedSearch, currentPage, itemsPerPage, selectedBranchId, includeTrainingProforma]);
 
     const { data, isLoading, isError, error: queryError } = useSales(salesFilters);
 
@@ -240,7 +253,8 @@ export const SalesReport = () => {
                 [`${t('salesReport.unitPrice')} (RWF)`]: formatCurrency(transaction.unitPrice).replace('RWF', '').trim(),
                 [t('common.total')]: transaction.total * amountMultiplier,
                 [`${t('common.total')} (RWF)`]: formatCurrency(transaction.total * amountMultiplier).replace('RWF', '').trim(),
-                [t('common.status')]: t(`salesReport.${transaction.status.toLowerCase()}`)
+                [t('common.status')]: t(`salesReport.${transaction.status.toLowerCase()}`),
+                'Receipt Type': receiptTypeLabel(transaction.receiptType)
             };
         });
 
@@ -260,7 +274,8 @@ export const SalesReport = () => {
                     'Quantity': (isRefunded ? '-' : '') + (transaction.quantity * amountMultiplier).toString(),
                     'UnitPrice': (isRefunded ? '-' : '') + formatCurrency(transaction.unitPrice * amountMultiplier).replace('RWF', '').trim(),
                     'Total': (isRefunded ? '-' : '') + formatCurrency(transaction.total * amountMultiplier).replace('RWF', '').trim(),
-                    'Status': t(`salesReport.${transaction.status.toLowerCase()}`)
+                    'Status': t(`salesReport.${transaction.status.toLowerCase()}`),
+                    'ReceiptType': receiptTypeLabel(transaction.receiptType)
                 };
             });
 
@@ -274,6 +289,7 @@ export const SalesReport = () => {
                 { header: `${t('salesReport.unitPrice')} (RWF)`, key: 'UnitPrice' },
                 { header: `${t('common.total')} (RWF)`, key: 'Total' },
                 { header: t('common.status'), key: 'Status' },
+                { header: 'Receipt Type', key: 'ReceiptType' },
             ];
 
             const totalQuantity = transactions.reduce((sum: number, t: SalesTransaction) => sum + (t.status === 'REFUNDED' ? -t.quantity : t.quantity), 0);
@@ -288,6 +304,7 @@ export const SalesReport = () => {
                 totalQuantity.toLocaleString(),
                 '',
                 formatCurrency(totalSales).replace('RWF', '').trim(),
+                '',
                 ''
             ]];
 
@@ -462,6 +479,16 @@ export const SalesReport = () => {
                         </select>
                     </div>
                     <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            <input
+                                type="checkbox"
+                                checked={includeTrainingProforma}
+                                onChange={(e) => setIncludeTrainingProforma(e.target.checked)}
+                                className="w-4 h-4 mr-2 accent-color-violet-600"
+                            />{t('salesReport.includeTrainingProforma')}
+                        </label>
+                    </div>
+                    <div className="space-y-1.5">
                         <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('inventory.product')}</label>
                         <input
                             type="text"
@@ -532,15 +559,16 @@ export const SalesReport = () => {
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b bg-surface-subtle/50 border-border text-left">
-                                    <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('salesReport.saleId')}</th>
-                                    <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('common.date')}</th>
-                                    <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('inventory.product')}</th>
-                                    <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('cashFlowReport.category')}</th>
-                                    <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('salesReport.seller')}</th>
-                                    <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">{t('salesReport.qty')}</th>
-                                    <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">{t('salesReport.unitPrice')}</th>
-                                    <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">{t('common.total')}</th>
-                                    <th className="py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('common.status')}</th>
+                                    <th className="py-3 px-4 text-base font-semibold text-muted-foreground uppercase tracking-wider">{t('salesReport.saleId')}</th>
+                                    <th className="py-3 px-4 text-base font-semibold text-muted-foreground uppercase tracking-wider">{t('common.date')}</th>
+                                    <th className="py-3 px-4 text-base font-semibold text-muted-foreground uppercase tracking-wider">{t('inventory.product')}</th>
+                                    <th className="py-3 px-4 text-base font-semibold text-muted-foreground uppercase tracking-wider">{t('cashFlowReport.category')}</th>
+                                    <th className="py-3 px-4 text-base font-semibold text-muted-foreground uppercase tracking-wider">{t('salesReport.seller')}</th>
+                                    <th className="py-3 px-4 text-base font-semibold text-muted-foreground uppercase tracking-wider text-right">{t('salesReport.qty')}</th>
+                                    <th className="py-3 px-4 text-base font-semibold text-muted-foreground uppercase tracking-wider text-right">{t('salesReport.unitPrice')}</th>
+                                    <th className="py-3 px-4 text-base font-semibold text-muted-foreground uppercase tracking-wider text-right">{t('common.total')}</th>
+                                    <th className="py-3 px-4 text-base font-semibold text-muted-foreground uppercase tracking-wider">{t('common.status')}</th>
+                                    <th className="py-3 px-4 text-base font-semibold text-muted-foreground uppercase tracking-wider">Receipt Type</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
@@ -576,6 +604,16 @@ export const SalesReport = () => {
                                                 {t(`salesReport.${transaction.status.toLowerCase()}`)}
                                             </span>
                                         </td>
+                                        <td className="py-3 px-4 whitespace-nowrap">
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${transaction.receiptType === 'PS'
+                                                ? 'bg-primary/10 text-primary border-primary/25'
+                                                : transaction.receiptType === 'TS' || transaction.receiptType === 'TR'
+                                                    ? 'bg-warning/10 text-warning border-warning/30'
+                                                    : 'bg-surface-subtle text-muted-foreground border-border'
+                                                }`}>
+                                                {receiptTypeLabel(transaction.receiptType)}
+                                            </span>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -589,6 +627,7 @@ export const SalesReport = () => {
                                     <td className="py-3 px-4 text-right text-primary font-bold font-mono">
                                         {formatCurrency(transactions.reduce((sum: number, t: SalesTransaction) => sum + (t.status === 'REFUNDED' ? -t.total : t.total), 0))}
                                     </td>
+                                    <td className="py-3 px-4"></td>
                                     <td className="py-3 px-4"></td>
                                 </tr>
                             </tfoot>

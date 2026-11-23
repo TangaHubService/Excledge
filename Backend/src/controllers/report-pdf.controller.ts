@@ -3,7 +3,6 @@ import { prisma } from "../lib/prisma"
 import type { BranchAuthRequest } from "../middleware/branchAuth.middleware"
 import { buildBranchFilter } from "../middleware/branchAuth.middleware"
 import { error as apiError } from "../utils/apiResponse"
-import { excludeTrainingReceipts } from "../services/training-mode.service"
 import { splitReportSales, type ReportSaleBucket } from "../services/daily-report-aggregate.service"
 import { paymentLabel } from "../services/a4-report-pdf.service"
 import {
@@ -153,7 +152,92 @@ const MONEY = "#,##0.00"
 const GROUPED = "#,##0.##"
 const QTY = "0.###"
 
-// Sales: one row per receipt (NS / NR), like RRA's Sales report.
+export interface SalesReportSale {
+  id: number
+  createdAt: Date
+  status: string
+  isProforma: boolean
+  rcptLabel: string | null
+  reprintCount?: number | null
+  paymentType: string
+  totalAmount: unknown
+  vatAmount: unknown
+  invoiceNumber: string | null
+  saleNumber: string
+  vsdcInvcNo: number | null
+  localReceiptSeq: number | null
+  customer: { name: string | null; TIN: string | null; phone: string | null } | null
+  salePayments: Array<{ paymentMethod: string }>
+  saleItems: Array<{ quantity: unknown; serviceName: string | null; totalPrice?: unknown; taxCode?: string | null; product: { name: string } | null }>
+}
+
+/**
+ * Sales report rows for every receipt type (NS, NR, TS, TR, PS). Only NS/NR add up to the main
+ * total, so it still matches RRA; training and proforma receipts get their own totals in `notes`.
+ */
+export function buildSalesReportBody(list: SalesReportSale[]): { body: CellValue[][]; total: number; vat: number; notes: string[] } {
+  const split = splitReportSales(list as unknown as ReportSaleBucket[])
+  const normalRefunds = new Set(split.normalRefunds as unknown as SalesReportSale[])
+  const normalSales = new Set(split.normalSales as unknown as SalesReportSale[])
+  const kindOf = (s: SalesReportSale): "NS" | "NR" | "TS" | "TR" | "PS" | null => {
+    if (s.isProforma || s.rcptLabel === "PS") return "PS"
+    if (s.rcptLabel === "TR") return "TR"
+    if (s.rcptLabel === "TS") return "TS"
+    if (normalRefunds.has(s)) return "NR"
+    if (normalSales.has(s)) return "NS"
+    return null
+  }
+  const KIND_LABEL = { NS: "Sale", NR: "Refund", TS: "Training Sale", TR: "Training Refund", PS: "Proforma" } as const
+  const receipts = list
+    .map((s) => ({ s, kind: kindOf(s) }))
+    .filter((r): r is { s: SalesReportSale; kind: keyof typeof KIND_LABEL } => r.kind != null)
+    .sort((a, b) => a.s.createdAt.getTime() - b.s.createdAt.getTime() || a.s.id - b.s.id)
+
+  let total = 0
+  let vat = 0
+  const sub = {
+    training: { count: 0, amount: 0, vat: 0 },
+    proforma: { count: 0, amount: 0, vat: 0 },
+  }
+  const body: CellValue[][] = receipts.map(({ s, kind }, i) => {
+    const sign = kind === "NR" || kind === "TR" ? -1 : 1
+    const amount = sign * Math.abs(Number(s.totalAmount))
+    const tax = sign * Math.abs(Number(s.vatAmount))
+    if (kind === "NS" || kind === "NR") {
+      total += amount
+      vat += tax
+    } else {
+      const bucket = kind === "PS" ? sub.proforma : sub.training
+      bucket.count += 1
+      bucket.amount += amount
+      bucket.vat += tax
+    }
+    const items = s.saleItems.map((it) => `${it.product?.name ?? it.serviceName ?? "Item"} x ${fmtPlain(Math.abs(Number(it.quantity)))}`).join("\n")
+    const methods = s.salePayments.length ? s.salePayments.map((p) => paymentLabel(p.paymentMethod)) : [paymentLabel(s.paymentType)]
+    return [
+      i + 1,
+      s.customer?.TIN || s.customer?.phone || "",
+      s.customer?.name ?? "",
+      s.vsdcInvcNo ?? s.localReceiptSeq ?? s.invoiceNumber ?? s.saleNumber,
+      fmtYmd(s.createdAt),
+      amount,
+      items,
+      tax,
+      KIND_LABEL[kind],
+      kind === "PS" ? "" : Array.from(new Set(methods)).join(", "),
+    ]
+  })
+  const subtotalNote = (label: string, b: { count: number; amount: number; vat: number }) =>
+    `${label}: ${b.count} receipt${b.count === 1 ? "" : "s"}, total ${fmtMoney(b.amount)}, VAT ${fmtMoney(b.vat)} (not included in Total Sales).`
+  const notes = [
+    subtotalNote("Training receipts", sub.training),
+    subtotalNote("Proforma receipts", sub.proforma),
+  ]
+
+  return { body, total, vat, notes }
+}
+
+// Sales: one row per receipt (NS, NR, TS, TR, PS), like RRA's Sales report.
 
 const MAX_SALES = 20000
 
@@ -163,13 +247,19 @@ const sales = reportRoutes("sales report", async (req, organizationId) => {
   const id = await identity(req, organizationId)
   const range = dayRange(start, end)
 
+  // Every receipt type is listed: NS/NR plus training (TS/TR) and proforma (PS). Only NS/NR count
+  // towards "Total Sales" so the figure still matches RRA; TS/TR/PS get their own totals below.
   const rows = await prisma.sale.findMany({
-    where: excludeTrainingReceipts({
+    where: {
       organizationId,
       ...buildBranchFilter(req),
-      status: { in: ["COMPLETED", "REFUNDED"] },
+      OR: [
+        { status: { in: ["COMPLETED", "REFUNDED"] } },
+        // A proforma stays listed after it is converted to a real sale.
+        { isProforma: true, status: { not: "CANCELLED" } },
+      ],
       ...(range ? { createdAt: range } : {}),
-    }),
+    },
     select: {
       id: true,
       createdAt: true,
@@ -195,36 +285,8 @@ const sales = reportRoutes("sales report", async (req, organizationId) => {
   })
   const truncated = rows.length > MAX_SALES
   const list = rows.slice(0, MAX_SALES)
-  const split = splitReportSales(list as unknown as ReportSaleBucket[])
-  const refunds = new Set(split.normalRefunds as unknown as typeof list)
-  const receipts = [...(split.normalSales as unknown as typeof list), ...(split.normalRefunds as unknown as typeof list)].sort(
-    (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id,
-  )
-
-  let total = 0
-  let vat = 0
-  const body: CellValue[][] = receipts.map((s, i) => {
-    const isRefund = refunds.has(s)
-    const sign = isRefund ? -1 : 1
-    const amount = sign * Math.abs(Number(s.totalAmount))
-    const tax = sign * Math.abs(Number(s.vatAmount))
-    total += amount
-    vat += tax
-    const items = s.saleItems.map((it) => `${it.product?.name ?? it.serviceName ?? "Item"} x ${fmtPlain(Math.abs(Number(it.quantity)))}`).join("\n")
-    const methods = s.salePayments.length ? s.salePayments.map((p) => paymentLabel(p.paymentMethod)) : [paymentLabel(s.paymentType)]
-    return [
-      i + 1,
-      s.customer?.TIN || s.customer?.phone || "",
-      s.customer?.name ?? "",
-      s.vsdcInvcNo ?? s.localReceiptSeq ?? s.invoiceNumber ?? s.saleNumber,
-      fmtYmd(s.createdAt),
-      amount,
-      items,
-      tax,
-      isRefund ? "Refund" : "Sale",
-      Array.from(new Set(methods)).join(", "),
-    ]
-  })
+  const { body, total, vat, notes } = buildSalesReportBody(list)
+  if (truncated) notes.push(`Only the first ${MAX_SALES} receipts are listed; narrow the date range for the full detail.`)
 
   const report: RraTableReport = {
     title: "SALES REPORT",
@@ -239,13 +301,13 @@ const sales = reportRoutes("sales report", async (req, organizationId) => {
       { label: "Total Amount", width: 1.9, format: fmtMoney, numFmt: MONEY },
       { label: "Items", width: 2.5 },
       { label: "VAT", width: 1.7, format: fmtMoney, numFmt: MONEY },
-      { label: "Receipt Type", width: 1.1 },
+      { label: "Receipt Type", width: 1.4 },
       { label: "Payment Method", width: 1.6 },
     ],
     rows: body,
     totals: { label: "Total Sales", span: 5, values: [total, "", vat, "", ""] },
     emptyText: "No sales in this period.",
-    notes: truncated ? [`Only the first ${MAX_SALES} receipts are listed; narrow the date range for the full detail.`] : [],
+    notes,
     subject: "Sales Report",
   }
   return { report, name: "Sales" }

@@ -1140,6 +1140,7 @@
         "unitPrice": "Bei ya Kitengo",
         "status": "Hali",
         "seller": "Muuzaji",
+        "includeTrainingProforma": "Piga chagua kuweka imico ya TS/TR na PS",
         "noTransactions": "Hakuna miamala iliyopatikana kwa kipindi kilichochaguliwa.",
         "completed": "Imekamilika",
         "refunded": "Imerejeshwa",

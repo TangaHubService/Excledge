@@ -54,6 +54,13 @@ async function stockOnHandAt(
   return map
 }
 
+/** CIS receipt type of a sale: NS, NR, TS, TR or PS (proforma). */
+function saleReceiptType(sale: { rcptLabel: string | null; isProforma: boolean; status: string }): 'NS' | 'NR' | 'TS' | 'TR' | 'PS' {
+  if (sale.isProforma || sale.rcptLabel === 'PS') return 'PS'
+  if (sale.rcptLabel === 'TS' || sale.rcptLabel === 'TR' || sale.rcptLabel === 'NR' || sale.rcptLabel === 'NS') return sale.rcptLabel
+  return sale.status === 'REFUNDED' ? 'NR' : 'NS'
+}
+
 export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
   try {
     const organizationId = parseInt(req.params.organizationId);
@@ -67,11 +74,13 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
       sortBy = 'date',
       sortOrder = 'desc',
       page = '1',
-      limit = '10'
+      limit = '10',
+      includeTrainingProforma
     } = req.query;
 
+    // When includeTrainingProforma is not "true", exclude TS/TR/PS receipts
     const where: any = {
-      ...excludeTrainingReceipts({}),
+      ...(includeTrainingProforma !== 'true' ? { ...excludeTrainingReceipts({}), isProforma: false } : {}),
       organizationId,
       ...buildBranchFilter(req),
       ...(startDate && endDate && startDate !== 'undefined' && endDate !== 'undefined' && (() => {
@@ -157,6 +166,7 @@ export const getSalesReport = async (req: BranchAuthRequest, res: Response) => {
           taxAmount: item.taxAmount.toNumber(),
           taxRate: item.taxRate.toNumber(),
           status: sale.status,
+          receiptType: saleReceiptType(sale),
           seller: sale.user.name,
           sellerEmail: sale.user.email,
           paymentType: sale.paymentType,

@@ -1185,6 +1185,7 @@
         "unitPrice": "Igiciro",
         "status": "Uko bimeze",
         "seller": "Umucuruzi",
+        "includeTrainingProforma": "Guhindura imico y'TS/TR na PS",
         "noTransactions": "Nta transactions zabonetse mu gihe cyahiswemo.",
         "completed": "Byarangiye",
         "refunded": "Byishyuwe",
