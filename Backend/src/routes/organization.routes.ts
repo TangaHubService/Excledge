@@ -10,6 +10,7 @@ import {
   acceptInvitation,
   getOrganizationUsers,
   getOrganizationInvitations,
+  transferOwnership,
   removeUserFromOrganization,
   getInvitationDetails,
   cancelInvitation,
@@ -49,6 +50,7 @@ router.put("/cancel-invitation/:id", cancelInvitation);
 router.put("/decline-invitation/:token", declineInvitation);
 router.get("/:organizationId/users", authenticate, orgAccess, getOrganizationUsers);
 router.get("/:organizationId/invitations", authenticate, orgAccess, getOrganizationInvitations);
+router.post("/:organizationId/transfer-ownership", authenticate, orgAccess, transferOwnership);
 router.delete(
   "/:organizationId/users/:userId",
   authenticate,

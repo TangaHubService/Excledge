@@ -1297,6 +1297,63 @@ export const getOrganizationInvitations = async (req: Request, res: Response) =>
   }
 };
 
+/**
+ * Hand the primary-admin (owner) flag to another active company admin (QuickBooks "Transfer
+ * primary admin"). Only the current primary admin may do this; both stay company admins.
+ */
+export const transferOwnership = async (req: Request, res: Response) => {
+  try {
+    const organizationId = parseInt(req.params.organizationId);
+    const targetUserId = parseInt(String(req.body?.userId));
+    //@ts-ignore
+    const userId = parseInt(req.user?.userId as string);
+
+    if (!targetUserId) {
+      return res.status(400).json({ error: "Choose who should become the primary admin" });
+    }
+    if (targetUserId === userId) {
+      return res.status(400).json({ error: "You are already the primary admin" });
+    }
+
+    const current = await prisma.userOrganization.findFirst({ where: { userId, organizationId } });
+    if (!current?.isOwner) {
+      return res.status(403).json({ error: "Only the primary admin can transfer this role" });
+    }
+
+    const target = await prisma.userOrganization.findFirst({
+      where: { userId: targetUserId, organizationId },
+      include: { user: { select: { isActive: true, deletedAt: true, email: true } } },
+    });
+    if (!target || target.user.deletedAt) {
+      return res.status(404).json({ error: "That person is not in this company" });
+    }
+    if (target.role !== "ADMIN") {
+      return res.status(400).json({ error: "Make them a company admin first" });
+    }
+    if (!target.user.isActive) {
+      return res.status(400).json({ error: "Reactivate them before making them primary admin" });
+    }
+
+    await prisma.$transaction([
+      prisma.userOrganization.update({ where: { id: current.id }, data: { isOwner: false } }),
+      prisma.userOrganization.update({ where: { id: target.id }, data: { isOwner: true } }),
+    ]);
+
+    await auditLogger.users(req, {
+      type: "USER_ROLE_UPDATE",
+      description: `Primary admin transferred from user ${userId} to user ${targetUserId}`,
+      entityType: "User",
+      entityId: targetUserId,
+      metadata: { organizationId, previousOwner: userId, newOwner: targetUserId },
+    });
+
+    res.json({ message: "Primary admin transferred", ownerUserId: targetUserId });
+  } catch (error) {
+    console.error("Error transferring ownership:", error);
+    res.status(500).json({ error: "Failed to transfer primary admin" });
+  }
+};
+
 export const removeUserFromOrganization = async (
   req: Request,
   res: Response
