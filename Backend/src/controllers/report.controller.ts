@@ -1652,10 +1652,18 @@ async function buildDailyReport(
     if (Object.keys(bFilter).length) Object.assign(branchFilter, bFilter);
   }
 
-  // R10 skipped-report rule: when closes were missed, this report covers the whole period since the
-  // previous SUCCESSFUL Z close (cursor rra_sync_cursors `zReport:<branchId>`, written by the
-  // nightly Z job).
+  // Both reports are DAILY: they only ever cover the selected day.
+  //  - Z: the whole selected day (00:00 – 23:59:59).
+  //  - X: interim totals since the last Z close. When a Z was closed earlier on the selected day,
+  //    the X starts at that close; otherwise it starts at 00:00. It never reaches back into earlier
+  //    days and never runs past "now".
+  // The last successful Z close comes from rra_sync_cursors `zReport:<branchId>` (nightly Z job).
   let periodStart = dayStart;
+  let periodEnd = dayEnd;
+  if (reportType === 'X') {
+    const now = new Date();
+    if (now >= dayStart && now < dayEnd) periodEnd = now;
+  }
   let previousCloseAt: string | null = null;
   let coversSinceLastZ = false;
   let lastClose: { at: Date; verified: boolean } | null = null;
@@ -1670,9 +1678,9 @@ async function buildDailyReport(
     if (cursor && /^(VERIFIED|SAVED_UNVERIFIED)/.test(cursor.lastResult ?? '')) {
       const prev = parseRptDeTimestamp(cursor.lastReqDt);
       lastClose = prev ? { at: prev, verified: cursor.lastResult!.startsWith('VERIFIED') } : null;
-      // Only a close BEFORE this day widens the window back to it; a close during or after the
-      // day must not hide the day's earlier sales.
-      if (prev && prev < dayStart) {
+      // X only: a Z closed DURING the selected day (before now) moves the X start to that close,
+      // so the X shows just the sales made after it.
+      if (reportType === 'X' && prev && prev > dayStart && prev < periodEnd) {
         periodStart = prev;
         previousCloseAt = prev.toISOString();
         coversSinceLastZ = true;
@@ -1698,7 +1706,7 @@ async function buildDailyReport(
       where: {
         organizationId,
         ...branchFilter,
-        createdAt: { gte: periodStart, lte: dayEnd },
+        createdAt: { gte: periodStart, lte: periodEnd },
         status: { in: ['COMPLETED', 'REFUNDED', 'CANCELLED', 'DRAFT', 'PENDING', 'CONVERTED'] },
       },
       include: {
@@ -1715,7 +1723,7 @@ async function buildDailyReport(
       where: {
         organizationId,
         ...(targetBranchId != null ? { branchId: targetBranchId } : branchFilter),
-        openedAt: { gte: periodStart, lte: dayEnd },
+        openedAt: { gte: periodStart, lte: periodEnd },
       },
       _sum: { openingFloat: true },
     }),
@@ -1723,7 +1731,7 @@ async function buildDailyReport(
       where: {
         organizationId,
         ...(targetBranchId != null ? { branchId: targetBranchId } : branchFilter),
-        createdAt: { gte: periodStart, lte: dayEnd },
+        createdAt: { gte: periodStart, lte: periodEnd },
         resultingSale: { is: null },
       },
     }),
@@ -1731,7 +1739,7 @@ async function buildDailyReport(
       where: {
         organizationId,
         ...branchFilter,
-        createdAt: { gte: periodStart, lte: dayEnd },
+        createdAt: { gte: periodStart, lte: periodEnd },
         status: 'CANCELLED',
       },
       select: { totalAmount: true },
@@ -1839,7 +1847,7 @@ async function buildDailyReport(
     organizationId,
     branchId: targetBranchId,
     periodStart: periodStart.toISOString(),
-    periodEnd: dayEnd.toISOString(),
+    periodEnd: periodEnd.toISOString(),
     previousCloseAt,
     coversSinceLastZ,
     generatedAt: new Date().toISOString(),

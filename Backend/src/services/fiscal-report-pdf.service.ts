@@ -36,10 +36,9 @@ export interface DailyReportData {
   generatedAt: string
   periodStart: string
   periodEnd: string
-  /** ISO timestamp of the previous successful Z close when this report covers
-   *  the whole period since then (R10 skipped-report rule); null otherwise. */
+  /** X only: ISO timestamp of the same-day Z close the X starts from; null otherwise. */
   previousCloseAt: string | null
-  /** True when periodStart is a previous Z close rather than start-of-day. */
+  /** X only: true when periodStart is a same-day Z close rather than 00:00. */
   coversSinceLastZ: boolean
   header: FiscalReportHeader
   counters: {

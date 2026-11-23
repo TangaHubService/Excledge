@@ -3,7 +3,6 @@ import {
   fmtMoney,
   fmtPlain,
   fmtRwf,
-  fmtYmd,
   periodLabel,
   renderRraSummaryPdf,
   renderRraSummaryXlsx,
@@ -40,8 +39,21 @@ export const paymentLabel = (k: string | null | undefined): string =>
 
 const abs = (n: number | null | undefined) => Math.abs(Number(n ?? 0))
 
+/** HH:mm of an ISO timestamp in the server's local time (Kigali wall clock). */
+function fmtHm(iso: string | null | undefined): string {
+  const d = iso ? new Date(iso) : null
+  if (!d || Number.isNaN(d.getTime())) return ""
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+}
+
+/**
+ * X and Z are daily reports, so the header always shows the single selected date. An X taken
+ * after a same-day Z close also shows the time window it covers (since that Z, up to now).
+ */
 function dailyDate(data: DailyReportData): string {
-  if (data.coversSinceLastZ) return periodLabel(fmtYmd(data.periodStart), fmtYmd(data.periodEnd))
+  if (data.reportType === "X" && data.coversSinceLastZ && data.previousCloseAt) {
+    return `${data.reportDate} (${fmtHm(data.previousCloseAt)} - ${fmtHm(data.periodEnd)})`
+  }
   return data.reportDate
 }
 
@@ -104,8 +116,12 @@ export function buildDailyReportSummary(data: DailyReportData): RraSummaryReport
   ]
 
   const notes: string[] = []
-  if (data.coversSinceLastZ) {
-    notes.push("No Z report was closed for the preceding day(s); per CIS spec Art. 20 this report covers the entire period since the previous Z report.")
+  if (isZ) {
+    notes.push(`Daily closing report for ${data.reportDate} (00:00 - 23:59). Daily counters are reset.`)
+  } else if (data.coversSinceLastZ && data.previousCloseAt) {
+    notes.push(`Interim report for ${data.reportDate}: sales since the last Z report closed at ${fmtHm(data.previousCloseAt)}. Counters are not reset.`)
+  } else {
+    notes.push(`Interim report for ${data.reportDate}: sales since the start of the day (no Z report closed yet today). Counters are not reset.`)
   }
 
   return {
