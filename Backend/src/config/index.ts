@@ -13,6 +13,8 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET as string,
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:3000",
   primaryFrontendUrl: getPrimaryFrontendUrl(),
+  /** Excel Edge Accounting web app; invitations sent from Accounting link here. */
+  accountingFrontendUrl: (process.env.ACCOUNTING_FRONTEND_URL || "http://localhost:5174").replace(/\/+$/, ""),
   dpo: {
     companyToken: process.env.DPO_COMPANY_TOKEN || "",
     serviceType: process.env.DPO_SERVICE_TYPE || "",

@@ -68,8 +68,13 @@ class EmailService {
     organizationName: string,
     role: string,
     token: string,
-    defaultPassword: string | null
+    defaultPassword: string | null,
+    options: { app?: "accounting"; inviterName?: string | null } = {}
   ) {
+    if (options.app === "accounting") {
+      return this.sendAccountingInvitationEmail(email, organizationName, role, token, options.inviterName ?? null);
+    }
+
     const inviteLink = `${config.primaryFrontendUrl}/accept-invite?token=${token}`;
 
     const passwordSection = defaultPassword
@@ -87,6 +92,55 @@ class EmailService {
         <p>Click the link below to accept the invitation:</p>
         <a href="${inviteLink}" style="background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Accept Invitation</a>
         <p>This invitation will expire in 7 days.</p>
+      `,
+    });
+  }
+
+  /**
+   * QuickBooks-style invitation for Excel Edge Accounting: who invited you, to which company and
+   * role, one Accept button. No password is ever emailed; the invitee sets one (or signs in with
+   * their existing account) on the accept page.
+   */
+  private async sendAccountingInvitationEmail(
+    email: string,
+    organizationName: string,
+    role: string,
+    token: string,
+    inviterName: string | null
+  ) {
+    const esc = (v: string) => v.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+    const roleLabels: Record<string, string> = {
+      ADMIN: "Company admin",
+      ACCOUNTANT: "Accountant",
+      BRANCH_MANAGER: "Branch manager",
+      SELLER: "Sales only",
+    };
+    const inviteLink = `${config.accountingFrontendUrl}/accept-invite?token=${encodeURIComponent(token)}`;
+    const company = esc(organizationName);
+    const who = inviterName ? esc(inviterName) : "Your team";
+    const roleLabel = esc(roleLabels[role] ?? role);
+
+    await this.sendMail({
+      from: config.email.from,
+      to: email,
+      subject: `${inviterName ?? "Your team"} invited you to ${organizationName} on Excel Edge Accounting`,
+      html: `
+        <div style="font-family: 'Avenir Next', Avenir, 'Nunito Sans', Arial, sans-serif; color: #0b2a4a; max-width: 520px; margin: 0 auto; padding: 24px;">
+          <p style="font-size: 13px; color: #667085; margin: 0 0 20px;">Excel Edge Accounting</p>
+          <h1 style="font-size: 22px; margin: 0 0 12px;">You're invited to ${company}</h1>
+          <p style="font-size: 14px; line-height: 1.5; margin: 0 0 16px;">
+            ${who} invited you to work in <strong>${company}</strong> on Excel Edge Accounting as <strong>${roleLabel}</strong>.
+          </p>
+          <p style="margin: 24px 0;">
+            <a href="${inviteLink}" style="background: #2f6fed; color: #fff; padding: 12px 22px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-block;">Accept invitation</a>
+          </p>
+          <p style="font-size: 13px; color: #445468; line-height: 1.5; margin: 0 0 8px;">
+            New to Excel Edge? You'll create your account in a minute. Already have one? Just sign in.
+          </p>
+          <p style="font-size: 13px; color: #667085; line-height: 1.5; margin: 0;">
+            This invitation expires in 7 days. If you weren't expecting it, you can ignore this email.
+          </p>
+        </div>
       `,
     });
   }
