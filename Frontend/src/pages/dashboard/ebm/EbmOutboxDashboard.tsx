@@ -43,19 +43,25 @@ interface EbmCredForm {
   vsdcUrl?: string | null;
 }
 
-const CRED_PAGE_SIZES = [5, 8, 10, 25];
+type BranchWithMain = Branch & { isDefault?: boolean };
+
+/** Mirrors the backend: the branch marked main, else the first active branch with device credentials, else the first active branch. */
+function pickMainBranch(list: BranchWithMain[]): BranchWithMain | undefined {
+  const active = list.filter((b) => b.status === 'ACTIVE');
+  return active.find((b) => b.isDefault)
+    ?? active.find((b) => b.ebmSerialNo || b.ebmDeviceId || b.mrcNo)
+    ?? active[0];
+}
 
 function EbmCredentialsCard() {
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [branchId, setBranchId] = useState<number | ''>('');
+  const [branches, setBranches] = useState<BranchWithMain[]>([]);
+  const [mainBranch, setMainBranch] = useState<BranchWithMain | undefined>(undefined);
   const [orgTin, setOrgTin] = useState('');
   const [form, setForm] = useState<EbmCredForm>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [credPage, setCredPage] = useState(1);
-  const [credPageSize, setCredPageSize] = useState(8);
   const [initializing, setInitializing] = useState(false);
   const [initInfo, setInitInfo] = useState<any>(null);
 
@@ -74,12 +80,11 @@ function EbmCredentialsCard() {
     const orgId = localStorage.getItem('current_organization_id');
     try {
       const res = await apiClient.getBranches(true);
-      const list = Array.isArray(res) ? res : res?.data || [];
+      const list: BranchWithMain[] = Array.isArray(res) ? res : res?.data || [];
       setBranches(list);
-      if (list.length > 0) {
-        setBranchId(list[0].id);
-        applyBranch(list[0]);
-      }
+      const main = pickMainBranch(list);
+      setMainBranch(main);
+      if (main) applyBranch(main);
     } catch (e) {
       console.error('Failed to load branches for EBM config', e);
     }
@@ -108,19 +113,22 @@ function EbmCredentialsCard() {
       setErrorMsg(`MRC must be exactly 11 letters or digits (you entered ${mrc.length}).`);
       return;
     }
+    if (!mainBranch) {
+      setErrorMsg('Create a branch first — the main branch holds the RRA/VSDC configuration.');
+      return;
+    }
     setSaving(true);
     try {
       if (orgTin.trim()) await apiClient.updateOrganization({ TIN: orgTin.trim() });
-      if (branchId !== '') {
-        await apiClient.updateBranch(branchId, {
-          bhfId: (form.bhfId ?? '').trim(),
-          ebmDeviceId: (form.ebmDeviceId ?? '').trim(),
-          ebmSerialNo: (form.ebmSerialNo ?? '').trim(),
-          mrcNo: (form.mrcNo ?? '').trim().toUpperCase(),
-          vsdcUrl: (form.vsdcUrl ?? '').trim(),
-        });
-      }
-      setSavedMsg('EBM / VSDC credentials saved.');
+      await apiClient.updateBranch(mainBranch.id, {
+        bhfId: (form.bhfId ?? '').trim(),
+        ebmDeviceId: (form.ebmDeviceId ?? '').trim(),
+        ebmSerialNo: (form.ebmSerialNo ?? '').trim(),
+        mrcNo: (form.mrcNo ?? '').trim().toUpperCase(),
+        vsdcUrl: (form.vsdcUrl ?? '').trim(),
+      });
+      setSavedMsg('RRA / VSDC configuration saved. Every branch uses it.');
+      await load();
     } catch (e: any) {
       setErrorMsg(
         (e?.response?.data?.code === 'INVALID_MRC_FORMAT'
@@ -142,7 +150,7 @@ function EbmCredentialsCard() {
     setErrorMsg(null);
     try {
       const res = await apiClient.initializeEbmDevice(
-        branchId !== '' ? { branchId: Number(branchId) } : {},
+        mainBranch ? { branchId: mainBranch.id } : {},
       );
       const info = (res as any)?.data ?? res;
       setInitInfo(info);
@@ -156,35 +164,43 @@ function EbmCredentialsCard() {
     }
   };
 
-  const credPageCount = Math.max(1, Math.ceil(branches.length / credPageSize));
-  const credPageSafe = Math.min(credPage, credPageCount);
-  const credPageRows = branches.slice(
-    (credPageSafe - 1) * credPageSize,
-    credPageSafe * credPageSize,
-  );
-
-  const changeCredPageSize = (value: string) => {
-    setCredPageSize(Number(value));
-    setCredPage(1);
-  };
-
-  const editBranchCredentials = (branch: Branch) => {
-    setBranchId(branch.id);
-    applyBranch(branch);
-  };
+  const otherBranches = branches.filter((b) => b.id !== mainBranch?.id);
 
   return (
     <Card>
       <CardHeader className="p-5 pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <ShieldCheck className="h-4 w-4 text-primary" />
-          EBM / VSDC Credentials
+          RRA / VSDC Configuration
         </CardTitle>
         <CardDescription className="text-sm">
-          Organization TIN and per-branch device credentials sent to the RRA VSDC gateway.
+          One configuration for the whole organization. It is kept on the main branch, and every other
+          branch sells, buys and reports under it. Purchases and imports are received on the main branch.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-5 pt-2 space-y-4">
+        <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+          {mainBranch ? (
+            <>
+              <span className="text-muted-foreground">Main branch: </span>
+              <span className="font-medium">{mainBranch.name}</span>
+              <span className="ml-1 text-xs text-muted-foreground">({mainBranch.code})</span>
+              {!mainBranch.isDefault && (
+                <span className="ml-2 text-xs text-warning">
+                  No branch is marked as main yet — mark one with the star in Organization → Branches.
+                </span>
+              )}
+              {otherBranches.length > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Working under it: {otherBranches.map((b) => b.name).join(', ')}
+                </p>
+              )}
+            </>
+          ) : (
+            <span className="text-muted-foreground">No active branch yet — create one to hold the RRA/VSDC configuration.</span>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Organization TIN</Label>
@@ -196,31 +212,7 @@ function EbmCredentialsCard() {
           </div>
 
           <div className="space-y-1.5">
-            <Label>Branch</Label>
-            <Select
-              value={branchId === '' ? undefined : String(branchId)}
-              onValueChange={(v) => {
-                const id = Number(v);
-                setBranchId(id);
-                const b = branches.find((x) => x.id === id);
-                if (b) applyBranch(b);
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a branch" />
-              </SelectTrigger>
-              <SelectContent>
-                {branches.map((b) => (
-                  <SelectItem key={b.id} value={String(b.id)}>
-                    {b.name} ({b.code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>bhfId (branch code)</Label>
+            <Label>bhfId (RRA branch code)</Label>
             <Input
               value={form.bhfId ?? ''}
               onChange={(e) => set('bhfId', e.target.value)}
@@ -248,7 +240,7 @@ function EbmCredentialsCard() {
               className="font-mono"
             />
             <p className="text-xs text-muted-foreground">
-              Exactly 11 characters ({(form.mrcNo ?? '').trim().length}/11): BBBCCNNNNNN — 3 developer + 2 certificate characters, then a 6-digit serial. Printed on every receipt of this device.
+              Exactly 11 characters ({(form.mrcNo ?? '').trim().length}/11): BBBCCNNNNNN — 3 developer + 2 certificate characters, then a 6-digit serial. Printed on every receipt.
             </p>
           </div>
 
@@ -262,7 +254,7 @@ function EbmCredentialsCard() {
           </div>
 
           <div className="space-y-1.5">
-            <Label>Per-branch VSDC URL (optional)</Label>
+            <Label>VSDC URL (optional)</Label>
             <Input
               value={form.vsdcUrl ?? ''}
               onChange={(e) => set('vsdcUrl', e.target.value)}
@@ -271,99 +263,9 @@ function EbmCredentialsCard() {
           </div>
         </div>
 
-        {branches.length > 0 && (
-          <div className="space-y-2 pt-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Per-branch device credentials</p>
-              <p className="text-xs text-muted-foreground">
-                {branches.length} branch{branches.length === 1 ? '' : 'es'}
-              </p>
-            </div>
-
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Branch</TableHead>
-                    <TableHead>bhfId</TableHead>
-                    <TableHead>dvcSrlNo</TableHead>
-                    <TableHead>MRC</TableHead>
-                    <TableHead>sdcId</TableHead>
-                    <TableHead>VSDC URL</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {credPageRows.map((branch) => (
-                    <TableRow key={branch.id}>
-                      <TableCell className="font-medium">
-                        {branch.name}
-                        <span className="ml-1 text-xs text-muted-foreground">({branch.code})</span>
-                      </TableCell>
-                      <TableCell>{branch.bhfId || '—'}</TableCell>
-                      <TableCell>{branch.ebmSerialNo || '—'}</TableCell>
-                      <TableCell className="font-mono">{branch.mrcNo || '—'}</TableCell>
-                      <TableCell>{branch.ebmDeviceId || '—'}</TableCell>
-                      <TableCell className="max-w-[180px] truncate">{branch.vsdcUrl || '—'}</TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => editBranchCredentials(branch)}
-                        >
-                          Edit
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground whitespace-nowrap">Rows per page</span>
-                <Select value={String(credPageSize)} onValueChange={changeCredPageSize}>
-                  <SelectTrigger className="h-8 w-[76px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CRED_PAGE_SIZES.map((size) => (
-                      <SelectItem key={size} value={String(size)}>
-                        {size}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Page {credPageSafe} of {credPageCount} · {branches.length} branches
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={credPageSafe <= 1}
-                  onClick={() => setCredPage(credPageSafe - 1)}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={credPageSafe >= credPageCount}
-                  onClick={() => setCredPage(credPageSafe + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {loading && (
           <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <Loader2 className="h-3 w-3 animate-spin" /> Loading credentials…
+            <Loader2 className="h-3 w-3 animate-spin" /> Loading configuration…
           </p>
         )}
 
@@ -386,17 +288,17 @@ function EbmCredentialsCard() {
         )}
 
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="outline" onClick={handleInitialize} disabled={initializing || loading || branchId === ''}>
+          <Button variant="outline" onClick={handleInitialize} disabled={initializing || loading || !mainBranch}>
             {initializing ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
             Initialize with RRA
           </Button>
-          <Button onClick={handleSave} disabled={saving || loading}>
+          <Button onClick={handleSave} disabled={saving || loading || !mainBranch}>
             {saving ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <Save className="size-4" />
             )}
-            Save Credentials
+            Save Configuration
           </Button>
         </div>
       </CardContent>

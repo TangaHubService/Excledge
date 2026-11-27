@@ -216,7 +216,7 @@ describe('ART4 audit — one rendered receipt per label (NS,NR,CS,CR,TS,TR,PS)',
         expect(html).toContain(NOT_OFFICIAL_RECEIPT_NOTICE);  // Art 11
       }
       if (label === 'CS' || label === 'CR') {
-        expect(html).not.toContain(NOT_OFFICIAL_RECEIPT_NOTICE); // copy: COPY header title only
+        expect(html).toContain(NOT_OFFICIAL_RECEIPT_NOTICE); // copy: COPY title + notice (§55)
       }
       if (label === 'NR') {
         // Implemented (PDF only): NR prints the original-receipt reference + negative amounts.
@@ -243,7 +243,7 @@ describe('ART4 audit — one rendered receipt per label (NS,NR,CS,CR,TS,TR,PS)',
     expect(documentIndicator(auditRenderPayload('CS', false))).toBe('COPY');
     expect(documentIndicator(auditRenderPayload('TS', false))).toBe('TRAINING MODE');
     expect(documentIndicator(auditRenderPayload('PS', false))).toBe('PROFORMA');
-    expect(isFormalNoticeIndicator('COPY')).toBe(false);
+    expect(isFormalNoticeIndicator('COPY')).toBe(true);
   });
 });
 
@@ -280,7 +280,7 @@ describe('ART4 audit — documented spec gaps (passing assertions on current beh
     // prints the indicator once at y=76/91.
     const p = auditRenderPayload('CS', false);
     expect(documentIndicator(p)).toBe('COPY');
-    expect(isFormalNoticeIndicator('COPY')).toBe(false);
+    expect(isFormalNoticeIndicator('COPY')).toBe(true);
   });
 });
 describe('ART4 audit — VSDC failure: no receipt is issued', () => {

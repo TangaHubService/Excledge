@@ -10,9 +10,11 @@ import {
   saveStockMaster,
   validateVsdcEnvelope,
   toRraReqDt,
+  bumpRraReqDt,
   type VsdcEnvelope,
 } from './vsdc-api.service';
 import { getCurrentStock, receiveStockOnBranch, resolveActiveBranchId } from './inventory-ledger.service';
+import { getMainBranchId } from './vsdc-branch.service';
 import { allocateItemCd, getOriginNationCode, DEFAULT_PKG_UNIT_CD } from './item-code.service';
 import { TaxService } from './tax.service';
 import { getTaxationTypes } from './rra-code.service';
@@ -30,11 +32,11 @@ const CURSOR_RESOURCE = 'purchases';
 /** VSDC §3.3.7.1 JSON sample uses 20190524000000 — use the same default when no cursor exists. */
 export const PURCHASES_DEFAULT_LAST_REQ_DT = '20190524000000';
 
-async function getCursor(organizationId: number): Promise<string> {
+async function getStoredCursor(organizationId: number): Promise<string | null> {
   const row = await prisma.rraSyncCursor.findUnique({
     where: { organizationId_resource: { organizationId, resource: CURSOR_RESOURCE } },
   });
-  return row?.lastReqDt ?? PURCHASES_DEFAULT_LAST_REQ_DT;
+  return row?.lastReqDt || null;
 }
 
 /** Normalize a UI/API request date (yyyy-mm-dd or yyyyMMddHHmmss) to VSDC lastReqDt. */
@@ -114,9 +116,12 @@ export async function syncRraPurchases(
       ? { branchId: opts, requestDate: undefined as string | undefined }
       : opts;
 
-  const prevCursor = await getCursor(organizationId);
+  const storedCursor = await getStoredCursor(organizationId);
+  const prevCursor = storedCursor ?? PURCHASES_DEFAULT_LAST_REQ_DT;
   const requestDate = normalized.requestDate?.trim() || undefined;
-  let since = prevCursor;
+  // Start one second after the last request, so the previous pull's last second is not asked for
+  // again. The first pull ever starts at the default date itself; a date picked by hand is sent as is.
+  let since = storedCursor ? bumpRraReqDt(storedCursor) : prevCursor;
   if (requestDate) {
     const parsed = normalizePurchaseReqDt(requestDate);
     if (!parsed) {
@@ -243,6 +248,18 @@ function overrideFor(it: PurchaseLine, items?: PurchaseItemOverride[]): Purchase
   return items.find((o) =>
     (o.itemId != null && o.itemId === it.id) || (o.itemSeq != null && o.itemSeq === it.itemSeq),
   );
+}
+
+/**
+ * A purchase with more than one item is approved only when every item is linked to an
+ * existing product; a single-item purchase may still create its product on approval.
+ */
+export function unmappedPurchaseLines<T extends PurchaseLine>(lines: T[], items?: PurchaseItemOverride[]): T[] {
+  if (lines.length <= 1) return [];
+  return lines.filter((it) => {
+    const id = overrideFor(it, items)?.linkProductId;
+    return !(id != null && Number.isFinite(id) && id > 0);
+  });
 }
 
 function localNameFor(it: PurchaseLine, ov?: PurchaseItemOverride): string {
@@ -455,7 +472,8 @@ async function pushStockMastersAfterPurchase(
   for (const product of products) {
     if (seen.has(product.id) || !product.itemCd) continue;
     seen.add(product.id);
-    const onHand = await getCurrentStock(organizationId, product.id, branchId);
+    // One VSDC device serves every branch, so its stock master holds the organization's total.
+    const onHand = await getCurrentStock(organizationId, product.id, null);
     const master = await saveStockMaster(envelope, product.itemCd, onHand, regr);
     if (!master.success) {
       logger.warn(
@@ -647,8 +665,21 @@ export async function confirmRraPurchase(
   if (!rp) return { success: false, error: 'Purchase not found' };
   if (rp.status !== 'PENDING') return { success: false, error: `Purchase already ${rp.status.toLowerCase()}` };
 
+  // Purchases are an organization-level RRA record: they always go through the main branch's
+  // VSDC configuration and the stock lands on the main branch.
+  opts = { ...opts, branchId: (await getMainBranchId(organizationId)) ?? opts.branchId ?? null };
+
   if (opts.reject) {
     return rejectRraPurchaseAtVsdc(organizationId, rp as PurchaseRow, opts);
+  }
+
+  const unmapped = unmappedPurchaseLines(rp.items, opts.items);
+  if (unmapped.length) {
+    return {
+      success: false,
+      error: `This purchase has ${rp.items.length} items — link every item to a product before approving. `
+        + `Not linked: ${unmapped.map((it) => `line ${it.itemSeq} (${it.itemNm?.trim() || 'Item'})`).join(', ')}`,
+    };
   }
 
   if (!isEbmEnabled()) return { success: false, error: 'EBM is not enabled' };

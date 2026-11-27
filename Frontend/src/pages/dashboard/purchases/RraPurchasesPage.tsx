@@ -283,6 +283,13 @@ export function RraPurchasesPage() {
     }
   };
 
+  // A purchase with several items is confirmed only when every item is linked to an existing product.
+  const isLinked = (linkProductId?: string) => !!linkProductId && linkProductId !== "__new__" && Number(linkProductId) > 0;
+  const multiItem = (selected?.items.length ?? 0) > 1;
+  const unmappedCount = multiItem && selected
+    ? selected.items.filter((it) => !isLinked(lineEdits[it.id]?.linkProductId)).length
+    : 0;
+
   const setLine = (itemId: number, patch: Partial<LineEdit>) => {
     setLineEdits((prev) => ({ ...prev, [itemId]: { ...prev[itemId], ...patch } }));
   };
@@ -514,7 +521,10 @@ export function RraPurchasesPage() {
                     />
                   </div>
                   <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                    You can rename each item for your inventory and set its selling price. The supplier&apos;s name is kept for RRA. Leave unmatched to create a new product, or link an existing one.
+                    You can rename each item for your inventory and set its selling price. The supplier&apos;s name is kept for RRA.{" "}
+                    {multiItem
+                      ? "This purchase has several items: link every item to an existing product before confirming."
+                      : "Leave unmatched to create a new product, or link an existing one."}
                   </p>
                 </>
               )}
@@ -565,11 +575,11 @@ export function RraPurchasesPage() {
                                   sellingPrice: value !== "__new__" && prod ? priceOf(prod) : edit.sellingPrice,
                                 });
                               }}
-                              placeholder="Create as a new product"
+                              placeholder={multiItem ? "Pick a product" : "Create as a new product"}
                               searchPlaceholder="Search your products..."
                               emptyText="No matching products."
                               options={[
-                                { value: "__new__", label: "Create as a new product", emphasized: true },
+                                ...(multiItem ? [] : [{ value: "__new__", label: "Create as a new product", emphasized: true }]),
                                 ...catalog.filter((p) => p.itemType !== "SERVICE").map((p) => ({
                                   value: String(p.id),
                                   label: p.name,
@@ -577,6 +587,9 @@ export function RraPurchasesPage() {
                                 })),
                               ]}
                             />
+                            {multiItem && !isLinked(edit.linkProductId) && (
+                              <p className="text-xs text-danger">Link this item to a product.</p>
+                            )}
                           </div>
                           <div className="space-y-1">
                             <Label htmlFor={`sell-price-${it.id}`}>Selling price</Label>
@@ -651,13 +664,20 @@ export function RraPurchasesPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex justify-between gap-2 border-t pt-3">
+                  <div className="space-y-2 border-t pt-3">
+                  {unmappedCount > 0 && (
+                    <p className="text-right text-xs text-danger">
+                      {unmappedCount} of {selected.items.length} items not linked to a product — link them all to confirm.
+                    </p>
+                  )}
+                  <div className="flex justify-between gap-2">
                     <Button variant="outline" className="text-danger hover:bg-danger/10 hover:text-danger" onClick={() => setRejecting(true)} disabled={rowBusy === selected.id}>
                       <X className="size-4" /> Reject
                     </Button>
-                    <Button onClick={() => action(selected.id, false)} disabled={rowBusy === selected.id}>
+                    <Button onClick={() => action(selected.id, false)} disabled={rowBusy === selected.id || unmappedCount > 0}>
                       {rowBusy === selected.id ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} Confirm with RRA
                     </Button>
+                  </div>
                   </div>
                 )
               )}

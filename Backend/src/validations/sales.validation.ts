@@ -61,6 +61,8 @@ export const createSaleSchema = z.object({
     shiftId: optionalId(),
     branchId: optionalId(),
     payments: z.array(salePaymentSchema).optional(),
+    // RRA purchase order code the buyer presented (6 characters, single-use). Blank = none.
+    prcOrdCd: z.string().trim().max(32).optional().nullable(),
     // Mode the POS was showing; the sale is refused (409) if the org switched.
     receiptMode: z.enum(['TRAINING', 'NORMAL']).optional(),
   }).refine((b) => itemsWithinLimit(b.items), ITEMS_TOO_LARGE),
@@ -90,6 +92,8 @@ export const convertProformaSchema = z.object({
     insuranceAmount: money('Insurance amount cannot be negative').optional(),
     shiftId: z.coerce.number().positive().optional(),
     payments: z.array(salePaymentSchema).optional(),
+    // RRA purchase order code the buyer presented (6 characters, single-use). Blank = none.
+    prcOrdCd: z.string().trim().max(32).optional().nullable(),
   }).refine((b) => itemsWithinLimit(b.items), ITEMS_TOO_LARGE),
   params: z.object({
     organizationId: z.coerce.number().positive('Organization ID required'),
@@ -151,6 +155,8 @@ export const correctSaleSchema = z.object({
     insuranceAmount: z.coerce.number().nonnegative('Insurance amount cannot be negative').optional(),
     shiftId: z.coerce.number().positive().optional(),
     payments: z.array(salePaymentSchema).optional(),
+    // RRA purchase order code the buyer presented (6 characters, single-use). Blank = none.
+    prcOrdCd: z.string().trim().max(32).optional().nullable(),
   }),
   params: z.object({
     organizationId: z.coerce.number().positive('Organization ID required'),

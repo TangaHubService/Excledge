@@ -2,9 +2,11 @@ import { prisma } from '../lib/prisma';
 import type { Prisma } from '@prisma/client';
 import { isEbmEnabled } from './rra-ebm.service';
 import { buildVsdcEnvelope, selectInitInfo, validateVsdcEnvelope, type RraInitInfo } from './vsdc-api.service';
+import { resolveVsdcBranchId } from './vsdc-branch.service';
 import logger from '../utils/logger';
 import { hasMrcLength, mrcMismatch } from '../utils/mrc';
 import { purchaseCounterKey } from './vsdc-purchase-counter.service';
+import { applyRraVatStatus, rraVatRegisteredFromInit, type VatStatusChange } from './rra-vat-status.service';
 
 /**
  * RRA VSDC device initialization (RRA checklist §58). Calls /initializer/selectInitInfo with (TIN,
@@ -20,13 +22,18 @@ export interface VsdcInitResult {
   mrcNo?: string;
   /** Set when the configured MRC disagrees with the one VSDC reports. */
   mrcWarning?: string;
+  /** Set when RRA's VAT status (vatTyCd) differed from ours and was applied. */
+  vatStatusChange?: VatStatusChange;
 }
 
 export async function initializeVsdcDevice(
   organizationId: number,
-  branchId?: number | null,
+  requestedBranchId?: number | null,
 ): Promise<VsdcInitResult> {
   if (!isEbmEnabled()) return { success: false, error: 'EBM is not enabled' };
+  // The main branch holds the organization's one VSDC configuration; initializing from any
+  // branch initializes (and records the result on) the main branch.
+  const branchId = await resolveVsdcBranchId(organizationId, requestedBranchId);
 
   const envelope = await buildVsdcEnvelope(organizationId, branchId ?? null);
   // Initialization is exactly what clears a pending post-TIN-reset re-init.
@@ -111,7 +118,16 @@ export async function initializeVsdcDevice(
     data: { lastSuccessfulVdsContact: new Date() },
   });
 
+  // RRA is the authority on VAT registration: a stale local flag makes every sale carry tax type B,
+  // which VSDC refuses for a non-VAT taxpayer (910 "VAT is not enabled").
+  let vatStatusChange: VatStatusChange | undefined;
+  const rraVat = rraVatRegisteredFromInit(info.vatTyCd);
+  if (rraVat !== null) {
+    const change = await applyRraVatStatus(organizationId, rraVat, 'device initialization');
+    if (change.changed) vatStatusChange = change;
+  }
+
   logger.info(`[VSDC-INIT] org ${organizationId} branch ${branchId ?? '-'}: sdcId=${info.sdcId} mrcNo=${info.mrcNo} lastRraInvcNo=${lastRraInvcNo} seededTo=${seededCounterTo ?? 'n/a'} lastPchsInvcNo=${lastPchsInvcNo}`);
 
-  return { success: true, info, seededCounterTo, mrcNo: envelope.mrcNo || reportedMrc, mrcWarning: mrcWarning ?? undefined };
+  return { success: true, info, seededCounterTo, mrcNo: envelope.mrcNo || reportedMrc, mrcWarning: mrcWarning ?? undefined, vatStatusChange };
 }

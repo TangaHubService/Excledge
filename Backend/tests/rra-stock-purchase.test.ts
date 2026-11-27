@@ -8,6 +8,15 @@ const ledgerUpdates: any[] = []
 const addStockCalls: any[] = []
 const sellingPriceCalls: any[] = []
 
+// The main branch holds the VSDC configuration; tests pass the branch through unchanged.
+vi.mock("../src/services/vsdc-branch.service", () => ({
+  hasOwnVsdcDevice: () => true,
+  getMainBranchId: vi.fn(async () => null),
+  getDefaultVsdcBranchId: vi.fn(async () => null),
+  resolveVsdcBranchId: vi.fn(async (_org: number, b?: number | null) => b ?? null),
+  vsdcBranchGroup: vi.fn(async () => []),
+}))
+
 vi.mock("../src/lib/prisma", () => {
   const purchase = {
     id: 7,
@@ -125,7 +134,8 @@ vi.mock("../src/services/vsdc-api.service", async () => {
 })
 
 import { sarTyCdFor, stockMovementNeedsEbm, submitStockLedgerEntryToEbm } from "../src/services/stock-movement-sync.service"
-import { confirmRraPurchase, readRraPurchaseAnswer } from "../src/services/purchase-sync.service"
+import { confirmRraPurchase, readRraPurchaseAnswer, unmappedPurchaseLines } from "../src/services/purchase-sync.service"
+import { getMainBranchId } from "../src/services/vsdc-branch.service"
 
 beforeEach(() => {
   stockItemsPayload = null
@@ -276,6 +286,13 @@ describe("confirmRraPurchase (§71)", () => {
     expect(addStockCalls[0].expiryDate).toEqual(new Date("2027-03-31T00:00:00Z"))
   })
 
+  it("receives the purchase on the main branch whatever branch the user is on", async () => {
+    vi.mocked(getMainBranchId).mockResolvedValueOnce(7)
+    const r = await confirmRraPurchase(1, 7, { userId: 3, branchId: 4 })
+    expect(r.success).toBe(true)
+    expect(addStockCalls[0].branchId).toBe(7)
+  })
+
   it("leaves the selling price alone when none is given", async () => {
     const r = await confirmRraPurchase(1, 7, { userId: 3, branchId: 4 })
     expect(r.success).toBe(true)
@@ -296,5 +313,25 @@ describe("RRA's answer to a saved purchase", () => {
 
   it.each([[{}], [null], [{ resultCd: "910" }], [{ resultMsg: "no code" }]])("does not count %j as accepted", (body) => {
     expect(readRraPurchaseAnswer(body).ok).toBe(false)
+  })
+})
+
+describe("approving a purchase with several items", () => {
+  const lines = [
+    { id: 21, itemSeq: 1, itemNm: "Widget" },
+    { id: 22, itemSeq: 2, itemNm: "Gadget" },
+  ] as any[]
+
+  it("lets a single-item purchase through without a link (product is created on approval)", () => {
+    expect(unmappedPurchaseLines([lines[0]], undefined)).toEqual([])
+  })
+
+  it("flags every item that is not linked to a product", () => {
+    expect(unmappedPurchaseLines(lines, undefined).map((l) => l.itemSeq)).toEqual([1, 2])
+    expect(unmappedPurchaseLines(lines, [{ itemId: 21, linkProductId: 5 }]).map((l) => l.itemSeq)).toEqual([2])
+  })
+
+  it("passes once all items are linked", () => {
+    expect(unmappedPurchaseLines(lines, [{ itemId: 21, linkProductId: 5 }, { itemSeq: 2, linkProductId: 6 }])).toEqual([])
   })
 })

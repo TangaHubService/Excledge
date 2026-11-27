@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import { error as apiError } from '../utils/apiResponse';
 import { isEbmEnabled } from '../services/rra-ebm.service';
-import { buildVsdcEnvelope, probeVsdc, type VsdcProbeResult } from '../services/vsdc-api.service';
+import { buildVsdcEnvelope, hasOwnVsdcDevice, probeVsdc, resolveVsdcBranchId, type VsdcProbeResult } from '../services/vsdc-api.service';
 import { getOrganizationSettings } from '../services/organization-settings.service';
 import type { BranchAuthRequest } from './branchAuth.middleware';
 
@@ -102,20 +102,21 @@ export async function checkVsdcConnection(
   }
 
   // "All Branches" and limited users without a single branch arrive with no usable branch id.
-  const targetBranchId = branchId != null && branchId > 0 ? branchId : fallbackBranchId;
+  // Every branch works under the main branch's VSDC configuration.
+  const targetBranchId = (await resolveVsdcBranchId(organizationId, branchId)) ?? fallbackBranchId;
   const result = await probeOnce(organizationId, targetBranchId);
 
   const branch = targetBranchId == null
     ? null
     : await prisma.branch.findFirst({
         where: { id: targetBranchId, organizationId },
-        select: { name: true, bhfId: true, ebmDeviceId: true, ebmInitializedAt: true },
+        select: { name: true, bhfId: true, ebmDeviceId: true, ebmSerialNo: true, mrcNo: true, ebmInitializedAt: true },
       });
-  // A branch with its own RRA branch code needs its own registered device; otherwise the
-  // organization's device is the one that signs.
-  const registered = branch?.bhfId
-    ? Boolean(branch.ebmInitializedAt || branch.ebmDeviceId)
-    : Boolean(org.ebmInitializedAt || org.ebmDeviceId);
+  // The signing branch with its own device must have that device registered; otherwise the
+  // organization-level device is the one that signs.
+  const registered = hasOwnVsdcDevice(branch)
+    ? Boolean(branch!.ebmInitializedAt || branch!.ebmDeviceId)
+    : Boolean(branch?.ebmInitializedAt || org.ebmInitializedAt || org.ebmDeviceId);
 
   return {
     configured: true,

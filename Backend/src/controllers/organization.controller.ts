@@ -8,6 +8,8 @@ import { auditLogger } from "../utils/auditLogger";
 import { lockReceiptModeForChange } from "../services/training-mode.service";
 import { syncProductToRraAsync } from "../services/product-sync.service";
 import { TaxService } from "../services/tax.service";
+import { lookupRraVatStatus } from "../services/rra-vat-status.service";
+import logger from "../utils/logger";
 import { deleteFromCloudinary, uploadToCloudinary } from "../config/cloudinary";
 import { SubscriptionService } from "../services/subscription.service";
 import {
@@ -301,6 +303,26 @@ export const updateOrganization = async (req: Request, res: Response) => {
       vatRegistered !== undefined && !!vatRegistered && existingOrg?.vatRegistered === false;
     let vatSwitchedProductIds: number[] = [];
 
+    // RRA decides VAT registration, not us: the VSDC refuses every B line (910 "VAT is not enabled")
+    // until RRA's record for the TIN says VAT. Check before converting items, so the switch never
+    // leaves the till ringing up sales RRA will reject.
+    let rraVatWarning: string | undefined;
+    if (becameVatRegistered) {
+      const rra = await lookupRraVatStatus(id);
+      if (rra.vatRegistered === false) {
+        return res.status(409).json({
+          error:
+            `RRA has TIN ${existingOrg?.TIN ?? ""} as not VAT-registered, so the EBM would reject every VAT sale. ` +
+            `Register for VAT with RRA first; once RRA has updated the TIN (the VSDC picks it up within an hour), switch VAT on again.`,
+          code: "RRA_NOT_VAT_REGISTERED",
+        });
+      }
+      if (rra.vatRegistered === null) {
+        rraVatWarning = `Could not confirm the VAT registration with RRA (${rra.detail}). The VSDC re-reads RRA's record hourly: until it shows VAT, sales are refused and kept in the EBM queue for retry.`;
+        logger.warn(`[RRA-VAT] org ${id}: switching to VAT without RRA confirmation: ${rra.detail}`);
+      }
+    }
+
     // CIS spec §7.2: a TIN change is a total VSDC reset.
     const previousTin = existingOrg?.TIN?.trim() || "";
     const nextTin = typeof TIN === "string" ? TIN.trim() : undefined;
@@ -463,8 +485,9 @@ export const updateOrganization = async (req: Request, res: Response) => {
 
     res.json({
       message: becameVatRegistered
-        ? `Organization updated. ${vatSwitchedProductIds.length} item(s) moved to tax type B — review them: each can be changed once.`
+        ? `Organization updated. ${vatSwitchedProductIds.length} item(s) moved to tax type B and re-sent to RRA — review them: each can be changed once.${rraVatWarning ? ` ${rraVatWarning}` : ""}`
         : "Organization updated successfully",
+      ...(rraVatWarning ? { warning: rraVatWarning } : {}),
       organization,
       vatSwitchedProducts: vatSwitchedProductIds.length,
     });

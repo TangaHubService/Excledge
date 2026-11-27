@@ -101,6 +101,8 @@ const models: Record<string, any> = {
     update: vi.fn(async () => ({})),
   },
   branch: {
+    // The main branch (id 1) holds the organization's VSDC configuration.
+    findFirst: vi.fn(async () => ({ id: 1 })),
     findUnique: vi.fn(async () => ({
       name: "Main", bhfId: "00", ebmDeviceId: "TESTSDC010000001", ebmSerialNo: "TESTMRC0001", vsdcUrl: null, address: null,
     })),

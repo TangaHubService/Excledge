@@ -375,7 +375,8 @@ export const updatePurchaseOrder = async (req: BranchAuthRequest, res: Response)
     }
 }
 
-// Update purchase order status with partial receiving support
+// Update purchase order status. Receiving is all-or-nothing: COMPLETED takes in every item's full
+// remaining quantity, and PARTIALLY_RECEIVED can no longer be set (it stays readable on old orders).
 export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Response) => {
     const id = parseInt(req.params.id)
     const organizationId = parseInt(req.params.organizationId)
@@ -427,6 +428,29 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
 
         if ((status === 'COMPLETED' || status === 'PARTIALLY_RECEIVED') && !effectiveBranchId) {
             return res.status(400).json({ message: "branchId is required to receive items" })
+        }
+
+        if (status === 'PARTIALLY_RECEIVED') {
+            return res.status(400).json({
+                message: "Partial receiving is not allowed: receive the whole purchase order (all items, full quantities) by marking it COMPLETED.",
+                code: "PARTIAL_RECEIVE_NOT_ALLOWED",
+            })
+        }
+
+        // Full approval only: a quantity sent for any item must be that item's whole remaining quantity.
+        if (status === 'COMPLETED' && Array.isArray(receivedItems)) {
+            for (const item of order.items) {
+                if (!item.productId) continue
+                const meta = receivedItems.find((ri: any) => parseInt(String(ri?.productId)) === item.productId)
+                if (meta?.quantity == null || meta.quantity === '') continue
+                const remaining = item.quantity - (item.quantityReceived || 0)
+                if (Number(meta.quantity) !== remaining) {
+                    return res.status(400).json({
+                        message: `Partial receiving is not allowed: "${item.productName}" must be received in full (${remaining}), not ${meta.quantity}.`,
+                        code: "PARTIAL_RECEIVE_NOT_ALLOWED",
+                    })
+                }
+            }
         }
 
         // Track receiving history
@@ -489,7 +513,9 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
                         ? receivedItems.find((ri: any) => parseInt(String(ri.productId)) === item.productId)
                         : null
 
-                    const recvQty = receivedMeta?.quantity ? parseInt(String(receivedMeta.quantity)) : item.quantity
+                    // Always the full remaining quantity (checked above); nothing left → nothing to receive.
+                    const recvQty = item.quantity - (item.quantityReceived || 0)
+                    if (recvQty <= 0) continue
                     const recvUnitCost = receivedMeta?.unitCost ? Number(receivedMeta.unitCost) : Number(item.unitPrice)
                     const recvBatchNumber = receivedMeta?.batchNumber || `PO-${po.id}-P${item.productId}-${Date.now()}`
                     const recvExpiryDate = receivedMeta?.expiryDate ? new Date(receivedMeta.expiryDate) : null
@@ -601,17 +627,6 @@ export const updatePurchaseOrderStatus = async (req: BranchAuthRequest, res: Res
                         lines: receiptLines,
                     })
                     localPurchaseId = queued?.id ?? null
-                }
-
-                // Determine if this should be PARTIALLY_RECEIVED based on received quantities
-                if (status === 'COMPLETED') {
-                    const allFullyReceived = receivingHistory.every(r => r.remainingQty <= 0)
-                    if (!allFullyReceived) {
-                        await tx.purchaseOrder.update({
-                            where: { id: po.id },
-                            data: { status: 'PARTIALLY_RECEIVED' },
-                        })
-                    }
                 }
             }
 

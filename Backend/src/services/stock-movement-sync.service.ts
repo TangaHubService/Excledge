@@ -44,9 +44,15 @@ export function sarTyCdFor(
   }
 }
 
-/** INITIAL_STOCK stays local; stock IO / master sync on real stock events only. */
-export function stockMovementNeedsEbm(movementType: InventoryMovementType): boolean {
-  return movementType !== 'INITIAL_STOCK';
+/**
+ * INITIAL_STOCK stays local; stock IO / master sync on real stock events only. Transfers between
+ * the organization's own branches also stay local: every branch works under the main branch's
+ * VSDC device, so the device's stock does not change.
+ */
+export function stockMovementNeedsEbm(movementType: InventoryMovementType, referenceType?: string | null): boolean {
+  if (movementType === 'INITIAL_STOCK') return false;
+  if ((movementType === 'TRANSFER_IN' || movementType === 'TRANSFER_OUT') && referenceType === 'STOCK_TRANSFER') return false;
+  return true;
 }
 
 async function resolveTransferCounterparty(entry: {
@@ -120,7 +126,7 @@ async function submitOne(ledgerId: number): Promise<{ success: boolean; error?: 
   if (!entry) return { success: false, error: 'Ledger entry not found' };
   if (entry.ebmSyncStatus === 'SYNCED') return { success: true };
 
-  if (!stockMovementNeedsEbm(entry.movementType)) {
+  if (!stockMovementNeedsEbm(entry.movementType, entry.referenceType)) {
     await prisma.inventoryLedger.update({ where: { id: ledgerId }, data: { ebmSyncStatus: null } });
     return { success: true };
   }
@@ -300,7 +306,8 @@ async function submitOne(ledgerId: number): Promise<{ success: boolean; error?: 
     }
 
     // §73 — push the item's new on-hand quantity to the stock master.
-    const onHand = await getCurrentStock(entry.organizationId, product.id, entry.branchId);
+    // One VSDC device serves every branch, so its stock master holds the organization's total.
+    const onHand = await getCurrentStock(entry.organizationId, product.id, null);
     const master = await saveStockMaster(envelope, product.itemCd, onHand, regr);
     if (!master.success) {
       // The IO record went through; flag the master push for retry but do not lose the IO.

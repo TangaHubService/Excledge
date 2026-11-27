@@ -14,6 +14,7 @@ import {
 } from "./rra-ebm.service"
 import { buildVsdcEnvelope, vsdcHeartbeat, validateVsdcEnvelope } from "./vsdc-api.service"
 import { processEbmOutboxBatch } from "./ebm-outbox.service"
+import { isValidPurchaseCode } from "./purchase-code.checksum"
 import { selectBatchesForSale, updateBatchQuantity } from "./batch.service"
 import { getAverageCost } from "./cost-price.service"
 import { TaxService } from "./tax.service"
@@ -69,6 +70,11 @@ export interface CommitSaleParams {
   inventoryMethod?: "FIFO" | "LIFO" | "AVERAGE"
   /** Mode the client screen was in (TRAINING/NORMAL); a mismatch is refused. */
   expectedReceiptMode?: ReceiptMode | null
+  /**
+   * RRA purchase order code the buyer presented at checkout (single-use, 6 characters). When given
+   * it wins over the organization pool and the customer's stored fallback code.
+   */
+  prcOrdCd?: string | null
   /** Express request — used only for audit-log request context. */
   req: any
 }
@@ -77,6 +83,51 @@ export interface CommitSaleResult {
   sale: any
   completeSale: any
   fiscalization: { status: "success" | "pending" | "failed"; sdcRcptNo: number | null; isCertified: boolean }
+}
+
+/** Trim/upper-case a cashier-entered purchase code; blank becomes null. */
+export function normalizePurchaseCode(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null
+  const code = String(raw).replace(/\s+/g, "").toUpperCase()
+  return code.length > 0 ? code : null
+}
+
+/**
+ * Fail fast on a purchase code RRA would refuse (881/882/883) instead of committing a sale that can
+ * never be fiscalized.
+ */
+async function assertUsablePurchaseCode(organizationId: number, code: string, buyerTin: string): Promise<void> {
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    throw new CommitSaleError(400, "The purchase code must be exactly 6 letters or digits.")
+  }
+  if (!isValidRraTin(buyerTin)) {
+    throw new CommitSaleError(
+      400,
+      "A purchase code can only be used for a customer with a valid 9-digit RRA TIN. Add the customer's TIN first.",
+    )
+  }
+  const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { TIN: true } })
+  const sellerTin = org?.TIN?.trim() ?? ""
+  if (isValidRraTin(sellerTin) && !isValidPurchaseCode(code, buyerTin, sellerTin)) {
+    throw new CommitSaleError(
+      400,
+      `The purchase code ${code} is not valid for buyer TIN ${buyerTin}. Check the code with the customer and try again.`,
+    )
+  }
+  const reused = await prisma.sale.findFirst({
+    where: { organizationId, prcOrdCd: code, isProforma: false },
+    select: { invoiceNumber: true, saleNumber: true },
+  })
+  const pooledUsed = await prisma.organizationPurchaseCode.findFirst({
+    where: { organizationId, code, consumed: true },
+    select: { id: true },
+  })
+  if (reused || pooledUsed) {
+    throw new CommitSaleError(
+      409,
+      `The purchase code ${code} was already used${reused ? ` on sale ${reused.invoiceNumber ?? reused.saleNumber}` : ""}. Ask the customer for a new purchase code.`,
+    )
+  }
 }
 
 /** A client/business-rule failure that maps to a specific HTTP status. */
@@ -105,8 +156,11 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
     isProforma,
     proformaSourceId,
     expectedReceiptMode,
+    prcOrdCd: rawPrcOrdCd,
     req,
   } = params
+
+  const suppliedPrcOrdCd = normalizePurchaseCode(rawPrcOrdCd)
 
   const orgSettings = await getOrganizationSettings(organizationId)
 
@@ -158,7 +212,9 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
     // B2B purchase-code pre-check: a business buyer needs a real 6-character prcOrdCd on record
     // (pool or customer fallback), otherwise the receipt can never be accepted (881/882).
     const needsCode = customerType === "CORPORATE" || customerType === "INSURANCE"
-    if (needsCode) {
+    if (suppliedPrcOrdCd) {
+      await assertUsablePurchaseCode(organizationId, suppliedPrcOrdCd, custTin)
+    } else if (needsCode) {
       const poolCount = await prisma.organizationPurchaseCode.count({
         where: { organizationId, buyerTin: custTin, consumed: false },
       })
@@ -562,9 +618,21 @@ export async function commitSale(params: CommitSaleParams): Promise<CommitSaleRe
         },
       } as any)
 
-      // 4b.
+      // 4b. Attach the purchase code: the one the buyer presented at checkout, otherwise the next
+      // pooled code for this buyer TIN, otherwise the customer's stored fallback.
       const custTin = (newSale as any).customer?.TIN?.trim() ?? ""
-      if (custTin && !custTin.startsWith("7")) {
+      if (suppliedPrcOrdCd && !isProforma) {
+        await tx.sale.update({
+          where: { id: (newSale as any).id },
+          data: { prcOrdCd: suppliedPrcOrdCd },
+        })
+        ;(newSale as any).prcOrdCd = suppliedPrcOrdCd
+        // If the same code was also pooled, retire it so it is never handed out twice.
+        await tx.organizationPurchaseCode.updateMany({
+          where: { organizationId, code: suppliedPrcOrdCd, consumed: false },
+          data: { consumed: true, consumedSaleId: (newSale as any).id, consumedAt: new Date() },
+        })
+      } else if (custTin && !custTin.startsWith("7")) {
         const allocated =
           (await consumeOrgPurchaseCode(organizationId, custTin, (newSale as any).id, tx)) ??
           ((newSale as any).customer?.prcOrdCd ?? null)

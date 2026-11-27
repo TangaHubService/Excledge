@@ -1,6 +1,6 @@
 import PDFDocument from "pdfkit"
 import type { RenderInvoiceLineItem, RenderInvoicePayload } from "./invoice-render.service"
-import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, formatItemTaxLabel, formatReceiptQuantity, groupFiscalValue } from "./invoice-format.service"
+import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, formatItemTaxLabel, formatReceiptQuantity, groupFiscalValue, sellerHeaderLines } from "./invoice-format.service"
 import { getOrganizationLogo, getRraCertificationLogo } from "./invoice-logo.service"
 import { NOT_FISCALIZED_NOTICE, NOT_FISCALIZED_TITLE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_DOCUMENT_LABEL, REFUND_NOTICE, SYSTEM_FOOTER, TRAINING_MODE_LABEL } from "./system-branding.service"
 import { TAX_RATE_BY_SLOT } from "./rra-ebm.service"
@@ -145,8 +145,13 @@ export function transactionSubTitle(data: RenderInvoicePayload): string {
  * TRAINING MODE and PROFORMA carry the "not an official receipt" notice between the items and
  * TOTAL.
  */
+/**
+ * Documents that print "THIS IS NOT AN OFFICIAL RECEIPT" (RRA checklist §55): COPY (CS/CR),
+ * TRAINING MODE (TS/TR), PROFORMA (PS) and a not-yet-fiscalized download. A normal sale or refund
+ * (NS/NR) is the official receipt and never carries it.
+ */
 export function isFormalNoticeIndicator(indicator: string): boolean {
-  return indicator !== "" && indicator !== REFUND_DOCUMENT_LABEL && indicator !== "COPY"
+  return indicator !== "" && indicator !== REFUND_DOCUMENT_LABEL
 }
 
 function drawImageFit(
@@ -177,20 +182,18 @@ function drawHeader(
   drawImageFit(doc, companyLogo, LEFT, 20, 64, 64)
   drawImageFit(doc, certificationLogo, 507, 19, 62, 62)
 
-  const companyLines = [
-    safe(data.company.name),
-    safe(data.company.address),
-    data.company.phone ? `TEL: ${safe(data.company.phone)}` : "",
-    data.company.tin ? `TIN: ${safe(data.company.tin)}` : "",
-  ].filter(Boolean)
+  // Same lines, same order as the top message sent to RRA (receipt.topMsg).
+  const companyLines = sellerHeaderLines(data.company)
 
-  let companyY = 29
+  // Five lines start higher and sit closer so the last one clears the document title at y 64.
+  const compact = companyLines.length > 4
+  let companyY = compact ? 23 : 29
   for (let index = 0; index < companyLines.length; index += 1) {
     doc
       .font(index === 0 ? FONT_BOLD : FONT)
       .fontSize(index === 0 ? 7.2 : 6.3)
-      .text(companyLines[index], 122, companyY, { width: 350, align: "center", lineBreak: false })
-    companyY += index === 0 ? 10 : 8
+      .text(companyLines[index], 122, companyY, { width: 350, align: "center", lineBreak: false, ellipsis: true })
+    companyY += index === 0 ? 10 : compact ? 7.5 : 8
   }
 
   const indicator = headerIndicator(data)
@@ -583,7 +586,7 @@ function drawFiscalInformation(doc: PDFKit.PDFDocument, data: RenderInvoicePaylo
 }
 
 function drawFinalFooter(doc: PDFKit.PDFDocument, data: RenderInvoicePayload): void {
-  // §11: TRAINING MODE/PROFORMA always carry this notice; an uncertified
+  // §11/§55: COPY/TRAINING MODE/PROFORMA always carry this notice; an uncertified
   // NORMAL sale/refund falls back to it too since it isn't official yet either.
   if (isFormalNoticeIndicator(documentIndicator(data)) || !data.certification.isCertified) {
     doc.moveTo(LEFT, 625).lineTo(RIGHT, 625).dash(2, { space: 1.5 }).stroke().undash()

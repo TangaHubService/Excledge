@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { getMainBranchId } from './vsdc-branch.service';
 import { prisma } from "../lib/prisma";
 import {
   DEFAULT_SETTINGS,
@@ -34,10 +35,10 @@ export async function getOrganizationSettings(
       where: { id: organizationId },
       select: { vatRegistered: true, TIN: true, ebmDeviceId: true },
     }),
-    prisma.branch.findFirst({
-      where: { organizationId, isDefault: true },
+    getMainBranchId(organizationId).then((id) => (id == null ? null : prisma.branch.findUnique({
+      where: { id },
       select: { bhfId: true, ebmSerialNo: true, mrcNo: true },
-    }),
+    }))),
   ]);
 
   const settings = toTypedSettings(row, org?.vatRegistered ?? false, org ?? undefined, branch ?? undefined);
@@ -86,7 +87,7 @@ export async function upsertOrganizationSettings(
   if (ebmConfigPatch.mrcNo !== undefined) {
     const [currentOrg, currentBranch] = await Promise.all([
       prisma.organization.findUnique({ where: { id: organizationId }, select: { mrcNo: true } }),
-      prisma.branch.findFirst({ where: { organizationId, isDefault: true }, select: { mrcNo: true } }),
+      getMainBranchId(organizationId).then((id) => (id == null ? null : prisma.branch.findUnique({ where: { id }, select: { mrcNo: true } }))),
     ]);
     mrc = normalizeMrcOrThrow(ebmConfigPatch.mrcNo, {
       current: [currentOrg?.mrcNo, currentBranch?.mrcNo],
@@ -111,10 +112,11 @@ export async function upsertOrganizationSettings(
   if (mrc !== undefined) branchUpdateData.mrcNo = mrc;
 
   if (Object.keys(branchUpdateData).length > 0) {
-    await prisma.branch.updateMany({
-      where: { organizationId, isDefault: true },
-      data: branchUpdateData,
-    });
+    // The main branch holds the organization's one RRA/VSDC configuration.
+    const mainBranchId = await getMainBranchId(organizationId);
+    if (mainBranchId != null) {
+      await prisma.branch.update({ where: { id: mainBranchId }, data: branchUpdateData });
+    }
   }
 
   const rows = await prisma.$queryRaw<
@@ -146,8 +148,9 @@ export async function upsertOrganizationSettings(
     select: { vatRegistered: true, TIN: true, ebmDeviceId: true },
   });
 
-  const branch = await prisma.branch.findFirst({
-    where: { organizationId, isDefault: true },
+  const mainId = await getMainBranchId(organizationId);
+  const branch = mainId == null ? null : await prisma.branch.findUnique({
+    where: { id: mainId },
     select: { bhfId: true, ebmSerialNo: true, mrcNo: true },
   });
 

@@ -1,6 +1,6 @@
 import PDFDocument from "pdfkit"
 import type { RenderInvoicePayload } from "./invoice-render.service"
-import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, formatItemTaxLabel, formatReceiptQuantity, groupFiscalValue } from "./invoice-format.service"
+import { formatInvoiceAmount, formatInvoiceDateTime, formatInvoiceQuantity, formatItemTaxLabel, formatReceiptQuantity, groupFiscalValue, sellerHeaderParts } from "./invoice-format.service"
 import { getOrganizationLogo, getRraCertificationLogo } from "./invoice-logo.service"
 import { NOT_FISCALIZED_NOTICE, NOT_OFFICIAL_RECEIPT_NOTICE, REFUND_NOTICE, SYSTEM_FOOTER } from "./system-branding.service"
 import { dataUrlBuffer, documentIndicator, headerIndicator, isCopyDocument, isFormalNoticeIndicator, isProformaDocument, isRefundTransaction, isTrainingDocument, printsQrCode, refundReferenceLine, safe, bandSalesLabel, salesBands, taxBandRows, taxGroups, transactionSubTitle } from "./invoice-pdf.service"
@@ -90,10 +90,14 @@ function drawReceipt(
   }
   if (usedLogoRow) y += logoSize + 4
 
-  y = centeredText(doc, safe(data.company.name, "—"), y, true, 7.5)
-  if (data.company.address) y = centeredText(doc, safe(data.company.address), y)
-  if (data.company.phone) y = centeredText(doc, `TEL: ${safe(data.company.phone)}`, y)
-  y = centeredText(doc, `TIN: ${safe(data.company.tin, "-")}`, y)
+  // Same lines, same order as the top message sent to RRA (receipt.topMsg). Name and TIN always
+  // print, as "—" / "-" when missing.
+  const sellerParts = sellerHeaderParts(data.company)
+  if (!sellerParts.some((part) => part.key === "name")) sellerParts.unshift({ key: "name", text: "—" })
+  if (!sellerParts.some((part) => part.key === "tin")) sellerParts.push({ key: "tin", text: "TIN: -" })
+  for (const part of sellerParts) {
+    y = part.key === "name" ? centeredText(doc, part.text, y, true, 7.5) : centeredText(doc, part.text, y)
+  }
 
   const indicator = documentIndicator(data)
   const title = headerIndicator(data)

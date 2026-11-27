@@ -13,13 +13,31 @@ interface PaymentEntry {
   reference?: string;
 }
 
+export interface PaymentExtras {
+  /** RRA purchase order code the buyer presented (6 characters), when one was entered. */
+  prcOrdCd?: string;
+}
+
+/** Shown when the selected customer has a TIN, so the buyer's RRA purchase code can be entered. */
+export interface PurchaseCodeConfig {
+  buyerTin: string;
+  /**
+   * Corporate/insurance buyer with no code stored on the customer. Only changes the wording: the
+   * backend may still find a pooled code, so an empty field is never blocked here.
+   */
+  expected: boolean;
+}
+
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   totalAmount: number;
-  onProcessPayment: (payments: PaymentEntry[]) => Promise<void>;
+  onProcessPayment: (payments: PaymentEntry[], extras?: PaymentExtras) => Promise<void>;
   isProcessing?: boolean;
+  purchaseCode?: PurchaseCodeConfig | null;
 }
+
+const PURCHASE_CODE_PATTERN = /^[A-Z0-9]{6}$/;
 
 const PAYMENT_METHODS = [
   { value: 'CASH',         label: 'Cash',         icon: Wallet     },
@@ -38,6 +56,7 @@ export function PaymentModal({
   totalAmount,
   onProcessPayment,
   isProcessing = false,
+  purchaseCode = null,
 }: PaymentModalProps) {
   const { t } = useTranslation();
   const [payments, setPayments] = useState<PaymentEntry[]>([]);
@@ -45,14 +64,36 @@ export function PaymentModal({
   const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
   const submittingRef = useRef(false);
   const pendingPaymentsRef = useRef<PaymentEntry[]>([]);
+  const [prcOrdCd, setPrcOrdCd] = useState('');
+  const [prcOrdCdError, setPrcOrdCdError] = useState<string | null>(null);
 
   /* ── reset on open ─────────────────────────────────────────────── */
   useEffect(() => {
     if (isOpen) {
       setPayments([{ id: Date.now().toString(), method: 'CASH', amount: 0 }]);
       setCurrentIndex(0);
+      setPrcOrdCd('');
+      setPrcOrdCdError(null);
     }
   }, [isOpen]);
+
+  /** Validates the purchase code field; returns false (and shows why) when it blocks payment. */
+  const checkPurchaseCode = (): boolean => {
+    if (!purchaseCode) return true;
+    const code = prcOrdCd.trim();
+    if (!code) return true;
+    if (!PURCHASE_CODE_PATTERN.test(code)) {
+      setPrcOrdCdError('The purchase code must be exactly 6 letters or digits.');
+      return false;
+    }
+    setPrcOrdCdError(null);
+    return true;
+  };
+
+  const extras = (): PaymentExtras => {
+    const code = prcOrdCd.trim();
+    return purchaseCode && code ? { prcOrdCd: code } : {};
+  };
 
   /* ── helpers ───────────────────────────────────────────────────── */
   const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
@@ -96,6 +137,7 @@ export function PaymentModal({
 
   const handleProcess = async () => {
     if (submittingRef.current || isProcessing) return;
+    if (!checkPurchaseCode()) return;
     submittingRef.current = true;
     try {
       const valid = payments.filter(p => p.amount > 0);
@@ -109,7 +151,7 @@ export function PaymentModal({
         setConfirmMsg(msg);
         return;
       }
-      await onProcessPayment(valid);
+      await onProcessPayment(valid, extras());
     } finally {
       submittingRef.current = false;
     }
@@ -119,7 +161,7 @@ export function PaymentModal({
     setConfirmMsg(null);
     submittingRef.current = true;
     try {
-      await onProcessPayment(pendingPaymentsRef.current);
+      await onProcessPayment(pendingPaymentsRef.current, extras());
     } finally {
       submittingRef.current = false;
     }
@@ -333,6 +375,39 @@ export function PaymentModal({
             Add Another Payment Method
           </button>
         </div>
+
+        {/* ── RRA purchase code (buyers with a TIN) ─────────────── */}
+        {purchaseCode && (
+          <div className="px-6 mb-5">
+            <label htmlFor="pos-prc-ord-cd" className="block text-xs font-semibold text-muted-foreground mb-1.5">
+              RRA purchase code{purchaseCode.expected ? '' : ' (optional)'}
+            </label>
+            <input
+              id="pos-prc-ord-cd"
+              type="text"
+              inputMode="text"
+              autoComplete="off"
+              maxLength={6}
+              value={prcOrdCd}
+              onChange={e => {
+                setPrcOrdCd(e.target.value.replace(/\s+/g, '').toUpperCase());
+                if (prcOrdCdError) setPrcOrdCdError(null);
+              }}
+              placeholder="6-character code"
+              aria-invalid={!!prcOrdCdError}
+              aria-describedby="pos-prc-ord-cd-help"
+              className={`w-full h-10 px-4 rounded-xl border text-sm font-mono tracking-widest text-foreground focus:outline-none transition-all bg-surface-subtle ${
+                prcOrdCdError ? 'border-danger focus:border-danger' : 'border-border focus:border-primary'
+              }`}
+            />
+            <p id="pos-prc-ord-cd-help" className={`mt-1 text-[11px] ${prcOrdCdError ? 'text-danger' : 'text-muted-foreground'}`}>
+              {prcOrdCdError
+                ?? (purchaseCode.expected
+                  ? `Business buyer (TIN ${purchaseCode.buyerTin}): enter the single-use code they got from RRA for this purchase.`
+                  : `Single-use code buyer TIN ${purchaseCode.buyerTin} got from RRA. Leave blank to use a code already on file.`)}
+            </p>
+          </div>
+        )}
 
         {/* ── Remaining pill ────────────────────────────────────── */}
         <div className="mx-6 mb-6 flex items-center justify-between px-5 py-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/25">

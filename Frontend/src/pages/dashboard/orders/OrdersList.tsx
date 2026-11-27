@@ -65,7 +65,6 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
     const [error, setError] = useState<string | null>(null);
     const [receiveModalOpen, setReceiveModalOpen] = useState(false);
     const [receivingOrder, setReceivingOrder] = useState<Order | null>(null);
-    const [receivingQuantities, setReceivingQuantities] = useState<Record<number, number>>({});
     const [receivingPrices, setReceivingPrices] = useState<Record<number, string>>({});
     const [isReceiving, setIsReceiving] = useState(false);
 
@@ -177,15 +176,11 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
 
     const handleReceiveOpen = (order: Order) => {
         setReceivingOrder(order);
-        const initial: Record<number, number> = {};
         const prices: Record<number, string> = {};
         order.items.forEach(item => {
-            const alreadyReceived = item.quantityReceived || 0;
-            initial[item.id] = Math.max(0, item.quantity - alreadyReceived);
             const current = (item as any).product?.unitPrice;
             prices[item.id] = current != null ? String(Number(current)) : '';
         });
-        setReceivingQuantities(initial);
         setReceivingPrices(prices);
         setReceiveModalOpen(true);
     };
@@ -195,11 +190,12 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
         setIsReceiving(true);
         try {
             const branchIdForReceive = selectedBranchId ?? primaryBranch?.id ?? null;
+            // Full approval only: every item is received with its whole remaining quantity.
             const receivedItems = receivingOrder.items.map(item => {
                 const sellingPrice = Number(receivingPrices[item.id]);
                 return {
                     productId: (item as any).productId!,
-                    quantity: receivingQuantities[item.id] ?? (item.quantity - (item.quantityReceived || 0)),
+                    quantity: Math.max(0, item.quantity - (item.quantityReceived || 0)),
                     sellingPrice: Number.isFinite(sellingPrice) && sellingPrice > 0 ? sellingPrice : undefined,
                 };
             }).filter(ri => ri.quantity > 0);
@@ -212,7 +208,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
 
             const response = await apiClient.updatePurchaseOrderStatus(
                 receivingOrder.id,
-                'PARTIALLY_RECEIVED',
+                'COMPLETED',
                 organizationId,
                 {
                     branchId: branchIdForReceive,
@@ -224,12 +220,12 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                 setOrders(prevOrders =>
                     prevOrders.map(order =>
                         String(order.id) === String(receivingOrder.id)
-                            ? { ...order, status: response.status || 'PARTIALLY_RECEIVED' }
+                            ? { ...order, status: response.status || 'COMPLETED' }
                             : order
                     )
                 );
                 if (String(selectedOrder?.id) === String(receivingOrder.id)) {
-                    setSelectedOrder(prev => prev ? { ...prev, status: response.status || 'PARTIALLY_RECEIVED' } : null);
+                    setSelectedOrder(prev => prev ? { ...prev, status: response.status || 'COMPLETED' } : null);
                 }
                 toast.success(t('purchaseOrders.itemsReceived') || 'Items received successfully');
                 setReceiveModalOpen(false);
@@ -501,7 +497,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                                                 )}
                                                                 <DropdownMenuSeparator className="my-1" />
 
-                                                                {['PENDING', 'APPROVED', 'PROCESSING', 'PARTIALLY_RECEIVED', 'COMPLETED', 'CANCELLED']
+                                                                {['PENDING', 'APPROVED', 'PROCESSING', 'COMPLETED', 'CANCELLED']
                                                                     .filter(s => s !== order.status)
                                                                     .map((s) => {
                                                                         const styles = getStatusStyles(s);
@@ -737,7 +733,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                             </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end" className="w-44 rounded-md p-1 shadow-md bg-card border border-border shadow-lg">
-                                            {['PENDING', 'APPROVED', 'PROCESSING', 'PARTIALLY_RECEIVED', 'COMPLETED', 'CANCELLED']
+                                            {['PENDING', 'APPROVED', 'PROCESSING', 'COMPLETED', 'CANCELLED']
                                                 .filter(s => s !== selectedOrder.status)
                                                 .map((s) => {
                                                     const styles = getStatusStyles(s);
@@ -776,6 +772,9 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                 <p className="text-sm text-muted-foreground mt-1">
                                     {receivingOrder.orderNumber}
                                 </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    {t('purchaseOrders.fullReceiveOnly') || 'The whole order is received at once: every item, full quantity.'}
+                                </p>
                             </div>
 
                             <div className="p-6">
@@ -799,17 +798,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ organizationId }) => {
                                                     <td className="px-4 py-3 text-right font-mono text-xs">{item.quantity}</td>
                                                     <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">{alreadyReceived}</td>
                                                     <td className="px-4 py-3 text-right">
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            max={remaining}
-                                                            value={receivingQuantities[item.id] ?? remaining}
-                                                            onChange={(e) => {
-                                                                const val = Math.min(remaining, Math.max(0, parseInt(e.target.value) || 0));
-                                                                setReceivingQuantities(prev => ({ ...prev, [item.id]: val }));
-                                                            }}
-                                                            className="w-20 text-right px-2 py-1 border border-border rounded bg-card text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
-                                                        />
+                                                        <span className="font-mono text-xs font-semibold">{Math.max(0, remaining)}</span>
                                                     </td>
                                                     <td className="px-4 py-3 text-right">
                                                         <input

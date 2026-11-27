@@ -533,6 +533,6 @@ describe('NR receipt content (Test 10) — real 80mm + A4 renderers', () => {
     expect(text).not.toContain('THIS IS NOT AN OFFICIAL RECEIPT');
     const copy = await nrDrawn('A4', true);
     expect(copy).toContain('COPY');
-    expect(copy).not.toContain('THIS IS NOT AN OFFICIAL RECEIPT');
+    expect(copy).toContain('THIS IS NOT AN OFFICIAL RECEIPT');
   });
 });

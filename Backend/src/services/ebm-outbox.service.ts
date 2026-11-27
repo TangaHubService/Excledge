@@ -27,6 +27,7 @@ import logger from '../utils/logger';
 
 export { isEbmEnabled };
 import { TaxService } from './tax.service';
+import { isVatNotEnabledError } from './rra-vat-status.service';
 import { getCurrentStockInTransaction, removeStock } from './inventory-ledger.service';
 import type { Decimal } from '@prisma/client/runtime/library';
 import type {
@@ -764,6 +765,19 @@ async function runEbmOutboxBatch(limit: number): Promise<{
           }
         }
 
+        // 910 "VAT is not enabled": the VSDC has this TIN as non-VAT. It re-reads RRA's record only
+        // hourly (and 90s after a restart), so right after RRA registers a TIN for VAT it still
+        // refuses B lines for a while. Keep retrying instead of dead-lettering, and never switch our
+        // VAT flag off from this alone: that would undo a correct switch to VAT.
+        let storedError = msg;
+        const vatNotEnabled = isVatNotEnabledError(msg);
+        if (vatNotEnabled) {
+          storedError =
+            `${msg} — the VSDC has this TIN as not VAT-registered. If RRA has just registered it for VAT, ` +
+            `the VSDC picks that up within an hour and this sale is retried; otherwise switch VAT off in ` +
+            `the company settings, then cancel this sale and ring it up again.`;
+        }
+
         // 899 = SQLite persistence failure (disk pressure) — transient infrastructure issue
         if (msg.includes('SQLite') || msg.includes('persistence') || msg.includes('disk pressure')) {
           logger.warn(`[EBM-OUTBOX] row ${row.id}: submission FAILED — transient infrastructure error, retrying...`);
@@ -771,17 +785,17 @@ async function runEbmOutboxBatch(limit: number): Promise<{
           throw new Error(`Transient VSDC error: ${msg}`);
         }
 
-        await failSubmission(txRow.id, msg);
+        await failSubmission(txRow.id, storedError);
 
         const nextRetry = scheduleNextRetry(row.retryCount);
-        const isDead = forceDeadLetter || row.retryCount + 1 >= (config.ebm.maxQueueRetries ?? 10);
+        const isDead = (forceDeadLetter && !vatNotEnabled) || row.retryCount + 1 >= (config.ebm.maxQueueRetries ?? 10);
 
         await prisma.ebmOutbox.update({
           where: { id: row.id },
           data: {
             status: isDead ? 'DEAD_LETTER' : 'FAILED',
             retryCount: { increment: 1 },
-            lastError: msg,
+            lastError: storedError,
             nextAttemptAt: isDead ? deadLetterAttemptAt() : nextRetry,
           },
         });

@@ -1,5 +1,6 @@
-import { BranchStatus } from '@prisma/client';
+import { BranchStatus, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import { hasOwnVsdcDevice } from './vsdc-branch.service';
 
 export interface CreateBranchParams {
   organizationId: number;
@@ -213,16 +214,50 @@ export async function setDefaultBranch(branchId: number, organizationId: number)
     throw new Error(`Branch with ID ${branchId} not found`);
   }
 
-  await prisma.branch.updateMany({
+  // The main branch holds the organization's one RRA/VSDC configuration. When the new main branch
+  // has none, the configuration moves with the "main" flag so no branch is left without a device.
+  const previous = await prisma.branch.findFirst({
     where: { organizationId, isDefault: true, NOT: { id: branchId } },
-    data: { isDefault: false },
+    select: VSDC_CONFIG_SELECT,
   });
+  const moveConfig = !!previous && hasOwnVsdcDevice(previous) && !hasOwnVsdcDevice(branch);
 
-  return await prisma.branch.update({
-    where: { id: branchId },
-    data: { isDefault: true },
+  return prisma.$transaction(async (tx) => {
+    await tx.branch.updateMany({
+      where: { organizationId, isDefault: true, NOT: { id: branchId } },
+      data: { isDefault: false },
+    });
+    if (moveConfig && previous) {
+      const { id: previousId, ebmInitInfo, ...config } = previous;
+      await tx.branch.update({
+        where: { id: previousId },
+        data: {
+          bhfId: null, ebmDeviceId: null, ebmSerialNo: null, mrcNo: null, vsdcUrl: null,
+          ebmInitializedAt: null, ebmInitInfo: Prisma.DbNull,
+        },
+      });
+      return tx.branch.update({
+        where: { id: branchId },
+        data: { ...config, ebmInitInfo: ebmInitInfo ?? Prisma.DbNull, isDefault: true },
+      });
+    }
+    return tx.branch.update({
+      where: { id: branchId },
+      data: { isDefault: true },
+    });
   });
 }
+
+const VSDC_CONFIG_SELECT = {
+  id: true,
+  bhfId: true,
+  ebmDeviceId: true,
+  ebmSerialNo: true,
+  mrcNo: true,
+  vsdcUrl: true,
+  ebmInitializedAt: true,
+  ebmInitInfo: true,
+} as const;
 
 /** Delete a branch (soft delete by setting status to INACTIVE) */
 export async function deleteBranch(branchId: number, organizationId: number) {

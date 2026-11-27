@@ -85,3 +85,35 @@ export function groupFiscalValue(value?: string | null): string {
   const compact = value?.replace(/[-\s]/g, "") ?? ""
   return compact.match(/.{1,4}/g)?.join("-") ?? ""
 }
+
+export interface SellerHeaderSource {
+  name?: string | null
+  address?: string | null
+  phone?: string | null
+  email?: string | null
+  tin?: string | null
+}
+
+export type SellerHeaderKey = "name" | "address" | "phone" | "email" | "tin"
+
+/**
+ * The seller header, one detail per line in the order name, address, TEL, EMAIL, TIN, skipping
+ * whatever is not filled in. It is both the VSDC `receipt.topMsg` and the header printed on every
+ * invoice, so what RRA receives and what the customer sees always match.
+ */
+export function sellerHeaderParts(seller: SellerHeaderSource): Array<{ key: SellerHeaderKey; text: string }> {
+  const clean = (value: unknown) => String(value ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim()
+  const labelled = (label: string, value: unknown) => (clean(value) ? `${label}: ${clean(value)}` : "")
+  const parts: Array<{ key: SellerHeaderKey; text: string }> = [
+    { key: "name", text: clean(seller.name) },
+    { key: "address", text: clean(seller.address) },
+    { key: "phone", text: labelled("TEL", seller.phone) },
+    { key: "email", text: labelled("EMAIL", seller.email) },
+    { key: "tin", text: labelled("TIN", seller.tin) },
+  ]
+  return parts.filter((part) => part.text !== "")
+}
+
+export function sellerHeaderLines(seller: SellerHeaderSource): string[] {
+  return sellerHeaderParts(seller).map((part) => part.text)
+}

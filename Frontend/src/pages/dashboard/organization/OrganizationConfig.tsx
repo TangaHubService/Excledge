@@ -321,7 +321,7 @@ export function OrganizationConfig() {
     const handleSetDefaultBranch = async (branch: Branch) => {
         try {
             await apiClient.setDefaultBranch(branch.id);
-            toast.success(t('branches.setDefault') || 'Default branch updated');
+            toast.success('Main branch updated — every branch now works under its RRA/VSDC configuration');
             fetchData();
             refreshBranches();
         } catch (error: any) {
@@ -582,47 +582,31 @@ export function OrganizationConfig() {
                                     <div className="space-y-2 md:col-span-2">
                                         <Label className="flex items-center gap-2">
                                             <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                                            RRA EBM / VSDC — device ID
+                                            Main branch (RRA / VSDC)
                                         </Label>
-                                        <Input
-                                            value={organization?.ebmDeviceId ?? ''}
-                                            onChange={(e) => setOrganization(prev => prev ? { ...prev, ebmDeviceId: e.target.value } : null)}
-                                            disabled={!isAuthorized || isSavingOrg}
-                                            placeholder="From RRA registration (VSDC)"
-                                            className="rounded-xl"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label className="flex items-center gap-2">
-                                            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                                            RRA EBM / VSDC — device serial (dvcSrlNo)
-                                        </Label>
-                                        <Input
-                                            value={organization?.ebmSerialNo ?? ''}
-                                            onChange={(e) => setOrganization(prev => prev ? { ...prev, ebmSerialNo: e.target.value } : null)}
-                                            disabled={!isAuthorized || isSavingOrg}
-                                            placeholder="Device / controller serial from RRA"
-                                            className="rounded-xl font-mono"
-                                            maxLength={32}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label className="flex items-center gap-2">
-                                            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                                            MRC (Machine Registration Code)
-                                        </Label>
-                                        <Input
-                                            value={organization?.mrcNo ?? ''}
-                                            onChange={(e) => setOrganization(prev => prev ? { ...prev, mrcNo: e.target.value.toUpperCase() } : null)}
-                                            disabled={!isAuthorized || isSavingOrg}
-                                            placeholder="e.g. WIS01029467"
-                                            className="rounded-xl font-mono"
-                                            minLength={11}
-                                            maxLength={11}
-                                        />
-                                        <p className="text-xs text-muted-foreground">{t('companySettings.mrcHint')}</p>
+                                        <Select
+                                            value={branches.find((b) => b.isDefault) ? String(branches.find((b) => b.isDefault)!.id) : undefined}
+                                            onValueChange={(v) => {
+                                                const b = branches.find((x) => String(x.id) === v);
+                                                if (b) handleSetDefaultBranch(b);
+                                            }}
+                                            disabled={!isAuthorized}
+                                        >
+                                            <SelectTrigger className="rounded-xl">
+                                                <SelectValue placeholder="Choose the main branch" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {branches.filter((b) => b.status === 'ACTIVE').map((b) => (
+                                                    <SelectItem key={b.id} value={String(b.id)}>
+                                                        {b.name} ({b.code})
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-muted-foreground">
+                                            The main branch holds the RRA / VSDC device and receives purchases and imports.
+                                            Every other branch works under it.
+                                        </p>
                                     </div>
 
                                     <div className="space-y-2 md:col-span-2">
@@ -776,7 +760,7 @@ export function OrganizationConfig() {
                                                         {branch.name}
                                                         {branch.isDefault && (
                                                             <Badge variant="outline" className="rounded-full text-warning border-warning/30 dark:text-amber-400 dark:border-amber-700">
-                                                                Default
+                                                                Main · RRA/VSDC
                                                             </Badge>
                                                         )}
                                                     </div>
@@ -814,7 +798,7 @@ export function OrganizationConfig() {
                                                                     size="sm"
                                                                     onClick={() => handleSetDefaultBranch(branch)}
                                                                     disabled={branch.isDefault || branch.status !== 'ACTIVE'}
-                                                                    title={branch.isDefault ? 'Default branch' : 'Set as Default'}
+                                                                    title={branch.isDefault ? 'Main branch — holds the RRA/VSDC configuration for every branch' : 'Make this the main branch (RRA/VSDC configuration, purchases and imports)'}
                                                                     className="text-amber-500 hover:text-warning hover:bg-warning/10 disabled:opacity-100"
                                                                 >
                                                                     <Star className={cn('h-4 w-4', branch.isDefault && 'fill-amber-500')} />

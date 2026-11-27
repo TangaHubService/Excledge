@@ -23,7 +23,7 @@ import { toastError } from "../../../lib/friendly-error";
 import { apiClient } from '../../../lib/api-client'
 import { parseInventoryGetProductsResponse } from '../../../lib/inventory-response'
 import { offlineQueue } from '../../../utils/offlineQueue'
-import { PaymentModal } from '../../../components/pos/PaymentModal'
+import { PaymentModal, type PaymentExtras, type PurchaseCodeConfig } from '../../../components/pos/PaymentModal'
 import SaleSuccessModal, { type SaleSuccessData } from '../../../components/pos/SaleSuccessModal'
 import { getInvoiceFilename, round2, unwrapInvoice } from '../../../lib/invoice'
 import { issueInvoicePdfBlob } from '../../../lib/invoice-pdf'
@@ -66,6 +66,9 @@ interface Customer {
   email?: string
   phone?: string
   type: string
+  customerType?: string
+  TIN?: string | null
+  prcOrdCd?: string | null
 }
 
 export interface CartItem {
@@ -845,6 +848,16 @@ export default function SalesForm() {
     [customers, selectedCustomer],
   )
 
+  // A buyer with a TIN may present an RRA purchase code; corporate/insurance buyers are expected to
+  // unless a code is stored on the customer. The backend enforces it (it also checks the org pool).
+  const purchaseCodeConfig = useMemo<PurchaseCodeConfig | null>(() => {
+    const tin = selectedCustomerObj?.TIN?.trim() ?? ''
+    if (!/^\d{9}$/.test(tin)) return null
+    const kind = (selectedCustomerObj?.customerType ?? selectedCustomerObj?.type ?? 'INDIVIDUAL').toUpperCase()
+    const hasStored = (selectedCustomerObj?.prcOrdCd?.trim().length ?? 0) === 6
+    return { buyerTin: tin, expected: (kind === 'CORPORATE' || kind === 'INSURANCE') && !hasStored }
+  }, [selectedCustomerObj])
+
   const filteredCustomers = useMemo(
     () => customers.filter(c =>
       customerSearch
@@ -911,6 +924,7 @@ export default function SalesForm() {
 
   const handleProcessPayment = useCallback(async (
     entries: Array<{ id: string; method: string; amount: number; reference?: string }>,
+    extras?: PaymentExtras,
   ) => {
     if (discountLimitError) { toast.error(discountLimitError); return }
     try {
@@ -967,6 +981,7 @@ export default function SalesForm() {
         payments: splitPayments,
         branchId: selectedBranchId,
         receiptMode: trainingMode ? 'TRAINING' : 'NORMAL',
+        ...(extras?.prcOrdCd ? { prcOrdCd: extras.prcOrdCd } : {}),
       }
 
       if (!isOnline) {
@@ -1630,6 +1645,7 @@ export default function SalesForm() {
           totalAmount={total}
           onProcessPayment={handleProcessPayment}
           isProcessing={isSubmitting}
+          purchaseCode={purchaseCodeConfig}
         />
       )}
 

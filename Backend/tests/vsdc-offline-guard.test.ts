@@ -4,6 +4,7 @@ let orgRow: any = null
 const findManyResult: any[] = []
 let saleRow: any = null
 let branchRow: any = null
+let branchDetail: any = null
 const orgUpdate = vi.fn(async () => ({}))
 
 vi.mock("../src/lib/prisma", () => ({
@@ -18,7 +19,7 @@ vi.mock("../src/lib/prisma", () => ({
     },
     branch: {
       findFirst: vi.fn(async () => branchRow),
-      findUnique: vi.fn(async ({ where }: any) => ({ bhfId: "00", vsdcUrl: `http://vsdc-${where.id}.test` })),
+      findUnique: vi.fn(async ({ where }: any) => branchDetail ?? ({ bhfId: "00", vsdcUrl: `http://vsdc-${where.id}.test` })),
     },
   },
 }))
@@ -257,28 +258,29 @@ describe("probeVsdc", () => {
 })
 
 describe("listActiveVsdcDevices — branch-aware target list", () => {
-  it("emits one target per credentialed branch, not per org", async () => {
-    findManyResult.push({
-      id: 2, name: "Demo Pharmacy", TIN: "999945560", ebmDeviceId: null, ebmSerialNo: null,
-      branches: [{ id: 3, name: "East Branch" }, { id: 9, name: "West Branch" }],
-    })
-    const targets = await listActiveVsdcDevices()
-    expect(targets).toEqual([
-      { organizationId: 2, branchId: 3, tin: "999945560", label: "Demo Pharmacy / East Branch" },
-      { organizationId: 2, branchId: 9, tin: "999945560", label: "Demo Pharmacy / West Branch" },
-    ])
+  it("emits one target per organization: the main branch every other branch works under", async () => {
+    findManyResult.push({ id: 2, name: "Demo Pharmacy", TIN: "999945560", ebmDeviceId: null, ebmSerialNo: null })
+    branchRow = { id: 3 }
+    branchDetail = { id: 3, name: "Main Branch", ebmDeviceId: null, ebmSerialNo: "SRL3", mrcNo: null }
+    try {
+      const targets = await listActiveVsdcDevices()
+      expect(targets).toEqual([
+        { organizationId: 2, branchId: 3, tin: "999945560", label: "Demo Pharmacy / Main Branch" },
+      ])
+    } finally {
+      branchRow = null
+      branchDetail = null
+    }
   })
 
   it("falls back to an org-level target only when no branch is credentialed", async () => {
-    findManyResult.push({
-      id: 5, name: "Legacy Co", TIN: "100000000", ebmDeviceId: "SDC5", ebmSerialNo: "MRC5", branches: [],
-    })
+    findManyResult.push({ id: 5, name: "Legacy Co", TIN: "100000000", ebmDeviceId: "SDC5", ebmSerialNo: "MRC5" })
     const targets = await listActiveVsdcDevices()
     expect(targets).toEqual([{ organizationId: 5, branchId: null, tin: "100000000", label: "Legacy Co" }])
   })
 
   it("skips an org with no credentials anywhere", async () => {
-    findManyResult.push({ id: 7, name: "Unconfigured", TIN: "200000000", ebmDeviceId: null, ebmSerialNo: null, branches: [] })
+    findManyResult.push({ id: 7, name: "Unconfigured", TIN: "200000000", ebmDeviceId: null, ebmSerialNo: null })
     expect(await listActiveVsdcDevices()).toEqual([])
   })
 })

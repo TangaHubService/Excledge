@@ -410,7 +410,7 @@ describe("POST /:org/:saleId/copy — CS from an existing NS", () => {
     expect(copyCalls.filter((c) => c.x === 0 && c.opts?.width === 595.28)).toHaveLength(0)
     expect(copyCalls).toHaveLength(1)
     expect(t).not.toContain("ORIGINAL RECEIPT#")
-    expect(t).not.toContain("THIS IS NOT AN OFFICIAL RECEIPT")
+    expect(t).toContain("THIS IS NOT AN OFFICIAL RECEIPT")
     expect(t).toContain("RECEIPT NUMBER: 168/258 NS")
     expect(t).toContain("Date: 01/10/2026 Time: 10:15:30")
     expect(t).toContain("SDC ID: TESTSDC010000001")
@@ -460,7 +460,7 @@ describe("POST /:org/:saleId/copy — CR from an existing NR", () => {
       expect(t).toContain("REF. NORMAL RECEIPT#: 45")
       expect(t).not.toContain("REFUND REASON")
       expect(t).not.toContain("REFUND TO")
-      expect(t).not.toContain("THIS IS NOT AN OFFICIAL RECEIPT")
+      expect(t).toContain("THIS IS NOT AN OFFICIAL RECEIPT")
       expect(t).toContain("RECEIPT NUMBER: 41/260 NR")
       expect(t).toContain("TEST-SIGN-0002-IIII-JJJJ")
       expect(t).toContain("-2,360.00")
@@ -668,7 +668,7 @@ describe("A4 layout", () => {
       // One header title per page.
       expect(cap.calls.filter((c) => c.text === "COPY")).toHaveLength(pages.length)
       const t = cap.joined()
-      expect(t).not.toContain("THIS IS NOT AN OFFICIAL RECEIPT")
+      expect(t).toContain("THIS IS NOT AN OFFICIAL RECEIPT")
       expect(t).toContain(formatMoney(payload.totals.grandTotal))
     }
   })
@@ -711,7 +711,7 @@ describe("80mm thermal layout", () => {
       }
       expect(cap.calls.filter((c) => c.text === "COPY").length).toBeGreaterThanOrEqual(1)
       const t = cap.joined()
-      expect(t).not.toContain("THIS IS NOT AN OFFICIAL RECEIPT")
+      expect(t).toContain("THIS IS NOT AN OFFICIAL RECEIPT")
       expect(t).toContain("TEST-SIGN-TEST-SIGN")
       expect(t).toContain(formatMoney(payload.totals.grandTotal))
     }
@@ -758,13 +758,13 @@ describe("80mm thermal layout", () => {
 })
 
 describe("HTML preview + regression of the originals", () => {
-  it("HTML copy carries the COPY title and the REFUND sub-title, no watermark or notice", async () => {
+  it("HTML copy carries the COPY title, the REFUND sub-title and the not-official notice, no watermark", async () => {
     seed(nrSale())
     const html = renderSalesInvoiceHtml((await composeInvoicePayload(mkReq(20), { copy: "force" }))!)
     expect(html).not.toContain('class="copy-watermark"')
     expect(html).toContain('<h2 class="title">COPY</h2>')
     expect(html).toMatch(/<h3 class="subtitle"[^>]*>REFUND<\/h3>/)
-    expect(html).not.toContain("THIS IS NOT AN OFFICIAL RECEIPT")
+    expect(html).toContain("THIS IS NOT AN OFFICIAL RECEIPT")
   })
 
   it("a copy carries the original's QR code, unchanged", async () => {

@@ -2,6 +2,7 @@ import { config } from '../config';
 import { prisma } from '../lib/prisma';
 import logger from '../utils/logger';
 import { isEbmEnabled } from './rra-ebm.service';
+import { applyRraVatStatus, rraVatRegisteredFromInit } from './rra-vat-status.service';
 import { buildVsdcEnvelope, listActiveVsdcDevices, probeVsdc, validateVsdcEnvelope } from './vsdc-api.service';
 
 export interface VsdcStartupIssue {
@@ -41,6 +42,25 @@ export async function runVsdcStartupChecks(): Promise<VsdcStartupIssue[]> {
           });
       if (!registeredAt?.ebmInitializedAt && !registeredAt?.ebmDeviceId) {
         issues.push({ label: device.label, problem: 'device is not registered on VSDC, so its sales will be refused until it is initialized' });
+      }
+
+      // Re-apply the VAT status RRA returned at the last initialization, so a stale local flag is
+      // corrected without re-initializing the device.
+      if (device.branchId != null) {
+        const branch = await prisma.branch.findUnique({
+          where: { id: device.branchId },
+          select: { ebmInitInfo: true },
+        });
+        const rraVat = rraVatRegisteredFromInit((branch?.ebmInitInfo as { vatTyCd?: unknown } | null)?.vatTyCd);
+        if (rraVat !== null) {
+          const change = await applyRraVatStatus(device.organizationId, rraVat, 'stored device initialization info');
+          if (change.changed) {
+            issues.push({
+              label: device.label,
+              problem: `VAT status corrected to match RRA (${rraVat ? 'VAT-registered' : 'not VAT-registered'}); ${change.productsConverted} item(s) changed tax type`,
+            });
+          }
+        }
       }
 
       const probe = await probeVsdc(envelope);

@@ -332,8 +332,9 @@ export function vsdcPrintedTextErrors(
   }
 
   const notice = "THIS IS NOT AN OFFICIAL RECEIPT"
-  if (training || proforma) need("notice", notice)
-  else if (payload.certification.isCertified) forbid(copy ? "CS/CR notice" : "NS/NR notice", notice)
+  // RRA checklist §55: COPY, TRAINING MODE and PROFORMA carry the notice; NS/NR never do.
+  if (training || proforma || copy) need("notice", notice)
+  else if (payload.certification.isCertified) forbid("NS/NR notice", notice)
   const designation = copy ? "COPY" : training ? "TRAINING MODE" : proforma ? "PROFORMA" : null
   if (designation) {
     const n = text.split("\n").filter((l) => l.trim() === designation).length

@@ -2,6 +2,9 @@ import { prisma } from '../lib/prisma';
 import { config } from '../config';
 import logger from '../utils/logger';
 import { kigaliWallParts } from './invoice-format.service';
+import { getDefaultVsdcBranchId, hasOwnVsdcDevice, resolveVsdcBranchId, vsdcBranchGroup } from './vsdc-branch.service';
+
+export { getDefaultVsdcBranchId, hasOwnVsdcDevice, resolveVsdcBranchId, vsdcBranchGroup };
 
 /** RRA EBM API may require a security_key header for authentication. */
 const RRA_SECURITY_KEY: string = config.ebm.securityKey || '';
@@ -125,8 +128,9 @@ export interface VsdcApiResult {
 
 export async function buildVsdcEnvelope(
   organizationId: number,
-  branchId?: number | null,
+  requestedBranchId?: number | null,
 ): Promise<VsdcEnvelope> {
+  const branchId = await resolveVsdcBranchId(organizationId, requestedBranchId);
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: {
@@ -210,28 +214,24 @@ export async function listActiveVsdcDevices(
       TIN: true,
       ebmDeviceId: true,
       ebmSerialNo: true,
-      branches: {
-        where: {
-          status: 'ACTIVE',
-          OR: [
-            { bhfId: { not: null } },
-            { ebmDeviceId: { not: null } },
-            { ebmSerialNo: { not: null } },
-          ],
-        },
-        select: { id: true, name: true },
-      },
     },
   });
 
+  // One device per organization: the main branch's. Every other branch works under it.
   const targets: VsdcDeviceTarget[] = [];
   for (const org of orgs) {
     const tin = org.TIN ?? '';
-    if (org.branches.length > 0) {
-      for (const b of org.branches) {
-        targets.push({ organizationId: org.id, branchId: b.id, tin, label: `${org.name} / ${b.name}` });
-      }
-    } else if (org.ebmDeviceId || org.ebmSerialNo) {
+    const mainId = await getDefaultVsdcBranchId(org.id);
+    const main = mainId == null
+      ? null
+      : await prisma.branch.findUnique({
+          where: { id: mainId },
+          select: { id: true, name: true, ebmDeviceId: true, ebmSerialNo: true, mrcNo: true },
+        });
+    const orgHasDevice = Boolean(org.ebmDeviceId || org.ebmSerialNo);
+    if (main && (hasOwnVsdcDevice(main) || orgHasDevice)) {
+      targets.push({ organizationId: org.id, branchId: main.id, tin, label: `${org.name} / ${main.name}` });
+    } else if (orgHasDevice) {
       targets.push({ organizationId: org.id, branchId: null, tin, label: org.name });
     }
   }

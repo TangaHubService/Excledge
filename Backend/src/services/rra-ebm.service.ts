@@ -7,8 +7,9 @@ import { deriveQtyUnitCd } from './item-code.service';
 import { getRraPaymentCode, requiresPurchaseCode, resolvePkgUnitCd, resolveQtyUnitCd, LAST_RESORT_TOURISM_TAX_RATE, getTourismTaxRate } from './rra-code.service';
 import { diff2, bandTaxFromNet } from './money.service';
 import { vsdcDiscountRate } from './discount.service';
-import { kigaliWallParts } from './invoice-format.service';
+import { kigaliWallParts, sellerHeaderParts, type SellerHeaderKey } from './invoice-format.service';
 import { vsdcSalesTyCdForLabel } from './training-mode.service';
+import { resolveVsdcBranchId } from './vsdc-branch.service';
 
 /** Any Prisma client capable of running queries — the top-level client or a $transaction callback's `tx`. */
 type PrismaClientOrTx = typeof prisma | Prisma.TransactionClient;
@@ -201,11 +202,13 @@ async function nextInvoiceSequenceFromLegacySequence(client: PrismaClientOrTx = 
 async function allocateNextInvoiceSequence(organizationId: number, branchId: number, client: PrismaClientOrTx = prisma): Promise<number> {
   // VSDC `invcNo` must be unique per DEVICE (org + bhfId), not per branch —
   // several branches may share one VSDC device and would otherwise collide.
+  // A branch without its own device signs on the default branch's device, so it shares that counter.
+  const deviceBranchId = (await resolveVsdcBranchId(organizationId, branchId)) ?? branchId;
   const branch = await client.branch.findUnique({
-    where: { id: branchId },
+    where: { id: deviceBranchId },
     select: { bhfId: true },
   });
-  const deviceKey = branch?.bhfId ? `bhf:${branch.bhfId}` : `branch:${branchId}`;
+  const deviceKey = branch?.bhfId ? `bhf:${branch.bhfId}` : `branch:${deviceBranchId}`;
 
   // Seed the first row past the highest number ever used by this org so we never re-emit an invcNo
   // the device has already accepted (avoids VSDC 924).
@@ -444,17 +447,10 @@ export function buildVsdcTopMsg(org: {
   phone?: string | null;
   email?: string | null;
 }): string {
-  const labelled = (label: string, value: unknown) => {
-    const text = sanitizeVsdcText(value);
-    return text ? `${label}: ${text}` : '';
-  };
-  return [
-    clampField(sanitizeVsdcText(org.name), 80),
-    clampField(sanitizeVsdcText(org.address), 80),
-    clampField(labelled('TEL', org.phone), 30),
-    clampField(labelled('EMAIL', org.email), 80),
-    clampField(labelled('TIN', org.TIN), 20),
-  ].filter(Boolean).join('\n');
+  const caps: Record<SellerHeaderKey, number> = { name: 80, address: 80, phone: 30, email: 80, tin: 20 };
+  return sellerHeaderParts({ ...org, tin: org.TIN })
+    .map((part) => clampField(part.text, caps[part.key]))
+    .join('\n');
 }
 
 /**

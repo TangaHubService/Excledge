@@ -3,6 +3,15 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 let branchUpdateArgs: any = null
 let counterQuery: any = null
 
+// The main branch holds the VSDC configuration; tests pass the branch through unchanged.
+vi.mock("../src/services/vsdc-branch.service", () => ({
+  hasOwnVsdcDevice: () => true,
+  getMainBranchId: vi.fn(async () => null),
+  getDefaultVsdcBranchId: vi.fn(async () => null),
+  resolveVsdcBranchId: vi.fn(async (_org: number, b?: number | null) => b ?? null),
+  vsdcBranchGroup: vi.fn(async () => []),
+}))
+
 vi.mock("../src/lib/prisma", () => ({
   prisma: {
     branch: { update: vi.fn(async (a: any) => { branchUpdateArgs = a; return {} }) },

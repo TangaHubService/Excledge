@@ -165,6 +165,7 @@ export async function initializeDevice(req: BranchAuthRequest, res: Response) {
       lastInvoiceNo: info.lastSaleInvcNo ?? info.lastInvcNo ?? 0,
       lastReceiptNo: info.lastSaleRcptNo ?? 0,
       seededCounterTo: result.seededCounterTo ?? null,
+      vatStatusChange: result.vatStatusChange ?? null,
     }));
   } catch (error) {
     console.error('[EbmInit] Initialization failed:', error);

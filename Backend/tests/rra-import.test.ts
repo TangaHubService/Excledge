@@ -7,6 +7,15 @@ let cursorValue = "20260101000000"
 const cursorUpserts: any[] = []
 let importLineStatus = "PENDING"
 
+// The main branch holds the VSDC configuration; tests pass the branch through unchanged.
+vi.mock("../src/services/vsdc-branch.service", () => ({
+  hasOwnVsdcDevice: () => true,
+  getMainBranchId: vi.fn(async () => null),
+  getDefaultVsdcBranchId: vi.fn(async () => null),
+  resolveVsdcBranchId: vi.fn(async (_org: number, b?: number | null) => b ?? null),
+  vsdcBranchGroup: vi.fn(async () => []),
+}))
+
 vi.mock("../src/lib/prisma", () => ({
   prisma: {
     rraSyncCursor: {
@@ -326,5 +335,18 @@ describe("actionRraImport — approve/reject (§68)", () => {
     const r = await actionRraImport(1, 1, "approve", { branchId: 3, userId: 2, itemClsCd: "5059690800", linkProductId: 77 })
     expect(r.success).toBe(true)
     expect(submitStockLedgerEntryToEbm).toHaveBeenCalledWith(5)
+  })
+})
+
+describe("pull start = last request date + 1 second", () => {
+  it("an automatic import pull asks VSDC from one second after the last request", async () => {
+    cursorValue = "20261127235959"
+    await syncRraImports(1)
+    expect(vi.mocked(selectImportItems).mock.calls.at(-1)?.[1]).toBe("20261128000000")
+  })
+  it("a hand-picked import request date is sent as is", async () => {
+    cursorValue = "20260101000000"
+    await syncRraImports(1, { requestDate: "2026-08-01" })
+    expect(vi.mocked(selectImportItems).mock.calls.at(-1)?.[1]).toBe("20260801000000")
   })
 })

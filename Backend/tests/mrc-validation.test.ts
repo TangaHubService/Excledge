@@ -15,8 +15,10 @@ vi.mock("../src/lib/prisma", () => ({
       findUnique: vi.fn(async () => ({ mrcNo: stored.org, ebmSerialNo: null, vatRegistered: true, TIN: "100000000", ebmDeviceId: null })),
     },
     branch: {
-      updateMany: (...a: any[]) => (branchUpdateMany as any)(...a),
-      findFirst: vi.fn(async () => ({ bhfId: "00", ebmSerialNo: null, mrcNo: stored.branch })),
+      // The main branch (id 1) holds the organization's RRA/VSDC configuration.
+      update: (...a: any[]) => (branchUpdateMany as any)(...a),
+      findFirst: vi.fn(async () => ({ id: 1 })),
+      findUnique: vi.fn(async () => ({ bhfId: "00", ebmSerialNo: null, mrcNo: stored.branch })),
       count: vi.fn(async () => 0),
     },
     $queryRaw: vi.fn(async () => [{ sidebarConfig: {}, featureFlags: {}, preferences: {} }]),
@@ -138,11 +140,11 @@ describe("configuredMrc / mrcMismatch", () => {
 })
 
 describe("upsertOrganizationSettings ebmConfig", () => {
-  it("writes the normalized MRC to mrcNo on the org and default branch", async () => {
+  it("writes the normalized MRC to mrcNo on the org and main branch", async () => {
     await upsertOrganizationSettings(1, { ebmConfig: { mrcNo: " wis01000123 " } } as any)
     expect(orgUpdate).toHaveBeenCalledWith({ where: { id: 1 }, data: { mrcNo: "WIS01000123" } })
     expect(branchUpdateMany).toHaveBeenCalledWith({
-      where: { organizationId: 1, isDefault: true },
+      where: { id: 1 },
       data: { mrcNo: "WIS01000123" },
     })
   })
@@ -151,7 +153,7 @@ describe("upsertOrganizationSettings ebmConfig", () => {
     await upsertOrganizationSettings(1, { ebmConfig: { dvcSrlNo: " excelwartest " } } as any)
     expect(orgUpdate).toHaveBeenCalledWith({ where: { id: 1 }, data: { ebmSerialNo: "excelwartest" } })
     expect(branchUpdateMany).toHaveBeenCalledWith({
-      where: { organizationId: 1, isDefault: true },
+      where: { id: 1 },
       data: { ebmSerialNo: "excelwartest" },
     })
   })

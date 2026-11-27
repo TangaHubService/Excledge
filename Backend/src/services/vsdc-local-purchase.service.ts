@@ -242,7 +242,8 @@ async function registerOne(id: number): Promise<{ success: boolean; error?: stri
   // savePurchases books the stock-in but not the stock master (§73).
   for (const product of products) {
     if (!product.itemCd) continue;
-    const onHand = await getCurrentStock(row.organizationId, product.id, row.branchId);
+    // One VSDC device serves every branch, so its stock master holds the organization's total.
+    const onHand = await getCurrentStock(row.organizationId, product.id, null);
     const master = await saveStockMaster(envelope, product.itemCd, onHand, regr);
     if (!master.success) {
       logger.warn(`[EBM] local purchase #${id}: stock master push failed for ${product.itemCd}: ${master.error}`);

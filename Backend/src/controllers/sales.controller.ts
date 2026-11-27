@@ -98,6 +98,7 @@ export const createSale = async (req: BranchAuthRequest, res: Response) => {
       isProforma: !!isProforma,
       inventoryMethod,
       expectedReceiptMode: parseExpectedReceiptMode(receiptMode),
+      prcOrdCd: req.body?.prcOrdCd,
       req,
     })
 
@@ -333,6 +334,7 @@ export const convertProforma = async (req: BranchAuthRequest, res: Response) => 
       isProforma: false,
       proformaSourceId: saleId,
       inventoryMethod: req.body?.inventoryMethod,
+      prcOrdCd: req.body?.prcOrdCd,
       req,
     })
 
@@ -1833,6 +1835,7 @@ export const correctSale = async (req: BranchAuthRequest, res: Response) => {
         shiftId,
         isProforma: false,
         inventoryMethod: req.body?.inventoryMethod,
+        prcOrdCd: req.body?.prcOrdCd,
         req,
       });
     } catch (e: any) {

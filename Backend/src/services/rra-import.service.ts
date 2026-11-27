@@ -10,6 +10,7 @@ import {
   bumpRraReqDt,
 } from './vsdc-api.service';
 import { receiveStockOnBranch, resolveActiveBranchId } from './inventory-ledger.service';
+import { getMainBranchId } from './vsdc-branch.service';
 import { applySellingPriceOnReceipt, syncProductToRra } from './product-sync.service';
 import { allocateItemCd, getOriginNationCode, DEFAULT_PKG_UNIT_CD } from './item-code.service';
 import { TaxService } from './tax.service';
@@ -35,11 +36,11 @@ function localStatusFromImptStts(code: string | undefined): 'PENDING' | 'APPROVE
   return 'PENDING';
 }
 
-async function getCursor(organizationId: number): Promise<string> {
+async function getStoredCursor(organizationId: number): Promise<string | null> {
   const row = await prisma.rraSyncCursor.findUnique({
     where: { organizationId_resource: { organizationId, resource: CURSOR_RESOURCE } },
   });
-  return row?.lastReqDt ?? '20200101000000';
+  return row?.lastReqDt || null;
 }
 
 async function saveCursor(organizationId: number, lastReqDt: string, result: string): Promise<void> {
@@ -66,7 +67,8 @@ export async function syncRraImports(
 ): Promise<{ ok: boolean; fetched: number; cached: number; created?: number; reopened?: number; failed: number; lastReqDt: string; error?: string }> {
   if (!isEbmEnabled()) return { ok: false, fetched: 0, cached: 0, failed: 0, lastReqDt: '', error: 'EBM is not enabled' };
 
-  const prevCursor = await getCursor(organizationId);
+  const storedCursor = await getStoredCursor(organizationId);
+  const prevCursor = storedCursor ?? '20200101000000';
 
   // §67: a manually-specified request date must be strictly after the previous request.
   // `requestDate` is yyyy-mm-dd; the cursor is yyyyMMddHHmmss.
@@ -87,7 +89,9 @@ export async function syncRraImports(
       };
     }
   } else {
-    lastReqDt = prevCursor;
+    // Start one second after the last request, so the previous pull's last second is not asked for
+    // again. The first pull ever starts at the default date itself.
+    lastReqDt = storedCursor ? bumpRraReqDt(storedCursor) : prevCursor;
   }
 
   let runAt = toRraReqDt(new Date());
@@ -318,6 +322,9 @@ export async function actionRraImport(
   if (!line) return { success: false, error: 'Import line not found' };
   if (line.status !== 'PENDING') return { success: false, error: `Import line already ${line.status.toLowerCase()}` };
   if (!isEbmEnabled()) return { success: false, error: 'EBM is not enabled' };
+  // Imports are an organization-level RRA record: they go through the main branch's VSDC
+  // configuration and the stock lands on the main branch.
+  opts = { ...opts, branchId: (await getMainBranchId(organizationId)) ?? opts.branchId ?? null };
 
   const envelope = await buildVsdcEnvelope(organizationId, opts.branchId ?? null);
   const envErr = validateVsdcEnvelope(envelope);
